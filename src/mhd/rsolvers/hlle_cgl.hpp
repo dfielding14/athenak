@@ -15,6 +15,9 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
+#include "mhd/rsolvers/hlle_mhd.hpp"
+#include "mhd/rsolvers/cgl_pressure_traction.hpp"
+#include "eos/cgl_passive.hpp"
 
 namespace mhd {
 
@@ -29,7 +32,46 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
      const ScrArray2D<Real> &wl, const ScrArray2D<Real> &wr,
      const ScrArray2D<Real> &bl, const ScrArray2D<Real> &br, const DvceArray4D<Real> &bx,
      DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
-     const bool record_pwork, DvceArray5D<Real> pflux) {
+     const bool record_pwork, DvceArray5D<Real> pflux,
+     const bool passive_flow_ready = false) {
+  if (eos.passive) {
+    if (!passive_flow_ready) {
+      Kokkos::abort("Passive HLLE requires native isothermal flow fluxes first");
+    }
+    const int iby = ((ivx-IVX)+1)%3, ibz = ((ivx-IVX)+2)%3;
+    par_for_inner(member, il, iu, [&](const int i) {
+      const Real fd = flx(m,IDN,k,j,i);
+      const bool left = fd >= 0.0;
+      const Real rho = left ? wl(IDN,i) : wr(IDN,i);
+      Real pp = fmax(left ? wl(IPR,i) : wr(IPR,i), eos.pfloor);
+      Real pt = fmax(left ? wl(IPP,i) : wr(IPP,i), eos.pfloor);
+      const Real by = left ? bl(iby,i) : br(iby,i);
+      const Real bz = left ? bl(ibz,i) : br(ibz,i);
+      const Real bn = bx(m,k,j,i);
+      const Real bmag = sqrt(SQR(bn) + SQR(by) + SQR(bz));
+      if (bmag <= eos.bfloor) { pp = TWO_3RDS*pt + ONE_3RD*pp; pt = pp; }
+      const auto q = cgl::PassiveSpecificInvariants(rho, pp, pt,
+                                                   fmax(bmag, eos.bfloor));
+      flx(m,IEN,k,j,i) = fd*q.j;
+      flx(m,IAN,k,j,i) = fd*q.a;
+      if (record_pwork) {
+        // Passive pressure work is a diagnostic thermal stress, with no force
+        // applied to the isothermal flow. Use the centered reconstructed stress.
+        MHDPrim1D l, r;
+        l.e = wl(IPR,i); l.pp = wl(IPP,i); l.by = bl(iby,i); l.bz = bl(ibz,i);
+        r.e = wr(IPR,i); r.pp = wr(IPP,i); r.by = br(iby,i); r.bz = br(ibz,i);
+        MHDCons1D pressure, anisotropic;
+        SingleStateLLF_CGLPressureTraction(l, r, bn, eos, pressure, anisotropic);
+        pflux(m,ICGLPressureX,k,j,i) = pressure.mx;
+        pflux(m,ICGLPressureY,k,j,i) = pressure.my;
+        pflux(m,ICGLPressureZ,k,j,i) = pressure.mz;
+        pflux(m,ICGLAnisPressureX,k,j,i) = anisotropic.mx;
+        pflux(m,ICGLAnisPressureY,k,j,i) = anisotropic.my;
+        pflux(m,ICGLAnisPressureZ,k,j,i) = anisotropic.mz;
+      }
+    });
+    return;
+  }
   int ivy = IVX + ((ivx-IVX)+1)%3;
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;

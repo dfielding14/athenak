@@ -1,4 +1,4 @@
-"""Passive signal-speed unit checks and disabled-mode constructor regression."""
+"""Signal-speed checks and rejection of unconverted passive initializers."""
 
 import math
 from pathlib import Path
@@ -170,7 +170,7 @@ def _initial_timestep(table, speed):
     return CFL * min(limits)
 
 
-def test_passive_cgl_signals_and_runtime_fence(tmp_path):
+def test_passive_cgl_signals_and_initializer_fence(tmp_path):
     unit_build_dir = tmp_path / "unit-build"
     _run([
         "cmake",
@@ -241,9 +241,7 @@ def test_passive_cgl_signals_and_runtime_fence(tmp_path):
             capture_output=True, text=True, check=False,
         )
         assert result.returncode != 0
-        assert "passive=true is disabled" in result.stdout
-        assert "thermal energy equation is inconsistent" in result.stdout
-        assert "WO2 redesign" in result.stdout
+        assert "this built-in pgen has no passive J/A initializer" in result.stdout
 
     active_dir = tmp_path / "active-oblique"
     active_dir.mkdir()

@@ -63,6 +63,7 @@ class ProblemGenerator {
   void CGLFOFC(ParameterInput *pin, const bool restart);
   void CGLLFBoundary(ParameterInput *pin, const bool restart);
   void CGLLandauFluid(ParameterInput *pin, const bool restart);
+  void CGLPassiveValidation(ParameterInput *pin, const bool restart);
   void CGLLFPaper(ParameterInput *pin, const bool restart);
   void CGLLFSbox(ParameterInput *pin, const bool restart);
   void DivBAMR(ParameterInput *pin, const bool restart);

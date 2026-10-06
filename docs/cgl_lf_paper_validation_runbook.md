@@ -65,19 +65,18 @@ cadence and applies one kick before the RK state copy per cycle. Both the kick a
 add their exact kinetic-energy change to total energy, preserving thermal
 energy. These corrections apply to all driven fluids, not only CGL.
 
-## Passive-Delta Controls — Disabled
+## Passive-Delta Controls
 
-`mhd/passive = true` is disabled because its thermal energy equation is
-inconsistent (review M7). It aborts at construction pending the WO2 redesign,
-including when `iso_sound_speed` is supplied. The isothermal HLLE signal-speed
-path is retained and covered by direct unit checks.
+`mhd/passive=true` evolves physical CGL pressures through the advected J/A
+invariants while density, momentum, induction and advective timestep follow
+isothermal MHD. `iso_sound_speed` is required. Physical thermal energy is the
+`thermal-U` history column; `cgl-J` is not energy. See [passive model and scope](cgl_passive.md).
 
-`inputs/cgl_lf_paper/cgl_lf_paper_turb_passive.athinput` and the other passive
-inputs are retained as disabled references. The local smoke script omits this
-case, and executable Python workflows skip passive cases and record them under
-`disabled_cases` in the result manifest. Historical case catalogs and archived
-validation records remain unchanged. Passive comparisons in the future run
-matrix below are blocked until WO2.
+The original custom-pgen passive turbulence deck is executable. The local and
+Python smoke workflows include passive controls and distinguish kinetic forcing
+work from physical thermal U. Other paper-scale analysis workflows retain an
+explicit consumer-validation fence; this does not disable supported solver runs.
+Historical case catalogs and archived validation records remain unchanged.
 
 ## Diagnostics
 

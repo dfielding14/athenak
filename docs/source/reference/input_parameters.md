@@ -134,7 +134,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `dyn_scratch` | int | 0 | dyn_grmhd.cpp:L120 |
 | `enforce_maximum` | bool | true | dyn_grmhd.cpp:L121 |
 | `eos` | string | required | mhd.cpp:L60 |
-| `passive` | bool | false; true disabled pending WO2 thermal-energy redesign | cgl_mhd.cpp |
+| `passive` | bool | false; true selects passive J/A thermodynamics on periodic uniform meshes | cgl_mhd.cpp |
 | `cgl_heat_flux` | string | absent | cgl_landau_fluid.cpp |
 | `cgl_heat_flux_integrator` | string | sts | cgl_landau_fluid.cpp |
 | `lf_k_parallel` | Real | required when CGL LF is active | cgl_landau_fluid.cpp |

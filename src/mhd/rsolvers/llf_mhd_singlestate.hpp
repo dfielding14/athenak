@@ -18,6 +18,8 @@
 //!   Springer-Verlag, Berlin, (1999) chpt. 10.
 
 #include "coordinates/cartesian_ks.hpp"
+#include "eos/cgl_passive.hpp"
+#include "mhd/rsolvers/cgl_pressure_traction.hpp"
 
 namespace mhd {
 //----------------------------------------------------------------------------------------
@@ -149,6 +151,22 @@ void SingleStateLLF_CGLStateAndFlux(const MHDPrim1D &w, const Real &bxi,
 KOKKOS_INLINE_FUNCTION
 void SingleStateLLF_CGL(const MHDPrim1D &wl, const MHDPrim1D &wr, const Real &bxi,
                         const EOS_Data &eos, MHDCons1D &flux) {
+  if (eos.passive) {
+    EOS_Data iso = eos;
+    iso.is_ideal = false;
+    iso.is_cgl = false;
+    iso.gamma = 0.0;
+    SingleStateLLF_MHD(wl, wr, bxi, iso, flux);
+    const MHDPrim1D &w = (flux.d >= 0.0) ? wl : wr;
+    const Real bmag = sqrt(SQR(bxi) + SQR(w.by) + SQR(w.bz));
+    Real pp = fmax(w.e, eos.pfloor), pt = fmax(w.pp, eos.pfloor);
+    if (bmag <= eos.bfloor) { pp = TWO_3RDS*pt + ONE_3RD*pp; pt = pp; }
+    const auto q = cgl::PassiveSpecificInvariants(w.d, pp, pt,
+                                                 fmax(bmag, eos.bfloor));
+    flux.e = flux.d*q.j;
+    flux.mu = flux.d*q.a;
+    return;
+  }
   MHDCons1D ul, ur, fl, fr;
   Real cl, cr;
   SingleStateLLF_CGLStateAndFlux(wl, bxi, eos, ul, fl, cl);
@@ -173,51 +191,6 @@ void SingleStateLLF_CGL(const MHDPrim1D &wl, const MHDPrim1D &wr, const Real &bx
   flux.bz =  0.5*(fl.bz + fr.bz - a*(ur.bz - ul.bz));
 
   return;
-}
-
-//----------------------------------------------------------------------------------------
-//! \brief Isolate the physical CGL pressure traction retained by an LLF face flux.
-
-KOKKOS_INLINE_FUNCTION
-void SingleStateLLF_CGLPressureTraction(const MHDPrim1D &wl, const MHDPrim1D &wr,
-                                        const Real &bxi, const EOS_Data &eos,
-                                        MHDCons1D &pressure, MHDCons1D &anisotropic) {
-  pressure.mx = pressure.my = pressure.mz = 0.0;
-  anisotropic.mx = anisotropic.my = anisotropic.mz = 0.0;
-  if (eos.passive) {
-    return;
-  }
-
-  Real pparl = wl.e;
-  Real pperpl = wl.pp;
-  Real pparr = wr.e;
-  Real pperpr = wr.pp;
-  const Real bsql = SQR(bxi) + SQR(wl.by) + SQR(wl.bz);
-  const Real bsqr = SQR(bxi) + SQR(wr.by) + SQR(wr.bz);
-  const Real bmagl = sqrt(bsql);
-  const Real bmagr = sqrt(bsqr);
-  if (bmagl <= eos.bfloor) {
-    pparl = TWO_3RDS*pperpl + ONE_3RD*pparl;
-    pperpl = pparl;
-  }
-  if (bmagr <= eos.bfloor) {
-    pparr = TWO_3RDS*pperpr + ONE_3RD*pparr;
-    pperpr = pparr;
-  }
-  const Real dl = (bmagl > eos.bfloor) ? (pperpl - pparl)/bsql : 0.0;
-  const Real dr = (bmagr > eos.bfloor) ? (pperpr - pparr)/bsqr : 0.0;
-  const Real alx = -SQR(bxi)*dl;
-  const Real aly = -bxi*wl.by*dl;
-  const Real alz = -bxi*wl.bz*dl;
-  const Real arx = -SQR(bxi)*dr;
-  const Real ary = -bxi*wr.by*dr;
-  const Real arz = -bxi*wr.bz*dr;
-  anisotropic.mx = 0.5*(alx + arx);
-  anisotropic.my = 0.5*(aly + ary);
-  anisotropic.mz = 0.5*(alz + arz);
-  pressure.mx = 0.5*(pperpl + alx + pperpr + arx);
-  pressure.my = anisotropic.my;
-  pressure.mz = anisotropic.mz;
 }
 
 //----------------------------------------------------------------------------------------

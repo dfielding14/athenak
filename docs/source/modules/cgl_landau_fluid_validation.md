@@ -128,8 +128,8 @@ transport, strict monitoring, and conserved prolongation:
 python3 scripts/cgl_lf_workflow.py amr
 ```
 
-For reduced MKS24-oriented active Alfvenic and active random turbulence smoke
-cases (passive definitions are disabled pending WO2):
+For reduced MKS24-oriented active Alfvenic, active random, and passive
+Alfvenic turbulence smoke cases:
 
 ```bash
 python3 scripts/cgl_lf_workflow.py paper-smoke
@@ -149,9 +149,11 @@ global energy/work residual closure, zero parallel
 forcing for the Alfvenic case, and nonzero parallel forcing for the random
 case. Focused CPU regressions separately check fixed-`dedt` first-cycle
 normalization, one kick per RK1/RK2/RK3 cycle, unchanged thermal energy under
-the kick, and cumulative-work restart continuation. `passive=true` is rejected;
-workflows preserve its catalog entries but omit their execution and record
-`disabled_cases`. These checks do not qualify paper-resolution or long-time
+the kick, and cumulative-work restart continuation. Passive smoke analysis
+uses kinetic energy for forcing work and reports physical `thermal-U`
+separately; the J invariant is not energy. Other paper-scale passive analysis
+consumers remain fenced and recorded in `disabled_cases`. These checks do not
+qualify paper-resolution or long-time
 forcing statistics, or figure-level analysis.
 
 For short reduced nonlinear product-path qualification, including
@@ -207,7 +209,9 @@ deduplicates these roles into sixteen mapped executions and excludes the
 unmapped active-Alfvenic beta-1 definition unless a later source audit assigns
 it a displayed result. Defining an input does not constitute a reproduction
 result. The sixteen-case catalog is historical/future coverage: passive roles
-cannot execute until the WO2 energy-equation redesign is accepted.
+remain gated in the paper-scale workflows until their J/A and physical-U
+analysis consumers are validated; supported passive solver runs and smoke
+checks are available.
 In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 `p_perp` output supplies the perpendicular pressure required for paper
 anisotropy analysis.

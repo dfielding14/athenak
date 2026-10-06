@@ -101,8 +101,8 @@ $\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `eos` | required | Set to `cgl` for this feature. |
-| `passive` | `false` | `true` is disabled: the passive thermal energy equation is inconsistent, pending WO2. |
-| `iso_sound_speed` | unused in active CGL | Retained for the disabled passive model; it does not bypass the `passive=true` fence. |
+| `passive` | `false` | `true` selects passive J/A thermodynamics on uniform periodic meshes; see the passive model. |
+| `iso_sound_speed` | unused in active CGL | Required positive isothermal flow sound speed when `passive=true`. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
 | `lf_k_parallel` | required | Finite positive closure wavenumber magnitude. |
@@ -203,7 +203,8 @@ component. The retained face traction is corrected through the same AMR flux
 exchange used by the momentum update before the contraction is evaluated.
 Archived passive-Delta runs retain zeros for both fields because their
 diagnostic CGL pressures were not applied to flow momentum. New passive runs
-are disabled.
+record the centered physical thermal stress for diagnosis; it is not a force
+on the isothermal fluid.
 
 ## LF Timestep
 
@@ -232,7 +233,9 @@ assumptions, derivation, exceptional arithmetic, and regression cases.
 ## Current Restrictions
 
 - CGL is not available for SR, GR, or dynamical-GR MHD.
-- `mhd/passive = true` is disabled pending the WO2 thermal-energy redesign.
+- Passive CGL supports uniform periodic Newtonian HLLE evolution; AMR/SMR,
+  nonperiodic boundaries, and additional dissipative or coupled modules are
+  fenced. See [the passive model](cgl_passive.md).
 - Active CGL LF supports inflow and user boundaries in explicit and STS
   integration, including refined meshes. User callbacks must follow the
   [representation-aware boundary contract](cgl_lf_boundaries.md). Periodic,
@@ -284,12 +287,12 @@ quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 A reduced forced-turbulence initializer is registered as
 `pgen_name = cgl_lf_paper`. Its active smoke deck is
 `inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`; the passive deck
-is retained as a disabled reference pending WO2. These decks initialize `rho0 = 1`, `B0` along `z`, and
+also executes with passive J/A thermodynamics. These decks initialize `rho0 = 1`, `B0` along `z`, and
 `p_parallel0 = p_perp0 = beta0 B0^2/2`, use the explicit MKS24
 `firehose_threshold = 2.0`, `mirror_threshold = 1.0` policy, and exercise the shared
-turbulence driver. `mhd/passive = true` now fails at construction because its
-thermal energy equation is inconsistent. Runtime regressions check this fence;
-direct unit checks retain coverage of the isothermal passive signal-speed path.
+turbulence driver. Passive histories expose `cgl-J`, `cgl-A`, and physical
+`thermal-U`; J must not be interpreted as total energy. Runtime regressions
+check exact isothermal flow/timestep identity and physical thermal evolution.
 These are reduced smoke cases, not standard paper-resolution runs. Their
 forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
 qualify reduced mechanics, not paper-scale statistics or
@@ -325,7 +328,9 @@ cases reuse standard definitions. The `paper-standard`, `paper-nulim`,
 workflows require explicit production authorization;
 the presence of these decks is not evidence that paper-scale runs have been
 executed. Passive definitions are retained for provenance, but executable
-workflows omit them and list them in `disabled_cases` until WO2.
+paper-scale analysis workflows omit them and list them in `disabled_cases`
+until their J/A and physical-U consumers are validated. The `paper-smoke`
+workflow executes its passive control.
 
 For CGL `mhd_w` or `mhd_w_bcc` output, the existing `eint` field retains its
 legacy meaning of `p_parallel`; output now also includes `p_perp`. Paper

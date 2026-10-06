@@ -1,0 +1,250 @@
+{
+  "execute": true,
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+  "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+  "records": [
+    {
+      "name": "heat-128-h",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {
+        "nx": 128,
+        "mode": 1,
+        "amp": 0.1,
+        "thermal": 0.2,
+        "tlim": 0.004
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-128-h/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-128-h",
+      "input_sha256": "1c37d1b1f0b7a1e27565752df3c2496bdd677fa127e728c817147f2ba82e10c5",
+      "exit_code": 0,
+      "seconds": 1.0695870658382773,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-128-h/rst/passive_validation.00001.rst",
+      "restart_sha256": "3e1552d7edcad7e59b7b61fda82dc824bcc18b4e3b3c033a5f3dd8000841150c",
+      "time": 0.004,
+      "cycle": 3
+    },
+    {
+      "name": "heat-128-2h",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {
+        "nx": 128,
+        "mode": 1,
+        "amp": 0.1,
+        "thermal": 0.2,
+        "tlim": 0.008
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-128-2h/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-128-2h",
+      "input_sha256": "6ccc76e43da2b9e3630aefd26a3a0efe7d663bd39a370c10dfed92981efa007e",
+      "exit_code": 0,
+      "seconds": 2.621813613921404,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-128-2h/rst/passive_validation.00001.rst",
+      "restart_sha256": "dd183f030825074c6c65295b63c946ad60da7ec3a039dd374887b9afecb6b791",
+      "time": 0.008,
+      "cycle": 6
+    },
+    {
+      "name": "heat-256-h",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {
+        "nx": 256,
+        "mode": 1,
+        "amp": 0.1,
+        "thermal": 0.2,
+        "tlim": 0.002
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-256-h/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-256-h",
+      "input_sha256": "d213b3b9d93737d56ed421f47324f72a5a1a82a142ebb6fbe230874c3bb13f34",
+      "exit_code": 0,
+      "seconds": 0.8194035699125379,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-256-h/rst/passive_validation.00001.rst",
+      "restart_sha256": "5158323d8344368ed3736d8a6c1e296b003d3e64fe4b90ad3416e089c2bfd3f6",
+      "time": 0.002,
+      "cycle": 3
+    },
+    {
+      "name": "heat-256-2h",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {
+        "nx": 256,
+        "mode": 1,
+        "amp": 0.1,
+        "thermal": 0.2,
+        "tlim": 0.004
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-256-2h/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-256-2h",
+      "input_sha256": "c25b59ba7407deddd5d437b55e7183c5a20fdbb65907eea93b07d61d7f28d3c8",
+      "exit_code": 0,
+      "seconds": 0.8693870618008077,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-256-2h/rst/passive_validation.00001.rst",
+      "restart_sha256": "44601e11c7e1d9c9f41b4d739a8cba26030f86ed87f984282966f401ea79cfab",
+      "time": 0.004,
+      "cycle": 6
+    },
+    {
+      "name": "heat-512-h",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {
+        "nx": 512,
+        "mode": 1,
+        "amp": 0.1,
+        "thermal": 0.2,
+        "tlim": 0.001
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-512-h/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-512-h",
+      "input_sha256": "5a653c3692efca676948bba01953b2ae61d91eceded365ac52f3ad156850f1ff",
+      "exit_code": 0,
+      "seconds": 0.8695370540954173,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-512-h/rst/passive_validation.00001.rst",
+      "restart_sha256": "8175463fbbfb4bdaaf3be20be4a735accfbf10269d1c45ce415ccd7f1eed3bd6",
+      "time": 0.001,
+      "cycle": 3
+    },
+    {
+      "name": "heat-512-2h",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {
+        "nx": 512,
+        "mode": 1,
+        "amp": 0.1,
+        "thermal": 0.2,
+        "tlim": 0.002
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-512-2h/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-512-2h",
+      "input_sha256": "df6c5ccfd07d3db4e7dec51f3ca9d688582c5cd0dd9eae4aca709b5d5cc5dfa0",
+      "exit_code": 0,
+      "seconds": 0.869393162894994,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/heat-512-2h/rst/passive_validation.00001.rst",
+      "restart_sha256": "50d7d4fa31fb5f54ba57e76d07b45d5ba6ddea39197219f04927ffeaed0fc8ba",
+      "time": 0.002,
+      "cycle": 6
+    }
+  ],
+  "checks": [
+    {
+      "name": "periodic-heating-128",
+      "passed": true,
+      "oracle": 0.031415926535897934,
+      "measured": 0.03142721704962881,
+      "relative_error": 0.0003593882140631166,
+      "initial_U": 3.0,
+      "final_U": 3.000128049475993
+    },
+    {
+      "name": "periodic-heating-256",
+      "passed": true,
+      "oracle": 0.031415926535897934,
+      "measured": 0.0314187100930452,
+      "relative_error": 8.860337587313083e-05,
+      "initial_U": 3.0,
+      "final_U": 3.0000634261921952
+    },
+    {
+      "name": "periodic-heating-512",
+      "passed": true,
+      "oracle": 0.031415926535897934,
+      "measured": 0.03141661742445123,
+      "relative_error": 2.1991665676512895e-05,
+      "initial_U": 3.0,
+      "final_U": 3.000031564242051
+    },
+    {
+      "name": "periodic-heating-refinement",
+      "passed": true,
+      "order": 2.015257156126974,
+      "errors": [
+        0.0003593882140631166,
+        8.860337587313083e-05,
+        2.1991665676512895e-05
+      ]
+    }
+  ]
+}

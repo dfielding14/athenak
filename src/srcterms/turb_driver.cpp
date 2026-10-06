@@ -1369,7 +1369,8 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   const int nji = nx2 * nx1;
 
   auto eos = peos->eos_data;  // copy-by-value (POD expected)
-  const bool secondary_is_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal;
+  const bool secondary_is_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal
+                                  && !pmy_pack->pmhd->peos->eos_data.passive;
 
   if ((current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
@@ -1394,7 +1395,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
             work = den * (a1 * ux + a2 * uy + a3 * uz) * bdt / ut;
           }
           const Real kick2 = (a1 * a1 + a2 * a2 + a3 * a3) * bdt * bdt;
-          if (eos.is_ideal) {
+          if (eos.is_ideal && !eos.passive) {
             u0(m, IEN, k, j, i) += work + 0.5 * den * kick2;
           }
           u0(m, IM1, k, j, i) += den * a1 * bdt;
@@ -1690,6 +1691,9 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     DvceArray5D<Real> u0;
     if (pmy_pack->phydro != nullptr) u0 = pmy_pack->phydro->u0;
     if (pmy_pack->pmhd != nullptr) u0 = pmy_pack->pmhd->u0;
+    const EquationOfState *peos = pmy_pack->pmhd != nullptr ?
+        pmy_pack->pmhd->peos : pmy_pack->phydro->peos;
+    const bool kinetic_only = !peos->eos_data.is_ideal || peos->eos_data.passive;
     auto& indcs = pm->mb_indcs;
     const int is = indcs.is, js = indcs.js, ks = indcs.ks;
     const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
@@ -1710,7 +1714,12 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
                         (j - js) * nx1 + is;
           const Real vol = mb_size.d_view(m).dx1 * mb_size.d_view(m).dx2 *
                            mb_size.d_view(m).dx3;
-          energy += vol * u0(m, IEN, k, j, i);
+          if (kinetic_only) {
+            energy += vol * (0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
+                                  SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i));
+          } else {
+            energy += vol * u0(m, IEN, k, j, i);
+          }
         },
         Kokkos::Sum<Real>(total));
 #if MPI_PARALLEL_ENABLED
@@ -1726,10 +1735,9 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     if (pmy_pack->phydro != nullptr) peos = pmy_pack->phydro->peos;
     if (pmy_pack->pmhd != nullptr) peos = pmy_pack->pmhd->peos;
     if (peos == nullptr ||
-        pmy_pack->pionn != nullptr || pmy_pack->pcoord->is_special_relativistic ||
-        !peos->eos_data.is_ideal) {
+        pmy_pack->pionn != nullptr || pmy_pack->pcoord->is_special_relativistic) {
       FatalTurbulenceError(
-          "record_injected_work requires a single nonrelativistic ideal/CGL fluid");
+          "record_injected_work requires a single nonrelativistic fluid");
     }
     forcing_energy_before = integrated_energy();
   }

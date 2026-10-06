@@ -122,7 +122,7 @@ void SourceTerms::ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     Real src = bdt*g*w0(m,IDN,k,j,i);
     u0(m,dir,k,j,i) += src;
-    if (eos_data.is_ideal) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
+    if (eos_data.is_ideal && !eos_data.passive) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
   });
 
   return;

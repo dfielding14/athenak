@@ -1,0 +1,341 @@
+{
+  "records": [
+    {
+      "name": "fused-contract-repeat1-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-contract-repeat1-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HSA_XNACK": "1"
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-contract-repeat2-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-contract-repeat2-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HSA_XNACK": "1"
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-contract-repeat3-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-contract-repeat3-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HSA_XNACK": "1"
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-contract-repeat4-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-contract-repeat4-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HSA_XNACK": "1"
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-contract-repeat5-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-contract-repeat5-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HSA_XNACK": "1"
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-first-repeat-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-first-repeat-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-isolated-pair1-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-isolated-pair1-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-isolated-pair2-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-isolated-pair2-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": false,
+      "gpu_memory_fault": true,
+      "last_cycle": 3,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": [
+        "Memory access fault by GPU node-7 (Agent handle: 0x38873e0) on address 0x7ffe85f87000. Reason: Unknown."
+      ]
+    },
+    {
+      "name": "fused-isolated-pair3-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-isolated-pair3-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "fused-repeat-21695-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-repeat-21695-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": false,
+      "gpu_memory_fault": true,
+      "last_cycle": 3,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": [
+        "Memory access fault by GPU node-4 (Agent handle: 0x38873e0) on address 0x7ffe85f85000. Reason: Unknown."
+      ]
+    },
+    {
+      "name": "fused-runtime-contract-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-runtime-contract-06527",
+      "node": "frontier06527",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HSA_XNACK": "1"
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "standalone-isolated1-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/standalone-isolated1-06527",
+      "node": "frontier06527",
+      "binary_sha256": "a3355e7d25601dd36faaa6dfe762572e3c4d2953499d95ea641b7a3542be2cbd",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "standalone-isolated2-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/standalone-isolated2-06527",
+      "node": "frontier06527",
+      "binary_sha256": "a3355e7d25601dd36faaa6dfe762572e3c4d2953499d95ea641b7a3542be2cbd",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "standalone-isolated3-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/standalone-isolated3-06527",
+      "node": "frontier06527",
+      "binary_sha256": "a3355e7d25601dd36faaa6dfe762572e3c4d2953499d95ea641b7a3542be2cbd",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "unfused-alone-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-alone-06527",
+      "node": "frontier06527",
+      "binary_sha256": "09d92a5f250aa04781fc534dd5eee11e9f39829d0084f6f1791ec8383588f0c2",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": true,
+      "gpu_memory_fault": false,
+      "last_cycle": 12,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": []
+    },
+    {
+      "name": "unfused-isolated-pair1-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-isolated-pair1-06527",
+      "node": "frontier06527",
+      "binary_sha256": "09d92a5f250aa04781fc534dd5eee11e9f39829d0084f6f1791ec8383588f0c2",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": false,
+      "gpu_memory_fault": true,
+      "last_cycle": 1,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": [
+        "Memory access fault by GPU node-7 (Agent handle: 0x3849070) on address 0x7ffe86385000. Reason: Unknown."
+      ]
+    },
+    {
+      "name": "unfused-isolated-pair2-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-isolated-pair2-06527",
+      "node": "frontier06527",
+      "binary_sha256": "09d92a5f250aa04781fc534dd5eee11e9f39829d0084f6f1791ec8383588f0c2",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": false,
+      "gpu_memory_fault": true,
+      "last_cycle": 11,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": [
+        "Memory access fault by GPU node-7 (Agent handle: 0x3849070) on address 0x7ffe84f85000. Reason: Unknown."
+      ]
+    },
+    {
+      "name": "unfused-isolated-pair3-06527",
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-isolated-pair3-06527",
+      "node": "frontier06527",
+      "binary_sha256": "09d92a5f250aa04781fc534dd5eee11e9f39829d0084f6f1791ec8383588f0c2",
+      "input_sha256": "a23b394443febd7bb9bbb27fbd7bc20b7d8b860e5fce3fb25fa77ecb975592ec",
+      "completed_cycle_limit": false,
+      "gpu_memory_fault": true,
+      "last_cycle": 1,
+      "runtime": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": null,
+        "HSA_XNACK": null
+      },
+      "fault_lines": [
+        "Memory access fault by GPU node-7 (Agent handle: 0x3849070) on address 0x7ffe86385000. Reason: Unknown."
+      ]
+    }
+  ],
+  "finding": "Both final fused and unfused can fault under the incomplete runtime; six unchanged final-fused controls pass under the full accepted runtime. Specific responsible flag/runtime mechanism not isolated.",
+  "source_workaround": false,
+  "assertion_or_tolerance_change": false
+}

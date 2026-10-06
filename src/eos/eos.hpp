@@ -32,7 +32,7 @@ struct EOS_Data {
   Real iso_cs;       // isothermal sound speed
   bool is_ideal;     // flag to denote ideal gas EOS
   bool is_cgl;       // flag to denote CGL anisotropic MHD EOS
-  bool passive;      // passive CGL evolution flag
+  bool passive;      // isothermal flow with persistent CGL J/A (LF temporary U/mu)
   bool mlim, flim;   // mirror and firehose limiter flags
   bool coll;         // enable CGL collision/limiter relaxation
   bool backup_lim;   // enable backup CGL instability limiters

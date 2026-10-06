@@ -226,11 +226,12 @@ ion-Larmor-radius, or kinetic phase-space physics.
 ## Active And Passive Runs
 
 Active CGL applies the anisotropic pressure tensor in the momentum and energy
-fluxes. The former passive-Delta model is disabled because its thermal-energy
-equation is inconsistent; `passive=true` fails at construction until the WO2
-redesign. Its isothermal signal-speed paths remain unit tested. Archived
-active/passive comparisons are retained as historical evidence, not as a
-currently executable controlled experiment.
+fluxes. With `passive=true`, flow follows isothermal MHD while the two material
+invariants J/A evolve physical CGL pressures, heat flux, and fixed-U relaxation.
+The uniform periodic scope, restart encoding, and physical `thermal-U` output
+are documented in [the passive model](cgl_passive.md). Archived
+active/passive comparisons remain historical evidence and do not validate this
+new formulation.
 
 ## Turbulence Comparisons
 

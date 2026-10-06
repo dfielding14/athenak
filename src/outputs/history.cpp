@@ -294,10 +294,10 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   pdata->label[IM2] = "2-mom";
   pdata->label[IM3] = "3-mom";
   if (eos_data.is_ideal) {
-    pdata->label[IEN] = "tot-E";
+    pdata->label[IEN] = eos_data.passive ? "cgl-J" : "tot-E";
   }
   if (eos_data.is_cgl) {
-    pdata->label[IAN] = "aam-D"; // CGL conserved anisotropy A, legacy column label
+    pdata->label[IAN] = eos_data.passive ? "cgl-A" : "aam-D"; // CGL conserved anisotropy A, legacy column label
   }
   pdata->label[nmhd_  ] = "1-KE";
   pdata->label[nmhd_+1] = "2-KE";
@@ -311,7 +311,12 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     labelSS << "scal-" << s;
     pdata->label[nmhd_+6+s] = labelSS.str();
   }
-  const int lf_begin = nmhd_ + 6 + nscalars_;
+  const int passive_thermal = nmhd_ + 6 + nscalars_;
+  if (eos_data.passive) {
+    pdata->label[passive_thermal] = "thermal-U";
+    ++pdata->nhist;
+  }
+  const int lf_begin = passive_thermal + (eos_data.passive ? 1 : 0);
   if (pmhd->pcgl_lf != nullptr) {
     pdata->label[lf_begin] = "lf_nstage";
     pdata->label[lf_begin+1] = "lf_dfloor";
@@ -339,6 +344,7 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
 
   // capture class variabels for kernel
   auto &u0_ = pm->pmb_pack->pmhd->u0;
+  auto &w0_ = pm->pmb_pack->pmhd->w0;
   auto &bx1f = pm->pmb_pack->pmhd->b0.x1f;
   auto &bx2f = pm->pmb_pack->pmhd->b0.x2f;
   auto &bx3f = pm->pmb_pack->pmhd->b0.x3f;
@@ -392,6 +398,10 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     // Scalar masses
     for (int s=0; s<nscalars_; ++s) {
       hvars.the_array[nmhd_+6+s] = vol*u0_(m,nmhd_+s,k,j,i);
+    }
+
+    if (eos_data.passive) {
+      hvars.the_array[passive_thermal] = vol*(0.5*w0_(m,IPR,k,j,i) + w0_(m,IPP,k,j,i));
     }
 
     // fill rest of the_array with zeros, if nhist < NHISTORY_VARIABLES

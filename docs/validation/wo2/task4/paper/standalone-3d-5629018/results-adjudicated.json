@@ -1,0 +1,2723 @@
+{
+  "classification": "passive original-duration stability/mass-drift evidence and throughput; not resolution convergence or a closed forced-energy budget",
+  "forcing_policy": "mks24_alfvenic_perpendicular",
+  "original_input": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2-baseline/inputs/cgl_lf_paper/cgl_lf_paper_turb_passive.athinput",
+  "original_input_sha256": "63df1401f394945be08f15c185180b1b6a1f079c36fca32234264de5f37fa9ab",
+  "staged_input_sha256": "0a181c0f7dfc2752a802326deb27a2294a743c836481366da8e018c8340482cd",
+  "original_grid": [
+    48,
+    48,
+    96
+  ],
+  "block_grid": [
+    24,
+    24,
+    48
+  ],
+  "source_sha": "9a4030b09307bc43865d5e597638f8645a6388f8",
+  "forcing_seed": "Unchanged default rseed=-1 uses deterministic internal seed1",
+  "adaptations": [
+    "Additional bin and Real-precision rst outputs at dt0.25",
+    "History formatting increased to16 digits",
+    "Explicit unchanged LF profiling/admissibility defaults to permit CLI overrides",
+    "Throughput runs only: fixed nlim64",
+    "Separate profile run only: enable synchronized LF profiling",
+    "Supplemental scientific change: mks24_alfvenic_perpendicular; retained original input and explicitly declared existing forcing/LF defaults"
+  ],
+  "ranks": 1,
+  "warmup_repeats": 1,
+  "timed_repeats": 3,
+  "slurm_job": "5629018",
+  "plan": [
+    {
+      "name": "warmup",
+      "timed": false,
+      "overrides": [
+        "output1/data_format=%24.16e",
+        "turb_driving/projection_policy=mks24_alfvenic_perpendicular",
+        "turb_driving/isotropic_power_spectrum=false",
+        "turb_driving/physical_k_shell=false",
+        "turb_driving/rseed=-1",
+        "turb_driving/spectrum=parabolic",
+        "mhd/cgl_lf_profile=false",
+        "mhd/cgl_lf_profile_detail=false",
+        "mhd/cgl_lf_strict_admissibility=false",
+        "time/nlim=64"
+      ]
+    },
+    {
+      "name": "repeat-0",
+      "timed": true,
+      "overrides": [
+        "output1/data_format=%24.16e",
+        "turb_driving/projection_policy=mks24_alfvenic_perpendicular",
+        "turb_driving/isotropic_power_spectrum=false",
+        "turb_driving/physical_k_shell=false",
+        "turb_driving/rseed=-1",
+        "turb_driving/spectrum=parabolic",
+        "mhd/cgl_lf_profile=false",
+        "mhd/cgl_lf_profile_detail=false",
+        "mhd/cgl_lf_strict_admissibility=false",
+        "time/nlim=64"
+      ]
+    },
+    {
+      "name": "repeat-1",
+      "timed": true,
+      "overrides": [
+        "output1/data_format=%24.16e",
+        "turb_driving/projection_policy=mks24_alfvenic_perpendicular",
+        "turb_driving/isotropic_power_spectrum=false",
+        "turb_driving/physical_k_shell=false",
+        "turb_driving/rseed=-1",
+        "turb_driving/spectrum=parabolic",
+        "mhd/cgl_lf_profile=false",
+        "mhd/cgl_lf_profile_detail=false",
+        "mhd/cgl_lf_strict_admissibility=false",
+        "time/nlim=64"
+      ]
+    },
+    {
+      "name": "repeat-2",
+      "timed": true,
+      "overrides": [
+        "output1/data_format=%24.16e",
+        "turb_driving/projection_policy=mks24_alfvenic_perpendicular",
+        "turb_driving/isotropic_power_spectrum=false",
+        "turb_driving/physical_k_shell=false",
+        "turb_driving/rseed=-1",
+        "turb_driving/spectrum=parabolic",
+        "mhd/cgl_lf_profile=false",
+        "mhd/cgl_lf_profile_detail=false",
+        "mhd/cgl_lf_strict_admissibility=false",
+        "time/nlim=64"
+      ]
+    },
+    {
+      "name": "profile",
+      "timed": false,
+      "overrides": [
+        "output1/data_format=%24.16e",
+        "turb_driving/projection_policy=mks24_alfvenic_perpendicular",
+        "turb_driving/isotropic_power_spectrum=false",
+        "turb_driving/physical_k_shell=false",
+        "turb_driving/rseed=-1",
+        "turb_driving/spectrum=parabolic",
+        "mhd/cgl_lf_profile=false",
+        "mhd/cgl_lf_profile_detail=false",
+        "mhd/cgl_lf_strict_admissibility=false",
+        "time/nlim=64",
+        "mhd/cgl_lf_profile=true",
+        "mhd/cgl_lf_profile_detail=false"
+      ]
+    },
+    {
+      "name": "physics-tlim1",
+      "timed": false,
+      "overrides": [
+        "output1/data_format=%24.16e",
+        "turb_driving/projection_policy=mks24_alfvenic_perpendicular",
+        "turb_driving/isotropic_power_spectrum=false",
+        "turb_driving/physical_k_shell=false",
+        "turb_driving/rseed=-1",
+        "turb_driving/spectrum=parabolic",
+        "mhd/cgl_lf_profile=false",
+        "mhd/cgl_lf_profile_detail=false",
+        "mhd/cgl_lf_strict_admissibility=false"
+      ]
+    }
+  ],
+  "results": [
+    {
+      "name": "warmup",
+      "timed": false,
+      "returncode": 0,
+      "restart_metadata": {
+        "rst/cgl_lf_paper_turb_passive.00000.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9149,
+          "normalized_ranges": [
+            [
+              9269,
+              9305
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "fe152921513d94554a3ac5edc712795305613dc23b6dd4df8e06a4dff54ba05d",
+          "normalized_sha256": "4109cbdc8144a016d1338c7865b666701fb0d6b196f8b7478630df62ce934971"
+        },
+        "rst/cgl_lf_paper_turb_passive.00001.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "4c6e53765c9f4a256c343209ab0fce7e6efcf2dd0bd99b4ff793e46228e9af02",
+          "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd"
+        }
+      },
+      "launch_inclusive_seconds": 17.523604076122865,
+      "output_hashes": {
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin": "7c379b42bb1fc7629882a31996590ab03d9fb5cf9736987c60e006b1b768facf",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin": "c1d8c2e894e84e8f05024397df7207fd083a0b87d6510f3bb2b5b87a17f02d70",
+        "cgl_lf_paper_turb_passive.mhd.hst": "c485979619081f29a4c424ae8ea899bd5a7f970329ee8ad57a1a19ed9f7b9d7a",
+        "cgl_lf_paper_turb_passive.user.hst": "37bae9229d16f7ef32a9f51c7968c95189f900795d2ae702e967d426b05370fe",
+        "rst/cgl_lf_paper_turb_passive.00000.rst": "fe152921513d94554a3ac5edc712795305613dc23b6dd4df8e06a4dff54ba05d",
+        "rst/cgl_lf_paper_turb_passive.00001.rst": "4c6e53765c9f4a256c343209ab0fce7e6efcf2dd0bd99b4ff793e46228e9af02"
+      },
+      "lf_work_peak": 6.207017368397969e-06,
+      "lf_activity_threshold": 3.4106051316484797e-12,
+      "max_z_variation": 0.014027755707502365,
+      "max_abs_history_hfpow": 0.00025611941214304774,
+      "cycles": 64,
+      "final_time": 0.1573072,
+      "solver_seconds": 13.87286,
+      "solver_seconds_per_cycle": 0.2167634375,
+      "total_stages": 1460.0,
+      "mean_stages_per_sweep": 11.40625,
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "mass": 2.0,
+        "1-mom": 0.0,
+        "2-mom": 0.0,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188758248682006,
+        "cgl-A": 0.0,
+        "1-KE": 0.0,
+        "2-KE": 0.0,
+        "3-KE": 0.0,
+        "1-ME": 0.0,
+        "2-ME": 0.0,
+        "3-ME": 1.0,
+        "thermal-U": 14.999999999999995,
+        "lf_nstage": 0.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 0.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "mass": 2.0,
+        "1-mom": -2.168404344971009e-19,
+        "2-mom": -2.168404344971009e-19,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188764872078037,
+        "cgl-A": -7.735749695731608e-07,
+        "1-KE": 0.002243409791409787,
+        "2-KE": 0.0025576943073152983,
+        "3-KE": 3.2222863908498645e-07,
+        "1-ME": 0.0008859931499757993,
+        "2-ME": 0.0005466140927212941,
+        "3-ME": 1.0000002350075263,
+        "thermal-U": 15.000010997946832,
+        "lf_nstage": 322928640.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 968785920.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 6.207017368397969e-06,
+        "lf_qpewrk": 2.368202861031994e-06,
+        "lf_hwproj": 0.0
+      },
+      "user_history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.0,
+        "emag": 1.0,
+        "ecgl": 14.999999999999995,
+        "b2": 2.0,
+        "b4": 2.0,
+        "beta": 19.999999999999996,
+        "dp": 0.0,
+        "absdp": 0.0,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0
+      },
+      "user_history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00480142632736417,
+        "emag": 1.0014318836016662,
+        "ecgl": 15.000010997946832,
+        "b2": 2.0028637672033325,
+        "b4": 2.005734865939344,
+        "beta": 19.97144438204054,
+        "dp": 0.02143943672315602,
+        "absdp": 0.02143943672315602,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.00025611941214304774
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "snapshot_fields": [
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "ranges": {
+            "dens": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            },
+            "velx": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "vely": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "velz": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "eint": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "p_perp": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "bcc1": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc2": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc3": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin",
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "ranges": {
+            "dens": {
+              "min": 0.9985665678977966,
+              "max": 1.0007834434509277,
+              "max_z_difference": 0.00013709068298339844
+            },
+            "velx": {
+              "min": -0.10278672724962234,
+              "max": 0.12723740935325623,
+              "max_z_difference": 0.014027755707502365
+            },
+            "vely": {
+              "min": -0.11352527886629105,
+              "max": 0.10537359118461609,
+              "max_z_difference": 0.010485365055501461
+            },
+            "velz": {
+              "min": -0.0019779836293309927,
+              "max": 0.0018321137176826596,
+              "max_z_difference": 0.0004194356733933091
+            },
+            "eint": {
+              "min": 4.977563381195068,
+              "max": 5.000580310821533,
+              "max_z_difference": 0.0013608932495117188
+            },
+            "p_perp": {
+              "min": 4.995602130889893,
+              "max": 5.0165486335754395,
+              "max_z_difference": 0.0011296272277832031
+            },
+            "bcc1": {
+              "min": -0.06947354972362518,
+              "max": 0.07587558776140213,
+              "max_z_difference": 0.008990291506052017
+            },
+            "bcc2": {
+              "min": -0.057879652827978134,
+              "max": 0.056128066033124924,
+              "max_z_difference": 0.006089489907026291
+            },
+            "bcc3": {
+              "min": 0.9980465173721313,
+              "max": 1.001546859741211,
+              "max_z_difference": 0.00025904178619384766
+            }
+          }
+        }
+      ],
+      "restart_files": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst",
+        "rst/cgl_lf_paper_turb_passive.00001.rst"
+      ]
+    },
+    {
+      "name": "repeat-0",
+      "timed": true,
+      "returncode": 0,
+      "restart_metadata": {
+        "rst/cgl_lf_paper_turb_passive.00000.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9149,
+          "normalized_ranges": [
+            [
+              9269,
+              9305
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "551542396c6f423f4476f04230d5d9aa23fc4de724a3a2bd60160564f91643d7",
+          "normalized_sha256": "8c66cc41c1f163f6e79b4e1fc8ec0c61f3f62ffc8272ce66c26c2927367a6a07"
+        },
+        "rst/cgl_lf_paper_turb_passive.00001.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+          "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd"
+        }
+      },
+      "launch_inclusive_seconds": 38.66540600778535,
+      "output_hashes": {
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin": "7c379b42bb1fc7629882a31996590ab03d9fb5cf9736987c60e006b1b768facf",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin": "c1d8c2e894e84e8f05024397df7207fd083a0b87d6510f3bb2b5b87a17f02d70",
+        "cgl_lf_paper_turb_passive.mhd.hst": "c485979619081f29a4c424ae8ea899bd5a7f970329ee8ad57a1a19ed9f7b9d7a",
+        "cgl_lf_paper_turb_passive.user.hst": "37bae9229d16f7ef32a9f51c7968c95189f900795d2ae702e967d426b05370fe",
+        "rst/cgl_lf_paper_turb_passive.00000.rst": "551542396c6f423f4476f04230d5d9aa23fc4de724a3a2bd60160564f91643d7",
+        "rst/cgl_lf_paper_turb_passive.00001.rst": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee"
+      },
+      "lf_work_peak": 6.207017368397969e-06,
+      "lf_activity_threshold": 3.4106051316484797e-12,
+      "max_z_variation": 0.014027755707502365,
+      "max_abs_history_hfpow": 0.00025611941214304774,
+      "cycles": 64,
+      "final_time": 0.1573072,
+      "solver_seconds": 13.97991,
+      "solver_seconds_per_cycle": 0.21843609375,
+      "total_stages": 1460.0,
+      "mean_stages_per_sweep": 11.40625,
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "mass": 2.0,
+        "1-mom": 0.0,
+        "2-mom": 0.0,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188758248682006,
+        "cgl-A": 0.0,
+        "1-KE": 0.0,
+        "2-KE": 0.0,
+        "3-KE": 0.0,
+        "1-ME": 0.0,
+        "2-ME": 0.0,
+        "3-ME": 1.0,
+        "thermal-U": 14.999999999999995,
+        "lf_nstage": 0.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 0.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "mass": 2.0,
+        "1-mom": -2.168404344971009e-19,
+        "2-mom": -2.168404344971009e-19,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188764872078037,
+        "cgl-A": -7.735749695731608e-07,
+        "1-KE": 0.002243409791409787,
+        "2-KE": 0.0025576943073152983,
+        "3-KE": 3.2222863908498645e-07,
+        "1-ME": 0.0008859931499757993,
+        "2-ME": 0.0005466140927212941,
+        "3-ME": 1.0000002350075263,
+        "thermal-U": 15.000010997946832,
+        "lf_nstage": 322928640.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 968785920.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 6.207017368397969e-06,
+        "lf_qpewrk": 2.368202861031994e-06,
+        "lf_hwproj": 0.0
+      },
+      "user_history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.0,
+        "emag": 1.0,
+        "ecgl": 14.999999999999995,
+        "b2": 2.0,
+        "b4": 2.0,
+        "beta": 19.999999999999996,
+        "dp": 0.0,
+        "absdp": 0.0,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0
+      },
+      "user_history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00480142632736417,
+        "emag": 1.0014318836016662,
+        "ecgl": 15.000010997946832,
+        "b2": 2.0028637672033325,
+        "b4": 2.005734865939344,
+        "beta": 19.97144438204054,
+        "dp": 0.02143943672315602,
+        "absdp": 0.02143943672315602,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.00025611941214304774
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "snapshot_fields": [
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "ranges": {
+            "dens": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            },
+            "velx": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "vely": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "velz": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "eint": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "p_perp": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "bcc1": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc2": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc3": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin",
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "ranges": {
+            "dens": {
+              "min": 0.9985665678977966,
+              "max": 1.0007834434509277,
+              "max_z_difference": 0.00013709068298339844
+            },
+            "velx": {
+              "min": -0.10278672724962234,
+              "max": 0.12723740935325623,
+              "max_z_difference": 0.014027755707502365
+            },
+            "vely": {
+              "min": -0.11352527886629105,
+              "max": 0.10537359118461609,
+              "max_z_difference": 0.010485365055501461
+            },
+            "velz": {
+              "min": -0.0019779836293309927,
+              "max": 0.0018321137176826596,
+              "max_z_difference": 0.0004194356733933091
+            },
+            "eint": {
+              "min": 4.977563381195068,
+              "max": 5.000580310821533,
+              "max_z_difference": 0.0013608932495117188
+            },
+            "p_perp": {
+              "min": 4.995602130889893,
+              "max": 5.0165486335754395,
+              "max_z_difference": 0.0011296272277832031
+            },
+            "bcc1": {
+              "min": -0.06947354972362518,
+              "max": 0.07587558776140213,
+              "max_z_difference": 0.008990291506052017
+            },
+            "bcc2": {
+              "min": -0.057879652827978134,
+              "max": 0.056128066033124924,
+              "max_z_difference": 0.006089489907026291
+            },
+            "bcc3": {
+              "min": 0.9980465173721313,
+              "max": 1.001546859741211,
+              "max_z_difference": 0.00025904178619384766
+            }
+          }
+        }
+      ],
+      "restart_files": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst",
+        "rst/cgl_lf_paper_turb_passive.00001.rst"
+      ]
+    },
+    {
+      "name": "repeat-1",
+      "timed": true,
+      "returncode": 0,
+      "restart_metadata": {
+        "rst/cgl_lf_paper_turb_passive.00000.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9149,
+          "normalized_ranges": [
+            [
+              9269,
+              9305
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "ff87bfc94efb4d8a4ea8a3babf7311a5812166a1adc92cb237ab495ec5002b14",
+          "normalized_sha256": "0f3dcd11db2816557950ff6931e5b4a4a34fc25d454fc2b96e1e6d164b149926"
+        },
+        "rst/cgl_lf_paper_turb_passive.00001.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+          "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd"
+        }
+      },
+      "launch_inclusive_seconds": 15.733763563912362,
+      "output_hashes": {
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin": "7c379b42bb1fc7629882a31996590ab03d9fb5cf9736987c60e006b1b768facf",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin": "c1d8c2e894e84e8f05024397df7207fd083a0b87d6510f3bb2b5b87a17f02d70",
+        "cgl_lf_paper_turb_passive.mhd.hst": "c485979619081f29a4c424ae8ea899bd5a7f970329ee8ad57a1a19ed9f7b9d7a",
+        "cgl_lf_paper_turb_passive.user.hst": "37bae9229d16f7ef32a9f51c7968c95189f900795d2ae702e967d426b05370fe",
+        "rst/cgl_lf_paper_turb_passive.00000.rst": "ff87bfc94efb4d8a4ea8a3babf7311a5812166a1adc92cb237ab495ec5002b14",
+        "rst/cgl_lf_paper_turb_passive.00001.rst": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee"
+      },
+      "lf_work_peak": 6.207017368397969e-06,
+      "lf_activity_threshold": 3.4106051316484797e-12,
+      "max_z_variation": 0.014027755707502365,
+      "max_abs_history_hfpow": 0.00025611941214304774,
+      "cycles": 64,
+      "final_time": 0.1573072,
+      "solver_seconds": 13.94994,
+      "solver_seconds_per_cycle": 0.2179678125,
+      "total_stages": 1460.0,
+      "mean_stages_per_sweep": 11.40625,
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "mass": 2.0,
+        "1-mom": 0.0,
+        "2-mom": 0.0,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188758248682006,
+        "cgl-A": 0.0,
+        "1-KE": 0.0,
+        "2-KE": 0.0,
+        "3-KE": 0.0,
+        "1-ME": 0.0,
+        "2-ME": 0.0,
+        "3-ME": 1.0,
+        "thermal-U": 14.999999999999995,
+        "lf_nstage": 0.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 0.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "mass": 2.0,
+        "1-mom": -2.168404344971009e-19,
+        "2-mom": -2.168404344971009e-19,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188764872078037,
+        "cgl-A": -7.735749695731608e-07,
+        "1-KE": 0.002243409791409787,
+        "2-KE": 0.0025576943073152983,
+        "3-KE": 3.2222863908498645e-07,
+        "1-ME": 0.0008859931499757993,
+        "2-ME": 0.0005466140927212941,
+        "3-ME": 1.0000002350075263,
+        "thermal-U": 15.000010997946832,
+        "lf_nstage": 322928640.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 968785920.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 6.207017368397969e-06,
+        "lf_qpewrk": 2.368202861031994e-06,
+        "lf_hwproj": 0.0
+      },
+      "user_history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.0,
+        "emag": 1.0,
+        "ecgl": 14.999999999999995,
+        "b2": 2.0,
+        "b4": 2.0,
+        "beta": 19.999999999999996,
+        "dp": 0.0,
+        "absdp": 0.0,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0
+      },
+      "user_history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00480142632736417,
+        "emag": 1.0014318836016662,
+        "ecgl": 15.000010997946832,
+        "b2": 2.0028637672033325,
+        "b4": 2.005734865939344,
+        "beta": 19.97144438204054,
+        "dp": 0.02143943672315602,
+        "absdp": 0.02143943672315602,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.00025611941214304774
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "snapshot_fields": [
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "ranges": {
+            "dens": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            },
+            "velx": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "vely": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "velz": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "eint": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "p_perp": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "bcc1": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc2": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc3": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin",
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "ranges": {
+            "dens": {
+              "min": 0.9985665678977966,
+              "max": 1.0007834434509277,
+              "max_z_difference": 0.00013709068298339844
+            },
+            "velx": {
+              "min": -0.10278672724962234,
+              "max": 0.12723740935325623,
+              "max_z_difference": 0.014027755707502365
+            },
+            "vely": {
+              "min": -0.11352527886629105,
+              "max": 0.10537359118461609,
+              "max_z_difference": 0.010485365055501461
+            },
+            "velz": {
+              "min": -0.0019779836293309927,
+              "max": 0.0018321137176826596,
+              "max_z_difference": 0.0004194356733933091
+            },
+            "eint": {
+              "min": 4.977563381195068,
+              "max": 5.000580310821533,
+              "max_z_difference": 0.0013608932495117188
+            },
+            "p_perp": {
+              "min": 4.995602130889893,
+              "max": 5.0165486335754395,
+              "max_z_difference": 0.0011296272277832031
+            },
+            "bcc1": {
+              "min": -0.06947354972362518,
+              "max": 0.07587558776140213,
+              "max_z_difference": 0.008990291506052017
+            },
+            "bcc2": {
+              "min": -0.057879652827978134,
+              "max": 0.056128066033124924,
+              "max_z_difference": 0.006089489907026291
+            },
+            "bcc3": {
+              "min": 0.9980465173721313,
+              "max": 1.001546859741211,
+              "max_z_difference": 0.00025904178619384766
+            }
+          }
+        }
+      ],
+      "restart_files": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst",
+        "rst/cgl_lf_paper_turb_passive.00001.rst"
+      ],
+      "raw_byte_repeatable": false,
+      "raw_repeatability_differences": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst"
+      ],
+      "physical_repeatability_differences": [],
+      "physical_byte_repeatable": true,
+      "original_repeat_check_differences": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst"
+      ]
+    },
+    {
+      "name": "repeat-2",
+      "timed": true,
+      "returncode": 0,
+      "restart_metadata": {
+        "rst/cgl_lf_paper_turb_passive.00000.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9149,
+          "normalized_ranges": [
+            [
+              9269,
+              9305
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "44ff519f4b99a6746c4edbe3491f45a1455af5fe6bd70d03367361e964ef1b2c",
+          "normalized_sha256": "8a6895645f354b9c18cc94e11e3ca9d58df1e6dedfe9cc011d1bf2309218d75f"
+        },
+        "rst/cgl_lf_paper_turb_passive.00001.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+          "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd"
+        }
+      },
+      "launch_inclusive_seconds": 15.679279025876895,
+      "output_hashes": {
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin": "7c379b42bb1fc7629882a31996590ab03d9fb5cf9736987c60e006b1b768facf",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin": "c1d8c2e894e84e8f05024397df7207fd083a0b87d6510f3bb2b5b87a17f02d70",
+        "cgl_lf_paper_turb_passive.mhd.hst": "c485979619081f29a4c424ae8ea899bd5a7f970329ee8ad57a1a19ed9f7b9d7a",
+        "cgl_lf_paper_turb_passive.user.hst": "37bae9229d16f7ef32a9f51c7968c95189f900795d2ae702e967d426b05370fe",
+        "rst/cgl_lf_paper_turb_passive.00000.rst": "44ff519f4b99a6746c4edbe3491f45a1455af5fe6bd70d03367361e964ef1b2c",
+        "rst/cgl_lf_paper_turb_passive.00001.rst": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee"
+      },
+      "lf_work_peak": 6.207017368397969e-06,
+      "lf_activity_threshold": 3.4106051316484797e-12,
+      "max_z_variation": 0.014027755707502365,
+      "max_abs_history_hfpow": 0.00025611941214304774,
+      "cycles": 64,
+      "final_time": 0.1573072,
+      "solver_seconds": 13.90173,
+      "solver_seconds_per_cycle": 0.21721453125,
+      "total_stages": 1460.0,
+      "mean_stages_per_sweep": 11.40625,
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "mass": 2.0,
+        "1-mom": 0.0,
+        "2-mom": 0.0,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188758248682006,
+        "cgl-A": 0.0,
+        "1-KE": 0.0,
+        "2-KE": 0.0,
+        "3-KE": 0.0,
+        "1-ME": 0.0,
+        "2-ME": 0.0,
+        "3-ME": 1.0,
+        "thermal-U": 14.999999999999995,
+        "lf_nstage": 0.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 0.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "mass": 2.0,
+        "1-mom": -2.168404344971009e-19,
+        "2-mom": -2.168404344971009e-19,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188764872078037,
+        "cgl-A": -7.735749695731608e-07,
+        "1-KE": 0.002243409791409787,
+        "2-KE": 0.0025576943073152983,
+        "3-KE": 3.2222863908498645e-07,
+        "1-ME": 0.0008859931499757993,
+        "2-ME": 0.0005466140927212941,
+        "3-ME": 1.0000002350075263,
+        "thermal-U": 15.000010997946832,
+        "lf_nstage": 322928640.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 968785920.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 6.207017368397969e-06,
+        "lf_qpewrk": 2.368202861031994e-06,
+        "lf_hwproj": 0.0
+      },
+      "user_history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.0,
+        "emag": 1.0,
+        "ecgl": 14.999999999999995,
+        "b2": 2.0,
+        "b4": 2.0,
+        "beta": 19.999999999999996,
+        "dp": 0.0,
+        "absdp": 0.0,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0
+      },
+      "user_history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00480142632736417,
+        "emag": 1.0014318836016662,
+        "ecgl": 15.000010997946832,
+        "b2": 2.0028637672033325,
+        "b4": 2.005734865939344,
+        "beta": 19.97144438204054,
+        "dp": 0.02143943672315602,
+        "absdp": 0.02143943672315602,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.00025611941214304774
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "snapshot_fields": [
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "ranges": {
+            "dens": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            },
+            "velx": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "vely": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "velz": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "eint": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "p_perp": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "bcc1": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc2": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc3": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin",
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "ranges": {
+            "dens": {
+              "min": 0.9985665678977966,
+              "max": 1.0007834434509277,
+              "max_z_difference": 0.00013709068298339844
+            },
+            "velx": {
+              "min": -0.10278672724962234,
+              "max": 0.12723740935325623,
+              "max_z_difference": 0.014027755707502365
+            },
+            "vely": {
+              "min": -0.11352527886629105,
+              "max": 0.10537359118461609,
+              "max_z_difference": 0.010485365055501461
+            },
+            "velz": {
+              "min": -0.0019779836293309927,
+              "max": 0.0018321137176826596,
+              "max_z_difference": 0.0004194356733933091
+            },
+            "eint": {
+              "min": 4.977563381195068,
+              "max": 5.000580310821533,
+              "max_z_difference": 0.0013608932495117188
+            },
+            "p_perp": {
+              "min": 4.995602130889893,
+              "max": 5.0165486335754395,
+              "max_z_difference": 0.0011296272277832031
+            },
+            "bcc1": {
+              "min": -0.06947354972362518,
+              "max": 0.07587558776140213,
+              "max_z_difference": 0.008990291506052017
+            },
+            "bcc2": {
+              "min": -0.057879652827978134,
+              "max": 0.056128066033124924,
+              "max_z_difference": 0.006089489907026291
+            },
+            "bcc3": {
+              "min": 0.9980465173721313,
+              "max": 1.001546859741211,
+              "max_z_difference": 0.00025904178619384766
+            }
+          }
+        }
+      ],
+      "restart_files": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst",
+        "rst/cgl_lf_paper_turb_passive.00001.rst"
+      ],
+      "raw_byte_repeatable": false,
+      "raw_repeatability_differences": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst"
+      ],
+      "physical_repeatability_differences": [],
+      "physical_byte_repeatable": true,
+      "original_repeat_check_differences": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst"
+      ]
+    },
+    {
+      "name": "profile",
+      "timed": false,
+      "returncode": 0,
+      "restart_metadata": {
+        "rst/cgl_lf_paper_turb_passive.00000.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9149,
+          "normalized_ranges": [
+            [
+              9269,
+              9305
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "88e45771fa52c6f6ef8a7443128831725b6c559e3a1e23fecaad93d9918b97ea",
+          "normalized_sha256": "318133c2227f1d755f7a0a8af3c29baffaa184d8ed2e2478d7234de0b1918c7f"
+        },
+        "rst/cgl_lf_paper_turb_passive.00001.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "85470ca04e586bbc5d116925f17f4e3c05287445ee049cd0558ed3056579adb4",
+          "normalized_sha256": "36d014688b40cf88a25c0a21f574c7e3df4b6009cd2369e3db709b9aa5d44453"
+        }
+      },
+      "launch_inclusive_seconds": 15.650537234032527,
+      "output_hashes": {
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin": "0af597d22f1adffca2c7e50b7a14345ae2e6dc62530cf4c977a39ad5a556a2a8",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin": "b493a7d8bf734aad334cff3f1eca8e7b8559387501c0a42f78419d63c61d0e3b",
+        "cgl_lf_paper_turb_passive.mhd.hst": "c485979619081f29a4c424ae8ea899bd5a7f970329ee8ad57a1a19ed9f7b9d7a",
+        "cgl_lf_paper_turb_passive.user.hst": "37bae9229d16f7ef32a9f51c7968c95189f900795d2ae702e967d426b05370fe",
+        "rst/cgl_lf_paper_turb_passive.00000.rst": "88e45771fa52c6f6ef8a7443128831725b6c559e3a1e23fecaad93d9918b97ea",
+        "rst/cgl_lf_paper_turb_passive.00001.rst": "85470ca04e586bbc5d116925f17f4e3c05287445ee049cd0558ed3056579adb4"
+      },
+      "lf_work_peak": 6.207017368397969e-06,
+      "lf_activity_threshold": 3.4106051316484797e-12,
+      "max_z_variation": 0.014027755707502365,
+      "max_abs_history_hfpow": 0.00025611941214304774,
+      "cycles": 64,
+      "final_time": 0.1573072,
+      "solver_seconds": 14.0906,
+      "solver_seconds_per_cycle": 0.220165625,
+      "total_stages": 1460.0,
+      "mean_stages_per_sweep": 11.40625,
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "mass": 2.0,
+        "1-mom": 0.0,
+        "2-mom": 0.0,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188758248682006,
+        "cgl-A": 0.0,
+        "1-KE": 0.0,
+        "2-KE": 0.0,
+        "3-KE": 0.0,
+        "1-ME": 0.0,
+        "2-ME": 0.0,
+        "3-ME": 1.0,
+        "thermal-U": 14.999999999999995,
+        "lf_nstage": 0.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 0.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "mass": 2.0,
+        "1-mom": -2.168404344971009e-19,
+        "2-mom": -2.168404344971009e-19,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188764872078037,
+        "cgl-A": -7.735749695731608e-07,
+        "1-KE": 0.002243409791409787,
+        "2-KE": 0.0025576943073152983,
+        "3-KE": 3.2222863908498645e-07,
+        "1-ME": 0.0008859931499757993,
+        "2-ME": 0.0005466140927212941,
+        "3-ME": 1.0000002350075263,
+        "thermal-U": 15.000010997946832,
+        "lf_nstage": 322928640.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 968785920.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 6.207017368397969e-06,
+        "lf_qpewrk": 2.368202861031994e-06,
+        "lf_hwproj": 0.0
+      },
+      "user_history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.0,
+        "emag": 1.0,
+        "ecgl": 14.999999999999995,
+        "b2": 2.0,
+        "b4": 2.0,
+        "beta": 19.999999999999996,
+        "dp": 0.0,
+        "absdp": 0.0,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0
+      },
+      "user_history_final": {
+        "time": 0.15730723907717248,
+        "dt": 0.0024256056284034837,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00480142632736417,
+        "emag": 1.0014318836016662,
+        "ecgl": 15.000010997946832,
+        "b2": 2.0028637672033325,
+        "b4": 2.005734865939344,
+        "beta": 19.97144438204054,
+        "dp": 0.02143943672315602,
+        "absdp": 0.02143943672315602,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.00025611941214304774
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "snapshot_fields": [
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "ranges": {
+            "dens": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            },
+            "velx": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "vely": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "velz": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "eint": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "p_perp": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "bcc1": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc2": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc3": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin",
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "ranges": {
+            "dens": {
+              "min": 0.9985665678977966,
+              "max": 1.0007834434509277,
+              "max_z_difference": 0.00013709068298339844
+            },
+            "velx": {
+              "min": -0.10278672724962234,
+              "max": 0.12723740935325623,
+              "max_z_difference": 0.014027755707502365
+            },
+            "vely": {
+              "min": -0.11352527886629105,
+              "max": 0.10537359118461609,
+              "max_z_difference": 0.010485365055501461
+            },
+            "velz": {
+              "min": -0.0019779836293309927,
+              "max": 0.0018321137176826596,
+              "max_z_difference": 0.0004194356733933091
+            },
+            "eint": {
+              "min": 4.977563381195068,
+              "max": 5.000580310821533,
+              "max_z_difference": 0.0013608932495117188
+            },
+            "p_perp": {
+              "min": 4.995602130889893,
+              "max": 5.0165486335754395,
+              "max_z_difference": 0.0011296272277832031
+            },
+            "bcc1": {
+              "min": -0.06947354972362518,
+              "max": 0.07587558776140213,
+              "max_z_difference": 0.008990291506052017
+            },
+            "bcc2": {
+              "min": -0.057879652827978134,
+              "max": 0.056128066033124924,
+              "max_z_difference": 0.006089489907026291
+            },
+            "bcc3": {
+              "min": 0.9980465173721313,
+              "max": 1.001546859741211,
+              "max_z_difference": 0.00025904178619384766
+            }
+          }
+        }
+      ],
+      "restart_files": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst",
+        "rst/cgl_lf_paper_turb_passive.00001.rst"
+      ]
+    },
+    {
+      "name": "physics-tlim1",
+      "timed": false,
+      "returncode": 0,
+      "restart_metadata": {
+        "rst/cgl_lf_paper_turb_passive.00000.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9149,
+          "normalized_ranges": [
+            [
+              9269,
+              9305
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "764f7846606acdb24360184cca7b5362977d7c1091d431d520111d4b417b97e1",
+          "normalized_sha256": "89cdf2eef5d7c0e401f07dc12d52571e818bbcf227836592f347fd30c809a85b"
+        },
+        "rst/cgl_lf_paper_turb_passive.00001.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "fac313d6234f30098dab8d09f6d09074e5d26eb5242c698cb76d82b7215a50c8",
+          "normalized_sha256": "9a19c8711eeae194878f2a1359b42e5faf5463dfe7257fc9eca6b14a0c63bd51"
+        },
+        "rst/cgl_lf_paper_turb_passive.00002.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "4e99828da989fe49700a707d2dcbd7c6236cd90cf1a45fc6df0c012b765a3466",
+          "normalized_sha256": "1941335dfd4d553f2947dfc3284729cc8eebdfcaaa948670ac113f36f24da92e"
+        },
+        "rst/cgl_lf_paper_turb_passive.00003.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "efe0c849e4ddc77ff8333996f1324fe27f34b9e1d83f0a80a1b26b25e02d5e56",
+          "normalized_sha256": "08aaf065cd097eed484a20a069d80af7c216cd68e8ddcecc0709e81852b9e07b"
+        },
+        "rst/cgl_lf_paper_turb_passive.00004.rst": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 9269,
+          "normalized_ranges": [
+            [
+              9389,
+              9425
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "5f09d46b8f6791ae217d2d11f90ce25ca43cc79c8d4f47b551cf96db5b323ea6",
+          "normalized_sha256": "0e65d31ca24f75163c6292a68b9ba2bc35a85a6c8eb5958dfde142d820761ead"
+        }
+      },
+      "launch_inclusive_seconds": 88.2203790070489,
+      "output_hashes": {
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin": "1b50bc9abf059a308a194385e311746869904c809485e092ded4ac65175d1be6",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin": "052194ab353e65d070554a08da0809888183edce71b6ca0666dac0a80f0f8d29",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00002.bin": "d4833e1b343856b91faacf599340b55e35865c16e7975399279e45c20ce9fbef",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00003.bin": "df9e9fbac1e728a699013141348fd521d12be1236f5e405e7572c876dcdf39e1",
+        "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00004.bin": "f778ae6ba2720698a9e2e1924078218d0aae46bff6e7138a9eaf66bfb6add1c4",
+        "cgl_lf_paper_turb_passive.mhd.hst": "6270e8dab0cb4bad52127e997d165f65bf4126b73a2932384b29a3c8dbb9f0f3",
+        "cgl_lf_paper_turb_passive.user.hst": "3dceef59dc3bdb3c76bf15e03a59f026b91eb8b2b824d420298746aca103deae",
+        "rst/cgl_lf_paper_turb_passive.00000.rst": "764f7846606acdb24360184cca7b5362977d7c1091d431d520111d4b417b97e1",
+        "rst/cgl_lf_paper_turb_passive.00001.rst": "fac313d6234f30098dab8d09f6d09074e5d26eb5242c698cb76d82b7215a50c8",
+        "rst/cgl_lf_paper_turb_passive.00002.rst": "4e99828da989fe49700a707d2dcbd7c6236cd90cf1a45fc6df0c012b765a3466",
+        "rst/cgl_lf_paper_turb_passive.00003.rst": "efe0c849e4ddc77ff8333996f1324fe27f34b9e1d83f0a80a1b26b25e02d5e56",
+        "rst/cgl_lf_paper_turb_passive.00004.rst": "5f09d46b8f6791ae217d2d11f90ce25ca43cc79c8d4f47b551cf96db5b323ea6"
+      },
+      "lf_work_peak": 0.007661969706855876,
+      "lf_activity_threshold": 3.4106051316484797e-12,
+      "max_z_variation": 0.033180445432662964,
+      "max_abs_history_hfpow": 0.026552225354118605,
+      "cycles": 415,
+      "final_time": 1.0,
+      "solver_seconds": 84.9977,
+      "solver_seconds_per_cycle": 0.20481373493975902,
+      "total_stages": 9178.0,
+      "mean_stages_per_sweep": 11.057831325301205,
+      "repairs": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "mass": 2.0,
+        "1-mom": 0.0,
+        "2-mom": 0.0,
+        "3-mom": 0.0,
+        "cgl-J": 3.2188758248682006,
+        "cgl-A": 0.0,
+        "1-KE": 0.0,
+        "2-KE": 0.0,
+        "3-KE": 0.0,
+        "1-ME": 0.0,
+        "2-ME": 0.0,
+        "3-ME": 1.0,
+        "thermal-U": 14.999999999999995,
+        "lf_nstage": 0.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 0.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.0,
+        "lf_qpewrk": 0.0,
+        "lf_hwproj": 0.0
+      },
+      "history_final": {
+        "time": 1.0,
+        "dt": 0.002360684690725017,
+        "mass": 2.0,
+        "1-mom": -8.673617379884035e-19,
+        "2-mom": -4.336808689942018e-19,
+        "3-mom": 2.710505431213761e-20,
+        "cgl-J": 3.2197918343618652,
+        "cgl-A": -0.0011163088265044542,
+        "1-KE": 0.0038330050442219443,
+        "2-KE": 0.0036975414442757524,
+        "3-KE": 2.7788886448022552e-05,
+        "1-ME": 0.013492607634618556,
+        "2-ME": 0.016908779593515805,
+        "3-ME": 1.0001035359704127,
+        "thermal-U": 15.005155148488488,
+        "lf_nstage": 2030026752.0,
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_mirror": 2558.0,
+        "lf_firehs": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_qface": 6090080256.0,
+        "lf_qprcap": 0.0,
+        "lf_qpr10": 0.0,
+        "lf_qpecap": 0.0,
+        "lf_qpe10": 0.0,
+        "lf_qprwrk": 0.007661969706855876,
+        "lf_qpewrk": 0.0020461177765685253,
+        "lf_hwproj": 0.0
+      },
+      "user_history_initial": {
+        "time": 0.0,
+        "dt": 0.002551551815399143,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.0,
+        "emag": 1.0,
+        "ecgl": 14.999999999999995,
+        "b2": 2.0,
+        "b4": 2.0,
+        "beta": 19.999999999999996,
+        "dp": 0.0,
+        "absdp": 0.0,
+        "mir": 0.0,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 0.0,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0
+      },
+      "user_history_final": {
+        "time": 1.0,
+        "dt": 0.002360684690725017,
+        "vol": 2.0,
+        "mass": 2.0,
+        "ekin": 0.00755833537494572,
+        "emag": 1.0304878776175852,
+        "ecgl": 15.005155148488488,
+        "b2": 2.0609757552351704,
+        "b4": 2.126308968141207,
+        "beta": 19.437532058580018,
+        "dp": 0.43167244932317717,
+        "absdp": 0.43167244932317717,
+        "mir": 1.808449074074074e-05,
+        "fire": 0.0,
+        "bmir": 0.0,
+        "bfire": 0.0,
+        "nueff": 180844.9074074074,
+        "qpar1": 0.0,
+        "qperp1": 0.0,
+        "qpar10": 0.0,
+        "qperp10": 0.0,
+        "hfpow": 0.0233012274282566
+      },
+      "max_relative_mass_drift": 1.1102230246251565e-16,
+      "snapshot_fields": [
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "ranges": {
+            "dens": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            },
+            "velx": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "vely": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "velz": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "eint": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "p_perp": {
+              "min": 5.0,
+              "max": 5.0,
+              "max_z_difference": 0.0
+            },
+            "bcc1": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc2": {
+              "min": 0.0,
+              "max": 0.0,
+              "max_z_difference": 0.0
+            },
+            "bcc3": {
+              "min": 1.0,
+              "max": 1.0,
+              "max_z_difference": 0.0
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00001.bin",
+          "time": 0.2517516574392407,
+          "cycle": 103,
+          "ranges": {
+            "dens": {
+              "min": 0.9979674816131592,
+              "max": 1.00116765499115,
+              "max_z_difference": 0.0002734661102294922
+            },
+            "velx": {
+              "min": -0.10845140367746353,
+              "max": 0.13172468543052673,
+              "max_z_difference": 0.013450875878334045
+            },
+            "vely": {
+              "min": -0.11392177641391754,
+              "max": 0.10895120352506638,
+              "max_z_difference": 0.010336080566048622
+            },
+            "velz": {
+              "min": -0.0038382206112146378,
+              "max": 0.0031278887763619423,
+              "max_z_difference": 0.000773421605117619
+            },
+            "eint": {
+              "min": 4.944794654846191,
+              "max": 4.997496604919434,
+              "max_z_difference": 0.0027360916137695312
+            },
+            "p_perp": {
+              "min": 5.000980377197266,
+              "max": 5.030076503753662,
+              "max_z_difference": 0.0015444755554199219
+            },
+            "bcc1": {
+              "min": -0.12323814630508423,
+              "max": 0.1316135972738266,
+              "max_z_difference": 0.015457509085536003
+            },
+            "bcc2": {
+              "min": -0.09797433763742447,
+              "max": 0.10037238150835037,
+              "max_z_difference": 0.010411693714559078
+            },
+            "bcc3": {
+              "min": 0.9960360527038574,
+              "max": 1.0027269124984741,
+              "max_z_difference": 0.0006780028343200684
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00002.bin",
+          "time": 0.5013315059846273,
+          "cycle": 206,
+          "ranges": {
+            "dens": {
+              "min": 0.9954451322555542,
+              "max": 1.0044726133346558,
+              "max_z_difference": 0.0006226301193237305
+            },
+            "velx": {
+              "min": -0.12646561861038208,
+              "max": 0.11189404129981995,
+              "max_z_difference": 0.014352229423820972
+            },
+            "vely": {
+              "min": -0.14313656091690063,
+              "max": 0.12196232378482819,
+              "max_z_difference": 0.01313694380223751
+            },
+            "velz": {
+              "min": -0.00814921036362648,
+              "max": 0.007589045912027359,
+              "max_z_difference": 0.001393463695421815
+            },
+            "eint": {
+              "min": 4.848520278930664,
+              "max": 4.989983081817627,
+              "max_z_difference": 0.006206035614013672
+            },
+            "p_perp": {
+              "min": 5.004762172698975,
+              "max": 5.088693141937256,
+              "max_z_difference": 0.004605293273925781
+            },
+            "bcc1": {
+              "min": -0.21351167559623718,
+              "max": 0.1775124967098236,
+              "max_z_difference": 0.022038234397768974
+            },
+            "bcc2": {
+              "min": -0.15992823243141174,
+              "max": 0.19723129272460938,
+              "max_z_difference": 0.015736263245344162
+            },
+            "bcc3": {
+              "min": 0.9896900653839111,
+              "max": 1.009743571281433,
+              "max_z_difference": 0.0014548301696777344
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00003.bin",
+          "time": 0.7505574505213437,
+          "cycle": 310,
+          "ranges": {
+            "dens": {
+              "min": 0.9886002540588379,
+              "max": 1.0061490535736084,
+              "max_z_difference": 0.0008090734481811523
+            },
+            "velx": {
+              "min": -0.16941945254802704,
+              "max": 0.17679867148399353,
+              "max_z_difference": 0.020734528079628944
+            },
+            "vely": {
+              "min": -0.1260383576154709,
+              "max": 0.08819619566202164,
+              "max_z_difference": 0.011452974751591682
+            },
+            "velz": {
+              "min": -0.018496619537472725,
+              "max": 0.01573386788368225,
+              "max_z_difference": 0.002369498135522008
+            },
+            "eint": {
+              "min": 4.658615589141846,
+              "max": 4.974270343780518,
+              "max_z_difference": 0.013881683349609375
+            },
+            "p_perp": {
+              "min": 5.016749382019043,
+              "max": 5.145603656768799,
+              "max_z_difference": 0.006371498107910156
+            },
+            "bcc1": {
+              "min": -0.2504633963108063,
+              "max": 0.2100314497947693,
+              "max_z_difference": 0.02156154252588749
+            },
+            "bcc2": {
+              "min": -0.23816435039043427,
+              "max": 0.30216488242149353,
+              "max_z_difference": 0.02034156024456024
+            },
+            "bcc3": {
+              "min": 0.9757068753242493,
+              "max": 1.020006537437439,
+              "max_z_difference": 0.0032175779342651367
+            }
+          }
+        },
+        {
+          "file": "bin/cgl_lf_paper_turb_passive.mhd_w_bcc.00004.bin",
+          "time": 1.0,
+          "cycle": 415,
+          "ranges": {
+            "dens": {
+              "min": 0.9769712090492249,
+              "max": 1.0096913576126099,
+              "max_z_difference": 0.0017456412315368652
+            },
+            "velx": {
+              "min": -0.16003911197185516,
+              "max": 0.16709885001182556,
+              "max_z_difference": 0.01861506886780262
+            },
+            "vely": {
+              "min": -0.15954072773456573,
+              "max": 0.19202622771263123,
+              "max_z_difference": 0.02044069394469261
+            },
+            "velz": {
+              "min": -0.01994701288640499,
+              "max": 0.016789060086011887,
+              "max_z_difference": 0.0022115609608590603
+            },
+            "eint": {
+              "min": 4.559157848358154,
+              "max": 4.975400447845459,
+              "max_z_difference": 0.016797542572021484
+            },
+            "p_perp": {
+              "min": 4.971145153045654,
+              "max": 5.227636337280273,
+              "max_z_difference": 0.011381149291992188
+            },
+            "bcc1": {
+              "min": -0.2950282096862793,
+              "max": 0.32122620940208435,
+              "max_z_difference": 0.033180445432662964
+            },
+            "bcc2": {
+              "min": -0.21792250871658325,
+              "max": 0.358462929725647,
+              "max_z_difference": 0.02538776397705078
+            },
+            "bcc3": {
+              "min": 0.9640885591506958,
+              "max": 1.0347665548324585,
+              "max_z_difference": 0.005060315132141113
+            }
+          }
+        }
+      ],
+      "restart_files": [
+        "rst/cgl_lf_paper_turb_passive.00000.rst",
+        "rst/cgl_lf_paper_turb_passive.00001.rst",
+        "rst/cgl_lf_paper_turb_passive.00002.rst",
+        "rst/cgl_lf_paper_turb_passive.00003.rst",
+        "rst/cgl_lf_paper_turb_passive.00004.rst"
+      ]
+    }
+  ],
+  "failures": [],
+  "timing_valid_for_performance": false,
+  "timing": "Concurrent functional validation: not benchmark evidence. Solver wall time divided by completed cycles, including configured outputs; srun-inclusive wall time reported separately; profile timing excluded from throughput median",
+  "physics_duration": "original tlim1 and nlim-1",
+  "binary_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/variants/hip/cgl_lf_paper/bin/athena",
+  "binary_sha256": "7bcd4eb559cc5da2a9d09e5efd4fa9a3f47b6ada4c85f5eb58b671a8658b97ed",
+  "median": {
+    "solver_seconds_per_cycle": 0.2179678125,
+    "launch_inclusive_seconds": 15.733763563912362,
+    "total_stages": 1460.0,
+    "mean_stages_per_sweep": 11.40625
+  },
+  "raw_check_failures": [
+    {
+      "run": "repeat-1",
+      "reason": "physical output repeatability mismatch"
+    },
+    {
+      "run": "repeat-2",
+      "reason": "physical output repeatability mismatch"
+    }
+  ],
+  "raw_check_source": {
+    "file": "results.json",
+    "sha256": "395ab598046472eb0a6edf4d534c62500d241cf1c1e3ec7bdea79972140c832c"
+  },
+  "restart_repeat_contract": "Exact physical bytes, including every live RNG member; normalize verified dormant startup RNG at t0/cycle0 plus four validated non-member RNG padding bytes and pre-existing unused root mesh coarse indices",
+  "restart_repeat_proofs": [
+    {
+      "repeat": "repeat-1",
+      "file": "rst/cgl_lf_paper_turb_passive.00000.rst",
+      "reference": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9149,
+        "normalized_ranges": [
+          [
+            9269,
+            9305
+          ],
+          [
+            9817,
+            10089
+          ],
+          [
+            10093,
+            10097
+          ],
+          [
+            10097,
+            10105
+          ]
+        ],
+        "normalized_byte_count": 320,
+        "raw_sha256": "551542396c6f423f4476f04230d5d9aa23fc4de724a3a2bd60160564f91643d7",
+        "normalized_sha256": "8a6895645f354b9c18cc94e11e3ca9d58df1e6dedfe9cc011d1bf2309218d75f",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": true,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 0,
+          "time": 0.0,
+          "cycle": 0,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "idum": -1,
+          "iset": 0,
+          "retained_padding_range": [
+            10093,
+            10097
+          ],
+          "ranges": [
+            [
+              9817,
+              10089
+            ],
+            [
+              10097,
+              10105
+            ]
+          ],
+          "members": [
+            "idum2",
+            "iy",
+            "iv[0:32]",
+            "gset"
+          ],
+          "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+          "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10093,
+            10097
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "time": 0.0,
+          "cycle": 0,
+          "idum": -1,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "comparison": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9149,
+        "normalized_ranges": [
+          [
+            9269,
+            9305
+          ],
+          [
+            9817,
+            10089
+          ],
+          [
+            10093,
+            10097
+          ],
+          [
+            10097,
+            10105
+          ]
+        ],
+        "normalized_byte_count": 320,
+        "raw_sha256": "ff87bfc94efb4d8a4ea8a3babf7311a5812166a1adc92cb237ab495ec5002b14",
+        "normalized_sha256": "8a6895645f354b9c18cc94e11e3ca9d58df1e6dedfe9cc011d1bf2309218d75f",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": true,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 0,
+          "time": 0.0,
+          "cycle": 0,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "idum": -1,
+          "iset": 0,
+          "retained_padding_range": [
+            10093,
+            10097
+          ],
+          "ranges": [
+            [
+              9817,
+              10089
+            ],
+            [
+              10097,
+              10105
+            ]
+          ],
+          "members": [
+            "idum2",
+            "iy",
+            "iv[0:32]",
+            "gset"
+          ],
+          "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+          "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10093,
+            10097
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "time": 0.0,
+          "cycle": 0,
+          "idum": -1,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "physical_bytes_equal": true
+    },
+    {
+      "repeat": "repeat-1",
+      "file": "rst/cgl_lf_paper_turb_passive.00001.rst",
+      "reference": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9269,
+        "normalized_ranges": [
+          [
+            9389,
+            9425
+          ],
+          [
+            10213,
+            10217
+          ]
+        ],
+        "normalized_byte_count": 40,
+        "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+        "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": false,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 16,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "idum": 546753255,
+          "iset": 0,
+          "retained_padding_range": [
+            10213,
+            10217
+          ],
+          "reason": "not initial time and cycle",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10213,
+            10217
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "idum": 546753255,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "comparison": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9269,
+        "normalized_ranges": [
+          [
+            9389,
+            9425
+          ],
+          [
+            10213,
+            10217
+          ]
+        ],
+        "normalized_byte_count": 40,
+        "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+        "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": false,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 16,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "idum": 546753255,
+          "iset": 0,
+          "retained_padding_range": [
+            10213,
+            10217
+          ],
+          "reason": "not initial time and cycle",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10213,
+            10217
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "idum": 546753255,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "physical_bytes_equal": true
+    },
+    {
+      "repeat": "repeat-2",
+      "file": "rst/cgl_lf_paper_turb_passive.00000.rst",
+      "reference": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9149,
+        "normalized_ranges": [
+          [
+            9269,
+            9305
+          ],
+          [
+            9817,
+            10089
+          ],
+          [
+            10093,
+            10097
+          ],
+          [
+            10097,
+            10105
+          ]
+        ],
+        "normalized_byte_count": 320,
+        "raw_sha256": "551542396c6f423f4476f04230d5d9aa23fc4de724a3a2bd60160564f91643d7",
+        "normalized_sha256": "8a6895645f354b9c18cc94e11e3ca9d58df1e6dedfe9cc011d1bf2309218d75f",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": true,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 0,
+          "time": 0.0,
+          "cycle": 0,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "idum": -1,
+          "iset": 0,
+          "retained_padding_range": [
+            10093,
+            10097
+          ],
+          "ranges": [
+            [
+              9817,
+              10089
+            ],
+            [
+              10097,
+              10105
+            ]
+          ],
+          "members": [
+            "idum2",
+            "iy",
+            "iv[0:32]",
+            "gset"
+          ],
+          "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+          "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10093,
+            10097
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "time": 0.0,
+          "cycle": 0,
+          "idum": -1,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "comparison": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9149,
+        "normalized_ranges": [
+          [
+            9269,
+            9305
+          ],
+          [
+            9817,
+            10089
+          ],
+          [
+            10093,
+            10097
+          ],
+          [
+            10097,
+            10105
+          ]
+        ],
+        "normalized_byte_count": 320,
+        "raw_sha256": "44ff519f4b99a6746c4edbe3491f45a1455af5fe6bd70d03367361e964ef1b2c",
+        "normalized_sha256": "8a6895645f354b9c18cc94e11e3ca9d58df1e6dedfe9cc011d1bf2309218d75f",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": true,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 0,
+          "time": 0.0,
+          "cycle": 0,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "idum": -1,
+          "iset": 0,
+          "retained_padding_range": [
+            10093,
+            10097
+          ],
+          "ranges": [
+            [
+              9817,
+              10089
+            ],
+            [
+              10097,
+              10105
+            ]
+          ],
+          "members": [
+            "idum2",
+            "iy",
+            "iv[0:32]",
+            "gset"
+          ],
+          "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+          "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10093,
+            10097
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9809,
+          "rng_bytes": 296,
+          "time": 0.0,
+          "cycle": 0,
+          "idum": -1,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "physical_bytes_equal": true
+    },
+    {
+      "repeat": "repeat-2",
+      "file": "rst/cgl_lf_paper_turb_passive.00001.rst",
+      "reference": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9269,
+        "normalized_ranges": [
+          [
+            9389,
+            9425
+          ],
+          [
+            10213,
+            10217
+          ]
+        ],
+        "normalized_byte_count": 40,
+        "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+        "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": false,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 16,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "idum": 546753255,
+          "iset": 0,
+          "retained_padding_range": [
+            10213,
+            10217
+          ],
+          "reason": "not initial time and cycle",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10213,
+            10217
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "idum": 546753255,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "comparison": {
+        "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+        "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+        "real_bytes": 8,
+        "int_bytes": 4,
+        "binary_header_offset": 9269,
+        "normalized_ranges": [
+          [
+            9389,
+            9425
+          ],
+          [
+            10213,
+            10217
+          ]
+        ],
+        "normalized_byte_count": 40,
+        "raw_sha256": "49df1f7470cdf44c7fddb5bb3b44b7b157770d26d8c8400057fb1ffe4a5918ee",
+        "normalized_sha256": "a98196143dd23d265da76fa9366c9713e106510a3ad475b45fde783b485feacd",
+        "dormant_startup_forcing": {
+          "enabled": true,
+          "applied": false,
+          "metadata_version": 3,
+          "mode_count": 10,
+          "n_updates": 16,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "idum": 546753255,
+          "iset": 0,
+          "retained_padding_range": [
+            10213,
+            10217
+          ],
+          "reason": "not initial time and cycle",
+          "padding_normalized_by_separate_opt_in": true
+        },
+        "forcing_padding": {
+          "enabled": true,
+          "applied": true,
+          "range": [
+            10213,
+            10217
+          ],
+          "metadata_version": 3,
+          "rng_offset": 9929,
+          "rng_bytes": 296,
+          "time": 0.15730723907717248,
+          "cycle": 64,
+          "idum": 546753255,
+          "iset": 0,
+          "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+          "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+          "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+          "rule": "zero only the four non-member alignment bytes between iset and gset"
+        }
+      },
+      "physical_bytes_equal": true
+    }
+  ],
+  "adjudicated_acceptance_passed": true
+}

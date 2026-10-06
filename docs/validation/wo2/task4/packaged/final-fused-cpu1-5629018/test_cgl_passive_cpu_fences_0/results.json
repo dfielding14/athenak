@@ -1,0 +1,588 @@
+{
+  "execute": true,
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+  "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+  "records": [
+    {
+      "name": "fence-sgs-output",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive CGL mhd_sgs output requires a physical-U definition",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-sgs-output/input.athinput",
+        "output3/file_type=bin",
+        "output3/variable=mhd_sgs",
+        "output3/dt=.1"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-sgs-output",
+      "input_sha256": "d4eaf5a58ac2eaa5047e05a5e8686c34422f33f693544fdacecff67b0c79af4c",
+      "exit_code": 1,
+      "seconds": 0.16826971899718046
+    },
+    {
+      "name": "fence-amr",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-amr/input.athinput",
+        "mesh_refinement/refinement=static"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-amr",
+      "input_sha256": "710605cdcc1f37e7098621a7573845399b728ad3519e46d795a131fc7a632a85",
+      "exit_code": 1,
+      "seconds": 0.16846439405344427
+    },
+    {
+      "name": "fence-viscosity",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-viscosity/input.athinput",
+        "mhd/viscosity=.001"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-viscosity",
+      "input_sha256": "9cde21e13c88bf71409f777132d4b45083bf61e5003ac5ea1be6b4b421f3fe94",
+      "exit_code": 1,
+      "seconds": 0.16879092808812857
+    },
+    {
+      "name": "fence-resistivity",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-resistivity/input.athinput",
+        "mhd/ohmic_resistivity=.001"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-resistivity",
+      "input_sha256": "c097afd8cee9777c51bcb224c4327702477cb54ad47e50d5b32fbb61a969305a",
+      "exit_code": 1,
+      "seconds": 0.1688784621655941
+    },
+    {
+      "name": "fence-hyperviscosity",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-hyperviscosity/input.athinput",
+        "mhd/hyperviscosity=.001"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-hyperviscosity",
+      "input_sha256": "fc5f242a2e9515ec47264faaaed1925425601ef14d4ded4e7ba09fb23523f18b",
+      "exit_code": 1,
+      "seconds": 0.16893323487602174
+    },
+    {
+      "name": "fence-cooling",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-cooling/input.athinput",
+        "mhd_srcterms/ism_cooling=true",
+        "mhd_srcterms/hrate=0"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-cooling",
+      "input_sha256": "7e345125092cb1736cea5a8bff03578b983760a5c30aafb507d5f4ddc72ca38f",
+      "exit_code": 1,
+      "seconds": 0.16851999913342297
+    },
+    {
+      "name": "fence-rel-cooling",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-rel-cooling/input.athinput",
+        "mhd_srcterms/rel_cooling=true",
+        "mhd_srcterms/crate_rel=.001"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-rel-cooling",
+      "input_sha256": "b1120dfcad804e60c853d32e1c56694ff8453fefcfdee6056e08ee1e35d86573",
+      "exit_code": 1,
+      "seconds": 0.1685187758412212
+    },
+    {
+      "name": "fence-shearing",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-shearing/input.athinput",
+        "shearing_box/qshear=1.5",
+        "shearing_box/omega0=1"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-shearing",
+      "input_sha256": "dbf4cdc298ad6bbdcf24ff240674f6bd5d94e433f8ab126cd9b5dd006a6a8e81",
+      "exit_code": 1,
+      "seconds": 0.2687666090205312
+    },
+    {
+      "name": "fence-coupled-fluid",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-coupled-fluid/input.athinput",
+        "ion-neutral/drag_coefficient=1"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-coupled-fluid",
+      "input_sha256": "aa8312919df49f24c90ecd6369dbeac5c3010881a0d60b353dd10aa6ee652139",
+      "exit_code": 1,
+      "seconds": 0.16901456681080163
+    },
+    {
+      "name": "fence-radiation",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive J/A has not yet validated",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-radiation/input.athinput",
+        "radiation/nangles=4"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-radiation",
+      "input_sha256": "25a02fd72d0e82196a94652fcc4db25fc538511a2ca47c0d12431968c7ae60d5",
+      "exit_code": 1,
+      "seconds": 0.1682591380085796
+    },
+    {
+      "name": "fence-outflow",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "currently requires periodic physical boundaries",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-outflow/input.athinput",
+        "mesh/ix1_bc=outflow",
+        "mesh/ox1_bc=outflow"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-outflow",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.16844314406625926
+    },
+    {
+      "name": "fence-reflect",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "currently requires periodic physical boundaries",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-reflect/input.athinput",
+        "mesh/ix1_bc=reflect",
+        "mesh/ox1_bc=reflect"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-reflect",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.1688185390084982
+    },
+    {
+      "name": "fence-inflow",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "currently requires periodic physical boundaries",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-inflow/input.athinput",
+        "mesh/ix1_bc=inflow",
+        "mesh/ox1_bc=inflow"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-inflow",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.1683303618337959
+    },
+    {
+      "name": "fence-user",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "currently requires periodic physical boundaries",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-user/input.athinput",
+        "mesh/ix1_bc=user",
+        "mesh/ox1_bc=user"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-user",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.1683562609832734
+    },
+    {
+      "name": "fence-kinematic",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "requires dynamic evolution",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-kinematic/input.athinput",
+        "time/evolution=kinematic"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-kinematic",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.1682204359676689
+    },
+    {
+      "name": "fence-ordinary-conduction",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "Ordinary <mhd>/conductivity is disabled",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-ordinary-conduction/input.athinput",
+        "mhd/conductivity=.001"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-ordinary-conduction",
+      "input_sha256": "c142a81f3e20c200d73ee50ddeb16831fd67eb0cff57e5769554c9515d9b70f0",
+      "exit_code": 1,
+      "seconds": 0.16839497513137758
+    },
+    {
+      "name": "fence-nonpositive-isothermal-speed",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive CGL requires finite positive",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-nonpositive-isothermal-speed/input.athinput",
+        "mhd/iso_sound_speed=0"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-nonpositive-isothermal-speed",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.1682909477967769
+    },
+    {
+      "name": "fence-negative-isothermal-speed",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "passive CGL requires finite positive",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-negative-isothermal-speed/input.athinput",
+        "mhd/iso_sound_speed=-1"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-negative-isothermal-speed",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.1682831239886582
+    },
+    {
+      "name": "fence-unconverted-pgen",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "configuration": {},
+      "restart_input": null,
+      "expected_failure": "this built-in pgen has no passive J/A initializer",
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n1",
+        "-c1",
+        "--cpu-bind=cores",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-unconverted-pgen/input.athinput",
+        "problem/pgen_name=advection"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/fence-unconverted-pgen",
+      "input_sha256": "3c7c2eb9105574b4a0cf6eee8769dc39ecd8ab220901e03fbbdb74ddd9dc930f",
+      "exit_code": 1,
+      "seconds": 0.16842876700684428
+    }
+  ],
+  "checks": [
+    {
+      "name": "fence-sgs-output",
+      "passed": true,
+      "expected_error": "passive CGL mhd_sgs output requires a physical-U definition"
+    },
+    {
+      "name": "fence-amr",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-viscosity",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-resistivity",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-hyperviscosity",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-cooling",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-rel-cooling",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-shearing",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-coupled-fluid",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-radiation",
+      "passed": true,
+      "expected_error": "passive J/A has not yet validated"
+    },
+    {
+      "name": "fence-outflow",
+      "passed": true,
+      "expected_error": "currently requires periodic physical boundaries"
+    },
+    {
+      "name": "fence-reflect",
+      "passed": true,
+      "expected_error": "currently requires periodic physical boundaries"
+    },
+    {
+      "name": "fence-inflow",
+      "passed": true,
+      "expected_error": "currently requires periodic physical boundaries"
+    },
+    {
+      "name": "fence-user",
+      "passed": true,
+      "expected_error": "currently requires periodic physical boundaries"
+    },
+    {
+      "name": "fence-kinematic",
+      "passed": true,
+      "expected_error": "requires dynamic evolution"
+    },
+    {
+      "name": "fence-ordinary-conduction",
+      "passed": true,
+      "expected_error": "Ordinary <mhd>/conductivity is disabled"
+    },
+    {
+      "name": "fence-nonpositive-isothermal-speed",
+      "passed": true,
+      "expected_error": "passive CGL requires finite positive"
+    },
+    {
+      "name": "fence-negative-isothermal-speed",
+      "passed": true,
+      "expected_error": "passive CGL requires finite positive"
+    },
+    {
+      "name": "fence-unconverted-pgen",
+      "passed": true,
+      "expected_error": "this built-in pgen has no passive J/A initializer"
+    }
+  ]
+}

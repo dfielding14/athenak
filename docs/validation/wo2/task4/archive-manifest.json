@@ -1,0 +1,38 @@
+{
+  "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/task4-delivery.tar.gz",
+  "sha256": "46d89a75f155a7f139b7ecfbf2c42b1786a6c73750dfa86bddb1672f380ff578",
+  "bytes": 542648265,
+  "scratch_files": 3350,
+  "contains_complete_restart_states": true,
+  "core_dumps_retained_in_scratch_not_duplicated": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-isolated-pair2-06527/core",
+      "bytes": 1393831936
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-isolated-pair1-06527/core",
+      "bytes": 1394659328
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-isolated-pair2-06527/core",
+      "bytes": 1394659328
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/fused-repeat-21695-06527/core",
+      "bytes": 1394843648
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/fault-probes/unfused-isolated-pair3-06527/core",
+      "bytes": 1394659328
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_ident0/passive-forced-3d-sts/core",
+      "bytes": 1394872320
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_resta0/restart-direct-forced/core",
+      "bytes": 1394872320
+    }
+  ],
+  "status": "All Task4 standalone and final fused acceptance gates passed"
+}

@@ -1,0 +1,293 @@
+{
+  "core": [
+    {
+      "backend": "cpu1",
+      "applications": 80,
+      "checks": 65,
+      "passed": true,
+      "binary_sha256": "8524451f18b4139d33643fdc7d915e320e7f9e9c5fddf62d6e727ec8dc235a97",
+      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/runs/cpu1-core-canonical-5628672/results.json",
+      "refinement": {
+        "periodic-heating-refinement": 2.015257156126974,
+        "linear-refinement-None": 1.991105519759876,
+        "linear-refinement-sts": 1.9114593795771908,
+        "advection-refinement": 2.0587950397289276
+      },
+      "restart_checks": [
+        {
+          "name": "restart-full-state-zero-rate",
+          "passed": true,
+          "full_state_bit_mismatches": 0,
+          "time_equal": true,
+          "next_dt_equal": true
+        },
+        {
+          "name": "restart-full-state-forced",
+          "passed": true,
+          "full_state_bit_mismatches": 0,
+          "time_equal": true,
+          "next_dt_equal": true
+        }
+      ]
+    },
+    {
+      "backend": "hip1",
+      "applications": 80,
+      "checks": 65,
+      "passed": true,
+      "binary_sha256": "738dfa870cfa58486959dbc4ed237832b0edb735e5bf466e7b05c26d208fc3e4",
+      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/runs/hip1-core-canonical-5628672/results.json",
+      "refinement": {
+        "periodic-heating-refinement": 2.015257156126974,
+        "linear-refinement-None": 1.9911073005421325,
+        "linear-refinement-sts": 1.9107703511971321,
+        "advection-refinement": 2.058795039733091
+      },
+      "restart_checks": [
+        {
+          "name": "restart-full-state-zero-rate",
+          "passed": true,
+          "full_state_bit_mismatches": 0,
+          "time_equal": true,
+          "next_dt_equal": true
+        },
+        {
+          "name": "restart-full-state-forced",
+          "passed": true,
+          "full_state_bit_mismatches": 0,
+          "time_equal": true,
+          "next_dt_equal": true
+        }
+      ]
+    },
+    {
+      "backend": "hip4",
+      "applications": 80,
+      "checks": 65,
+      "passed": true,
+      "binary_sha256": "738dfa870cfa58486959dbc4ed237832b0edb735e5bf466e7b05c26d208fc3e4",
+      "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/runs/hip4-core-canonical-5628672/results.json",
+      "refinement": {
+        "periodic-heating-refinement": 2.015257156126974,
+        "linear-refinement-None": 1.9911073005421325,
+        "linear-refinement-sts": 1.9107703511971321,
+        "advection-refinement": 2.058795039733091
+      },
+      "restart_checks": [
+        {
+          "name": "restart-full-state-zero-rate",
+          "passed": true,
+          "full_state_bit_mismatches": 0,
+          "time_equal": true,
+          "next_dt_equal": true
+        },
+        {
+          "name": "restart-full-state-forced",
+          "passed": true,
+          "full_state_bit_mismatches": 0,
+          "time_equal": true,
+          "next_dt_equal": true
+        }
+      ]
+    }
+  ],
+  "core_applications": 240,
+  "packaged": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_advection0/results.json",
+      "applications": 3,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_fences_0/results.json",
+      "applications": 19,
+      "checks": 19,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_heating_0/results.json",
+      "applications": 6,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_identity_0/results.json",
+      "applications": 35,
+      "checks": 23,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_linear_0/results.json",
+      "applications": 7,
+      "checks": 9,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-cpu1-5629018/test_cgl_passive_cpu_restart_0/results.json",
+      "applications": 10,
+      "checks": 6,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip1-5629018/test_cgl_passive_gpu_advection0/results.json",
+      "applications": 3,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip1-5629018/test_cgl_passive_gpu_fences_0/results.json",
+      "applications": 19,
+      "checks": 19,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip1-5629018/test_cgl_passive_gpu_heating_0/results.json",
+      "applications": 6,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip1-5629018/test_cgl_passive_gpu_identity_0/results.json",
+      "applications": 35,
+      "checks": 23,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip1-5629018/test_cgl_passive_gpu_linear_0/results.json",
+      "applications": 7,
+      "checks": 9,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip1-5629018/test_cgl_passive_gpu_restart_0/results.json",
+      "applications": 10,
+      "checks": 6,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_advec0/results.json",
+      "applications": 3,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_fence0/results.json",
+      "applications": 19,
+      "checks": 19,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_heati0/results.json",
+      "applications": 6,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_ident0/results.json",
+      "applications": 35,
+      "checks": 23,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/results.json",
+      "applications": 7,
+      "checks": 9,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_resta0/results.json",
+      "applications": 10,
+      "checks": 6,
+      "passed": true
+    }
+  ],
+  "packaged_prior_attempts": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_advec0/results.json",
+      "applications": 3,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_fence0/results.json",
+      "applications": 19,
+      "checks": 19,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_heati0/results.json",
+      "applications": 6,
+      "checks": 4,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_ident0/results.json",
+      "applications": 33,
+      "checks": 21,
+      "passed": false
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_linea0/results.json",
+      "applications": 7,
+      "checks": 9,
+      "passed": true
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-5629018/test_cgl_passive_mpi_gpu_resta0/results.json",
+      "applications": 4,
+      "checks": 1,
+      "passed": false
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-exclusive-5629018/test_cgl_passive_mpi_gpu_ident0/results.json",
+      "applications": 17,
+      "checks": 10,
+      "passed": false
+    }
+  ],
+  "paper": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/final-fused-3d-5629018/results.json",
+      "raw_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/final-fused-3d-5629018/results.json",
+      "failures": [],
+      "completed_runs": 1,
+      "planned_runs": 1,
+      "binary_sha256": "b4c9dd8498b9deabd406930164fa0f36ba28c585560cf07b2f37c2e13a4cbb16",
+      "timing_valid_for_performance": false
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/final-fused-original-5629018/results.json",
+      "raw_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/final-fused-original-5629018/results.json",
+      "failures": [],
+      "completed_runs": 1,
+      "planned_runs": 1,
+      "binary_sha256": "b4c9dd8498b9deabd406930164fa0f36ba28c585560cf07b2f37c2e13a4cbb16",
+      "timing_valid_for_performance": false
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/standalone-3d-5629018/results-adjudicated.json",
+      "raw_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/standalone-3d-5629018/results.json",
+      "failures": [],
+      "completed_runs": 6,
+      "planned_runs": 6,
+      "binary_sha256": "7bcd4eb559cc5da2a9d09e5efd4fa9a3f47b6ada4c85f5eb58b671a8658b97ed",
+      "timing_valid_for_performance": false
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/standalone-original-5629018/results-adjudicated.json",
+      "raw_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/paper/runs/standalone-original-5629018/results.json",
+      "failures": [],
+      "completed_runs": 6,
+      "planned_runs": 6,
+      "binary_sha256": "7bcd4eb559cc5da2a9d09e5efd4fa9a3f47b6ada4c85f5eb58b671a8658b97ed",
+      "timing_valid_for_performance": false
+    }
+  ],
+  "float_compatibility_followups": "Root added explicit Real casts (identity in double), extracted the unchanged pressure-traction helper to avoid pulling GR float code into CGL unit tests, and linked actual Kokkos runtime for host_abort; see root followup proofs and test results",
+  "status": "All Task4 standalone and final fused acceptance gates passed",
+  "scratch_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research",
+  "production_base": "738810c8807ac25f7e871f486d36c0d93c65aca2",
+  "source_archive": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-unfused",
+  "numerical_source_status": "Integrated immutable archive; final fused LF differs only by Task7 insertion"
+}

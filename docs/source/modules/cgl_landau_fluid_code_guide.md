@@ -235,10 +235,21 @@ applies a soft-threshold projection.
 ## Active And Passive CGL
 
 Active CGL runs apply the anisotropic pressure tensor in the dynamic MHD fluxes.
-`passive=true` is rejected at construction because its thermal-energy equation
-is inconsistent, pending WO2. The retained passive HLLE, FOFC, and CFL paths use
-isothermal signal speeds and remain covered by direct unit tests. Archived
-passive runs are historical model comparisons, not supported new executions.
+With `passive=true`, the flow uses the exact native isothermal HLLE kernel,
+FOFC decisions, forcing kick, and advective timestep. A second reconstruction
+writes only the thermal scalar fluxes. The persistent thermal slots are the
+J/A material invariants; the LF sweep temporarily converts both to physical
+U and magnetic moment, then restores J/A. Collisions conserve physical U and
+refresh canonical primitives before the next hyperbolic step or checkpoint.
+
+Passive histories distinguish `cgl-J`, `cgl-A`, and physical `thermal-U`.
+Conserved IEN must not be treated as energy by custom source terms or output
+consumers. Versioned restarts reject active/passive mode changes. The supported
+scope is dynamic Newtonian uniform periodic HLLE MHD; nonperiodic boundaries,
+AMR/SMR, additional dissipative/coupled modules and unredefined `mhd_sgs`
+energy moments remain fenced. See [the passive model](cgl_passive.md)
+for equations, initialization contracts, and acceptance tests. Archived
+passive runs remain historical evidence for their earlier formulation.
 
 ## Restrictions
 

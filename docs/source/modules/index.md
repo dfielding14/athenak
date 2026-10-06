@@ -147,6 +147,7 @@ cgl_mhd_method
 cgl_landau_fluid
 cgl_lf_timestep
 cgl_lf_boundaries
+cgl_passive
 cgl_amr
 cgl_landau_fluid_code_guide
 cgl_landau_fluid_validation

@@ -662,6 +662,12 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   }
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
   pcgl_lf->SetFusedPrimitiveRefresh(false);
+  if (peos->eos_data.passive) {
+    // Canonical persistent primitives must decode the J/A actually checkpointed.
+    // Leaving the last U/mu pressure pair here makes restart initialization take
+    // a different roundtrip, even when collision rates and walls are inactive.
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  }
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "post",
                               STSSweepName(pdrive), "anisotropy", u0);
@@ -698,6 +704,11 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
         ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
     peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_cycle, mode,
                      0, n1m1, 0, n2m1, 0, n3m1);
+  }
+  if (peos->eos_data.passive) {
+    // Canonicalize in the same C2P kernel used after restart. On HIP, decoding
+    // inside the collision kernel may contract expressions differently.
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   // Synchronize the coarse representation with the final rates/wall update.
   RestrictU(pdrive, stage);

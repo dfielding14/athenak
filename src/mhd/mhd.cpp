@@ -147,6 +147,23 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
 
+  if (peos->eos_data.passive) {
+    if (pin->GetString("time", "evolution") != "dynamic") {
+      std::cout << "### FATAL ERROR: passive J/A prototype requires dynamic evolution"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    const int nfaces = pmy_pack->pmesh->three_d ? 6 :
+                       (pmy_pack->pmesh->multi_d ? 4 : 2);
+    for (int face=0; face<nfaces; ++face) {
+      if (pmy_pack->pmesh->mesh_bcs[face] != BoundaryFlag::periodic) {
+        std::cout << "### FATAL ERROR: passive J/A prototype currently requires "
+                  << "periodic physical boundaries" << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
+  }
+
   // (2) Initialize scalars, diffusion, source terms
   nscalars = pin->GetOrAddInteger("mhd","nscalars",0);
   if (peos->eos_data.is_cgl) {
@@ -329,6 +346,17 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   // Source terms (if needed)
   if (pin->DoesBlockExist("mhd_srcterms")) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
+  }
+
+  if (peos->eos_data.passive &&
+      (has_sts_viscosity || has_explicit_viscosity || has_sts_hyperviscosity ||
+       has_explicit_hyperviscosity || has_sts_resistivity || has_explicit_resistivity ||
+       (psrc != nullptr && (psrc->ism_cooling || psrc->rel_cooling)) ||
+       pmy_pack->pmesh->multilevel || pin->DoesBlockExist("shearing_box") ||
+       pin->DoesBlockExist("ion-neutral") || pin->DoesBlockExist("radiation"))) {
+    std::cout << "### FATAL ERROR: passive J/A has not yet validated "
+              << "AMR, viscosity, resistivity, cooling, shearing-box, or coupled-fluid consumers" << std::endl;
+    std::exit(EXIT_FAILURE);
   }
 
   if (has_sts_cgl_lf &&

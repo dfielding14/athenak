@@ -1,0 +1,512 @@
+{
+  "execute": true,
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+  "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+  "records": [
+    {
+      "name": "linear-none-128",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 128,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": null
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-128/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-128",
+      "input_sha256": "595292bbfe9758162146b33a46e899937b2d8b0dbc17422fc111b89e88e5edd4",
+      "exit_code": 0,
+      "seconds": 1.7709297640249133,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-128/rst/passive_validation.00001.rst",
+      "restart_sha256": "bb0524b36d49b2a6d59a2ee63eb524121750ebcae2498cca1a9d59646ff8fdf5",
+      "time": 0.04,
+      "cycle": 18
+    },
+    {
+      "name": "linear-none-256",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 256,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": null
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-256/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-256",
+      "input_sha256": "cc947ec76f85f7fd25b9dea3f6299634f359021764b93a815eb991c858b5d19a",
+      "exit_code": 0,
+      "seconds": 1.8710448790807277,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-256/rst/passive_validation.00001.rst",
+      "restart_sha256": "a4c6f93d754fe151cd4555ed9746c2b867b869ecf638a158bd3581b44d240f5c",
+      "time": 0.04,
+      "cycle": 35
+    },
+    {
+      "name": "linear-none-512",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 512,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": null
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-512/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-512",
+      "input_sha256": "2d8bf9d16469c331609adde277ef4b314c3b003d290baca950d25087f297868a",
+      "exit_code": 0,
+      "seconds": 2.0212638850789517,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-none-512/rst/passive_validation.00001.rst",
+      "restart_sha256": "812a775a3b1013871b37b6d69bc8da7595f47af734c4e72f382dfec93ab93f3c",
+      "time": 0.04,
+      "cycle": 69
+    },
+    {
+      "name": "linear-sts-128",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 128,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": "sts"
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-128/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-128",
+      "input_sha256": "01bcd20e5482f0ed8a6491f3e9d7eb379bb10978e3dda6915a0335306b09503b",
+      "exit_code": 0,
+      "seconds": 1.921077829785645,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-128/rst/passive_validation.00001.rst",
+      "restart_sha256": "777b4a9f67e462d3fa499ced24af334c850576b86f53630c339b927d4aedd114",
+      "time": 0.04,
+      "cycle": 18
+    },
+    {
+      "name": "linear-sts-256",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 256,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": "sts"
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-256/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-256",
+      "input_sha256": "7b8a6bf3bcf99a03e4c5640e32a67271ebb49880c35edd508de8087d4a1d299b",
+      "exit_code": 0,
+      "seconds": 2.3215995708014816,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-256/rst/passive_validation.00001.rst",
+      "restart_sha256": "490c3730bc2e4942af397c9c87c1713b0395138448e79a5c9eca867ed518018e",
+      "time": 0.04,
+      "cycle": 35
+    },
+    {
+      "name": "linear-sts-512",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 512,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": "sts"
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-512/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-512",
+      "input_sha256": "3edc80bdf1c82f644f6b714249228522ffc814349e6465a9142df2b52d66d87e",
+      "exit_code": 0,
+      "seconds": 3.8742499849759042,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-sts-512/rst/passive_validation.00001.rst",
+      "restart_sha256": "39ca6ee1c3f6e6fc2f71fad669a2efaef4af5bd916225fcf3f2161db3015d4bd",
+      "time": 0.04,
+      "cycle": 69
+    },
+    {
+      "name": "linear-explicit-256",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+      "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "configuration": {
+        "nx": 256,
+        "mode": 2,
+        "amp": 1e-06,
+        "thermal": 1e-06,
+        "tlim": 0.04,
+        "lf": "explicit"
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "--threads-per-core=1",
+        "--cpu-bind=threads",
+        "-c7",
+        "--gpus-per-task=1",
+        "--gpu-bind=closest",
+        "-w",
+        "frontier06527",
+        "-N",
+        "1",
+        "-n",
+        "4",
+        "--ntasks-per-node",
+        "4",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-explicit-256/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-explicit-256",
+      "input_sha256": "a5e8ed1becaf672873b91bd46f804ec714a380e309fc28a233ed08a23963f7a0",
+      "exit_code": 0,
+      "seconds": 48.37994991987944,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/packaged-runs/final-fused-hip4-contract-5629018/test_cgl_passive_mpi_gpu_linea0/linear-explicit-256/rst/passive_validation.00001.rst",
+      "restart_sha256": "9835672a5d31d1a16a69cd2724cef348b1688ccde7774d9c80f45c246b687295",
+      "time": 0.04,
+      "cycle": 6278
+    }
+  ],
+  "checks": [
+    {
+      "name": "linear-response-None-128",
+      "passed": true,
+      "error_normalized_by_p0_amp": 0.00017390544848544962,
+      "measured": [
+        [
+          5.81136979863051e-06,
+          -1.4924622595329433e-06
+        ],
+        [
+          1.9371232661962986e-06,
+          -4.974874199071358e-07
+        ]
+      ],
+      "expected": [
+        [
+          5.811498966771787e-06,
+          -1.4921393229891289e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    },
+    {
+      "name": "linear-response-None-256",
+      "passed": true,
+      "error_normalized_by_p0_amp": 4.374127212005482e-05,
+      "measured": [
+        [
+          5.811471836691819e-06,
+          -1.4922224924204584e-06
+        ],
+        [
+          1.937157279076323e-06,
+          -4.974074975463228e-07
+        ]
+      ],
+      "expected": [
+        [
+          5.811498966771787e-06,
+          -1.4921393229891289e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    },
+    {
+      "name": "linear-response-None-512",
+      "passed": true,
+      "error_normalized_by_p0_amp": 1.1003912912730613e-05,
+      "measured": [
+        [
+          5.811492819448059e-06,
+          -1.4921604548326014e-06
+        ],
+        [
+          1.937164273170188e-06,
+          -4.973868180654214e-07
+        ]
+      ],
+      "expected": [
+        [
+          5.811498966771787e-06,
+          -1.4921393229891289e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    },
+    {
+      "name": "linear-refinement-None",
+      "passed": true,
+      "order": 1.9911073005421325,
+      "errors": [
+        0.00017390544848544962,
+        4.374127212005482e-05,
+        1.1003912912730613e-05
+      ]
+    },
+    {
+      "name": "linear-response-sts-128",
+      "passed": true,
+      "error_normalized_by_p0_amp": 0.00017327800244470792,
+      "measured": [
+        [
+          4.10095699853449e-06,
+          -1.2557154581584956e-06
+        ],
+        [
+          1.9371232661639356e-06,
+          -4.974874188272198e-07
+        ]
+      ],
+      "expected": [
+        [
+          4.100756489421137e-06,
+          -1.2554327973016595e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    },
+    {
+      "name": "linear-response-sts-256",
+      "passed": true,
+      "error_normalized_by_p0_amp": 4.584543403350903e-05,
+      "measured": [
+        [
+          4.1008120290332495e-06,
+          -1.2555057532251563e-06
+        ],
+        [
+          1.937157278802166e-06,
+          -4.974074957340315e-07
+        ]
+      ],
+      "expected": [
+        [
+          4.100756489421137e-06,
+          -1.2554327973016595e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    },
+    {
+      "name": "linear-response-sts-512",
+      "passed": true,
+      "error_normalized_by_p0_amp": 1.2216029497205178e-05,
+      "measured": [
+        [
+          4.100772184809016e-06,
+          -1.255451521091501e-06
+        ],
+        [
+          1.937164273046737e-06,
+          -4.973868178464548e-07
+        ]
+      ],
+      "expected": [
+        [
+          4.100756489421137e-06,
+          -1.2554327973016595e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    },
+    {
+      "name": "linear-refinement-sts",
+      "passed": true,
+      "order": 1.913120580385874,
+      "errors": [
+        0.00017327800244470792,
+        4.584543403350903e-05,
+        1.2216029497205178e-05
+      ]
+    },
+    {
+      "name": "linear-response-explicit-256",
+      "passed": true,
+      "error_normalized_by_p0_amp": 3.319641800041327e-05,
+      "measured": [
+        [
+          4.1007722064962495e-06,
+          -1.2554973029775504e-06
+        ],
+        [
+          1.9371582940262622e-06,
+          -4.974031708041697e-07
+        ]
+      ],
+      "expected": [
+        [
+          4.100756489421137e-06,
+          -1.2554327973016595e-06
+        ],
+        [
+          1.937166322257262e-06,
+          -4.973797743297096e-07
+        ]
+      ]
+    }
+  ]
+}

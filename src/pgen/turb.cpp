@@ -142,7 +142,12 @@ void ProblemGenerator::Turb(ParameterInput *pin, const bool restart) {
         if (k==ke) {b0.x3f(m,k+1,j,i) = bz_cc;}
       }
 
-      if (eos.is_cgl) {
+      if (eos.passive) {
+        const auto q = cgl::PassiveEncode(u0(m,IDN,k,j,i), p0, p0,
+                                          fmax(fabs(bz_cc), eos.bfloor));
+        u0(m,IEN,k,j,i) = q.j;
+        u0(m,IAN,k,j,i) = q.a;
+      } else if (eos.is_cgl) {
         Real bmag = fmax(fabs(bz_cc), eos.bfloor);
         u0(m,IEN,k,j,i) = 1.5*p0 + 0.5*bz_cc*bz_cc +
            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +

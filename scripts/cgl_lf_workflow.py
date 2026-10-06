@@ -1103,7 +1103,7 @@ def evaluate_amr(case: dict[str, object], root: Path) -> dict[str, object]:
 
 
 def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, object]:
-    """Verify reduced active paper forcing state and energy diagnostics."""
+    """Verify paper forcing diagnostics with explicit active/passive energy semantics."""
 
     user_path = case_history_path(case, root, "user_history")
     mhd_path = case_history_path(case, root)
@@ -1124,12 +1124,19 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
         mirror_fraction = final_value(user, "mirror_vol") / volume
         firehose_fraction = final_value(user, "fire_vol") / volume
         hard_bound_fraction = final_value(user, "hard_vol") / volume
-        energy_delta = final_value(mhd, "tot-E") - mhd["tot-E"][0]
+        active_delta = model.get("passive_delta", "false").lower() != "true"
+        if active_delta:
+            energy_delta = final_value(mhd, "tot-E") - mhd["tot-E"][0]
+            thermal_delta = None
+        else:
+            # Passive IEN is J. Forcing work is kinetic; physical U is separate.
+            energy_delta = sum(final_value(mhd, key) - mhd[key][0]
+                               for key in ("1-KE", "2-KE", "3-KE"))
+            thermal_delta = final_value(mhd, "thermal-U") - mhd["thermal-U"][0]
         force_work = final_value(user, "force_work") - user["force_work"][0]
         energy_work_residual = energy_delta - force_work
         energy_work_scale = max(abs(energy_delta), abs(force_work), 1.0e-30)
         energy_work_relative_residual = abs(energy_work_residual) / energy_work_scale
-        active_delta = model.get("passive_delta", "false").lower() != "true"
         mode_pass = (
             parallel == 0.0 if forcing_mode == "alfvenic_z_perpendicular"
             else parallel > 0.0 if forcing_mode == "isotropic_random"
@@ -1150,6 +1157,8 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
             "firehose_volume_fraction": firehose_fraction,
             "hard_bound_volume_fraction": hard_bound_fraction,
             "energy_delta": energy_delta,
+            "energy_measure": "total" if active_delta else "kinetic",
+            "passive_thermal_energy_delta": thermal_delta,
             "applied_forcing_work": force_work,
             "energy_minus_applied_work": energy_work_residual,
             "energy_work_relative_residual": energy_work_relative_residual,
@@ -1638,8 +1647,9 @@ def execute_workflow(args: argparse.Namespace, paths: RunPaths) -> int:
     for spec in workflow_cases(args.workflow):
         source = (ROOT_DIR / spec.input_path).read_text(encoding="utf-8")
         passive = model_choices(source, spec.overrides)["passive_delta"].lower()
-        if passive in ("true", "1"):
-            reason = "Passive CGL thermal energy equation is disabled pending WO2."
+        if passive in ("true", "1") and args.workflow != "paper-smoke":
+            reason = ("Passive solver is supported on uniform periodic meshes; "
+                      "this paper-scale analysis workflow has not validated J/A and physical-U consumers.")
             print(f"Skipping {spec.name}: {reason}")
             disabled_cases.append({"name": spec.name, "reason": reason})
         else:

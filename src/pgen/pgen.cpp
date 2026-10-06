@@ -135,6 +135,18 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     nadm = padm->nadm;
   }
 
+  if (pmhd != nullptr) {
+    const bool encoded_passive = pin->DoesParameterExist("mhd", "passive_restart_encoding");
+    const bool passive = pmhd->peos->eos_data.passive;
+    if (encoded_passive != passive ||
+        (encoded_passive && pin->GetInteger("mhd", "passive_restart_encoding") != 1)) {
+      std::cout << "### FATAL ERROR: restart EOS must agree with passive J/A encoding "
+                << "version 1; changing active/passive mode on restart is unsupported"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
   // root process reads z4c last_output_time and tracker data
   if (pz4c != nullptr) {
     Real last_output_time;
@@ -979,8 +991,19 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
 #else
   // else read name of built-in pgen from <problem> block in input file, and call
   std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
+  if (pmy_mesh_->pmb_pack->pmhd != nullptr &&
+      pmy_mesh_->pmb_pack->pmhd->peos->eos_data.passive &&
+      pgen_fun_name != "turb" && pgen_fun_name != "cgl_lf_paper" &&
+      pgen_fun_name != "cgl_passive_validation") {
+    std::cout << "### FATAL ERROR: this built-in pgen has no passive J/A initializer; "
+              << "use turb, cgl_lf_paper, or a custom pgen calling the EOS PrimToCons interface"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
-  if (pgen_fun_name.compare("advection") == 0) {
+  if (pgen_fun_name == "cgl_passive_validation") {
+    CGLPassiveValidation(pin, is_restart);
+  } else if (pgen_fun_name.compare("advection") == 0) {
     Advection(pin, is_restart);
   } else if (pgen_fun_name.compare("cpaw") == 0) {
     AlfvenWave(pin, is_restart);

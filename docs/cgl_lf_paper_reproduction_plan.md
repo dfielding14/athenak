@@ -32,7 +32,9 @@ Soft thresholds default to $\Delta p=-B^2$ and $B^2/2$; backup factors default
 to 1 and 2. `limiter_hardwall=true` is rejected in favor of an explicit finite
 `limiter_nu_coll`, and strictness does not enable backups implicitly.
 The perpendicular coefficient uses the SHD97/BGK $+2\nu_{\rm eff}$ denominator.
-Passive CGL is disabled pending WO2; LF inflow/user boundaries also remain fenced.
+Passive CGL now supports uniform periodic J/A evolution; paper-scale analysis
+consumers remain gated separately. See [the passive model](cgl_passive.md).
+The active LF boundary contract is documented in the current module guide.
 The driver updates OU coefficients at the configured cadence and applies one
 kick before RK per cycle. The kick and momentum removal add their exact
 kinetic-energy changes to total energy. The removed problem-level `forcing_mode` is replaced by explicit
@@ -106,7 +108,8 @@ figure match.
 - Duration: at least `10 L_perp/vA`; use restarts for longer saturated
   statistics.
 - Controls: active CGL-LF, pure CGL without LF, ideal/isothermal MHD, and
-  passive-delta after the WO2 thermal-energy redesign; it is currently disabled.
+  passive-delta with the WO2 J/A model; paper-scale analysis consumers require
+  separate validation before their workflow fence is removed.
 
 Required diagnostics:
 
@@ -228,7 +231,7 @@ These should become separate CI/smoke, nightly, and HPC-regression tiers.
 10. **Conservation budget**: for every nonlinear problem, track injected power,
     kinetic/magnetic/internal energy, anisotropic work, collisional heating, and
     heat-flux transport so the residual remains at truncation-error level.
-11. **Active/passive-delta divergence**: after the WO2 passive-mode redesign, test whether
+11. **Active/passive-delta divergence**: using the WO2 passive J/A model, test whether
     active CGL-LF suppresses threshold occupancy relative to identical MHD-like
     fields.
 12. **Limiter collisionality locality**: create adjacent stable/unstable regions
@@ -245,7 +248,7 @@ These should become separate CI/smoke, nightly, and HPC-regression tiers.
    pressure work; distinguish applied face contractions from snapshot proxies.
 4. Add offline Python analysis for Fourier mode fitting, spectra, Brazil plots,
    transfer functions, and run summaries.
-5. Resolve the WO2 passive thermal-energy equation and add optional electron
+5. Validate the passive paper-scale analysis consumers and add optional electron
    pressure only if the intended Majeski comparison requires it.
 6. Split runs into quick local smoke, nightly quantitative, and HPC paper
    reproduction tiers.

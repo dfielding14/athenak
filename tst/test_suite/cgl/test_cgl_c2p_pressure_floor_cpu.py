@@ -55,6 +55,11 @@ def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path, single_precision):
             ["make", "-f", "src/CMakeFiles/athena.dir/build.make", target, "-j4"],
             cwd=build_dir,
         )
+    # The shared passive decoder uses Kokkos::abort for an invalid encoding.
+    # Link the real implementation even though these checks exercise active CGL.
+    _run([
+        "cmake", "--build", str(build_dir), "--target", "kokkoscore", "-j4",
+    ])
 
     main_source = tmp_path / "main.cpp"
     main_source.write_text(
@@ -68,7 +73,10 @@ def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path, single_precision):
         compiler,
         str(main_source),
         str(test_object),
+        str(build_dir / "kokkos/core/src/libkokkoscore.a"),
         "-std=c++17",
+        "-ldl",
+        "-pthread",
         "-o",
         str(test_executable),
     ])

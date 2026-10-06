@@ -136,6 +136,9 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
 //  \brief Cycles over all MeshBlocks and writes everything to a single restart file
 
 void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+  if (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->peos->eos_data.passive) {
+    pin->SetInteger("mhd", "passive_restart_encoding", 1);
+  }
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
   int nout1 = indcs.nx1 + 2*(indcs.ng);

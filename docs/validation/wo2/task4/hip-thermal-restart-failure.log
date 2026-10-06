@@ -1,0 +1,203 @@
+Unloading the cpe module is insufficient to restore the system defaults.
+Please run 'source
+/opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.[csh|sh]'. 
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: /opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+Core/26.05:
+   On September 15, 2026, the default Core module was upgraded from
+   Core/25.03 to Core/26.05. For more information on Core/26.05 including
+   package version changes please see: https://docs.olcf.ornl.gov/software/software-news.html#frontier-core-module-may-11-2026
+
+-------------------------------------------------------------------------------
+
+
+Activating Modules:
+  1) darshan-runtime/3.4.4-mpi
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.30
+
+The following have been reloaded with a version change:
+  1) cray-libsci/24.11.0 => cray-libsci/24.07.0
+  2) craype/2.7.33 => craype/2.7.32
+
+
+The following have been reloaded with a version change:
+  1) PrgEnv-cray/8.5.0 => PrgEnv-cray/8.6.0
+  2) cce/18.0.0 => cce/20.0.0
+  3) cray-dsmml/0.3.0 => cray-dsmml/0.3.1
+  4) cray-libsci/24.07.0 => cray-libsci/25.09.0
+  5) cray-mpich/8.1.30 => cray-mpich/9.0.1
+  6) cray-pmi/6.1.15.21 => cray-pmi/6.1.16
+  7) craype/2.7.32 => craype/2.7.35
+  8) darshan-runtime/3.4.4-mpi => darshan-runtime/3.4.7-mpi
+  9) perftools-base/24.07.0 => perftools-base/25.09.0
+
+START iso-plm
+DONE iso-plm cycle=38 time=0.050000000000000003
+START passive-plm-none
+DONE passive-plm-none cycle=38 time=0.050000000000000003
+PASS plm-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-plm-sts
+DONE passive-plm-sts cycle=38 time=0.050000000000000003
+PASS plm-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-dc
+DONE iso-dc cycle=38 time=0.050000000000000003
+START passive-dc-none
+DONE passive-dc-none cycle=38 time=0.050000000000000003
+PASS dc-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-dc-sts
+DONE passive-dc-sts cycle=38 time=0.050000000000000003
+PASS dc-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-ppm4
+DONE iso-ppm4 cycle=38 time=0.050000000000000003
+START passive-ppm4-none
+DONE passive-ppm4-none cycle=38 time=0.050000000000000003
+PASS ppm4-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-ppm4-sts
+DONE passive-ppm4-sts cycle=38 time=0.050000000000000003
+PASS ppm4-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-ppmx
+DONE iso-ppmx cycle=38 time=0.050000000000000003
+START passive-ppmx-none
+DONE passive-ppmx-none cycle=38 time=0.050000000000000003
+PASS ppmx-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-ppmx-sts
+DONE passive-ppmx-sts cycle=38 time=0.050000000000000003
+PASS ppmx-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-wenoz
+DONE iso-wenoz cycle=38 time=0.050000000000000003
+START passive-wenoz-none
+DONE passive-wenoz-none cycle=38 time=0.050000000000000003
+PASS wenoz-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-wenoz-sts
+DONE passive-wenoz-sts cycle=38 time=0.050000000000000003
+PASS wenoz-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-density-floor
+DONE iso-density-floor cycle=82 time=0.050000000000000003
+START passive-density-floor-none
+DONE passive-density-floor-none cycle=82 time=0.050000000000000003
+PASS density-floor-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-density-floor-sts
+DONE passive-density-floor-sts cycle=82 time=0.050000000000000003
+PASS density-floor-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-thermal-floor
+DONE iso-thermal-floor cycle=38 time=0.050000000000000003
+START passive-thermal-floor-none
+DONE passive-thermal-floor-none cycle=38 time=0.050000000000000003
+PASS thermal-floor-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-thermal-floor-sts
+DONE passive-thermal-floor-sts cycle=38 time=0.050000000000000003
+PASS thermal-floor-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-weak-field
+DONE iso-weak-field cycle=24 time=0.050000000000000003
+START passive-weak-field-none
+DONE passive-weak-field-none cycle=24 time=0.050000000000000003
+PASS weak-field-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-weak-field-sts
+DONE passive-weak-field-sts cycle=24 time=0.050000000000000003
+PASS weak-field-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-accelerated
+DONE iso-accelerated cycle=38 time=0.050000000000000003
+START passive-accelerated-none
+DONE passive-accelerated-none cycle=38 time=0.050000000000000003
+PASS accelerated-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-accelerated-sts
+DONE passive-accelerated-sts cycle=38 time=0.050000000000000003
+PASS accelerated-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-forced
+DONE iso-forced cycle=12 time=0.12230836330958797
+START passive-forced-none
+DONE passive-forced-none cycle=12 time=0.12230836330958797
+PASS forced-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-forced-sts
+DONE passive-forced-sts cycle=12 time=0.12230836330958797
+PASS forced-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-forced-3d
+DONE iso-forced-3d cycle=12 time=0.121127746383905
+START passive-forced-3d-none
+DONE passive-forced-3d-none cycle=12 time=0.121127746383905
+PASS forced-3d-none {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START passive-forced-3d-sts
+DONE passive-forced-3d-sts cycle=12 time=0.121127746383905
+PASS forced-3d-sts {"flow_bit_mismatches": 0, "time_sequence_equal": true, "next_dt_equal": true}
+START iso-explicit-matched
+DONE iso-explicit-matched cycle=38 time=0.050000000000000003
+START passive-explicit-matched
+DONE passive-explicit-matched cycle=38 time=0.050000000000000003
+PASS explicit-matched-dt {"flow_bit_mismatches": 0, "time_sequence_equal": true}
+START heat-128-h
+DONE heat-128-h cycle=3 time=0.0040000000000000001
+START heat-128-2h
+DONE heat-128-2h cycle=6 time=0.0080000000000000002
+PASS periodic-heating-128 {"oracle": 0.031415926535897934, "measured": 0.03142721704962881, "relative_error": 0.0003593882140631166, "initial_U": 3.0, "final_U": 3.000128049475993}
+START heat-256-h
+DONE heat-256-h cycle=3 time=0.002
+START heat-256-2h
+DONE heat-256-2h cycle=6 time=0.0040000000000000001
+PASS periodic-heating-256 {"oracle": 0.031415926535897934, "measured": 0.0314187100930452, "relative_error": 8.860337587313083e-05, "initial_U": 3.0, "final_U": 3.0000634261921952}
+START heat-512-h
+DONE heat-512-h cycle=3 time=0.001
+START heat-512-2h
+DONE heat-512-2h cycle=6 time=0.002
+PASS periodic-heating-512 {"oracle": 0.031415926535897934, "measured": 0.03141661742445123, "relative_error": 2.1991665676512895e-05, "initial_U": 3.0, "final_U": 3.000031564242051}
+PASS periodic-heating-refinement {"order": 2.015257156126974, "errors": [0.0003593882140631166, 8.860337587313083e-05, 2.1991665676512895e-05]}
+START linear-none-128
+DONE linear-none-128 cycle=18 time=0.040000000000000001
+PASS linear-response-None-128 {"error_normalized_by_p0_amp": 0.00017390544848544962, "measured": [[5.81136979863051e-06, -1.4924622595329433e-06], [1.9371232661962986e-06, -4.974874199071358e-07]], "expected": [[5.811498966771787e-06, -1.4921393229891289e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+START linear-none-256
+DONE linear-none-256 cycle=35 time=0.040000000000000001
+PASS linear-response-None-256 {"error_normalized_by_p0_amp": 4.374127212005482e-05, "measured": [[5.811471836691819e-06, -1.4922224924204584e-06], [1.937157279076323e-06, -4.974074975463228e-07]], "expected": [[5.811498966771787e-06, -1.4921393229891289e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+START linear-none-512
+DONE linear-none-512 cycle=69 time=0.040000000000000001
+PASS linear-response-None-512 {"error_normalized_by_p0_amp": 1.1003912912730613e-05, "measured": [[5.811492819448059e-06, -1.4921604548326014e-06], [1.937164273170188e-06, -4.973868180654214e-07]], "expected": [[5.811498966771787e-06, -1.4921393229891289e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+PASS linear-refinement-None {"order": 1.9911073005421325, "errors": [0.00017390544848544962, 4.374127212005482e-05, 1.1003912912730613e-05]}
+START linear-sts-128
+DONE linear-sts-128 cycle=18 time=0.040000000000000001
+PASS linear-response-sts-128 {"error_normalized_by_p0_amp": 0.00017287463135662052, "measured": [[4.100955860857027e-06, -1.2557152748816866e-06], [1.937123271470443e-06, -4.974874277816633e-07]], "expected": [[4.100756489421137e-06, -1.2554327973016595e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+START linear-sts-256
+DONE linear-sts-256 cycle=35 time=0.040000000000000001
+PASS linear-response-sts-256 {"error_normalized_by_p0_amp": 4.577584574998827e-05, "measured": [[4.1008118353192395e-06, -1.2555057256485469e-06], [1.937157284342715e-06, -4.974075026146539e-07]], "expected": [[4.100756489421137e-06, -1.2554327973016595e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+START linear-sts-512
+DONE linear-sts-512 cycle=69 time=0.040000000000000001
+PASS linear-response-sts-512 {"error_normalized_by_p0_amp": 1.2227365264260056e-05, "measured": [[4.100772217257173e-06, -1.255451523460338e-06], [1.9371642728995006e-06, -4.973868102995044e-07]], "expected": [[4.100756489421137e-06, -1.2554327973016595e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+PASS linear-refinement-sts {"order": 1.9107703511971321, "errors": [0.00017287463135662052, 4.577584574998827e-05, 1.2227365264260056e-05]}
+START linear-explicit-256
+DONE linear-explicit-256 cycle=6278 time=0.040000000000000001
+PASS linear-response-explicit-256 {"error_normalized_by_p0_amp": 3.31952816317723e-05, "measured": [[4.1007722082201055e-06, -1.2554973002182559e-06], [1.9371582938196755e-06, -4.97403170223083e-07]], "expected": [[4.100756489421137e-06, -1.2554327973016595e-06], [1.937166322257262e-06, -4.973797743297096e-07]]}
+START advection-64
+DONE advection-64 cycle=87 time=0.20000000000000001
+PASS advection-64 {"l1_error": 0.0001926433115201874}
+START advection-128
+DONE advection-128 cycle=173 time=0.20000000000000001
+PASS advection-128 {"l1_error": 4.6806654407137785e-05}
+START advection-256
+DONE advection-256 cycle=345 time=0.20000000000000001
+PASS advection-256 {"l1_error": 1.1097772337804665e-05}
+PASS advection-refinement {"order": 2.058795039733091, "errors": [0.0001926433115201874, 4.6806654407137785e-05, 1.1097772337804665e-05]}
+START restart-direct-zero-rate
+DONE restart-direct-zero-rate cycle=16 time=0.021502949838085629
+START restart-initial-zero-rate
+DONE restart-initial-zero-rate cycle=8 time=0.010779221252641955
+START restart-continued-zero-rate
+DONE restart-continued-zero-rate cycle=16 time=0.021502949838085629
+PASS restart-full-state-zero-rate {"full_state_bit_mismatches": 0, "time_equal": true, "next_dt_equal": true}
+START restart-direct-forced
+DONE restart-direct-forced cycle=16 time=0.16290981237432739
+START restart-initial-forced
+DONE restart-initial-forced cycle=8 time=0.081976256166123362
+START restart-continued-forced
+DONE restart-continued-forced cycle=16 time=0.16290981237432739
+FAIL restart-full-state-forced {"full_state_bit_mismatches": 63488, "time_equal": true, "next_dt_equal": true}
+Traceback (most recent call last):
+  File "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/run_acceptance.py", line 288, in <module>
+    if __name__=='__main__':main()
+                            ^^^^^^
+  File "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/run_acceptance.py", line 240, in main
+    check('restart-full-state-'+label,mismatch==0 and ref['time']==continued['time'] and ref['dt']==continued['dt'],
+  File "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/run_acceptance.py", line 151, in check
+    assert passed,(name,evidence)
+AssertionError: ('restart-full-state-forced', {'full_state_bit_mismatches': 63488, 'time_equal': True, 'next_dt_equal': True})

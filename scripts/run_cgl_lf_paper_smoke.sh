@@ -34,6 +34,7 @@ run_case() {
 }
 
 run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_active.athinput
+run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_passive.athinput
 run_case inputs/cgl_lf_paper/cgl_lf_paper_turb_active.athinput \
   job/basename=cgl_lf_paper_turb_random \
   turb_driving/driving_type=2

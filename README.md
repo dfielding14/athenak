@@ -27,6 +27,11 @@ time stepping. See the [module guide](docs/source/modules/cgl_landau_fluid.md)
 and [Frontier validation report](docs/validation/wo2/README.md). Active-CGL LF
 supports inflow and primitive-based user boundaries under the
 [representation-aware callback contract](docs/source/modules/cgl_lf_boundaries.md).
+The [passive CGL control](docs/source/modules/cgl_passive.md) evolves physical thermal
+pressures through J/A material invariants while flow follows isothermal MHD.
+Its supported scope is uniform periodic HLLE evolution, including LF heat
+flux, collisions, limiters and forcing. Histories expose physical `thermal-U`
+separately from the conserved J/A integrals.
 
 ## Getting Started
 

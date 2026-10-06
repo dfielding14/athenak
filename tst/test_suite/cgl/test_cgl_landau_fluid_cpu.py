@@ -1639,15 +1639,17 @@ def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
         _cleanup()
 
 
-def test_cgl_lf_paper_passive_delta_is_disabled():
+def test_cgl_lf_paper_passive_delta_smoke(tmp_path):
     result = subprocess.run(
-        ["./athena", "-i", PAPER_PASSIVE_INPUT],
-        capture_output=True, text=True, check=False,
+        [str(Path("./athena").resolve()), "-i", str(Path(PAPER_PASSIVE_INPUT).resolve()),
+         "-d", str(tmp_path)], capture_output=True, text=True, check=False,
     )
-    assert result.returncode != 0
-    assert "passive=true is disabled" in result.stdout
-    assert "thermal energy equation is inconsistent" in result.stdout
-    assert "WO2 redesign" in result.stdout
+    assert result.returncode == 0, result.stdout + result.stderr
+    history = testutils.athena_read.hst(str(next(tmp_path.glob("*.mhd.hst"))))
+    assert "thermal-U" in history and "cgl-J" in history and "cgl-A" in history
+    assert "tot-E" not in history
+    assert np.all(np.isfinite(history["thermal-U"]))
+    assert np.all(history["thermal-U"] > 0.0)
 
 
 def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
