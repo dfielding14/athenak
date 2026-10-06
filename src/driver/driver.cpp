@@ -6,6 +6,7 @@
 //! \file driver.cpp
 //  \brief implementation of functions in class Driver
 
+#include <cmath>
 #include <iostream>
 #include <iomanip>    // std::setprecision()
 #include <limits>
@@ -25,6 +26,8 @@
 #include "ion-neutral/ion-neutral.hpp"
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
+#include "eos/eos.hpp"
 #include "driver.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -99,6 +102,9 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     tlim = pin->GetReal("time", "tlim");
     nlim = pin->GetOrAddInteger("time", "nlim", -1);
     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
+    // Do not insert an absent default into serialized input/restart headers.
+    merge_sts_requested_ = pin->DoesParameterExist("time", "sts_merge_half_sweeps") &&
+        pin->GetBoolean("time", "sts_merge_half_sweeps");
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -291,6 +297,182 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
 
     ValidateSTSConfiguration(pmesh);
   }
+}
+
+
+// This first implementation intentionally has a narrow eligibility gate. Moving
+// nonzero end-of-cycle rates would change the splitting order, so they always
+// use the unchanged pair of half sweeps. Configured limiters also fall back.
+void Driver::ConfigureMergedSTS(Mesh *pm) {
+  if (!merge_sts_requested_) return;
+  auto *pack = pm->pmb_pack;
+  auto *mhd = pack->pmhd;
+  merge_sts_enabled_ = mhd != nullptr && mhd->has_sts_cgl_lf &&
+      pm->sts_integrator == parabolic::STSIntegrator::rkl2 &&
+      pm->strictly_periodic && !pm->multilevel && !pm->adaptive &&
+      !pm->pgen->user_bcs && !pm->pgen->user_srcs &&
+      pack->parabolic_processes.size() == 1 &&
+      pack->phydro == nullptr && pack->pionn == nullptr && pack->prad == nullptr &&
+      pack->ppart == nullptr && pack->padm == nullptr && pack->ptmunu == nullptr &&
+      pack->pz4c == nullptr && pack->pdyngr == nullptr && pack->pnr == nullptr &&
+      !pack->pcoord->is_special_relativistic &&
+      !pack->pcoord->is_general_relativistic &&
+      !pack->pcoord->is_dynamical_relativistic;
+  if (merge_sts_enabled_) {
+    const auto &eos = mhd->peos->eos_data;
+    merge_sts_enabled_ = eos.is_cgl && !eos.passive &&
+        eos.nu_coll == 0.0 && eos.lim_coll == 0.0 &&
+        !eos.mlim && !eos.flim && !eos.backup_lim &&
+        !mhd->pcgl_lf->effective_backup_limiter && !mhd->pcgl_lf->strict_admissibility &&
+        !mhd->has_any_parabolic_field_update &&
+        mhd->porb_u == nullptr && mhd->psbox_u == nullptr && mhd->psrc == nullptr &&
+        mhd->pvisc == nullptr && mhd->phypervisc == nullptr &&
+        mhd->presist == nullptr && mhd->pcond == nullptr && mhd->pscalar_diff == nullptr;
+  }
+  if (global_variable::my_rank == 0) {
+    std::cout << "STS half-sweep merging: "
+              << (merge_sts_enabled_ ? "eligible collisionless periodic LF run" :
+                  "ordinary half-sweep fallback "
+                  "(mesh, collisions, limiter, strict mode or physics)")
+              << std::endl;
+  }
+}
+
+bool Driver::CanDeferSTSPost(Mesh *pm, Outputs *pout) const {
+  if (!merge_sts_enabled_ || pm->adaptive || pending_sts_half_ != 0.0 ||
+      !(pm->dt_parabolic_sts < std::numeric_limits<float>::max())) return false;
+  const Real next_time = pm->time + pm->dt;
+  const int next_cycle = pm->ncycle + 1;
+  if (next_time >= tlim || (nlim >= 0 && next_cycle >= nlim)) return false;
+  // Match the real output loop, including its float32 comparison and all types
+  // of output (history and restart included). There is no pending restart state.
+  for (const auto &out : pout->pout_list) {
+    const float time32 = static_cast<float>(next_time);
+    const float next32 = static_cast<float>(out->out_params.last_time+out->out_params.dt);
+    const float tlim32 = static_cast<float>(tlim);
+    const int dcycle = out->out_params.dcycle;
+    if ((out->out_params.dt > 0.0 && time32 >= next32 && time32 < tlim32) ||
+        (dcycle > 0 && next_cycle % dcycle == 0)) return false;
+  }
+  return true;
+}
+
+void Driver::RunMergedSTSSweep(Mesh *pm, Real duration, Real old_cycle) {
+  BeginSTSSweep(pm, STSSweep::post);
+  if (!sts.enabled) {
+    DriverFatalError(__FILE__, __LINE__,
+                     "Pending STS diffusion lost its timestep budget");
+  }
+  sts.dt_cycle = old_cycle;
+  sts.dt_sweep = duration;
+  sts.nstages = parabolic::ComputeRKL2StageCount(duration, sts.dt_parabolic_min);
+  // The post label completes the old cycle's full collision hook (rates are
+  // identically zero), applies walls after the actual merged operator, and
+  // refreshes the local advective/LF budgets. No forcing has run yet.
+  for (int stage=1; stage<=sts.nstages; ++stage) {
+    SetSTSStage(stage);
+    ExecuteTaskList(pm, "before_parabolic_stagen", stage);
+    ExecuteTaskList(pm, "parabolic_stagen", stage);
+    ExecuteTaskList(pm, "after_parabolic_stagen", stage);
+  }
+  EndSTSSweep();
+}
+
+bool Driver::TryMergedSTSPre(Mesh *pm) {
+  if (pending_sts_half_ == 0.0) return false;
+  auto *mhd = pm->pmb_pack->pmhd;
+  auto *lf = mhd->pcgl_lf;
+  const Real trial_dt = pm->dt;
+  const Real saved_mhd_dt = mhd->dtnew, saved_lf_dt = lf->dtnew;
+  const auto saved_events = pm->ecounter;
+  const auto saved_diag = lf->diagnostics;
+  const auto saved_slot = mhd->cgl_slot_representation;
+  // For this eligibility gate LF changes only u/w: no STS field update,
+  // physical/user BC, coarse map or cell-centered-B refresh exists in the graph.
+  // Full arrays include ghosts and possible floor repairs, not just IEN/IAN.
+  Kokkos::fence();
+  Kokkos::Timer copy_time;
+  if (merge_u_backup_.size() == 0) {
+    Kokkos::realloc(merge_u_backup_, mhd->u0.extent(0), mhd->u0.extent(1),
+                    mhd->u0.extent(2), mhd->u0.extent(3), mhd->u0.extent(4));
+    Kokkos::realloc(merge_w_backup_, mhd->w0.extent(0), mhd->w0.extent(1),
+                    mhd->w0.extent(2), mhd->w0.extent(3), mhd->w0.extent(4));
+  }
+  Kokkos::deep_copy(merge_u_backup_, mhd->u0);
+  Kokkos::deep_copy(merge_w_backup_, mhd->w0);
+  Kokkos::fence();
+  merge_snapshot_seconds_ += copy_time.seconds();
+  RunMergedSTSSweep(pm, pending_sts_half_+0.5*trial_dt, pending_sts_cycle_);
+  const int attempted_stages = sts.nstages;
+  const auto &diag = lf->diagnostics;
+  const Real advective_limit = pm->cfl_no*mhd->dtnew;
+  const bool cfl_reject = !std::isfinite(advective_limit) || !(advective_limit > 0.0) ||
+      trial_dt > advective_limit;
+  const bool state_reject = diag.dfloor != saved_diag.dfloor ||
+      diag.pfloor != saved_diag.pfloor || diag.nonfinite != saved_diag.nonfinite ||
+      diag.nonpositive != saved_diag.nonpositive ||
+      diag.hard_bound != saved_diag.hard_bound;
+  int reject = (cfl_reject ? 1 : 0) | (state_reject ? 2 : 0);
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, &reject, 1, MPI_INT, MPI_BOR, MPI_COMM_WORLD);
+#endif
+  if (!reject) {
+    ++merge_accepted_;
+    merge_accepted_stages_ += attempted_stages;
+    merge_consumed_ += pending_sts_half_;
+    pending_sts_half_ = 0.0;
+    RefreshSTSCycleState(pm);
+    return true;
+  }
+  ++merge_rejected_;
+  if (reject & 1) ++merge_rejected_cfl_;
+  if (reject & 2) ++merge_rejected_admissibility_;
+  merge_rejected_stages_ += attempted_stages;
+  Kokkos::fence();
+  copy_time.reset();
+  Kokkos::deep_copy(mhd->u0, merge_u_backup_);
+  Kokkos::deep_copy(mhd->w0, merge_w_backup_);
+  // Stage 1 reads these old registers with zero coefficients before replacing
+  // them. Nonfinite*0 propagates, so a rejected invalid attempt must clear both.
+  Kokkos::deep_copy(mhd->u_sts1, 0.0);
+  Kokkos::deep_copy(mhd->u_sts_rhs, 0.0);
+  Kokkos::fence();
+  merge_snapshot_seconds_ += copy_time.seconds();
+  pm->ecounter = saved_events;
+  lf->diagnostics = saved_diag;
+  mhd->cgl_slot_representation = saved_slot;
+  lf->SetFusedPrimitiveRefresh(false);  // invalidate rejected temperature cache
+  mhd->dtnew = saved_mhd_dt;
+  lf->dtnew = saved_lf_dt;
+  // Remaining stage registers are populated from restored u0 and finite zeros
+  // by the next stage 1. Profile time and rejected-stage counts retain real work;
+  // physical diagnostics
+  // and EOS events above are rolled back. Strict-admissibility fatal checks are
+  // intentionally unchanged and cannot be caught by this transaction.
+  FlushPendingSTS(pm, true);
+  return false;  // caller now executes an ordinary pre sweep with the fresh dt
+}
+
+void Driver::FlushPendingSTS(Mesh *pm, bool select_next_dt) {
+  if (pending_sts_half_ == 0.0) return;
+  const Real current_time = pm->time, current_dt = pm->dt;
+  // Deferred operators use the old cycle's time/duration. This distinction is
+  // inert for allowed periodic boundaries and zero rates, but is explicit.
+  pm->time = pending_sts_time_;
+  pm->dt = pending_sts_cycle_;
+  pm->RefreshSTSParabolicTimeStep();
+  RunMergedSTSSweep(pm, pending_sts_half_, pending_sts_cycle_);
+  merge_flushed_ += pending_sts_half_;
+  pending_sts_half_ = 0.0;
+  pm->time = current_time;
+  pm->dt = current_dt;
+  if (select_next_dt) {
+    // A late wall stop must checkpoint a fresh next budget from the synchronized
+    // state. Retain the old completed-cycle dt for the baseline growth cap.
+    pm->dt = pending_sts_cycle_;
+    pm->NewTimeStep(tlim);
+  }
+  RefreshSTSCycleState(pm);
 }
 
 //----------------------------------------------------------------------------------------
@@ -486,6 +668,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
 
     pmesh->NewTimeStep(tlim);
     RefreshSTSCycleState(pmesh);
+    ConfigureMergedSTS(pmesh);
   }
 
   //---- Step 3.  Cycle through output Types and load data / write files.
@@ -544,7 +727,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
            (elapsed_time < wall_time)) {
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
 
-      if (sts.enabled) {
+      const bool merged_pre = pending_sts_half_ > 0.0 && TryMergedSTSPre(pmesh);
+      if (sts.enabled && !merged_pre) {
         BeginSTSSweep(pmesh, STSSweep::pre);
         for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
           SetSTSStage(sts_stage);
@@ -582,15 +766,24 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
           pmesh->RefreshSTSParabolicTimeStep();
         }
-        BeginSTSSweep(pmesh, STSSweep::post);
-        if (sts.enabled) {
-          for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
-            SetSTSStage(sts_stage);
-            ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
-            ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
-            ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+        if (CanDeferSTSPost(pmesh, pout)) {
+          pending_sts_half_ = 0.5*pmesh->dt;
+          pending_sts_cycle_ = pmesh->dt;
+          pending_sts_time_ = pmesh->time;
+          merge_deferred_ += pending_sts_half_;
+          // CGLCollisions just refreshed limits after the hyperbolic walls.
+          // The old post's zero-rate hook completes in the merged/flush sweep.
+        } else {
+          BeginSTSSweep(pmesh, STSSweep::post);
+          if (sts.enabled) {
+            for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
+              SetSTSStage(sts_stage);
+              ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
+              ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
+              ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+            }
+            EndSTSSweep();
           }
-          EndSTSSweep();
         }
       }
 
@@ -621,13 +814,17 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
+          FlushPendingSTS(pmesh);
           out->LoadOutputData(pmesh);
           out->WriteOutputFile(pmesh, pin);
         }
       }
 
       // AMR
-      if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
+      if (pmesh->adaptive) {
+        FlushPendingSTS(pmesh);
+        pmesh->pmr->AdaptiveMeshRefinement(this, pin);
+      }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
       RefreshSTSCycleState(pmesh);
@@ -637,6 +834,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         elapsed_time = UpdateWallClock();
       }
     }  // end while
+    FlushPendingSTS(pmesh, true);  // includes an unpredicted wall-clock stop
   }    // end of (time_evolution != tstatic) clause
   return;
 }
@@ -647,6 +845,19 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //!  and printing diagnostic messages
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
+  FlushPendingSTS(pmesh, true);
+  if (merge_sts_enabled_ && global_variable::my_rank == 0) {
+    std::cout << "STS merge: accepted=" << merge_accepted_
+              << " rejected=" << merge_rejected_
+              << " rejected_cfl=" << merge_rejected_cfl_
+              << " rejected_admissibility=" << merge_rejected_admissibility_
+              << " accepted_stages=" << merge_accepted_stages_
+              << " rejected_stages=" << merge_rejected_stages_
+              << " snapshot_seconds=" << merge_snapshot_seconds_
+              << " deferred=" << merge_deferred_ << " consumed=" << merge_consumed_
+              << " flushed=" << merge_flushed_ << " pending=" << pending_sts_half_
+              << std::endl;
+  }
   // The last cycle can end with AMR after the normal output point. Refresh a
   // rendered turbulence field only when it no longer matches the final mesh.
   if (pmesh->pmb_pack->pturb != nullptr) {

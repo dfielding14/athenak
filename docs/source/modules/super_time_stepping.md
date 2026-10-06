@@ -102,6 +102,58 @@ protected split lifecycle with one Euler stage. See
 [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md) and
 [CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md).
 
+## Optional LF Half-Sweep Merging
+
+`<time>/sts_merge_half_sweeps = true` can defer an old post half-sweep and
+combine it with the next pre half-sweep. The option defaults to `false`; an
+absent option leaves the ordinary controller path and serialized input unchanged.
+It is currently eligible only for active CGL LF with RKL2 on a strictly periodic,
+uniform mesh, with one parabolic process, zero background and soft-limiter rates, and no
+enabled limiter flags, strict admissibility, user boundary/source hooks,
+other fluid/particle/radiation physics, shear/orbital remapping, source terms, or
+other MHD diffusion. Passive CGL is excluded. Ineligible requests print an
+ordinary-half-sweep fallback message and retain the original update schedule.
+Noncommuting collision updates are never moved across a hyperbolic step.
+
+A deferred half is completed before any output or restart, mesh-refinement
+processing, final-time/cycle termination, or wall-clock exit. Time-based and
+cycle-based output predicates follow the output controller. On an unexpected
+wall-clock stop, the completed state also gets a fresh next-cycle timestep
+before the checkpoint is written. Restart files contain no pending duration.
+
+Before a merged trial, the driver saves conserved and primitive arrays,
+diagnostic/event counters, slot representation, and local timestep estimates.
+It then checks the fresh advective CFL limit and LF admissibility counters
+across all ranks. A rejected trial restores the saved state, clears STS registers
+that could contain invalid trial values, completes the old pending half, selects
+a fresh timestep, and runs the ordinary new pre half. Accepted physical
+diagnostics describe the retained trajectory; rejected stage work remains in
+the merge performance counters. Strict mode falls back because its fatal checks
+cannot be rolled back. No scientific admissibility setting is relaxed implicitly.
+
+The `STS merge:` summary reports accepted and rejected trials, CFL and
+admissibility rejection counts, attempted stages, snapshot time, and deferred,
+consumed, flushed and pending durations. Pending duration is zero at every
+published state. Merging removes an intermediate LF checkpoint, so acceptance
+and second-order temporal checks apply to the stated smooth eligible scope;
+this is not a nonlinear stability theorem for projection-active states.
+
+Transactions allocate two full arrays, including ghosts. For six double-precision
+CGL variables and no passive scalars this is 96 bytes per stored cell, with
+192 bytes per stored cell of snapshot read/write traffic for each attempt.
+Extra scalars increase both amounts. Allocation, copies, fences, global
+accept/reject reduction and rejected work can offset stage-count savings;
+performance should be measured on the intended workload. The original turbulence
+deck is ineligible because its limiter physics is enabled; explicitly strict
+paper/unit waves are ineligible because of strictness.
+
+The permanent `cgl_lf_sts_merge` regressions check absent/false behavior,
+collision/limiter/strict/explicit fallback, time/cycle outputs, restart and
+wall-clock synchronization, deterministic CFL rollback, MPI decisions, and
+second-order differences between merged and ordinary smooth evolution. They use
+a separately declared nonstrict collisionless fixture while retaining the
+scientific decay amplitude and analytic error bounds.
+
 ## Process Contract
 
 A parabolic operator participates in STS through
@@ -141,6 +193,7 @@ All non-STS stability limits continue to restrict the cycle as usual.
 | --- | --- | --- |
 | `<time>/sts_integrator` | `none` | `none` or `rkl2` global STS controller |
 | `<time>/sts_safety` | `0.9` | Finite factor in `(0, 1]` multiplying every STS process reference timestep |
+| `<time>/sts_merge_half_sweeps` | `false` | Optional transactional merging for eligible collisionless periodic CGL LF runs; see the merging section above |
 | `<time>/sts_max_dt_ratio` | `-1.0` | Optional positive limit `dt <= ratio * dt_diff`; `-1.0` disables the cap |
 
 `sts_safety` is independent of `<time>/cfl_number`: advection and explicitly

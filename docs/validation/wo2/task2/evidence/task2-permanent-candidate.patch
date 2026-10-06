@@ -1,0 +1,828 @@
+--- a/src/driver/driver.hpp
++++ b/src/driver/driver.hpp
+@@ -79,6 +79,20 @@
+   std::uint64_t nmb_updated_;   // running total of MB updated during run
+   std::uint64_t npart_updated_; // running total of particles updated during run
+   float lb_efficiency_;         // measure of how efficient was load balancing
++  // Optional, collisionless LF-only transaction; restart files never store debt.
++  bool merge_sts_requested_ = false, merge_sts_enabled_ = false;
++  Real pending_sts_half_ = 0.0, pending_sts_cycle_ = 0.0, pending_sts_time_ = 0.0;
++  Real merge_deferred_ = 0.0, merge_consumed_ = 0.0, merge_flushed_ = 0.0;
++  Real merge_snapshot_seconds_ = 0.0;
++  std::uint64_t merge_accepted_ = 0, merge_rejected_ = 0;
++  std::uint64_t merge_rejected_cfl_ = 0, merge_rejected_admissibility_ = 0;
++  std::uint64_t merge_accepted_stages_ = 0, merge_rejected_stages_ = 0;
++  DvceArray5D<Real> merge_u_backup_, merge_w_backup_;
++  void ConfigureMergedSTS(Mesh *pm);
++  bool CanDeferSTSPost(Mesh *pm, Outputs *pout) const;
++  void RunMergedSTSSweep(Mesh *pm, Real duration, Real old_cycle);
++  bool TryMergedSTSPre(Mesh *pm);
++  void FlushPendingSTS(Mesh *pm, bool select_next_dt=false);
+   void ResetSTSController();
+   void ValidateSTSConfiguration(Mesh *pm);
+   void RefreshSTSCycleState(Mesh *pm);
+--- a/src/driver/driver.cpp
++++ b/src/driver/driver.cpp
+@@ -6,6 +6,7 @@
+ //! \file driver.cpp
+ //  \brief implementation of functions in class Driver
+ 
++#include <cmath>
+ #include <iostream>
+ #include <iomanip>    // std::setprecision()
+ #include <limits>
+@@ -25,6 +26,8 @@
+ #include "ion-neutral/ion-neutral.hpp"
+ #include "radiation/radiation.hpp"
+ #include "srcterms/turb_driver.hpp"
++#include "diffusion/cgl_landau_fluid.hpp"
++#include "eos/eos.hpp"
+ #include "driver.hpp"
+ 
+ #if MPI_PARALLEL_ENABLED
+@@ -99,6 +102,9 @@
+     tlim = pin->GetReal("time", "tlim");
+     nlim = pin->GetOrAddInteger("time", "nlim", -1);
+     ndiag = pin->GetOrAddInteger("time", "ndiag", 1);
++    // Do not insert an absent default into serialized input/restart headers.
++    merge_sts_requested_ = pin->DoesParameterExist("time", "sts_merge_half_sweeps") &&
++        pin->GetBoolean("time", "sts_merge_half_sweeps");
+ 
+     if (integrator == "rk1") {
+       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
+@@ -293,6 +299,179 @@
+   }
+ }
+ 
++
++// This first implementation intentionally has a narrow eligibility gate. Moving
++// nonzero end-of-cycle rates would change the splitting order, so they always
++// use the unchanged pair of half sweeps. Configured limiters also fall back.
++void Driver::ConfigureMergedSTS(Mesh *pm) {
++  if (!merge_sts_requested_) return;
++  auto *pack = pm->pmb_pack;
++  auto *mhd = pack->pmhd;
++  merge_sts_enabled_ = mhd != nullptr && mhd->has_sts_cgl_lf &&
++      pm->sts_integrator == parabolic::STSIntegrator::rkl2 &&
++      pm->strictly_periodic && !pm->multilevel && !pm->adaptive &&
++      !pm->pgen->user_bcs && !pm->pgen->user_srcs &&
++      pack->parabolic_processes.size() == 1 &&
++      pack->phydro == nullptr && pack->pionn == nullptr && pack->prad == nullptr &&
++      pack->ppart == nullptr && pack->padm == nullptr && pack->ptmunu == nullptr &&
++      pack->pz4c == nullptr && pack->pdyngr == nullptr && pack->pnr == nullptr &&
++      !pack->pcoord->is_special_relativistic &&
++      !pack->pcoord->is_general_relativistic &&
++      !pack->pcoord->is_dynamical_relativistic;
++  if (merge_sts_enabled_) {
++    const auto &eos = mhd->peos->eos_data;
++    merge_sts_enabled_ = eos.is_cgl && !eos.passive &&
++        eos.nu_coll == 0.0 && eos.lim_coll == 0.0 &&
++        !eos.mlim && !eos.flim && !eos.backup_lim &&
++        !mhd->pcgl_lf->effective_backup_limiter && !mhd->pcgl_lf->strict_admissibility &&
++        !mhd->has_any_parabolic_field_update &&
++        mhd->porb_u == nullptr && mhd->psbox_u == nullptr && mhd->psrc == nullptr &&
++        mhd->pvisc == nullptr && mhd->phypervisc == nullptr &&
++        mhd->presist == nullptr && mhd->pcond == nullptr && mhd->pscalar_diff == nullptr;
++  }
++  if (global_variable::my_rank == 0) {
++    std::cout << "STS half-sweep merging: "
++              << (merge_sts_enabled_ ? "eligible collisionless periodic LF run" :
++                  "ordinary half-sweep fallback (mesh, collisions, limiter, strict mode or physics)")
++              << std::endl;
++  }
++}
++
++bool Driver::CanDeferSTSPost(Mesh *pm, Outputs *pout) const {
++  if (!merge_sts_enabled_ || pm->adaptive || pending_sts_half_ != 0.0 ||
++      !(pm->dt_parabolic_sts < std::numeric_limits<float>::max())) return false;
++  const Real next_time = pm->time + pm->dt;
++  const int next_cycle = pm->ncycle + 1;
++  if (next_time >= tlim || (nlim >= 0 && next_cycle >= nlim)) return false;
++  // Match the real output loop, including its float32 comparison and all types
++  // of output (history and restart included). There is no pending restart state.
++  for (const auto &out : pout->pout_list) {
++    const float time32 = static_cast<float>(next_time);
++    const float next32 = static_cast<float>(out->out_params.last_time+out->out_params.dt);
++    const float tlim32 = static_cast<float>(tlim);
++    const int dcycle = out->out_params.dcycle;
++    if ((out->out_params.dt > 0.0 && time32 >= next32 && time32 < tlim32) ||
++        (dcycle > 0 && next_cycle % dcycle == 0)) return false;
++  }
++  return true;
++}
++
++void Driver::RunMergedSTSSweep(Mesh *pm, Real duration, Real old_cycle) {
++  BeginSTSSweep(pm, STSSweep::post);
++  if (!sts.enabled) {
++    DriverFatalError(__FILE__, __LINE__, "Pending STS diffusion lost its timestep budget");
++  }
++  sts.dt_cycle = old_cycle;
++  sts.dt_sweep = duration;
++  sts.nstages = parabolic::ComputeRKL2StageCount(duration, sts.dt_parabolic_min);
++  // The post label completes the old cycle's full collision hook (rates are
++  // identically zero), applies walls after the actual merged operator, and
++  // refreshes the local advective/LF budgets. No forcing has run yet.
++  for (int stage=1; stage<=sts.nstages; ++stage) {
++    SetSTSStage(stage);
++    ExecuteTaskList(pm, "before_parabolic_stagen", stage);
++    ExecuteTaskList(pm, "parabolic_stagen", stage);
++    ExecuteTaskList(pm, "after_parabolic_stagen", stage);
++  }
++  EndSTSSweep();
++}
++
++bool Driver::TryMergedSTSPre(Mesh *pm) {
++  if (pending_sts_half_ == 0.0) return false;
++  auto *mhd = pm->pmb_pack->pmhd;
++  auto *lf = mhd->pcgl_lf;
++  const Real trial_dt = pm->dt;
++  const Real saved_mhd_dt = mhd->dtnew, saved_lf_dt = lf->dtnew;
++  const auto saved_events = pm->ecounter;
++  const auto saved_diag = lf->diagnostics;
++  const auto saved_slot = mhd->cgl_slot_representation;
++  // For this eligibility gate LF changes only u/w: no STS field update,
++  // physical/user BC, coarse map or cell-centered-B refresh exists in the graph.
++  // Full arrays include ghosts and possible floor repairs, not just IEN/IAN.
++  Kokkos::fence();
++  Kokkos::Timer copy_time;
++  if (merge_u_backup_.size() == 0) {
++    Kokkos::realloc(merge_u_backup_, mhd->u0.extent(0), mhd->u0.extent(1),
++                    mhd->u0.extent(2), mhd->u0.extent(3), mhd->u0.extent(4));
++    Kokkos::realloc(merge_w_backup_, mhd->w0.extent(0), mhd->w0.extent(1),
++                    mhd->w0.extent(2), mhd->w0.extent(3), mhd->w0.extent(4));
++  }
++  Kokkos::deep_copy(merge_u_backup_, mhd->u0);
++  Kokkos::deep_copy(merge_w_backup_, mhd->w0);
++  Kokkos::fence();
++  merge_snapshot_seconds_ += copy_time.seconds();
++  RunMergedSTSSweep(pm, pending_sts_half_+0.5*trial_dt, pending_sts_cycle_);
++  const int attempted_stages = sts.nstages;
++  const auto &diag = lf->diagnostics;
++  const Real advective_limit = pm->cfl_no*mhd->dtnew;
++  const bool cfl_reject = !std::isfinite(advective_limit) || !(advective_limit > 0.0) ||
++      trial_dt > advective_limit;
++  const bool state_reject = diag.dfloor != saved_diag.dfloor ||
++      diag.pfloor != saved_diag.pfloor || diag.nonfinite != saved_diag.nonfinite ||
++      diag.nonpositive != saved_diag.nonpositive || diag.hard_bound != saved_diag.hard_bound;
++  int reject = (cfl_reject ? 1 : 0) | (state_reject ? 2 : 0);
++#if MPI_PARALLEL_ENABLED
++  MPI_Allreduce(MPI_IN_PLACE, &reject, 1, MPI_INT, MPI_BOR, MPI_COMM_WORLD);
++#endif
++  if (!reject) {
++    ++merge_accepted_;
++    merge_accepted_stages_ += attempted_stages;
++    merge_consumed_ += pending_sts_half_;
++    pending_sts_half_ = 0.0;
++    RefreshSTSCycleState(pm);
++    return true;
++  }
++  ++merge_rejected_;
++  if (reject & 1) ++merge_rejected_cfl_;
++  if (reject & 2) ++merge_rejected_admissibility_;
++  merge_rejected_stages_ += attempted_stages;
++  Kokkos::fence();
++  copy_time.reset();
++  Kokkos::deep_copy(mhd->u0, merge_u_backup_);
++  Kokkos::deep_copy(mhd->w0, merge_w_backup_);
++  // Stage 1 reads these old registers with zero coefficients before replacing
++  // them. Nonfinite*0 propagates, so a rejected invalid attempt must clear both.
++  Kokkos::deep_copy(mhd->u_sts1, 0.0);
++  Kokkos::deep_copy(mhd->u_sts_rhs, 0.0);
++  Kokkos::fence();
++  merge_snapshot_seconds_ += copy_time.seconds();
++  pm->ecounter = saved_events;
++  lf->diagnostics = saved_diag;
++  mhd->cgl_slot_representation = saved_slot;
++  lf->SetFusedPrimitiveRefresh(false);  // invalidate rejected temperature cache
++  mhd->dtnew = saved_mhd_dt;
++  lf->dtnew = saved_lf_dt;
++  // Remaining stage registers are populated from restored u0 and finite zeros
++  // by the next stage 1. Profile time and rejected-stage counts retain real work;
++  // physical diagnostics
++  // and EOS events above are rolled back. Strict-admissibility fatal checks are
++  // intentionally unchanged and cannot be caught by this transaction.
++  FlushPendingSTS(pm, true);
++  return false;  // caller now executes an ordinary pre sweep with the fresh dt
++}
++
++void Driver::FlushPendingSTS(Mesh *pm, bool select_next_dt) {
++  if (pending_sts_half_ == 0.0) return;
++  const Real current_time = pm->time, current_dt = pm->dt;
++  // Deferred operators use the old cycle's time/duration. This distinction is
++  // inert for allowed periodic boundaries and zero rates, but is explicit.
++  pm->time = pending_sts_time_;
++  pm->dt = pending_sts_cycle_;
++  pm->RefreshSTSParabolicTimeStep();
++  RunMergedSTSSweep(pm, pending_sts_half_, pending_sts_cycle_);
++  merge_flushed_ += pending_sts_half_;
++  pending_sts_half_ = 0.0;
++  pm->time = current_time;
++  pm->dt = current_dt;
++  if (select_next_dt) {
++    // A late wall stop must checkpoint a fresh next budget from the synchronized
++    // state. Retain the old completed-cycle dt for the baseline growth cap.
++    pm->dt = pending_sts_cycle_;
++    pm->NewTimeStep(tlim);
++  }
++  RefreshSTSCycleState(pm);
++}
++
+ //----------------------------------------------------------------------------------------
+ //! \fn Driver::ResetSTSController()
+ //! \brief Clears the cycle-local STS controller state.
+@@ -486,6 +665,7 @@
+ 
+     pmesh->NewTimeStep(tlim);
+     RefreshSTSCycleState(pmesh);
++    ConfigureMergedSTS(pmesh);
+   }
+ 
+   //---- Step 3.  Cycle through output Types and load data / write files.
+@@ -544,7 +724,8 @@
+            (elapsed_time < wall_time)) {
+       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
+ 
+-      if (sts.enabled) {
++      const bool merged_pre = pending_sts_half_ > 0.0 && TryMergedSTSPre(pmesh);
++      if (sts.enabled && !merged_pre) {
+         BeginSTSSweep(pmesh, STSSweep::pre);
+         for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
+           SetSTSStage(sts_stage);
+@@ -582,6 +763,14 @@
+         if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
+           pmesh->RefreshSTSParabolicTimeStep();
+         }
++        if (CanDeferSTSPost(pmesh, pout)) {
++          pending_sts_half_ = 0.5*pmesh->dt;
++          pending_sts_cycle_ = pmesh->dt;
++          pending_sts_time_ = pmesh->time;
++          merge_deferred_ += pending_sts_half_;
++          // CGLCollisions just refreshed limits after the hyperbolic walls.
++          // The old post's zero-rate hook completes in the merged/flush sweep.
++        } else {
+         BeginSTSSweep(pmesh, STSSweep::post);
+         if (sts.enabled) {
+           for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
+@@ -591,6 +780,7 @@
+             ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
+           }
+           EndSTSSweep();
++        }
+         }
+       }
+ 
+@@ -621,13 +811,17 @@
+ 
+         if (((out->out_params.dt > 0.0) && ((time_32 >= next_32) && (time_32<tlim_32))) ||
+             ((dcycle_ > 0) && ((pmesh->ncycle)%(dcycle_) == 0)) ) {
++          FlushPendingSTS(pmesh);
+           out->LoadOutputData(pmesh);
+           out->WriteOutputFile(pmesh, pin);
+         }
+       }
+ 
+       // AMR
+-      if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
++      if (pmesh->adaptive) {
++        FlushPendingSTS(pmesh);
++        pmesh->pmr->AdaptiveMeshRefinement(this, pin);
++      }
+       // compute new timestep AFTER all Meshblocks refined/derefined
+       pmesh->NewTimeStep(tlim);
+       RefreshSTSCycleState(pmesh);
+@@ -637,6 +831,7 @@
+         elapsed_time = UpdateWallClock();
+       }
+     }  // end while
++    FlushPendingSTS(pmesh, true);  // includes an unpredicted wall-clock stop
+   }    // end of (time_evolution != tstatic) clause
+   return;
+ }
+@@ -647,6 +842,19 @@
+ //!  and printing diagnostic messages
+ 
+ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
++  FlushPendingSTS(pmesh, true);
++  if (merge_sts_enabled_ && global_variable::my_rank == 0) {
++    std::cout << "STS merge: accepted=" << merge_accepted_
++              << " rejected=" << merge_rejected_
++              << " rejected_cfl=" << merge_rejected_cfl_
++              << " rejected_admissibility=" << merge_rejected_admissibility_
++              << " accepted_stages=" << merge_accepted_stages_
++              << " rejected_stages=" << merge_rejected_stages_
++              << " snapshot_seconds=" << merge_snapshot_seconds_
++              << " deferred=" << merge_deferred_ << " consumed=" << merge_consumed_
++              << " flushed=" << merge_flushed_ << " pending=" << pending_sts_half_
++              << std::endl;
++  }
+   // The last cycle can end with AMR after the normal output point. Refresh a
+   // rendered turbulence field only when it no longer matches the final mesh.
+   if (pmesh->pmb_pack->pturb != nullptr) {
+--- a/src/pgen/tests/cgl_landau_fluid.cpp
++++ b/src/pgen/tests/cgl_landau_fluid.cpp
+@@ -1863,7 +1863,11 @@
+ } // namespace
+ 
+ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
+-  pgen_final_func = FinalizeCGLLFQuantitative;
++  const bool merge_cfl_probe =
++      pin->GetOrAddString("problem", "test_mode", "parallel_decay") == "merge_cfl_probe";
++  // The dedicated transactional fixture is verified by its Python regression,
++  // including conservation and clean diagnostics; it is not the grad-B reference.
++  pgen_final_func = merge_cfl_probe ? nullptr : FinalizeCGLLFQuantitative;
+   if (restart) return;
+ 
+   auto *pmbp = pmy_mesh_->pmb_pack;
+@@ -1871,8 +1875,10 @@
+   if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl) {
+     Fail("quantitative LF tests require <mhd>/eos = cgl");
+   }
+-  const TestMode mode = ParseMode(pin);
+-  if (mode == TestMode::field_reversal ||
++  const TestMode mode = merge_cfl_probe ? TestMode::grad_b : ParseMode(pin);
++  if (merge_cfl_probe) {
++    RequireOneDimensionalMesh(pmy_mesh_);
++  } else if (mode == TestMode::field_reversal ||
+       mode == TestMode::staggered_checkerboard ||
+       mode == TestMode::hotspot) {
+     RequireSingleBlock(pmy_mesh_);
+--- /dev/null
++++ b/tst/test_suite/cgl/test_cgl_lf_sts_merge_gpu.py
+@@ -0,0 +1,32 @@
++"""Optional LF half-sweep transaction application regressions."""
++import pytest
++from test_suite.cgl import cgl_lf_sts_merge as merge
++
++
++def test_cgl_lf_sts_merge_default_off_gpu(tmp_path):
++    merge.default_off(tmp_path)
++
++
++@pytest.mark.parametrize("reason", ["collision", "limiter", "strict", "explicit"])
++def test_cgl_lf_sts_merge_fallback_gpu(tmp_path, reason):
++    merge.fallback(tmp_path, reason)
++
++
++def test_cgl_lf_sts_merge_barriers_gpu(tmp_path):
++    merge.smooth_and_output_barriers(tmp_path)
++
++
++def test_cgl_lf_sts_merge_restart_gpu(tmp_path):
++    merge.restart_sync(tmp_path)
++
++
++def test_cgl_lf_sts_merge_rejection_gpu(tmp_path):
++    merge.dynamic_rejection(tmp_path)
++
++
++def test_cgl_lf_sts_merge_wall_gpu(tmp_path):
++    merge.wall_sync(tmp_path)
++
++
++def test_cgl_lf_sts_merge_temporal_gpu(tmp_path):
++    merge.temporal_refinement(tmp_path)
+--- /dev/null
++++ b/tst/test_suite/cgl/test_cgl_lf_sts_merge_cpu.py
+@@ -0,0 +1,32 @@
++"""Optional LF half-sweep transaction application regressions."""
++import pytest
++from test_suite.cgl import cgl_lf_sts_merge as merge
++
++
++def test_cgl_lf_sts_merge_default_off_cpu(tmp_path):
++    merge.default_off(tmp_path)
++
++
++@pytest.mark.parametrize("reason", ["collision", "limiter", "strict", "explicit"])
++def test_cgl_lf_sts_merge_fallback_cpu(tmp_path, reason):
++    merge.fallback(tmp_path, reason)
++
++
++def test_cgl_lf_sts_merge_barriers_cpu(tmp_path):
++    merge.smooth_and_output_barriers(tmp_path)
++
++
++def test_cgl_lf_sts_merge_restart_cpu(tmp_path):
++    merge.restart_sync(tmp_path)
++
++
++def test_cgl_lf_sts_merge_rejection_cpu(tmp_path):
++    merge.dynamic_rejection(tmp_path)
++
++
++def test_cgl_lf_sts_merge_wall_cpu(tmp_path):
++    merge.wall_sync(tmp_path)
++
++
++def test_cgl_lf_sts_merge_temporal_cpu(tmp_path):
++    merge.temporal_refinement(tmp_path)
+--- /dev/null
++++ b/tst/test_suite/cgl/cgl_lf_sts_merge.py
+@@ -0,0 +1,209 @@
++"""Shared application checks for the narrow optional LF sweep-merging path."""
++from pathlib import Path
++import json
++import os
++import re
++import subprocess
++
++import numpy as np
++
++ROOT = Path(__file__).resolve().parents[3]
++INPUT = ROOT / "inputs/tests/cgl_lf_sts_merge.athinput"
++
++
++def _input(updates):
++    text = INPUT.read_text()
++    for key, value in updates.items():
++        block, name = key.split("/", 1)
++        match = re.search(r"(^<" + re.escape(block) + r">\s*\n)(.*?)(?=^<|\Z)",
++                          text, re.M | re.S)
++        assert match, key
++        body = match.group(2)
++        line = re.compile(r"^" + re.escape(name) + r"\s*=.*$", re.M)
++        if value is None:
++            body = line.sub("", body)
++        else:
++            body = (line.sub(name + " = " + str(value), body) if line.search(body)
++                    else body + "\n" + name + " = " + str(value) + "\n")
++        text = text[:match.start(2)] + body + text[match.end(2):]
++    return text
++
++
++def run(directory, updates=None, *, launcher=(), restart=None, wall=None):
++    directory.mkdir(parents=True)
++    updates = updates or {}
++    command = [*launcher, str(Path("athena").absolute())]
++    if restart is None:
++        staged = directory / "input.athinput"
++        staged.write_text(_input(updates))
++        command += ["-i", str(staged)]
++    else:
++        command += ["-r", str(restart)]
++        command += [key + "=" + str(value) for key, value in updates.items()]
++    command += ["-d", str(directory)]
++    if wall:
++        command += ["-t", wall]
++    env = os.environ.copy()
++    for key in list(env):
++        if key.startswith("ATHENAK_CGL_LF_"):
++            env.pop(key)
++    result = subprocess.run(command, env=env, capture_output=True, text=True)
++    stdout = result.stdout + result.stderr
++    (directory / "stdout.log").write_text(stdout)
++    assert result.returncode == 0, stdout[-5000:]
++    stats = {key: float(value) for key, value in re.findall(
++        r"(accepted|rejected|rejected_cfl|rejected_admissibility|accepted_stages|"
++        r"rejected_stages|snapshot_seconds|deferred|consumed|flushed|pending)="
++        r"([+\-.0-9eE]+)", stdout)}
++    if stats:
++        assert stats["pending"] == 0.0
++        np.testing.assert_allclose(stats["deferred"],
++                                   stats["consumed"] + stats["flushed"],
++                                   rtol=3e-5, atol=1e-14)
++    return stats
++
++
++def table(directory):
++    return np.loadtxt(sorted((directory / "tab").glob("*.tab"))[-1])
++
++
++def clean_conserved(directory):
++    path = next(directory.glob("*.mhd.hst"))
++    lines = path.read_text().splitlines()
++    names = re.findall(r"\[\d+\]=(\S+)", next(x for x in lines if "[1]=" in x))
++    values = np.atleast_2d(np.loadtxt(path))
++    assert np.all(np.isfinite(values))
++    columns = dict(zip(names, values.T))
++    for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
++                 "lf_hwproj"):
++        assert np.all(columns[name] == 0.0), name
++    for name in ("mass", "tot-E"):
++        np.testing.assert_allclose(columns[name], columns[name][0], rtol=0, atol=3e-12)
++    state = table(directory)
++    assert np.all(np.isfinite(state))
++    assert np.min(state[:, [3, 7, 8]]) > 0.0
++    return state
++
++
++def equal_fields_and_history(first, second):
++    # Parameter headers differ intentionally (option absent/false or false/true).
++    # Compare physical field/history bytes; restart synchronization is exercised
++    # separately by continuation and wall-clock tests.
++    def products(directory):
++        return {str(p.relative_to(directory)): p.read_bytes()
++                for p in directory.rglob("*") if p.suffix in (".tab", ".hst")}
++    left, right = products(first), products(second)
++    assert left and left == right
++
++
++def default_off(tmp_path):
++    left, right = tmp_path / "absent", tmp_path / "false"
++    assert not run(left)
++    assert not run(right, {"time/sts_merge_half_sweeps": "false"})
++    equal_fields_and_history(left, right)
++
++
++def fallback(tmp_path, reason):
++    physics = {
++        "collision": {"mhd/nu_coll": 10},
++        "limiter": {"mhd/mirror_limiter": "true", "mhd/limiter_nu_coll": 0},
++        "strict": {"mhd/cgl_lf_strict_admissibility": "true"},
++        "explicit": {"time/sts_integrator": "none", "mhd/cgl_heat_flux_integrator": "explicit"},
++    }[reason]
++    left, right = tmp_path / "off", tmp_path / "on"
++    assert not run(left, physics | {"time/sts_merge_half_sweeps": "false"})
++    assert not run(right, physics | {"time/sts_merge_half_sweeps": "true"})
++    assert "ordinary half-sweep fallback" in (right / "stdout.log").read_text()
++    equal_fields_and_history(left, right)
++
++
++def smooth_and_output_barriers(tmp_path):
++    for name, outputs in (
++        ("sparse", {}),
++        ("every", {"output1/dcycle": 1, "output2/dcycle": 1, "output3/dcycle": 1}),
++        ("mixed", {"output1/dcycle": 3, "output2/dcycle": None, "output2/dt": .006}),
++    ):
++        off, on = tmp_path / (name + "off"), tmp_path / (name + "on")
++        run(off, outputs | {"time/sts_merge_half_sweeps": "false"})
++        stats = run(on, outputs | {"time/sts_merge_half_sweeps": "true"})
++        assert (stats["accepted"] == 0) if name == "every" else (stats["accepted"] > 0)
++        if name == "every":
++            equal_fields_and_history(off, on)
++        else:
++            for path in sorted((off / "tab").glob("*.tab")):
++                np.testing.assert_allclose(np.loadtxt(path), np.loadtxt(on / "tab" / path.name),
++                                           rtol=0, atol=2e-8)
++        clean_conserved(on)
++        if name == "mixed":
++            times = [float(re.search(r"time=\s*([+\-.0-9eE]+)", p.read_text()).group(1))
++                     for p in sorted((on / "tab").glob("*.tab"))]
++            assert any(0.0 < time < .01 for time in times), times
++
++
++def restart_sync(tmp_path):
++    first, resumed, reference = (tmp_path / x for x in ("first", "resumed", "reference"))
++    run(first, {"time/sts_merge_half_sweeps": "true"})
++    restart = sorted((first / "rst").glob("*.rst"))[-1]
++    stats = run(resumed, {"time/sts_merge_half_sweeps": "true", "time/tlim": .015},
++                restart=restart)
++    assert stats["accepted"] > 0
++    run(reference, {"time/sts_merge_half_sweeps": "false", "time/tlim": .015})
++    np.testing.assert_allclose(clean_conserved(resumed), clean_conserved(reference),
++                               rtol=0, atol=2e-8)
++    before = np.atleast_2d(np.loadtxt(next(first.glob("*.mhd.hst"))))[-1]
++    after = np.atleast_2d(np.loadtxt(next(resumed.glob("*.mhd.hst"))))[-1]
++    np.testing.assert_allclose(after[[2, 6]], before[[2, 6]], rtol=0, atol=3e-12)
++
++
++def dynamic_rejection(tmp_path, launchers=((),)):
++    states, decisions = [], []
++    for number, launcher in enumerate(launchers):
++        directory = tmp_path / str(number)
++        stats = run(directory, {
++            "time/sts_merge_half_sweeps": "true", "meshblock/nx1": 16,
++            "time/evolution": "dynamic", "mhd/rsolver": "hlle",
++            "problem/test_mode": "merge_cfl_probe", "problem/b0": .1,
++            "problem/by_amp": .3, "problem/ppar0": 1, "problem/pperp0": 1.3,
++            "time/sts_max_dt_ratio": -1, "time/tlim": .02, "time/nlim": 12,
++        }, launcher=launcher)
++        assert stats["rejected_cfl"] > 0 and stats["rejected_admissibility"] == 0
++        states.append(clean_conserved(directory))
++        decisions.append({key: stats[key] for key in
++                          ("accepted", "rejected_cfl", "rejected_stages", "pending")})
++    for state, decision in zip(states[1:], decisions[1:]):
++        np.testing.assert_allclose(state, states[0], rtol=2e-12, atol=2e-13)
++        assert decision == decisions[0]
++
++
++def wall_sync(tmp_path):
++    directory = tmp_path / "wall"
++    stats = run(directory, {
++        "time/sts_merge_half_sweeps": "true", "time/tlim": 100, "time/nlim": -1,
++        "problem/test_mode": "merge_cfl_probe", "problem/b0": 1,
++        "problem/by_amp": 0, "problem/ppar0": 1, "problem/pperp0": 1,
++    }, wall="00:00:01")
++    assert stats["accepted"] > 0 and stats["flushed"] > 0
++    assert "Terminating on wall clock limit" in (directory / "stdout.log").read_text()
++    clean_conserved(directory)
++    assert list((directory / "rst").glob("*.rst"))
++
++
++def temporal_refinement(tmp_path):
++    chi = np.sqrt(8 / np.pi) / (2 * np.pi)
++    target = 256 * .4 * .5 / (64**2 * chi)
++    errors = []
++    for ratio in (2, 1, .5):
++        states = []
++        for enabled in (False, True):
++            directory = tmp_path / f"{ratio}-{enabled}"
++            stats = run(directory, {"time/sts_merge_half_sweeps": str(enabled).lower(),
++                                   "time/sts_max_dt_ratio": ratio, "time/tlim": target})
++            if enabled:
++                assert stats["accepted"] > 0
++            states.append(clean_conserved(directory))
++        errors.append(np.sqrt(np.mean((states[0][:, 7] - states[1][:, 7])**2)))
++    orders = np.log2(np.asarray(errors[:-1]) / errors[1:])
++    (tmp_path / "temporal-refinement.json").write_text(json.dumps({
++        "time": target, "ratios": [2, 1, .5], "rms_temperature_errors": errors,
++        "orders": orders.tolist()}, indent=2) + "\n")
++    assert np.all((orders > 1.7) & (orders < 2.3)), (errors, orders)
+--- /dev/null
++++ b/tst/test_suite/cgl/test_cgl_lf_sts_merge_mpi_gpu.py
+@@ -0,0 +1,14 @@
++"""Opt-in GPU MPI coordination of transactional LF sweeps."""
++import shlex
++from test_suite.cgl import cgl_lf_sts_merge as merge
++from test_suite.cgl import test_cgl_amr_mpi_gpu as amr
++
++pytestmark = amr.pytestmark
++
++
++def test_cgl_lf_sts_merge_rejection_mpi_gpu(tmp_path):
++    assert amr.MPI_GPU_LAUNCHER
++    prefix = tuple(shlex.split(amr.MPI_GPU_LAUNCHER))
++    merge.dynamic_rejection(tmp_path, tuple(
++        prefix + ("-N", "1", "-n", str(ranks), "--ntasks-per-node", str(ranks))
++        for ranks in (1, 4)))
+--- /dev/null
++++ b/tst/test_suite/cgl/test_cgl_lf_sts_merge_mpicpu.py
+@@ -0,0 +1,7 @@
++"""Every rank must make the same CFL rollback decision."""
++from test_suite.cgl import cgl_lf_sts_merge as merge
++
++
++def test_cgl_lf_sts_merge_rejection_mpicpu(tmp_path):
++    merge.dynamic_rejection(tmp_path, (("mpirun", "-np", "1"),
++                                      ("mpirun", "-np", "4")))
+--- /dev/null
++++ b/inputs/tests/cgl_lf_sts_merge.athinput
+@@ -0,0 +1,89 @@
++# Optional STS merge transaction fixture. Explicitly nonstrict, collisionless,
++# periodic LF; original decay amplitude and scientific tolerances are retained.
++# Evolve to chi k^2 t = 1 over hundreds of cycles, resolving finite damping.
++# Quantitative CGL Landau-fluid STS test.
++# lf_k_parallel is the closure wavenumber |k_parallel|, not a conductivity.
++# background mode freezes only c_parallel; gradients and state variables remain live.
++
++<job>
++basename = cgl_lf_quant_parallel
++
++<mesh>
++nghost = 2
++nx1 = 64
++x1min = 0.0
++x1max = 1.0
++ix1_bc = periodic
++ox1_bc = periodic
++nx2 = 1
++x2min = 0.0
++x2max = 1.0
++ix2_bc = periodic
++ox2_bc = periodic
++nx3 = 1
++x3min = 0.0
++x3max = 1.0
++ix3_bc = periodic
++ox3_bc = periodic
++
++<meshblock>
++nx1 = 64
++nx2 = 1
++nx3 = 1
++
++<time>
++evolution = kinematic
++integrator = rk2
++sts_integrator = rkl2
++sts_max_dt_ratio = 10.0
++cfl_number = 0.4
++nlim = -1
++tlim = 0.01
++ndiag = 100000
++
++<mhd>
++eos = cgl
++passive = false
++cgl_heat_flux = landau_fluid
++cgl_heat_flux_integrator = sts
++lf_k_parallel = 6.283185307179586
++lf_coefficient_mode = background
++lf_c_parallel0 = 1.0
++cgl_lf_strict_admissibility = false
++reconstruct = plm
++rsolver = advect
++gamma = 1.666666666666667
++dfloor = 1.0e-12
++pfloor = 1.0e-12
++tfloor = 1.0e-12
++sfloor = 1.0e-12
++bfloor = 1.0e-10
++
++<problem>
++pgen_name = cgl_landau_fluid
++test_mode = parallel_decay
++mode_number = 1
++rho0 = 1.0
++ppar0 = 1.0
++pperp0 = 1.0
++b0 = 1.0
++amp = 1.0e-4
++decay_rel_tol = 3.0e-3
++phase_rel_tol = 1.0e-6
++validation_output = false
++validation_output_dir = docs/figures/data
++
++<output1>
++file_type = hst
++data_format = %24.16e
++dcycle = 100000
++
++<output2>
++file_type = tab
++variable = mhd_w
++data_format = %24.16e
++dcycle = 100000
++
++<output3>
++file_type = rst
++dcycle = 100000
+--- a/docs/source/modules/super_time_stepping.md
++++ b/docs/source/modules/super_time_stepping.md
+@@ -102,6 +102,58 @@
+ [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md) and
+ [CGL Landau-Fluid Code Guide](cgl_landau_fluid_code_guide.md).
+ 
++## Optional LF Half-Sweep Merging
++
++`<time>/sts_merge_half_sweeps = true` can defer an old post half-sweep and
++combine it with the next pre half-sweep. The option defaults to `false`; an
++absent option leaves the ordinary controller path and serialized input unchanged.
++It is currently eligible only for active CGL LF with RKL2 on a strictly periodic,
++uniform mesh, with one parabolic process, zero background and soft-limiter rates, and no
++enabled limiter flags, strict admissibility, user boundary/source hooks,
++other fluid/particle/radiation physics, shear/orbital remapping, source terms, or
++other MHD diffusion. Passive CGL is excluded. Ineligible requests print an
++ordinary-half-sweep fallback message and retain the original update schedule.
++Noncommuting collision updates are never moved across a hyperbolic step.
++
++A deferred half is completed before any output or restart, mesh-refinement
++processing, final-time/cycle termination, or wall-clock exit. Time-based and
++cycle-based output predicates follow the output controller. On an unexpected
++wall-clock stop, the completed state also gets a fresh next-cycle timestep
++before the checkpoint is written. Restart files contain no pending duration.
++
++Before a merged trial, the driver saves conserved and primitive arrays,
++diagnostic/event counters, slot representation, and local timestep estimates.
++It then checks the fresh advective CFL limit and LF admissibility counters
++across all ranks. A rejected trial restores the saved state, clears STS registers
++that could contain invalid trial values, completes the old pending half, selects
++a fresh timestep, and runs the ordinary new pre half. Accepted physical
++diagnostics describe the retained trajectory; rejected stage work remains in
++the merge performance counters. Strict mode falls back because its fatal checks
++cannot be rolled back. No scientific admissibility setting is relaxed implicitly.
++
++The `STS merge:` summary reports accepted and rejected trials, CFL and
++admissibility rejection counts, attempted stages, snapshot time, and deferred,
++consumed, flushed and pending durations. Pending duration is zero at every
++published state. Merging removes an intermediate LF checkpoint, so acceptance
++and second-order temporal checks apply to the stated smooth eligible scope;
++this is not a nonlinear stability theorem for projection-active states.
++
++Transactions allocate two full arrays, including ghosts. For six double-precision
++CGL variables and no passive scalars this is 96 bytes per stored cell, with
++192 bytes per stored cell of snapshot read/write traffic for each attempt.
++Extra scalars increase both amounts. Allocation, copies, fences, global
++accept/reject reduction and rejected work can offset stage-count savings;
++performance should be measured on the intended workload. The original turbulence
++deck is ineligible because its limiter physics is enabled; explicitly strict
++paper/unit waves are ineligible because of strictness.
++
++The permanent `cgl_lf_sts_merge` regressions check absent/false behavior,
++collision/limiter/strict/explicit fallback, time/cycle outputs, restart and
++wall-clock synchronization, deterministic CFL rollback, MPI decisions, and
++second-order differences between merged and ordinary smooth evolution. They use
++a separately declared nonstrict collisionless fixture while retaining the
++scientific decay amplitude and analytic error bounds.
++
+ ## Process Contract
+ 
+ A parabolic operator participates in STS through
+@@ -141,6 +193,7 @@
+ | --- | --- | --- |
+ | `<time>/sts_integrator` | `none` | `none` or `rkl2` global STS controller |
+ | `<time>/sts_safety` | `0.9` | Finite factor in `(0, 1]` multiplying every STS process reference timestep |
++| `<time>/sts_merge_half_sweeps` | `false` | Optional transactional merging for eligible collisionless periodic CGL LF runs; see below |
+ | `<time>/sts_max_dt_ratio` | `-1.0` | Optional positive limit `dt <= ratio * dt_diff`; `-1.0` disables the cap |
+ 
+ `sts_safety` is independent of `<time>/cfl_number`: advection and explicitly
+--- a/docs/source/reference/input_parameters.md
++++ b/docs/source/reference/input_parameters.md
+@@ -425,6 +425,7 @@
+ | `sts_integrator` | string | none | build_tree.cpp |
+ | `sts_safety` | Real, finite in `(0, 1]` | 0.9 | build_tree.cpp; scales STS processes only |
+ | `sts_max_dt_ratio` | Real | -1.0 | build_tree.cpp |
++| `sts_merge_half_sweeps` | bool | false | driver.cpp; optional eligible collisionless periodic CGL LF transactions |
+ | `tlim` | Real | required | driver.cpp:L93 |
+ 
+ ## Input Block: `<turb_driving>`

@@ -1,0 +1,54 @@
+Unloading the cpe module is insufficient to restore the system defaults.
+Please run 'source
+/opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.[csh|sh]'. 
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: /opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+Core/26.05:
+   On September 15, 2026, the default Core module was upgraded from
+   Core/25.03 to Core/26.05. For more information on Core/26.05 including
+   package version changes please see: https://docs.olcf.ornl.gov/software/software-news.html#frontier-core-module-may-11-2026
+
+-------------------------------------------------------------------------------
+
+
+Activating Modules:
+  1) darshan-runtime/3.4.4-mpi
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.30
+
+The following have been reloaded with a version change:
+  1) cray-libsci/24.11.0 => cray-libsci/24.07.0
+  2) craype/2.7.33 => craype/2.7.32
+
+
+The following have been reloaded with a version change:
+  1) PrgEnv-cray/8.5.0 => PrgEnv-cray/8.6.0
+  2) cce/18.0.0 => cce/20.0.0
+  3) cray-dsmml/0.3.0 => cray-dsmml/0.3.1
+  4) cray-libsci/24.07.0 => cray-libsci/25.09.0
+  5) cray-mpich/8.1.30 => cray-mpich/9.0.1
+  6) cray-pmi/6.1.15.21 => cray-pmi/6.1.16
+  7) craype/2.7.32 => craype/2.7.35
+  8) darshan-runtime/3.4.4-mpi => darshan-runtime/3.4.7-mpi
+  9) perftools-base/24.07.0 => perftools-base/25.09.0
+
+ratio2-repeat-1-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.09574583333333332, 'stages_per_cycle': 3.03125, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 285.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008077388, 'deferred': 0.04109472, 'consumed': 0.04109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio2-repeat-1-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.21380770833333332, 'stages_per_cycle': 6.0, 'transaction': {}, 'error': None}
+ratio2-repeat0-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.22374489583333335, 'stages_per_cycle': 6.0, 'transaction': {}, 'error': None}
+ratio2-repeat0-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.09644360416666665, 'stages_per_cycle': 3.03125, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 285.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008049454, 'deferred': 0.04109472, 'consumed': 0.04109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio2-repeat1-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.09618009374999999, 'stages_per_cycle': 3.03125, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 285.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008030559, 'deferred': 0.04109472, 'consumed': 0.04109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio2-repeat1-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.17038947916666666, 'stages_per_cycle': 6.0, 'transaction': {}, 'error': None}
+ratio2-repeat2-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.16853552083333334, 'stages_per_cycle': 6.0, 'transaction': {}, 'error': None}
+ratio2-repeat2-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.09746523958333332, 'stages_per_cycle': 3.03125, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 285.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008058688, 'deferred': 0.04109472, 'consumed': 0.04109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio20-repeat-1-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.24055635416666665, 'stages_per_cycle': 9.052083333333334, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 855.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008049975, 'deferred': 0.4109472, 'consumed': 0.4109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio20-repeat-1-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.3639745833333334, 'stages_per_cycle': 14.0, 'transaction': {}, 'error': None}
+ratio20-repeat0-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.3569360416666667, 'stages_per_cycle': 14.0, 'transaction': {}, 'error': None}
+ratio20-repeat0-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.23992760416666667, 'stages_per_cycle': 9.052083333333334, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 855.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008068253, 'deferred': 0.4109472, 'consumed': 0.4109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio20-repeat1-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.24312697916666667, 'stages_per_cycle': 9.052083333333334, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 855.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008060763, 'deferred': 0.4109472, 'consumed': 0.4109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}
+ratio20-repeat1-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.3622708333333333, 'stages_per_cycle': 14.0, 'transaction': {}, 'error': None}
+ratio20-repeat2-mergeFalse {'returncode': 0, 'solver_seconds_per_cycle': 0.3581033333333334, 'stages_per_cycle': 14.0, 'transaction': {}, 'error': None}
+ratio20-repeat2-mergeTrue {'returncode': 0, 'solver_seconds_per_cycle': 0.2392455208333333, 'stages_per_cycle': 9.052083333333334, 'transaction': {'accepted': 95.0, 'rejected': 0.0, 'rejected_cfl': 0.0, 'rejected_admissibility': 0.0, 'accepted_stages': 855.0, 'rejected_stages': 0.0, 'snapshot_seconds': 0.008045952, 'deferred': 0.4109472, 'consumed': 0.4109472, 'flushed': 0.0, 'pending': 0.0}, 'error': None}

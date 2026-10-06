@@ -24,6 +24,14 @@ throughput gain on the separately labeled nonzero-transport 3D turbulence case
 and 2.37x on the slow eigenwave. SMR reaches the common final time 1.24–1.26x
 faster through fewer cycles, despite a modestly higher cost per cycle.
 
+Task2 adds `time/sts_merge_half_sweeps = false`. The optional mode uses
+transactional merging on uniform periodic collisionless active-CGL LF runs.
+Collisions, configured limiters, strict diagnostics, passive mode, refinement
+and incompatible physics retain ordinary halves. Output/restart/final states
+are synchronized, and a failed fresh-CFL or admissibility trial rolls back.
+The [Task2 report](validation/wo2/task2/README.md) records second-order smooth
+agreement, default-off byte identity and measured eligible-workload savings.
+
 The following sections preserve the WO1 implementation record.
 
 

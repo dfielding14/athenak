@@ -425,6 +425,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `sts_integrator` | string | none | build_tree.cpp |
 | `sts_safety` | Real, finite in `(0, 1]` | 0.9 | build_tree.cpp; scales STS processes only |
 | `sts_max_dt_ratio` | Real | -1.0 | build_tree.cpp |
+| `sts_merge_half_sweeps` | bool | false | driver.cpp; optional eligible collisionless periodic CGL LF transactions |
 | `tlim` | Real | required | driver.cpp:L93 |
 
 ## Input Block: `<turb_driving>`

@@ -1,0 +1,22 @@
+
+Root grid = 2 x 2 x 2 MeshBlocks
+Total number of MeshBlocks = 8
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+STS half-sweep merging: eligible collisionless periodic LF run
+
+Setup complete, executing task list(s)...
+
+elapsed=7.654272e-01 cycle=0 time=0.000000e+00 dt=8.651519e-03
+STS merge: accepted=95 rejected=0 rejected_cfl=0 rejected_admissibility=0 accepted_stages=855 rejected_stages=0 snapshot_seconds=8.060763e-03 deferred=4.109472e-01 consumed=4.109472e-01 flushed=0.000000e+00 pending=0.000000e+00
+CGL LF rotated_decay passed: k_parallel=6.283185e+00 measured_amp=2.443816e-08 expected_amp=2.417809e-08 rel_err=1.075633e-02 rel_tol=3.000000e-02
+
+Terminating on cycle limit
+time=8.305458e-01 cycle=96
+tlim=1.000000e+03 nlim=96
+
+MeshBlock-cycles = 768
+cpu time used  = 2.334019e+01
+zone-cycles/cpu_second = 1.078219e+06
+particle-updates/cpu_second = 0.000000e+00

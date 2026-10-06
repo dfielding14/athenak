@@ -1,0 +1,1047 @@
+[
+  {
+    "label": "absent-baseline",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/bin/athena-hip-nocray",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-dfc762c85485f71b.athinput"
+    ],
+    "stats": {},
+    "binary_sha256": "adcdadd805c63fd774ef69bd7673c9b0ab52e77cf37e2e3913cff2b890c18150"
+  },
+  {
+    "label": "absent-candidate",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-dfc762c85485f71b.athinput"
+    ],
+    "stats": {},
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78",
+    "byte_identical_products": {
+      "merge.mhd.hst": {
+        "raw_equal": true,
+        "sha256": "859bc5799f0f2a19f1b4b5bd9177df853df9aefda47ad0f60f66aebb098bcf66"
+      },
+      "tab/merge.mhd_w.00000.tab": {
+        "raw_equal": true,
+        "sha256": "0357108907d332f5a839fd448b13324b2440be8a77d0d8b54a1d22130135f316"
+      },
+      "tab/merge.mhd_w.00001.tab": {
+        "raw_equal": true,
+        "sha256": "d08a04a7cb1c4e7f2a78aae7f1b1c7ab83830e4e76c27deb921dd83c0b36704e"
+      },
+      "rst/merge.00000.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7243,
+          "normalized_ranges": [
+            [
+              7363,
+              7399
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "5e9eb1fc14c30d549ad1b3d882681e1c320df4fe8c2df8446c38755e3ca97839",
+          "normalized_sha256": "e781136471132a90e04bce3324779394233cbe4bc0781b3aa9d7334322e85fcf"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7243,
+          "normalized_ranges": [
+            [
+              7363,
+              7399
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "682509a30d329cb41ae72a5b103f53fb70e4e3778e9d21a915f0ae1c63a65ec3",
+          "normalized_sha256": "e781136471132a90e04bce3324779394233cbe4bc0781b3aa9d7334322e85fcf"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 14,
+        "raw_difference_offsets": [
+          7363,
+          7364,
+          7365,
+          7371,
+          7372,
+          7373,
+          7379,
+          7380,
+          7381,
+          7387,
+          7388,
+          7389,
+          7395,
+          7396
+        ]
+      },
+      "rst/merge.00001.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7243,
+          "normalized_ranges": [
+            [
+              7363,
+              7399
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "0bcd95c9ca2f4ec14d53cf35a9a2c52a056af9d221918c3e0ab509de34dfe588",
+          "normalized_sha256": "4c2140600e9e2fb6cb997badfc3b4fdaa0779cbf4ef2d29df9b72668d269637c"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7243,
+          "normalized_ranges": [
+            [
+              7363,
+              7399
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "ac2927771d7d3a13cbc38bc46e2692577fb9809c4b62ba37237d7120d86faf3d",
+          "normalized_sha256": "4c2140600e9e2fb6cb997badfc3b4fdaa0779cbf4ef2d29df9b72668d269637c"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 14,
+        "raw_difference_offsets": [
+          7363,
+          7364,
+          7365,
+          7371,
+          7372,
+          7373,
+          7379,
+          7380,
+          7381,
+          7387,
+          7388,
+          7389,
+          7395,
+          7396
+        ]
+      }
+    }
+  },
+  {
+    "label": "false-baseline",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/bin/athena-hip-nocray",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-94e9b32f1c35c1b4.athinput"
+    ],
+    "stats": {},
+    "binary_sha256": "adcdadd805c63fd774ef69bd7673c9b0ab52e77cf37e2e3913cff2b890c18150"
+  },
+  {
+    "label": "false-candidate",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-94e9b32f1c35c1b4.athinput"
+    ],
+    "stats": {},
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78",
+    "byte_identical_products": {
+      "merge.mhd.hst": {
+        "raw_equal": true,
+        "sha256": "859bc5799f0f2a19f1b4b5bd9177df853df9aefda47ad0f60f66aebb098bcf66"
+      },
+      "tab/merge.mhd_w.00000.tab": {
+        "raw_equal": true,
+        "sha256": "0357108907d332f5a839fd448b13324b2440be8a77d0d8b54a1d22130135f316"
+      },
+      "tab/merge.mhd_w.00001.tab": {
+        "raw_equal": true,
+        "sha256": "d08a04a7cb1c4e7f2a78aae7f1b1c7ab83830e4e76c27deb921dd83c0b36704e"
+      },
+      "rst/merge.00001.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7328,
+          "normalized_ranges": [
+            [
+              7448,
+              7484
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "f0da8147e1bc16fa705a6232bc52bb5afbfa3f5d45f8cb868e7977667e15b3c5",
+          "normalized_sha256": "0284c99ca6b0f518939b281dc930c6096cd6e8b265ff0b6c2eca7babe8ac6d6d"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7328,
+          "normalized_ranges": [
+            [
+              7448,
+              7484
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "2d1252336f900332d8d08d0f8acd40a7d302edac822cb17f05432fe4c2d191ed",
+          "normalized_sha256": "0284c99ca6b0f518939b281dc930c6096cd6e8b265ff0b6c2eca7babe8ac6d6d"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 12,
+        "raw_difference_offsets": [
+          7448,
+          7449,
+          7450,
+          7456,
+          7457,
+          7458,
+          7465,
+          7466,
+          7473,
+          7474,
+          7481,
+          7482
+        ]
+      },
+      "rst/merge.00000.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7328,
+          "normalized_ranges": [
+            [
+              7448,
+              7484
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "a51a28ab1c546980884c13f4ab275e6583c0bc92355f55c032e6c3740ab6029b",
+          "normalized_sha256": "93addc234c0af58801ee9598213d854f6bd26b31e25090a7c08244960db09b62"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7328,
+          "normalized_ranges": [
+            [
+              7448,
+              7484
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "0f4ccd95ec546566c54fa8c0b31bb7ca029bb16bf72c037301570b613a165731",
+          "normalized_sha256": "93addc234c0af58801ee9598213d854f6bd26b31e25090a7c08244960db09b62"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 12,
+        "raw_difference_offsets": [
+          7448,
+          7449,
+          7450,
+          7456,
+          7457,
+          7458,
+          7465,
+          7466,
+          7473,
+          7474,
+          7481,
+          7482
+        ]
+      }
+    }
+  },
+  {
+    "label": "every-cycle-baseline",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/bin/athena-hip-nocray",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-b94f8fa66ed6fb2e.athinput"
+    ],
+    "stats": {},
+    "binary_sha256": "adcdadd805c63fd774ef69bd7673c9b0ab52e77cf37e2e3913cff2b890c18150"
+  },
+  {
+    "label": "every-cycle-candidate",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-b94f8fa66ed6fb2e.athinput"
+    ],
+    "stats": {
+      "accepted": 0.0,
+      "rejected": 0.0,
+      "rejected_cfl": 0.0,
+      "rejected_admissibility": 0.0,
+      "accepted_stages": 0.0,
+      "rejected_stages": 0.0,
+      "snapshot_seconds": 0.0,
+      "deferred": 0.0,
+      "consumed": 0.0,
+      "flushed": 0.0,
+      "pending": 0.0
+    },
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78",
+    "byte_identical_products": {
+      "merge.mhd.hst": {
+        "raw_equal": true,
+        "sha256": "96f3149f4a93b76b83b7874957af89c562bdf7730b0181c1f145b264f749bf47"
+      },
+      "tab/merge.mhd_w.00003.tab": {
+        "raw_equal": true,
+        "sha256": "692ea637ebda2352ee3de0a66c668f6feee45116c8cf14d77a5326b99f02fbd7"
+      },
+      "tab/merge.mhd_w.00004.tab": {
+        "raw_equal": true,
+        "sha256": "667bc5858ef1f5e4ffb819b9ca9296c297dc68f378bae6cd0eb16134e162231a"
+      },
+      "tab/merge.mhd_w.00005.tab": {
+        "raw_equal": true,
+        "sha256": "3f0ee6fda884689bfaa412ad0f41943839178ea9f8f1802012fb68d45165fca9"
+      },
+      "tab/merge.mhd_w.00002.tab": {
+        "raw_equal": true,
+        "sha256": "36bc2ab876148cbf8eea927c4f20074b0a42d2debdcd39c97f041c6b6f258251"
+      },
+      "tab/merge.mhd_w.00001.tab": {
+        "raw_equal": true,
+        "sha256": "b8f0630993aebb7cb27c1c25c1e24fa601afee58537078b36c4a6d28b9169b5d"
+      },
+      "tab/merge.mhd_w.00006.tab": {
+        "raw_equal": true,
+        "sha256": "d08a04a7cb1c4e7f2a78aae7f1b1c7ab83830e4e76c27deb921dd83c0b36704e"
+      },
+      "tab/merge.mhd_w.00007.tab": {
+        "raw_equal": true,
+        "sha256": "d08a04a7cb1c4e7f2a78aae7f1b1c7ab83830e4e76c27deb921dd83c0b36704e"
+      },
+      "tab/merge.mhd_w.00000.tab": {
+        "raw_equal": true,
+        "sha256": "0357108907d332f5a839fd448b13324b2440be8a77d0d8b54a1d22130135f316"
+      },
+      "rst/merge.00004.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "be2c3063b2e117f284ef1811312edab2b552f3ef9b9528c419f0860a47f99951",
+          "normalized_sha256": "2faf890f8cbcc58938b4c2e9e2e64c4a4b1d991a513d5ec2a8237c9649f66aaf"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "37582ea1c2e8583d5d3c94ab3d77b3f99ba18d2d1be0b4258fb04d45899aeb29",
+          "normalized_sha256": "2faf890f8cbcc58938b4c2e9e2e64c4a4b1d991a513d5ec2a8237c9649f66aaf"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      },
+      "rst/merge.00003.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "a00bf0798949fb4cb5a59843b4007404e1d88c06f2823e005b6ba290aef74938",
+          "normalized_sha256": "a233178c3f15663c7ab89cdd86bf7948258091d14df0281236f5711be06e8967"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "62d2085c42f72da57f59ab417b885b2cb24bfca6b34286aada27d3f5d70bec38",
+          "normalized_sha256": "a233178c3f15663c7ab89cdd86bf7948258091d14df0281236f5711be06e8967"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      },
+      "rst/merge.00002.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "f7cf114c36a3107a84635c5a01b18cc47d88b93f85d937f346653312bddc0489",
+          "normalized_sha256": "42fe814d00b8dc2678d82353f29ef58109da1bac6a663a578cc9b92879a36bd0"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "da18d5dec50bf3553c5aabcd2b75015cb424c0cf4244451cf6fbced7344b6af8",
+          "normalized_sha256": "42fe814d00b8dc2678d82353f29ef58109da1bac6a663a578cc9b92879a36bd0"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      },
+      "rst/merge.00005.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "d7787f4055b02cc2fa2feeea70c53218acb571c1b476043267b8a6f645786048",
+          "normalized_sha256": "7b78bdf8ab0792a9406513dc243884b771eaa42125107ff563dcd73e6614bb26"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "31e4eb66e70416e625ac9be1ddfa3f285b4d87f3ecfbe9091b25b6900f91b234",
+          "normalized_sha256": "7b78bdf8ab0792a9406513dc243884b771eaa42125107ff563dcd73e6614bb26"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      },
+      "rst/merge.00006.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "4fcb8c91872870d14d650af088f87c43f5e6bc3996edc957f612e647263f82d0",
+          "normalized_sha256": "f3c6e1157164f769021e4d34309cd2d0e69164faf6c6cdfeb2cdd97842f85aa4"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "b00175657c993a8b2ef284a3a0698ff85178c6321f29152fda3627442abe0a6f",
+          "normalized_sha256": "f3c6e1157164f769021e4d34309cd2d0e69164faf6c6cdfeb2cdd97842f85aa4"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      },
+      "rst/merge.00001.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "4b9a04525c7e578402d4dd0ccaeae3703fcd3fd28fe450eef9b585a942c82b0b",
+          "normalized_sha256": "fe0f3e648a1b39bbc731c551d2def3e71240ffe806bff3fe8cf16855d5ca9b3c"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "af39a68ac3a91a25464f4e9611e68794d65474538c308872a4ecd9e459a9c149",
+          "normalized_sha256": "fe0f3e648a1b39bbc731c551d2def3e71240ffe806bff3fe8cf16855d5ca9b3c"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      },
+      "rst/merge.00000.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7328,
+          "normalized_ranges": [
+            [
+              7448,
+              7484
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "b67be00720d06f1e0998e66f40b2a92b050c78c535cd2f7fc5a29f2116e5bdec",
+          "normalized_sha256": "b2cb667dc4c5108dcefedbc14aab00b07741d48b9c4950e17e96d4c079c025fb"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7328,
+          "normalized_ranges": [
+            [
+              7448,
+              7484
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "fec6eab94ab32d785de454c18726a05af9fd033cd80d9743f91c5d9998300ad4",
+          "normalized_sha256": "b2cb667dc4c5108dcefedbc14aab00b07741d48b9c4950e17e96d4c079c025fb"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7448,
+          7449,
+          7450,
+          7451,
+          7456,
+          7457,
+          7458,
+          7459,
+          7464,
+          7465,
+          7466,
+          7472,
+          7473,
+          7474,
+          7480,
+          7481,
+          7482,
+          7483
+        ]
+      },
+      "rst/merge.00007.rst": {
+        "baseline": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "e71fd2eea660d806dcc561382768e4b168104af308200e72c249454e88ac7791",
+          "normalized_sha256": "77f507ae91965707a1a2d24ed35aa30d2f9d842719b8bf9176ebe4de5dc3d579"
+        },
+        "candidate": {
+          "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+          "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+          "real_bytes": 8,
+          "int_bytes": 4,
+          "binary_header_offset": 7460,
+          "normalized_ranges": [
+            [
+              7580,
+              7616
+            ]
+          ],
+          "normalized_byte_count": 36,
+          "raw_sha256": "7d9b6ee85c7bb18cfff04e0717af70e7d9aa09f8f03e46a891616dc0239937ad",
+          "normalized_sha256": "77f507ae91965707a1a2d24ed35aa30d2f9d842719b8bf9176ebe4de5dc3d579"
+        },
+        "raw_equal": false,
+        "raw_difference_count": 18,
+        "raw_difference_offsets": [
+          7580,
+          7581,
+          7582,
+          7583,
+          7588,
+          7589,
+          7590,
+          7591,
+          7596,
+          7597,
+          7598,
+          7604,
+          7605,
+          7606,
+          7612,
+          7613,
+          7614,
+          7615
+        ]
+      }
+    }
+  },
+  {
+    "label": "wall-clock",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-bdbad4ec42f3924c.athinput",
+      "-t",
+      "00:00:01"
+    ],
+    "stats": {
+      "accepted": 39.0,
+      "rejected": 0.0,
+      "rejected_cfl": 0.0,
+      "rejected_admissibility": 0.0,
+      "accepted_stages": 273.0,
+      "rejected_stages": 0.0,
+      "snapshot_seconds": 0.001167105,
+      "deferred": 0.0384512,
+      "consumed": 0.03748992,
+      "flushed": 0.0009612799,
+      "pending": 0.0
+    },
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78"
+  },
+  {
+    "label": "smooth-False",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-94e9b32f1c35c1b4.athinput"
+    ],
+    "stats": {},
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78"
+  },
+  {
+    "label": "smooth-True",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-71dacaba3dee5d10.athinput"
+    ],
+    "stats": {
+      "accepted": 5.0,
+      "rejected": 0.0,
+      "rejected_cfl": 0.0,
+      "rejected_admissibility": 0.0,
+      "accepted_stages": 33.0,
+      "rejected_stages": 0.0,
+      "snapshot_seconds": 0.001748645,
+      "deferred": 0.0048064,
+      "consumed": 0.0048064,
+      "flushed": 0.0,
+      "pending": 0.0
+    },
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78"
+  },
+  {
+    "label": "cfl-mpi1",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "1",
+      "--ntasks-per-node=1",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-4f2584913e34d5ae.athinput"
+    ],
+    "stats": {
+      "accepted": 3.0,
+      "rejected": 2.0,
+      "rejected_cfl": 2.0,
+      "rejected_admissibility": 0.0,
+      "accepted_stages": 27.0,
+      "rejected_stages": 18.0,
+      "snapshot_seconds": 0.003666172,
+      "deferred": 0.00896183,
+      "consumed": 0.00533573,
+      "flushed": 0.003626099,
+      "pending": 0.0
+    },
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78"
+  },
+  {
+    "label": "cfl-mpi4",
+    "returncode": 0,
+    "command": [
+      "srun",
+      "--exact",
+      "-N",
+      "1",
+      "-n",
+      "4",
+      "--ntasks-per-node=4",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/build/athena-hip-merge",
+      "-i",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/input-variants/input-4f2584913e34d5ae.athinput"
+    ],
+    "stats": {
+      "accepted": 3.0,
+      "rejected": 2.0,
+      "rejected_cfl": 2.0,
+      "rejected_admissibility": 0.0,
+      "accepted_stages": 27.0,
+      "rejected_stages": 18.0,
+      "snapshot_seconds": 0.000350916,
+      "deferred": 0.00896183,
+      "consumed": 0.00533573,
+      "flushed": 0.003626099,
+      "pending": 0.0
+    },
+    "binary_sha256": "5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78",
+    "mpi_field_max_difference": 0.0
+  }
+]

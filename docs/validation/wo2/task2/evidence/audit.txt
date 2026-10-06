@@ -1,0 +1,238 @@
+Task 2 scratch prototype audit (2026-10-06)
+=========================================
+
+Recommendation
+--------------
+The narrow optional implementation is feasible, and actual CPU PDE tests now
+cover second-order temporal differences, successful merging, deterministic CFL
+rejection/rollback, and MPI coordination. Retain it as a research candidate until
+GPU acceptance and useful same-allocation timing are established. Do not advertise
+the asymptotic stage reduction as a measured wall-clock improvement. In particular,
+explicitly strict unit/paper wave inputs fall back to ordinary halves. The
+original active turbulence deck instead has strict_admissibility=false by default;
+it is still ineligible because its mirror/firehose limiter flags and finite
+limiter rates are enabled. Neither case gains performance from this version.
+Do not weaken scientific settings to manufacture eligibility.
+
+Current reviewable artifact
+---------------------------
+task2-merge-prototype.patch contains348 lines across driver.hpp, driver.cpp, and
+the dedicated CGL diagnostic fixture. make_merge_candidate.py generates the
+candidate-merge overlay without writing through symlinks into production. Main
+production source remains clean. The runnable Python regression drivers are kept
+in this directory rather than included in the production patch at this milestone.
+
+Current CPU binary SHA256:
+  b22608c16c4bfa9a2044e4d55e3df24ce92fe204b4940ae495f12c9cf2d9d556
+Current HIP binary SHA256:
+  5de22433cf4937cd4c6b22bd25415f0d4a27b58d8ae2d1fc984d1d3c9e3bed78
+build/manifest-{cpu,hip}.json records commands, objects, linkage and provenance.
+These reuse the corrected authoritative baseline objects, rebuilding driver.cpp,
+main.cpp and the pgen TU. New Driver members are appended after old members;
+main.cpp is the only allocation/sizeof consumer and is rebuilt. These binaries
+do not include the independent Task1 timestep or Task0 final-refill candidate.
+Any eventual integration needs another full compatibility/acceptance pass.
+
+Exact applicability
+-------------------
+sts_merge_half_sweeps is optional and defaults off. Reading the absent option does
+not insert it into serialized inputs. The configuration gate requires CGL LF-only
+RKL2, one parabolic process, a strictly periodic uniform mesh, no refinement,
+no user source/boundary, no other diffusion/field-update process, and no additional
+physics that changes the transaction state. Passive CGL is explicitly excluded
+until J/A-to-U/mu conversion and rollback have separate acceptance. Physical and soft collision rates
+must both be exactly zero; all configurable microinstability/backup limiters must
+be disabled. Strict admissibility forces ordinary halves because existing fatal
+checks cannot be rolled back. Forcing remains after an accepted pre operation.
+
+The unconditional firehose wall still exists. The removed intermediate wall
+checkpoint is not mathematically equivalent on wall-active nonsmooth states.
+The candidate rejects a trial if a stage reports floor/nonfinite/nonpositive/
+hard-bound events, but configuration alone does not prove the omitted checkpoint
+would stay inactive. Current convergence evidence is explicitly smooth and clean.
+No full nonlinear or wall-active convergence theorem is claimed.
+
+Transaction and synchronization
+-------------------------------
+An eligible old post half is deferred only when no predicted output/final barrier
+occurs. The next cycle combines its duration with the new pre half. The transaction
+snapshots u0/w0 (including ghosts and possible repaired components), EOS counters,
+LF cumulative diagnostics, slot representation and local timestep estimates. The
+LF-only uniform periodic graph mutates no B state. It uses MPI_BOR to combine
+rejection reasons and accepts only a fresh positive finite advective budget that
+admits the trial cycle dt, with no new unacceptable state events.
+
+On rejection the snapshot is restored, rejected temperature caches invalidated,
+and u_sts1/u_sts_rhs cleared before ordinary stage1: even a zero RKL coefficient
+does not safely suppress NaN/Inf in those old registers. Remaining stage registers
+are initialized by stage1. Private LF sweep-work registers reset at stage1; private
+hyperbolic pressure-work origins are unchanged by the LF attempt. Rejected profile
+work remains counted separately; physical diagnostics are restored. The old post
+then completes at its saved old time and duration, a fresh next dt is selected,
+and the caller runs an ordinary new pre half.
+
+Output prediction mirrors the actual float32 time and dcycle predicates. Explicit
+backstops flush before outputs, AMR, finalization and an unpredicted wall stop.
+The late-wall path also recomputes the next dt from the completed state, preserving
+the old cycle's factor-two growth cap. Restart format gains no deferred state.
+Nonzero rates always take the untouched ordinary path and are never moved across
+a noncommuting diffusion operator. sts_max_dt_ratio retains its original policy;
+the new fresh safeguard is an advective limit, not another parabolic-ratio policy.
+
+Cost
+----
+For six CGL variables in double precision and no passive scalars, snapshots cost
+96 bytes per stored cell including ghosts. An accepted attempt copies192 bytes
+per cell. A rejected attempt adds192 bytes of restore traffic plus96 bytes for
+the two register clears. Two global/device fences and an MPI accept reduction
+are added per attempt. Snapshot allocation occurs only on the first attempt.
+Successful operation replaces two half sweeps with one longer sweep; the
+asymptotic LF stage saving is about29 percent, before snapshot/reduction costs.
+Rejects pay discarded stages, the restored old post, and a fresh mesh timestep.
+The tiny regression timings are diagnostic only, not performance measurements.
+
+Actual CPU evidence
+-------------------
+merge_regression_results.json and merge_regressions-final-cpu.log record20 runs
+on the pre-passive-fence binary (SHA27e2b4ba2de2368d2808b397546df66f51893d6eb64f88fa7252c7703a2766e5),
+all successful. The only subsequent implementation change is !eos.passive in
+the eligibility gate; it does not broaden active-CGL eligibility. Its two backend
+links are compiled, with post-fence runtime checks queued after the timing pause.
+Same-backend absent option, explicit false,
+collision fallback, limiter fallback, strict fallback and explicit-integration
+fallback preserve state-product bytes. Output every cycle also matches, with zero
+deferred/accepted sweeps. Raw restart headers contain an independently confirmed
+baseline36-byte uninitialized RegionIndcs coarse field; comparisons normalize
+exactly that field using p1-research/restart_compare.py and preserve raw hashes
+and differing offsets. No other state/header differences are masked.
+
+Sparse output gives5 accepted merges, restart continuation2. Mixed time/cycle
+output agrees within2e-8. An exploratory one-second wall termination gives807
+accepted merges, flushes the pending old half and reports pending=0; that original
+wall harness disabled its long-time decay/phase comparison and is only scheduling
+evidence. The runner now uses a stationary dedicated diagnostic fixture with
+independent conservation/admissibility checks and no changed science tolerances;
+that replacement will run after the timing pause. All duration ledgers satisfy
+deferred=consumed+flushed+pending to reported precision.
+
+The dedicated dynamic fixture has Bx=.1, By=.3sin(2*pi*x), initial parallel
+pressure1 and perpendicular pressure1.3. It triggers3 accepted merged sweeps
+and2 specifically CFL-rejected trials (18 discarded stages), with0 admissibility
+rejections. Final state is finite/positive, floor/nonfinite/hard-bound counters
+remain zero, and mass/energy errors are below3e-12. This fixture has its own
+conservation/admissibility checks; no linear-wave reference tolerances are relaxed.
+
+merge_cpu_backend_results.json and merge_cpu_mpi.log repeat that physical fixture
+with the same four MeshBlocks owned by1 and4 ranks. Counts match exactly, both
+reject precisely2 CFL trials, and the final formatted fields are byte-value equal
+(maximum numerical difference0). Pending duration is zero in both.
+
+merge_followup_results.json and merge_temporal_refinement.json cover the preceding
+binary revision, whose subsequent changes only add rejection-reason counters and
+permit the diagnostic fixture across multiple MeshBlocks. The original eigenmode
+amplitude/error tolerances pass in an explicitly nonstrict merge test (11 merges).
+Explicitly strict unit/paper wave inputs remain unchanged and ineligible; this
+statement does not describe the turbulence deck's false strictness default. Smooth merged-versus-ordinary
+PDE evolution to common time .04921753108038256, halving cycle dt three times,
+gives RMS parallel-temperature differences
+  2.3565961807868863e-11, 5.909824426610634e-12, 1.4802304566015444e-12
+and orders1.9955173883843345,1.9972934643335234. A local-coefficient case also
+accepts26 merges with demonstrably changing cycle dt.
+
+Remaining checks and limits
+---------------------------
+The HIP counterpart is compiled and run_merge_hip.sh is ready, but application
+execution is paused by the parent while uncontended baseline timing completes.
+Its plan covers default-off/output bytes, smooth on/off comparison, and actual
+CFL rejection on1 and4 GPU ranks. A uniform multiblock test proves MPI agreement;
+it does not establish AMR merge semantics (AMR is ineligible). AMR fallback has
+been inspected but not executed in this Task2-specific suite. Corrupted-state
+admissibility rollback is reviewed but only genuine CFL rollback is executed.
+Production pytest packaging, integrated Task0/Task1 compatibility, and useful
+representative GPU timing remain required before recommending production adoption.
+
+Permanent integrated acceptance (Task1 + Task0 refill + Task2)
+-------------------------------------------------------------
+The standalone latest HIP binary passed all 11 queued application checks:
+absent/false/every-cycle state-byte identity, revised stationary wall-clock flush,
+smooth merging, and the same deterministic CFL probe on 1 and 4 GPU ranks.
+The latter gives 3 accepted and 2 CFL-rejected trials on each rank count; final
+fields agree exactly and pending duration is zero. The revised wall fixture
+accepted 39 merges and flushed its old pending half at wall termination, with
+finite positive state, conserved mass/energy and clean diagnostics. Evidence is
+merge_hip_backend_results.json and merge-hip-backend.log; no timing inference is
+made from those shared-allocation correctness runs.
+
+The independently composed Task1+refill+Task2 builds are:
+  integrated-task1-refill/build/athena-cpu-merge
+  SHA256 4d0b368c12e766ce021c58c2a0a34bc3c90f811225e26713864a7de8600c346f
+  integrated-task1-refill/build/athena-hip-merge
+  SHA256 c729a817c7508016ea73a75ac0a579b5b28045a1f8c71f071423a8870106f3b0
+They replace the three audited Driver-layout consumers/diagnostic fixture objects
+against complete Task1 object builds, retaining Task1 Mesh layout and new bound.
+No original-baseline object build is mixed with the new Mesh headers.
+
+Permanent tests are staged under permanent/ and in the integration source overlay.
+They include a dedicated nonstrict collisionless analytic fixture, shared helper,
+CPU/GPU modules and CPU/GPU MPI wrappers. The first permanent suite had 9 passes
+and one test-reader failure on each backend: np.loadtxt returns one-dimensional
+arrays for the restarted one-row history. np.atleast_2d fixes the reader; no C++
+or numerical acceptance bound changed. A second coverage correction removes
+existing dcycle from the timed-output block, because Outputs selects dcycle when
+both parameters exist. The mixed test now requires an interior-time snapshot.
+
+The corrected restart, mixed/sparse/every-cycle output and temporal refinement
+checks all passed again on CPU and HIP. The permanent MPI coordination test also
+passed on both backends with 1/4 ranks. At the common physical time
+0.04921753108038256, integrated merged-versus-ordinary RMS temperature differences
+were exactly equal across CPU/HIP:
+  1.1841361447123178e-10, 2.9782991616277e-11, 7.472552122210217e-12
+with observed orders 1.9912743818321714 and 1.9948157157140745. Each original decay
+amplitude/phase/analytic check and the separate health/conservation checks passed.
+
+Logs: integrated-{cpu,hip}-pytest.log (retains first reader failure),
+integrated-{cpu,hip}-retest.log, integrated-{cpu,hip}-mpi.log. XML and per-case
+outputs are in ../baseline/task2-integrated-*, including retained first-run logs.
+Earlier source-overlay import failures are also retained separately; they did
+not execute applications and were corrected by following source directory links.
+
+The integration-ready package against production Task1 commit 822cad5e8 is
+  task2-permanent-candidate.patch
+  SHA256 91c394625528eb074746aa34081dd1d1f9474b6faa9e5f8c48327db0fc6a9fe1
+It contains 11 files: three C++ changes, six permanent fixture/test files, and
+two documentation updates. git apply --check passes. task2-permanent-candidate.json
+records source and tested build hashes. No production edits were made here.
+
+Representative timing is prepared in run_merge_timing.py, with independently
+specified 64^3-cell collisionless kinematic thermal waves. Scientific amplitude
+and analytic bounds remain unchanged; strict=false is explicit and separate from
+the original strict input. Ratios 2 and 20 cover minimum and larger stage counts,
+with one warmup and three alternating on/off repeats per case. Timing is pending
+an exclusive allocation window; stage savings alone remain insufficient evidence
+for adoption. TASK2_INTEGRATION_RECIPE.txt records regeneration/build steps.
+
+Completed exclusive integrated GPU timing and posthoc audit
+----------------------------------------------------------
+All 16 apps passed in the exclusive allocation 5628672 window. Each cap ratio
+used warmups plus 3 alternating ordinary/merged repeats, all 96 cycles on the
+independently specified eligible 64^3 thermal-wave volume.
+  ratio 2: off median 0.1703894792 [0.1685355208, 0.2237448958] s/cycle
+            on median 0.0964436042 [0.0961800937, 0.0974652396], 1.7667266x
+            stages/cycle 6 -> 3.03125
+  ratio20: off median 0.3581033333 [0.3569360417, 0.3622708333] s/cycle
+            on median 0.2399276042 [0.2392455208, 0.2431269792], 1.4925474x
+            stages/cycle 14 -> 9.05208333
+No timing samples were discarded. All merged runs accepted95/rejected0 and ended
+pending0. Snapshot time was 0.008030559--0.008077388 seconds/run. Original analytic
+bounds passed, reported mass error was zero, and all six health counters including
+lf_hardbd were zero in all16 apps. The separate audit leaves results.json intact.
+All8 repeat comparisons and all40 constituent files were raw byte identical;
+all16 restart comparisons also passed the independently applied documented36-byte
+unused root RegionIndcs normalization, with no other normalization enabled.
+Raw hashes, offsets, source hashes, input and exact commands are retained in
+  timing/task1-refill-hip/results.json
+  timing-repeatability.json
+Final report/evidence archive:
+  delivery/docs/validation/wo2/task2/README.md
+This supports opt-in adoption within the narrow gate. Final combined WO2 build
+and regression acceptance remain pending at report creation.

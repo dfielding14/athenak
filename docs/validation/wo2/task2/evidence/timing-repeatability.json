@@ -1,0 +1,1115 @@
+{
+  "source_results_sha256": "c52f24dd7756559d288759052a6d15b32e8d37f8de8488b338fd9d2f37f1ddac",
+  "normalization": "Only the documented36 unused root RegionIndcs coarse-index bytes; no forcing or other normalization.",
+  "history_health": [
+    {
+      "run": "ratio2-repeat-1-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat-1-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat0-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat0-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat1-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat1-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat2-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio2-repeat2-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat-1-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat-1-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat0-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat0-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat1-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat1-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat2-mergeFalse",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    },
+    {
+      "run": "ratio20-repeat2-mergeTrue",
+      "counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_hwproj": 0.0
+      }
+    }
+  ],
+  "repeatability": [
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat0-mergeFalse",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat1-mergeFalse",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "a82aab8f9277f359385a0ecd18047c23941590b38b1ed0e84e00c7c716278807",
+          "raw_sha256": "a82aab8f9277f359385a0ecd18047c23941590b38b1ed0e84e00c7c716278807",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+          "raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+            "normalized_sha256": "49d31ba72dfc5e2fc6330ad1d6526320b8548d9c8121beba089d81ad201320cb"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+            "normalized_sha256": "49d31ba72dfc5e2fc6330ad1d6526320b8548d9c8121beba089d81ad201320cb"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+          "raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+            "normalized_sha256": "2c4d50954f9759154b92551044088c49d20e8f5c1c4633087427ab86cb61474b"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+            "normalized_sha256": "2c4d50954f9759154b92551044088c49d20e8f5c1c4633087427ab86cb61474b"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130721,
+            27130721
+          ],
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "26f9a1f38abbf908ba4c3450a632ad06fe3516913b011254cd39e64e1aff3e27",
+          "raw_sha256": "26f9a1f38abbf908ba4c3450a632ad06fe3516913b011254cd39e64e1aff3e27",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "eca440e91c298f067bf916ae31d8b7539913caa65b1e252c7e296f6fcd7a5e86",
+          "raw_sha256": "eca440e91c298f067bf916ae31d8b7539913caa65b1e252c7e296f6fcd7a5e86",
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat0-mergeFalse",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat2-mergeFalse",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "a82aab8f9277f359385a0ecd18047c23941590b38b1ed0e84e00c7c716278807",
+          "raw_sha256": "a82aab8f9277f359385a0ecd18047c23941590b38b1ed0e84e00c7c716278807",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+          "raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+            "normalized_sha256": "49d31ba72dfc5e2fc6330ad1d6526320b8548d9c8121beba089d81ad201320cb"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "70b66b4652d8e290d75d3a6c39cf24c195ca1b6d1908ac146a1e67ddfca2c6f7",
+            "normalized_sha256": "49d31ba72dfc5e2fc6330ad1d6526320b8548d9c8121beba089d81ad201320cb"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+          "raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+            "normalized_sha256": "2c4d50954f9759154b92551044088c49d20e8f5c1c4633087427ab86cb61474b"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "5f7a1b575bb9f946dc2e13920e744dece0737d7d456185ba55f1352b4529806e",
+            "normalized_sha256": "2c4d50954f9759154b92551044088c49d20e8f5c1c4633087427ab86cb61474b"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130721,
+            27130721
+          ],
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "26f9a1f38abbf908ba4c3450a632ad06fe3516913b011254cd39e64e1aff3e27",
+          "raw_sha256": "26f9a1f38abbf908ba4c3450a632ad06fe3516913b011254cd39e64e1aff3e27",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "eca440e91c298f067bf916ae31d8b7539913caa65b1e252c7e296f6fcd7a5e86",
+          "raw_sha256": "eca440e91c298f067bf916ae31d8b7539913caa65b1e252c7e296f6fcd7a5e86",
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat0-mergeTrue",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat1-mergeTrue",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "ea78fbd41bb1f75969f2943678d792a320ead734349dc0f26b58c6bd08c234f6",
+          "raw_sha256": "ea78fbd41bb1f75969f2943678d792a320ead734349dc0f26b58c6bd08c234f6",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "5caaea44cdafa7abe171c35bba19f5e936ae842eefd9ca989d7e1c8901daa432",
+          "raw_sha256": "5caaea44cdafa7abe171c35bba19f5e936ae842eefd9ca989d7e1c8901daa432",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "a55980f7d1ec5103c920feff99002325297b200ad03a022d876015e136d1ae49",
+          "raw_sha256": "a55980f7d1ec5103c920feff99002325297b200ad03a022d876015e136d1ae49",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+          "raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+            "normalized_sha256": "5357cd53ddf0e666d60ffb74be3f6d6e6ed4841f0a7a8e8be1dec1bab1b4ac72"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+            "normalized_sha256": "5357cd53ddf0e666d60ffb74be3f6d6e6ed4841f0a7a8e8be1dec1bab1b4ac72"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130721,
+            27130721
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+          "raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+            "normalized_sha256": "82221148e66df0adf30feacc784583f01a45b7ad70c2aa0f3cb97ef3c13b3bbb"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+            "normalized_sha256": "82221148e66df0adf30feacc784583f01a45b7ad70c2aa0f3cb97ef3c13b3bbb"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat0-mergeTrue",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-repeat2-mergeTrue",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "ea78fbd41bb1f75969f2943678d792a320ead734349dc0f26b58c6bd08c234f6",
+          "raw_sha256": "ea78fbd41bb1f75969f2943678d792a320ead734349dc0f26b58c6bd08c234f6",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "5caaea44cdafa7abe171c35bba19f5e936ae842eefd9ca989d7e1c8901daa432",
+          "raw_sha256": "5caaea44cdafa7abe171c35bba19f5e936ae842eefd9ca989d7e1c8901daa432",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "a55980f7d1ec5103c920feff99002325297b200ad03a022d876015e136d1ae49",
+          "raw_sha256": "a55980f7d1ec5103c920feff99002325297b200ad03a022d876015e136d1ae49",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+          "raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+            "normalized_sha256": "5357cd53ddf0e666d60ffb74be3f6d6e6ed4841f0a7a8e8be1dec1bab1b4ac72"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7469,
+            "normalized_ranges": [
+              [
+                7589,
+                7625
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2a8d9b2800eabe8783a619f464819ca67b70b77645486ecd4e343b17a14191d9",
+            "normalized_sha256": "5357cd53ddf0e666d60ffb74be3f6d6e6ed4841f0a7a8e8be1dec1bab1b4ac72"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130721,
+            27130721
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+          "raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+            "normalized_sha256": "82221148e66df0adf30feacc784583f01a45b7ad70c2aa0f3cb97ef3c13b3bbb"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "30c7c700d814a6dc276fe3ded05238736507988794f7ce199415519617e533f2",
+            "normalized_sha256": "82221148e66df0adf30feacc784583f01a45b7ad70c2aa0f3cb97ef3c13b3bbb"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat0-mergeFalse",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat1-mergeFalse",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "1a0f107a55c62957bc0bec7fdf47a7322f47018e2c64971e8062e1016c1538ff",
+          "raw_sha256": "1a0f107a55c62957bc0bec7fdf47a7322f47018e2c64971e8062e1016c1538ff",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+          "raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+            "normalized_sha256": "9d8763b6eb10de56b36ebcb16a980563d0161c58b60b8435257ab215905c582b"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+            "normalized_sha256": "9d8763b6eb10de56b36ebcb16a980563d0161c58b60b8435257ab215905c582b"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130709,
+            27130709
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+          "raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+            "normalized_sha256": "cdfc90d23a9bf6a1c21a14dd46cfc39b2a95917e8fa56bb56d9c8f5069a658b1"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+            "normalized_sha256": "cdfc90d23a9bf6a1c21a14dd46cfc39b2a95917e8fa56bb56d9c8f5069a658b1"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "55974e43e52af615da45e166fc4794aedc4b7530f9b484ae581dc2de59982f4e",
+          "raw_sha256": "55974e43e52af615da45e166fc4794aedc4b7530f9b484ae581dc2de59982f4e",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "05655d186b400b691815a38b3ed0c9151064ad9791c37e3e38130a2ded6f567b",
+          "raw_sha256": "05655d186b400b691815a38b3ed0c9151064ad9791c37e3e38130a2ded6f567b",
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat0-mergeFalse",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat2-mergeFalse",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "1a0f107a55c62957bc0bec7fdf47a7322f47018e2c64971e8062e1016c1538ff",
+          "raw_sha256": "1a0f107a55c62957bc0bec7fdf47a7322f47018e2c64971e8062e1016c1538ff",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+          "raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+            "normalized_sha256": "9d8763b6eb10de56b36ebcb16a980563d0161c58b60b8435257ab215905c582b"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "066170b4b8dca60808dc95e42153c3efa764db981b5233ad892f7dbfcf32dfaa",
+            "normalized_sha256": "9d8763b6eb10de56b36ebcb16a980563d0161c58b60b8435257ab215905c582b"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130709,
+            27130709
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+          "raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+            "normalized_sha256": "cdfc90d23a9bf6a1c21a14dd46cfc39b2a95917e8fa56bb56d9c8f5069a658b1"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1e54a2425ca7fad054e2516931bf4f75907837cd1e3abc8d81fabdd6e81cb287",
+            "normalized_sha256": "cdfc90d23a9bf6a1c21a14dd46cfc39b2a95917e8fa56bb56d9c8f5069a658b1"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "55974e43e52af615da45e166fc4794aedc4b7530f9b484ae581dc2de59982f4e",
+          "raw_sha256": "55974e43e52af615da45e166fc4794aedc4b7530f9b484ae581dc2de59982f4e",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "05655d186b400b691815a38b3ed0c9151064ad9791c37e3e38130a2ded6f567b",
+          "raw_sha256": "05655d186b400b691815a38b3ed0c9151064ad9791c37e3e38130a2ded6f567b",
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat0-mergeTrue",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat1-mergeTrue",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "7eaa92a13dbfbe1b3146941b2df85b9dff99db5c3a97d787ae1829f4e1af32cd",
+          "raw_sha256": "7eaa92a13dbfbe1b3146941b2df85b9dff99db5c3a97d787ae1829f4e1af32cd",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "1443f3f9dfcf0166d25fc6e24de35a231d7095082c773e9678e68426c00cb8bd",
+          "raw_sha256": "1443f3f9dfcf0166d25fc6e24de35a231d7095082c773e9678e68426c00cb8bd",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "4d37f1acfffa739d38a3aa86c9467eba3fcf88cb281f4372f746ec4be7f85b90",
+          "raw_sha256": "4d37f1acfffa739d38a3aa86c9467eba3fcf88cb281f4372f746ec4be7f85b90",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+          "raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+            "normalized_sha256": "8dcb25cec7be7a0b8900e4314491d825a38fc621924798b47d9b536374ccfba7"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+            "normalized_sha256": "8dcb25cec7be7a0b8900e4314491d825a38fc621924798b47d9b536374ccfba7"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130709,
+            27130709
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+          "raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+            "normalized_sha256": "e371845bd9ac42473bc2144ddfccbaa0da087db389d29fc1a65cf23c55b6ca0c"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+            "normalized_sha256": "e371845bd9ac42473bc2144ddfccbaa0da087db389d29fc1a65cf23c55b6ca0c"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    },
+    {
+      "reference": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat0-mergeTrue",
+      "run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio20-repeat2-mergeTrue",
+      "files": {
+        "merge_timing.mhd.hst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "7eaa92a13dbfbe1b3146941b2df85b9dff99db5c3a97d787ae1829f4e1af32cd",
+          "raw_sha256": "7eaa92a13dbfbe1b3146941b2df85b9dff99db5c3a97d787ae1829f4e1af32cd",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00001.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "1443f3f9dfcf0166d25fc6e24de35a231d7095082c773e9678e68426c00cb8bd",
+          "raw_sha256": "1443f3f9dfcf0166d25fc6e24de35a231d7095082c773e9678e68426c00cb8bd",
+          "physical_equal": true
+        },
+        "bin/merge_timing.mhd_w_bcc.00000.bin": {
+          "raw_equal": true,
+          "reference_raw_sha256": "4d37f1acfffa739d38a3aa86c9467eba3fcf88cb281f4372f746ec4be7f85b90",
+          "raw_sha256": "4d37f1acfffa739d38a3aa86c9467eba3fcf88cb281f4372f746ec4be7f85b90",
+          "physical_equal": true
+        },
+        "rst/merge_timing.00001.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+          "raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+            "normalized_sha256": "8dcb25cec7be7a0b8900e4314491d825a38fc621924798b47d9b536374ccfba7"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7457,
+            "normalized_ranges": [
+              [
+                7577,
+                7613
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "999141205eacd608bd48da09ccb0300cd0ad413d8791e1468036019f8b854c50",
+            "normalized_sha256": "8dcb25cec7be7a0b8900e4314491d825a38fc621924798b47d9b536374ccfba7"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130709,
+            27130709
+          ],
+          "physical_equal": true
+        },
+        "rst/merge_timing.00000.rst": {
+          "raw_equal": true,
+          "reference_raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+          "raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+          "reference_metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+            "normalized_sha256": "e371845bd9ac42473bc2144ddfccbaa0da087db389d29fc1a65cf23c55b6ca0c"
+          },
+          "metadata": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7337,
+            "normalized_ranges": [
+              [
+                7457,
+                7493
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "dfd785608bcc48695cb18034081e7e93bdc34875da7d2099a2c47c2f2b8cdb1d",
+            "normalized_sha256": "e371845bd9ac42473bc2144ddfccbaa0da087db389d29fc1a65cf23c55b6ca0c"
+          },
+          "raw_difference_offsets": [],
+          "raw_lengths": [
+            27130589,
+            27130589
+          ],
+          "physical_equal": true
+        }
+      },
+      "physical_equal": true
+    }
+  ],
+  "ranges": {
+    "ratio2-mergeFalse": {
+      "median": 0.17038947916666666,
+      "min": 0.16853552083333334,
+      "max": 0.22374489583333335,
+      "samples": [
+        0.22374489583333335,
+        0.17038947916666666,
+        0.16853552083333334
+      ]
+    },
+    "ratio2-mergeTrue": {
+      "median": 0.09644360416666665,
+      "min": 0.09618009374999999,
+      "max": 0.09746523958333332,
+      "samples": [
+        0.09644360416666665,
+        0.09618009374999999,
+        0.09746523958333332
+      ]
+    },
+    "ratio20-mergeFalse": {
+      "median": 0.3581033333333334,
+      "min": 0.3569360416666667,
+      "max": 0.3622708333333333,
+      "samples": [
+        0.3569360416666667,
+        0.3622708333333333,
+        0.3581033333333334
+      ]
+    },
+    "ratio20-mergeTrue": {
+      "median": 0.23992760416666667,
+      "min": 0.2392455208333333,
+      "max": 0.24312697916666667,
+      "samples": [
+        0.23992760416666667,
+        0.24312697916666667,
+        0.2392455208333333
+      ]
+    }
+  },
+  "failures": []
+}

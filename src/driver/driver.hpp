@@ -79,6 +79,20 @@ class Driver {
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
   float lb_efficiency_;         // measure of how efficient was load balancing
+  // Optional, collisionless LF-only transaction; restart files never store debt.
+  bool merge_sts_requested_ = false, merge_sts_enabled_ = false;
+  Real pending_sts_half_ = 0.0, pending_sts_cycle_ = 0.0, pending_sts_time_ = 0.0;
+  Real merge_deferred_ = 0.0, merge_consumed_ = 0.0, merge_flushed_ = 0.0;
+  Real merge_snapshot_seconds_ = 0.0;
+  std::uint64_t merge_accepted_ = 0, merge_rejected_ = 0;
+  std::uint64_t merge_rejected_cfl_ = 0, merge_rejected_admissibility_ = 0;
+  std::uint64_t merge_accepted_stages_ = 0, merge_rejected_stages_ = 0;
+  DvceArray5D<Real> merge_u_backup_, merge_w_backup_;
+  void ConfigureMergedSTS(Mesh *pm);
+  bool CanDeferSTSPost(Mesh *pm, Outputs *pout) const;
+  void RunMergedSTSSweep(Mesh *pm, Real duration, Real old_cycle);
+  bool TryMergedSTSPre(Mesh *pm);
+  void FlushPendingSTS(Mesh *pm, bool select_next_dt=false);
   void ResetSTSController();
   void ValidateSTSConfiguration(Mesh *pm);
   void RefreshSTSCycleState(Mesh *pm);

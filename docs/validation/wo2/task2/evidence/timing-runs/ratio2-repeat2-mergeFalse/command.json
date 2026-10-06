@@ -1,0 +1,14 @@
+[
+  "srun",
+  "--exact",
+  "-N1",
+  "-n1",
+  "--threads-per-core=1",
+  "--cpu-bind=threads",
+  "-c7",
+  "--gpus-per-task=1",
+  "--gpu-bind=closest",
+  "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/athena",
+  "-i",
+  "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task2-research/timing/task1-refill-hip/ratio2-mergeFalse.athinput"
+]

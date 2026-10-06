@@ -246,3 +246,13 @@ Evidence under this directory:
 Task3's earlier bitwise proof against the refill-only reference remains intact;
 the new synchronization is a separate change that intentionally corrects the
 baseline's flux mismatch.
+
+## Task 2: optional merged half-sweeps
+
+Triage: **adapted and implemented**, with a narrow eligibility gate that preserves
+noncommuting collision schedules and strict failure semantics. The mode is off
+by default and falls back outside uniform periodic collisionless active-CGL LF.
+The [Task2 report](task2/README.md) records CPU/HIP/MPI default/fallback identity,
+smooth second-order agreement, synchronization/rollback checks and paired GPU
+timings including snapshot overhead. It does not claim a speedup for the original
+paper turbulence deck, whose limiter physics makes it ineligible.

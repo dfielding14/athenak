@@ -1863,7 +1863,11 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
 } // namespace
 
 void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
-  pgen_final_func = FinalizeCGLLFQuantitative;
+  const bool merge_cfl_probe =
+      pin->GetOrAddString("problem", "test_mode", "parallel_decay") == "merge_cfl_probe";
+  // The dedicated transactional fixture is verified by its Python regression,
+  // including conservation and clean diagnostics; it is not the grad-B reference.
+  pgen_final_func = merge_cfl_probe ? nullptr : FinalizeCGLLFQuantitative;
   if (restart) return;
 
   auto *pmbp = pmy_mesh_->pmb_pack;
@@ -1871,8 +1875,10 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl) {
     Fail("quantitative LF tests require <mhd>/eos = cgl");
   }
-  const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::field_reversal ||
+  const TestMode mode = merge_cfl_probe ? TestMode::grad_b : ParseMode(pin);
+  if (merge_cfl_probe) {
+    RequireOneDimensionalMesh(pmy_mesh_);
+  } else if (mode == TestMode::field_reversal ||
       mode == TestMode::staggered_checkerboard ||
       mode == TestMode::hotspot) {
     RequireSingleBlock(pmy_mesh_);

@@ -1,0 +1,37 @@
+Task2 remains a separately tested research prototype until standalone HIP passes.
+No production source has been edited. To compose it after that gate:
+
+  python make_merge_candidate.py \
+    --source ../task1-research/source-task1-refill \
+    --output integrated-task1-refill
+
+  python build_merge_candidate.py --backend hip \
+    --source integrated-task1-refill/candidate-merge \
+    --build-base ../build/task1-hip-refill \
+    --output integrated-task1-refill/build
+
+Run these under the same verified CCE20 HIP environment as run_merge_hip.sh,
+including -fno-cray and -mno-daz-ftz inherited from the Task1 object build.
+The build replaces driver.cpp, main.cpp (Driver allocation/layout consumer), and
+pgen/tests/cgl_landau_fluid.cpp; all other objects are the compatible complete
+Task1+refill build. Do not link original baseline objects against Task1 Mesh layout.
+The generator applies only the three Task2 changes to the specified source root,
+retaining Task1 checkerboard mode, timestep calls and parameter lifecycle.
+
+After combined correctness acceptance, the timing runner accepts that binary:
+  python run_merge_timing.py --label task1-refill-hip \
+    --binary integrated-task1-refill/build/athena-hip-merge \
+    --manifest integrated-task1-refill/build/manifest-hip.json
+
+For standalone timing use build/athena-hip-merge and build/manifest-hip.json.
+run_merge_timing.py requires PAUSE_APPLICATION_TESTS absent and coordinated Slurm.
+No independent application overlap is permitted during paired GPU timings.
+Both timing cases preserve amp=1e-4, decay_rel_tol=.03, phase_rel_tol=.02 from
+rotated_decay, and explicitly choose an eligible nonstrict collisionless fixture.
+The original strict fixture is unmodified. 64^3 cells, 32^3 blocks,96 cycles,
+initial/final fields+restart+history; ratio2 gives minimum3-stage ordinary halves,
+ratio20 larger sweeps. One warmup per mode, three alternating off/on repeats.
+All runs must pass the production analytic check and remain repair-free. Report
+actual solver time, stages, accepted/rejected attempts and snapshot cost; do not
+infer savings solely from stage reduction. This simple aligned kinematic thermal
+wave measures eligible transport/scheduling cost, not turbulent full-physics speed.
