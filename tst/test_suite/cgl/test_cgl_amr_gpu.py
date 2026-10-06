@@ -385,7 +385,10 @@ def test_cgl_amr_repair_counters_survive_restart_gpu():
 
 def test_cgl_lf_amr_primitive_churn_gpu():
     try:
-        _run("cgl_lf_amr_primitive_churn.athinput", "cgl_amr_gpu_lf_churn")
+        # Cap only the cycle duration so the fixed physical-time threshold
+        # still samples both refinement and derefinement with the new LF bound.
+        _run("cgl_lf_amr_primitive_churn.athinput", "cgl_amr_gpu_lf_churn",
+             "time/sts_max_dt_ratio=0.1")
         user = _user_history("cgl_amr_gpu_lf_churn")
         mhd = _mhd_history("cgl_amr_gpu_lf_churn")
         _assert_clean_user(user)
@@ -404,7 +407,9 @@ def test_cgl_lf_amr_primitive_churn_gpu():
 
 def test_cgl_lf_amr_3d_churn_gpu():
     try:
-        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn")
+        # Preserve the original cycle-three AMR event at fixed switch time.
+        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn",
+             "time/sts_max_dt_ratio=0.13")
         user = _user_history("cgl_amr_gpu_lf_3d_churn")
         mhd = _mhd_history("cgl_amr_gpu_lf_3d_churn")
         _assert_clean_user(user, max_ndiv=1.0e-12)

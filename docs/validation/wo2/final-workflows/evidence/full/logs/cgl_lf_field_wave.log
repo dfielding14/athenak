@@ -1,0 +1,23 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=2.611308e-02 cycle=0 time=0.000000e+00 dt=1.804184e-03
+elapsed=4.720580e-02 cycle=1 time=1.804184e-03 dt=1.804184e-03
+elapsed=5.674692e-02 cycle=2 time=3.608367e-03 dt=1.391633e-03
+CGL LF field_aligned_wave passed against linear Fourier reference: rho_rel_err=4.691458e-05 vx_rel_err=4.758054e-05 p_parallel_rel_err=4.629452e-05 rel_tol=1.000000e-03
+elapsed=6.978707e-02 cycle=3 time=5.000000e-03 dt=1.804184e-03
+
+Terminating on time limit
+time=5.000000e-03 cycle=3
+tlim=5.000000e-03 nlim=-1
+
+MeshBlock-cycles = 3
+cpu time used  = 4.368013e-02
+zone-cycles/cpu_second = 4.395591e+03
+particle-updates/cpu_second = 0.000000e+00

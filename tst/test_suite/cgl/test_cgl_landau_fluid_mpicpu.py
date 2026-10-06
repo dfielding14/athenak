@@ -107,7 +107,10 @@ def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
 def test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks():
     input_file = "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput"
     try:
-        for heating_rate, post_stages in ((0, 7), (3000, 11)):
+        # Task1's aligned row gives dt_FE=h^2/(2*chi), chi=sqrt(8/pi)/(2*pi).
+        # The cap is 20*0.9*dt_FE; p_after=1+(2/3)*heating_rate*dt_cycle.
+        # A half-sweep ratio 10*sqrt(p_after) requires 7 or 13 RKL2 stages.
+        for heating_rate, post_stages in ((0, 7), (3000, 13)):
             histories = []
             for nranks in (1, 4):
                 Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)

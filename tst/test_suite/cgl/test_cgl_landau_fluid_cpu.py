@@ -670,7 +670,10 @@ def test_cgl_lf_low_field_faces_disable_transport_cleanly():
             "problem/amp=0.5",
         )
         history = testutils.athena_read.hst("cgl_ci_low_field.mhd.hst")
-        assert history["lf_nstage"][-1] > 0.0
+        # Every face is disabled below bfloor, so the discrete LF row is zero.
+        # The timestep controller skips LF stages; the pgen still checks the
+        # physical pressure state against its initial values at 1e-13.
+        assert history["lf_nstage"][-1] == 0.0
         assert history["lf_qface"][-1] == 0.0
         assert history["lf_qprwrk"][-1] == 0.0
         assert history["lf_qpewrk"][-1] == 0.0

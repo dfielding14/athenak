@@ -1,0 +1,9 @@
+{
+  "created": "2026-10-06T23:42:04.502036+00:00",
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-hip",
+  "sha256": "6530c1b31a7d99077f3ff5932d4b1c790e33be38c1fa222cfda097f87b339f9e",
+  "source_manifest": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-source-manifest.json",
+  "build_log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip.log",
+  "cpu_relink_manifest": null,
+  "runtime_acceptance": "pending release equivalence; earlier combined equivalent source suites recorded separately"
+}

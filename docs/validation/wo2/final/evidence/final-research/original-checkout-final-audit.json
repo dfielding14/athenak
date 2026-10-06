@@ -1,0 +1,8 @@
+{
+  "time": "2026-10-06T23:48:27.037516+00:00",
+  "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl/docs/source/engineering/cgl_amr_implementation_guide_temporary.md",
+  "sha256": "522906df36df368a070b0495941c47bf8b8dcce01f2869b8f72766e2dc7b8afc",
+  "status": " M docs/source/engineering/cgl_amr_implementation_guide_temporary.md\n",
+  "note": "Original checkout inspected read-only throughout WO2; dirty guide belongs to user. Numerical implementation resides in separate c/cgl-lf-wo2 worktree.",
+  "unchanged_from_initial_audit": true
+}

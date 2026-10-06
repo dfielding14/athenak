@@ -297,7 +297,8 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     pdata->label[IEN] = eos_data.passive ? "cgl-J" : "tot-E";
   }
   if (eos_data.is_cgl) {
-    pdata->label[IAN] = eos_data.passive ? "cgl-A" : "aam-D"; // CGL conserved anisotropy A, legacy column label
+    // CGL conserved anisotropy A; preserve the legacy active-CGL column label.
+    pdata->label[IAN] = eos_data.passive ? "cgl-A" : "aam-D";
   }
   pdata->label[nmhd_  ] = "1-KE";
   pdata->label[nmhd_+1] = "2-KE";

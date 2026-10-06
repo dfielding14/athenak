@@ -1,0 +1,94 @@
+<job>
+basename = lf3d
+
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 32
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 32
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+
+
+<time>
+evolution = kinematic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 20
+cfl_number = 0.3
+nlim = 4
+tlim = 1
+ndiag = 100000
+
+
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = local
+lf_c_parallel0 = 1.0
+cgl_lf_strict_admissibility = true
+reconstruct = plm
+rsolver = advect
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+
+cgl_lf_arithmetic = safe
+cgl_lf_diagnostics = none
+
+<problem>
+pgen_name = cgl_landau_fluid
+test_mode = rotated_decay
+rotated_axis = x
+mode_number = 1
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.0
+b0 = 1
+by0 = 0.3
+bz0 = 0.2
+amp = 1.0e-4
+decay_rel_tol = 3.0e-2
+phase_rel_tol = 2.0e-2
+validation_output = false
+validation_output_dir = docs/figures/data
+
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1
+
+<output2>
+file_type = bin
+variable = mhd_w_bcc
+dcycle = 1000000
+
+<output3>
+file_type = rst
+dcycle = 1000000

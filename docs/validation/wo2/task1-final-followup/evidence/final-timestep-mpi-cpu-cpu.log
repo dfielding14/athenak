@@ -1,0 +1,10 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-timestep-mpi-cpu-cpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2890 items / 2889 deselected / 1 selected
+
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks PASSED [100%]
+
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-timestep-mpi-cpu-cpu/results.xml -
+===================== 1 passed, 2889 deselected in 10.14s ======================

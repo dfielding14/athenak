@@ -1,0 +1,53 @@
+{
+  "scope": "Real=double at final CPU/HIP flags; only two static_cast<Real> wrappers; no application execution",
+  "checks": {
+    "cpu_complete_object": {
+      "equal": true,
+      "bytes": 5904,
+      "sha256": "eab5aefd0873df5bade5a3f65945135e441bd6fd53ba5a3ee40fccd152cf0fb1"
+    },
+    "cpu_ir": {
+      "equal": true,
+      "raw_equal": false
+    },
+    "cpu_wo2_passive_specific": {
+      "equal": true,
+      "sha256": "adf59a99cf8c97cea80470517379d5edd93bbe080c1f83c5839b3af0f28ea9c8"
+    },
+    "cpu_wo2_passive_encode": {
+      "equal": true,
+      "sha256": "41cf7964b3a1e23ebb6dd2c167a85dae2e7f3a766fbab9897041cc2b10b44b7d"
+    },
+    "hip_ir": {
+      "equal": true,
+      "raw_equal": false
+    },
+    "hip_wo2_passive_specific": {
+      "equal": true,
+      "sha256": "ef15a8b3d28b6290f8edd6e6c2cf55f3a1db3708e9f94edbaa15b8e1da075c9a"
+    },
+    "hip_wo2_passive_encode": {
+      "equal": true,
+      "sha256": "4469a33c72c0d723f16f10dde9de7e912404bc2fdb5d1e776afde1fa58df05b1"
+    },
+    "hip_wo2_passive_kernel": {
+      "equal": true,
+      "sha256": "5749805a63a66be869484549b64aa5a9d3e95c67f667842a17ec04070187299e"
+    },
+    "hip_device_text": {
+      "equal": true,
+      "bytes": 6868,
+      "sha256": "01dc37dc30d09821754155aa70e90336cd9ee0c310832002c2c2d1d092716ec5"
+    },
+    "hip_device_rodata": {
+      "equal": true,
+      "bytes": 32912,
+      "sha256": "19a526ad549807ff70d4632ba9fc515ae0296349e453a8d6ff602e9b87354c38"
+    }
+  },
+  "normalization": {
+    "cpu_ir": "Only source-column numbers on changed header lines19/20, in comments and DILocation metadata; full machine object already raw-identical.",
+    "hip_ir": "Only compiler-generated __hip_cuid_* identifier names (two occurrences per IR); no instructions or arithmetic attributes removed."
+  },
+  "passed": true
+}

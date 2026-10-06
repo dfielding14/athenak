@@ -1,0 +1,22 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-low-field-diagnosis-cpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2890 items / 2889 deselected / 1 selected
+
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_low_field_faces_disable_transport_cleanly FAILED [100%]
+
+=================================== FAILURES ===================================
+____________ test_cgl_lf_low_field_faces_disable_transport_cleanly _____________
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py:673: in test_cgl_lf_low_field_faces_disable_transport_cleanly
+    assert history["lf_nstage"][-1] > 0.0
+E   assert 0.0 > 0.0
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 19:18:15,807 - INFO - Executing command: ./athena -i ../../../inputs/tests/cgl_lf_decay.athinput job/basename=cgl_ci_low_field time/evolution=kinematic time/nlim=1 time/tlim=1.0e-5 mhd/rsolver=advect problem/test_mode=low_field problem/b0=5.0e-11 problem/amp=0.5
+rm: cannot remove '*.dat': No such file or directory
+------------------------------ Captured log call -------------------------------
+INFO     root:testutils.py:50 Executing command: ./athena -i ../../../inputs/tests/cgl_lf_decay.athinput job/basename=cgl_ci_low_field time/evolution=kinematic time/nlim=1 time/tlim=1.0e-5 mhd/rsolver=advect problem/test_mode=low_field problem/b0=5.0e-11 problem/amp=0.5
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-low-field-diagnosis-cpu/results.xml -
+=========================== short test summary info ============================
+FAILED ../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_low_field_faces_disable_transport_cleanly
+====================== 1 failed, 2889 deselected in 6.27s ======================

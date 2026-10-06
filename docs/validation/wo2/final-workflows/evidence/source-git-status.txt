@@ -1,0 +1,48 @@
+ M docs/cgl_lf_paper_reproduction_plan.md
+ M docs/cgl_lf_paper_validation_runbook.md
+ M docs/cgl_lf_validation.tex
+ M docs/source/modules/cgl_landau_fluid.md
+ M docs/source/modules/cgl_landau_fluid_validation.md
+ M docs/source/modules/cgl_mhd_method.md
+ M docs/source/reference/input_parameters.md
+ M scripts/cgl_lf_workflow.py
+ M scripts/run_cgl_lf_paper_smoke.sh
+ M src/CMakeLists.txt
+ M src/diffusion/cgl_landau_fluid.cpp
+ M src/eos/cgl_mhd.cpp
+ M src/eos/eos.hpp
+ M src/eos/ideal_c2p_mhd.hpp
+ M src/eos/isothermal_mhd.cpp
+ M src/mhd/mhd.cpp
+ M src/mhd/mhd_fluxes.cpp
+ M src/mhd/mhd_sts.cpp
+ M src/mhd/mhd_tasks.cpp
+ M src/mhd/rsolvers/hlle_cgl.hpp
+ M src/mhd/rsolvers/llf_mhd_singlestate.hpp
+ M src/outputs/basetype_output.cpp
+ M src/outputs/history.cpp
+ M src/outputs/restart.cpp
+ M src/pgen/pgen.cpp
+ M src/pgen/pgen.hpp
+ M src/pgen/tests/cgl_landau_fluid.cpp
+ M src/pgen/turb.cpp
+ M src/srcterms/srcterms.cpp
+ M src/srcterms/turb_driver.cpp
+ M tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py
+ M tst/test_suite/cgl/test_cgl_parameters_cpu.py
+ M tst/test_suite/cgl/test_cgl_passive_fast_path_cpu.py
+ M tst/test_suite/cgl/test_cgl_passive_workflow_cpu.py
+?? docs/cgl_passive.md
+?? src/eos/cgl_passive.hpp
+?? src/eos/isothermal_c2p_mhd.hpp
+?? src/pgen/tests/cgl_passive_validation.cpp
+?? tst/test_suite/__pycache__/__init__.cpython-311.pyc
+?? tst/test_suite/cgl/__pycache__/passive_acceptance.cpython-311.pyc
+?? tst/test_suite/cgl/__pycache__/test_cgl_passive_cpu.cpython-311-pytest-8.2.2.pyc
+?? tst/test_suite/cgl/__pycache__/test_cgl_passive_gpu.cpython-311-pytest-8.2.2.pyc
+?? tst/test_suite/cgl/__pycache__/test_cgl_passive_mpi_gpu.cpython-311-pytest-8.2.2.pyc
+?? tst/test_suite/cgl/passive_acceptance.py
+?? tst/test_suite/cgl/test_cgl_passive_cpu.py
+?? tst/test_suite/cgl/test_cgl_passive_gpu.py
+?? tst/test_suite/cgl/test_cgl_passive_mpi_gpu.py
+?? tst/test_suite/cgl/test_cgl_passive_mpicpu.py

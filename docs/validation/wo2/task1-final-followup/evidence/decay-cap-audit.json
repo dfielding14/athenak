@@ -1,0 +1,56 @@
+{
+  "scope": "Only test timestep cap changed; all four input decks and scientific assertions preserved",
+  "cap": 8,
+  "sts_safety": 0.9,
+  "parallel_full_step_equivalents_old": 92.22479293311456,
+  "parallel_full_step_equivalents_new": 115.2809911663932,
+  "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+  "cases": [
+    {
+      "name": "cgl_lf_quant_parallel.decay.csv",
+      "time": 0.09973557010035816,
+      "rel_err": 0.00025579949810819425,
+      "rel_tol": 0.003,
+      "chi_parallel": 0.25397454373696393,
+      "chi_perp": 0.12698727186848197,
+      "nu_coll": 0.0,
+      "csv": "baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co0/cgl_lf_quant_parallel.decay.csv"
+    },
+    {
+      "name": "cgl_lf_quant_perp.decay.csv",
+      "time": 0.19947114020071632,
+      "rel_err": 0.0002547924335100245,
+      "rel_tol": 0.003,
+      "chi_parallel": 0.25397454373696393,
+      "chi_perp": 0.12698727186848197,
+      "nu_coll": 0.0,
+      "csv": "baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co1/cgl_lf_quant_perp.decay.csv"
+    },
+    {
+      "name": "cgl_lf_quant_parallel_collisional.decay.csv",
+      "time": 0.14484812929181745,
+      "rel_err": 0.00020291906362392652,
+      "rel_tol": 0.003,
+      "chi_parallel": 0.17487485709637926,
+      "chi_perp": 0.05594466633444508,
+      "nu_coll": 10.0,
+      "csv": "baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co2/cgl_lf_quant_parallel_collisional.decay.csv"
+    },
+    {
+      "name": "cgl_lf_quant_perp_collisional.decay.csv",
+      "time": 0.4527740993065608,
+      "rel_err": 0.0002760315548408491,
+      "rel_tol": 0.003,
+      "chi_parallel": 0.17487485709637926,
+      "chi_perp": 0.05594466633444508,
+      "nu_coll": 10.0,
+      "csv": "baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co3/cgl_lf_quant_perp_collisional.decay.csv"
+    }
+  ],
+  "input_sha256": {
+    "inputs/unit_tests/cgl_lf_quant_parallel.athinput": "6c0be74794eb58eceeea127949e1a4b604d795a13491f685a54263977e05c7f9",
+    "inputs/unit_tests/cgl_lf_quant_perp.athinput": "84df8cac50c0eae10d6090a936c4f56a6efde6240f5a2024983f8006d5f900da",
+    "inputs/unit_tests/cgl_lf_quant_parallel_collisional.athinput": "89c9b86e4a61d8c564928831545d11d51e92d8811abd0dc95435841014ae98ed",
+    "inputs/unit_tests/cgl_lf_quant_perp_collisional.athinput": "4a6723238287c2284016b8460ed9512823a6b1350f02f33ce723b74c50a818bb"
+  }
+}

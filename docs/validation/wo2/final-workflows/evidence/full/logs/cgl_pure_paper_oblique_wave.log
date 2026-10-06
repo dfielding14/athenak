@@ -1,0 +1,26 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=2.027514e-02 cycle=0 time=0.000000e+00 dt=3.532316e-04
+elapsed=3.063371e-02 cycle=1 time=3.532316e-04 dt=3.532316e-04
+elapsed=3.308448e-02 cycle=2 time=7.064632e-04 dt=3.532316e-04
+elapsed=3.604473e-02 cycle=3 time=1.059695e-03 dt=3.532316e-04
+elapsed=3.840043e-02 cycle=4 time=1.412926e-03 dt=3.532316e-04
+elapsed=4.125431e-02 cycle=5 time=1.766158e-03 dt=2.338420e-04
+pure CGL paper_oblique_wave passed against linear oblique IVP reference: vy_rel_err=1.355613e-06 By_rel_err=2.483689e-06 p_parallel_rel_err=2.120882e-06 p_perp_rel_err=1.099897e-06 rel_tol=1.000000e-03
+elapsed=4.914090e-02 cycle=6 time=2.000000e-03 dt=3.532316e-04
+
+Terminating on time limit
+time=2.000000e-03 cycle=6
+tlim=2.000000e-03 nlim=-1
+
+MeshBlock-cycles = 6
+cpu time used  = 2.887169e-02
+zone-cycles/cpu_second = 2.660046e+04
+particle-updates/cpu_second = 0.000000e+00

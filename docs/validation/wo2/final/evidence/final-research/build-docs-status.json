@@ -1,0 +1,30 @@
+{
+  "date_utc": "2026-10-06T23:03:09.727712+00:00",
+  "sphinx": {
+    "final_log": "final-research/sphinx-closeout.log",
+    "status": "passed",
+    "warnings_as_errors": true,
+    "suppressed": "toc.not_included only: same two pre-existing engineering pages",
+    "initial_new_warnings": "three passive-page links outside Sphinx source plus one new timestep anchor; all corrected",
+    "packages": "final-research/docs-packages.txt"
+  },
+  "builds": {
+    "cpu": {
+      "unfused_binary": "final-research/build-cpu/src/athena",
+      "unfused_sha256": "e322387c22ed1e52697e419e3dd0585e2105689618e2b410873549e042c150b7",
+      "fused_binary": "final-research/bin/athena-cpu",
+      "fused_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+      "status": "PASS: complete clean release build and 25 accepted/release pairs",
+      "release_manifest": "final-research/release-bin/manifest-cpu.json"
+    },
+    "hip": {
+      "unfused_binary": "final-research/build-hip/src/athena",
+      "unfused_sha256": "09d92a5f250aa04781fc534dd5eee11e9f39829d0084f6f1791ec8383588f0c2",
+      "fused_binary": "final-research/bin/athena-hip",
+      "fused_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+      "status": "PASS: complete clean release build and 25 accepted/release pairs",
+      "release_manifest": "final-research/release-bin/manifest-hip.json"
+    }
+  },
+  "remaining": "none"
+}

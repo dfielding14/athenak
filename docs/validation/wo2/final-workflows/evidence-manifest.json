@@ -1,0 +1,836 @@
+{
+  "classification": "Exact final fused HIP binary full29 + paper3 functional acceptance; no timing claims",
+  "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+  "files": {
+    "run_final_gpu_workflows.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/run_final_gpu_workflows.py",
+      "sha256": "2a1a336b19dace86eea23276475936f05315d7ed970ccabacc72849466527e99",
+      "bytes": 8242
+    },
+    "run_final_gpu_workflows.sh": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/run_final_gpu_workflows.sh",
+      "sha256": "a443118b777ed731def027978decf3c24904e473a39938b21fea0e3253a7c857",
+      "bytes": 1049
+    },
+    "launch_final.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/launch_final.py",
+      "sha256": "119a66753898302f5a893131ba3d8f58b883e91b5774bca82e533f7c29265d3c",
+      "bytes": 1642
+    },
+    "WORKFLOW_RUNNERS.md": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/WORKFLOW_RUNNERS.md",
+      "sha256": "7080b99109f64c138f55008a364906b93bbfcde603274f14a9be500c1256829c",
+      "bytes": 2529
+    },
+    "acceptance-hip-final2-runner.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2-runner.log",
+      "sha256": "aace7508d0429eb6c1b4f4c15e3e5ed902481e11bfa26cbc1656be04c749d697",
+      "bytes": 1691
+    },
+    "acceptance-hip-runner.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-runner.log",
+      "sha256": "6bc4e6fe3ad26a55151a447ebab316dba10bbbcc6a386034247edf9057e52481",
+      "bytes": 1691
+    },
+    "acceptance-hip-final-runner.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final-runner.log",
+      "sha256": "47192ac17d750cdd48b5f106bf4ca658ed3c74ae3db988bd1a110ff5195b3be6",
+      "bytes": 2774
+    },
+    "runner-manifest.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/runner-manifest.json",
+      "sha256": "e4527b87f8ae4f0d400587ff715c0f0e77a3602534eb2742d6ffb550545d881c",
+      "bytes": 46445
+    },
+    "launches.jsonl": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/launches.jsonl",
+      "sha256": "3412a0287da794e0e77852799612713d5c43d8723360a363018734ee7c9766c8",
+      "bytes": 29612
+    },
+    "source-git-status.txt": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/source-git-status.txt",
+      "sha256": "fa1ac0bd37d8b7b1c118616a4d5bb8754f1f112415baf97cbaf85a6415855589",
+      "bytes": 1903
+    },
+    "full.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full.log",
+      "sha256": "f62fc1a5a3e4157ed3f66d03db20535c0ec293122e88a4867bd4e4f2cc7a547f",
+      "bytes": 1127
+    },
+    "paper-smoke.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke.log",
+      "sha256": "9d5187cd599b5c3c92fc6a552a60ee693a9968519993c8556425d5b14027d2d1",
+      "bytes": 335
+    },
+    "full/manifest.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/manifest.json",
+      "sha256": "0d0203f244030f0e5e623adb4b1c8b2ecd50e496bee4f9477d90ac22342b445c",
+      "bytes": 106725
+    },
+    "full/summary.md": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/summary.md",
+      "sha256": "7f8a0a84d42b2a059b4d58ca0e8a964f5a4d67e194d945c9b7d0796c42b054b9",
+      "bytes": 8673
+    },
+    "full/logs/cgl_lf_paper_eigen_slow.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_paper_eigen_slow.log",
+      "sha256": "12f4c20ac4c7105d6f85d2a94436677d920902f647cec917a95f6cf0401a3a01",
+      "bytes": 1491
+    },
+    "full/logs/cgl_lf_quant_perp.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_quant_perp.log",
+      "sha256": "b967fb4d0d85faeed08e7d5159c46488dddc024c7ca4fc787d6721f7b2c84285",
+      "bytes": 768
+    },
+    "full/logs/cgl_lf_hotspot.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_hotspot.log",
+      "sha256": "b959091b1c630a56bc843534b92c73d8df8e21372f6e5d403b25f635cda7c3e0",
+      "bytes": 1407
+    },
+    "full/logs/cgl_lf_paper_eigen_alfven.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_paper_eigen_alfven.log",
+      "sha256": "2bcbaff481d9652527b6fc442b0856c9151a9983d51ad6a8f9d52f1371842717",
+      "bytes": 1493
+    },
+    "full/logs/cgl_collision_once.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_collision_once.log",
+      "sha256": "b322b53f1e5474d5cefb9c3e81892e496722b87e299b2c36a591095ecd32140c",
+      "bytes": 1942
+    },
+    "full/logs/cgl_lf_field_wave.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_field_wave.log",
+      "sha256": "46501043cf3f7792f318b05d97b796caa1663d70c80fad8af9e03fbe9bb40230",
+      "bytes": 893
+    },
+    "full/logs/cgl_pure_paper_eigen_slow.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_pure_paper_eigen_slow.log",
+      "sha256": "3b823e514ad3fe6aaa5702f12f7e5fd5f5f0a16be303c95d8ea45e8f679f4694",
+      "bytes": 1491
+    },
+    "full/logs/cgl_lf_density_contact.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_density_contact.log",
+      "sha256": "de559c5f4ed66d2773a7413564b4994b889b61d02dd4ba3936b4b5374693242a",
+      "bytes": 829
+    },
+    "full/logs/cgl_lf_quant_parallel.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_quant_parallel.log",
+      "sha256": "bddf00a57c11da685fe8fdf8386cdd101938052a60da63392cc2e8bdd6cdeead",
+      "bytes": 705
+    },
+    "full/logs/cgl_pure_paper_eigen_alfven.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_pure_paper_eigen_alfven.log",
+      "sha256": "cbf8b01933b16db536efac325a4122b41167e7e79c09f8dbb274d07b9eb810f6",
+      "bytes": 1492
+    },
+    "full/logs/cgl_lf_field_reversal_1d.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_field_reversal_1d.log",
+      "sha256": "99cf33b19e850fd4b26114ffb8ed89ef6e691d3a08d9ffe6d2e6bf53c91996a8",
+      "bytes": 1939
+    },
+    "full/logs/cgl_lf_paper_oblique_wave.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_paper_oblique_wave.log",
+      "sha256": "da6f141f305bf8fedd74f12dac2438cf4cdae3a66b9e5adc588056b3158c461f",
+      "bytes": 1113
+    },
+    "full/logs/cgl_lf_quant_parallel_collisional.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_quant_parallel_collisional.log",
+      "sha256": "462cab732ac8a51be7ea92eba69c8c135c2a5845d8d65d22168fb2d73eae15fd",
+      "bytes": 705
+    },
+    "full/logs/cgl_pure_paper_oblique_wave.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_pure_paper_oblique_wave.log",
+      "sha256": "8bcad9089552b686d971c1248b810ebe810a3f4ba54e6f503273031537518b44",
+      "bytes": 1115
+    },
+    "full/logs/cgl_lf_limiter_heat_flux_suppression.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_limiter_heat_flux_suppression.log",
+      "sha256": "563f0a956ff043578d9e2b6fc99e2abcdcd2bb1e31a89681cef47ffeba16ce5f",
+      "bytes": 866
+    },
+    "full/logs/cgl_lf_paper_eigen_fast.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_paper_eigen_fast.log",
+      "sha256": "3d256eea15b382875fe4a52185143bd62a13a370b3ac3f3fd33c0c2909f1fff4",
+      "bytes": 1491
+    },
+    "full/logs/cgl_lf_smr_decay_2d.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_smr_decay_2d.log",
+      "sha256": "2fbafc985760fde42e947dfbe7c46955466389b2fd4231fb914dd719c8ea4843",
+      "bytes": 3535
+    },
+    "full/logs/cgl_lf_field_reversal_2d.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_field_reversal_2d.log",
+      "sha256": "6be9e965023aaedf3c5c3f45ce8d810746b388fd42f2ca051c04b6e229af9d39",
+      "bytes": 1939
+    },
+    "full/logs/cgl_lf_quant_grad_b.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_quant_grad_b.log",
+      "sha256": "bb43d0a47ee2fe6942a9a0304a4df7f349f9ad0b79512bdb99ddcf3287069508",
+      "bytes": 666
+    },
+    "full/logs/cgl_pure_paper_eigen_fast.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_pure_paper_eigen_fast.log",
+      "sha256": "2d4a72142418cb6ee3fe318f8805b03e1040262357909969abdd3e302bf3e722",
+      "bytes": 1491
+    },
+    "full/logs/cgl_lf_limiter_mirror.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_limiter_mirror.log",
+      "sha256": "c793cb938e3c2ffec3616f28c3dd7091a0bbcda1177a52d9f1e71b11e9be059a",
+      "bytes": 694
+    },
+    "full/logs/cgl_lf_limiter_firehose.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_limiter_firehose.log",
+      "sha256": "fe63d7c8082c7597f0dd854b9604eb9a1032c5007c611df8d31737762512db85",
+      "bytes": 696
+    },
+    "full/logs/cgl_lf_uniform_timestep.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_uniform_timestep.log",
+      "sha256": "febf5705d693a95d5e7c392fe6be6d087433a08121f942ac4d2bcc75bbc6c05d",
+      "bytes": 631
+    },
+    "full/logs/cgl_lf_quant_perp_collisional.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_quant_perp_collisional.log",
+      "sha256": "5316dc9bd37a36f546c2e56a4e6821001dcbb3e45610b6e195dbd732e5878ecc",
+      "bytes": 833
+    },
+    "full/logs/cgl_reconstruction_ppmx.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_reconstruction_ppmx.log",
+      "sha256": "4d5b6f960cb042cc7a59459877b4af47faf45aafca2016dd0c2e3100f1ce6426",
+      "bytes": 3925
+    },
+    "full/logs/cgl_lf_flux_limiter.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_flux_limiter.log",
+      "sha256": "3758fdd462a8027c6704415397b08f2be6ef2d3fd9dcd688a432cbb1c2c889c3",
+      "bytes": 797
+    },
+    "full/logs/cgl_reconstruction_wenoz.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_reconstruction_wenoz.log",
+      "sha256": "ce50a3628e78c3ce8cd779cf3041a04e83a53eb8beb7c34754111e14093283e1",
+      "bytes": 3967
+    },
+    "full/logs/cgl_lf_oblique_decay_2d.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_oblique_decay_2d.log",
+      "sha256": "2e51b8af2f5e003389b0f5f7141681878a2035858d07821819dbd4f15fe79460",
+      "bytes": 684
+    },
+    "full/logs/cgl_lf_timestep_refresh.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/logs/cgl_lf_timestep_refresh.log",
+      "sha256": "f5e947f37fc5b8b1fb153e1e256496e8ec18508bd84037da3f3347813412c6a5",
+      "bytes": 3089
+    },
+    "full/inputs/cgl_lf_quant_perp_collisional.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_quant_perp_collisional.athinput",
+      "sha256": "deb62e233abed0df3f7979fb93aa275cb0cbd96c5452f564d3d9a5814d4c8225",
+      "bytes": 1387
+    },
+    "full/inputs/cgl_reconstruction_wenoz.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_reconstruction_wenoz.athinput",
+      "sha256": "cf850de46ed6469a2e9d5f98680c71819f2400d222f71880101575fdf5cab7de",
+      "bytes": 803
+    },
+    "full/inputs/cgl_lf_quant_grad_b.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_quant_grad_b.athinput",
+      "sha256": "bd6ff6ee31c34e5608f418880000560593e145a0371fb594f412cf8d57ff13f9",
+      "bytes": 1295
+    },
+    "full/inputs/cgl_lf_uniform_timestep.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_uniform_timestep.athinput",
+      "sha256": "a2cc162a074b3ad6a3cb0839b54dda5cd748ff5b7cde532de681934707fe4212",
+      "bytes": 1181
+    },
+    "full/inputs/cgl_lf_quant_perp.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_quant_perp.athinput",
+      "sha256": "476637f719a953b48aefb37ba8bacbf2e7c662463bfbc9ea8e2baf85f3b47849",
+      "bytes": 1413
+    },
+    "full/inputs/cgl_pure_paper_eigen_fast.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_pure_paper_eigen_fast.athinput",
+      "sha256": "200a94798c5bab1fcbcfd33ec6f56b629f71ae6a0978ca1d793634d7980606d2",
+      "bytes": 2081
+    },
+    "full/inputs/cgl_pure_paper_eigen_alfven.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_pure_paper_eigen_alfven.athinput",
+      "sha256": "c4d5971a65f7ea9a623cda98f53b2b4b491353c96d9e71dd2260a825d16cb4a0",
+      "bytes": 2087
+    },
+    "full/inputs/cgl_lf_paper_eigen_slow.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_paper_eigen_slow.athinput",
+      "sha256": "47b8c30bd0a93d88b6e913ae22496c4bb5781f7654c01081a6a8a4a9ce2244c7",
+      "bytes": 2332
+    },
+    "full/inputs/cgl_lf_density_contact.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_density_contact.athinput",
+      "sha256": "e901d2ad12e8cf02f0194e93a22513391b4f59a64c6a33def5df4526599dbf30",
+      "bytes": 1258
+    },
+    "full/inputs/cgl_lf_paper_oblique_wave.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_paper_oblique_wave.athinput",
+      "sha256": "9b40abc01732f75dd5dfb1bb914b9a71965fae71045efc80c9567452ecfc5d90",
+      "bytes": 1437
+    },
+    "full/inputs/cgl_lf_oblique_decay_2d.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_oblique_decay_2d.athinput",
+      "sha256": "01a8596240e889fced337724307c61fb9b72e51f0711cb28c81c3a76babd7781",
+      "bytes": 1572
+    },
+    "full/inputs/cgl_reconstruction_ppmx.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_reconstruction_ppmx.athinput",
+      "sha256": "af31e92ab2f696bada408356fa102cbc3343d0e1171a8870145368553317abbd",
+      "bytes": 801
+    },
+    "full/inputs/cgl_lf_quant_parallel.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_quant_parallel.athinput",
+      "sha256": "e9e6ffafe6f8819d008e769233dec2e3c500f7aa4360b14d90dad4c5aa27fc1c",
+      "bytes": 1422
+    },
+    "full/inputs/cgl_lf_limiter_mirror.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_limiter_mirror.athinput",
+      "sha256": "ec34772402f9a13b92e89493ac82d20d2bdb41de433b02022943f817b378e385",
+      "bytes": 1367
+    },
+    "full/inputs/cgl_lf_flux_limiter.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_flux_limiter.athinput",
+      "sha256": "c577dd433f7462d951a1a4ce8a3ea4a6e08532e830a04811dabcbf72ea6c1e41",
+      "bytes": 1256
+    },
+    "full/inputs/cgl_lf_paper_eigen_fast.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_paper_eigen_fast.athinput",
+      "sha256": "b0918155d069ff003001ed1973a230f73c7e806036fa6c14d4c5294db1e2eadb",
+      "bytes": 2334
+    },
+    "full/inputs/cgl_lf_field_wave.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_field_wave.athinput",
+      "sha256": "dd23237900c299f42a61c913c9ba85b961bec92f7426a18a3e0b18492c66f679",
+      "bytes": 1267
+    },
+    "full/inputs/cgl_lf_smr_decay_2d.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_smr_decay_2d.athinput",
+      "sha256": "88aecc1a35d1591db2263a5c240aa0ae46f20a46c6f9f907384566137eda9d73",
+      "bytes": 1787
+    },
+    "full/inputs/cgl_lf_limiter_firehose.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_limiter_firehose.athinput",
+      "sha256": "d31fdf3e45834357b44186ef78dc325a247ba2c5e3ae1eb242b537b99f684e70",
+      "bytes": 1481
+    },
+    "full/inputs/cgl_pure_paper_oblique_wave.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_pure_paper_oblique_wave.athinput",
+      "sha256": "2a61c050b51b746e84f84e5935192c241408675ca623878a31dee5ff540be277",
+      "bytes": 1169
+    },
+    "full/inputs/cgl_collision_once.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_collision_once.athinput",
+      "sha256": "fb5c351acbcb9765fa020bd2e02a2f9e299c07e37adc02ae3ef86458a240fcee",
+      "bytes": 1016
+    },
+    "full/inputs/cgl_lf_quant_parallel_collisional.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_quant_parallel_collisional.athinput",
+      "sha256": "3887f08295b957694b822e8aae69255be42f72fd8c923270a98054baace86f61",
+      "bytes": 1390
+    },
+    "full/inputs/cgl_pure_paper_eigen_slow.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_pure_paper_eigen_slow.athinput",
+      "sha256": "5aa26fac959cd5f63437cadb040c5ce82de320d5f42ede9979e41a6afcfb5a08",
+      "bytes": 2082
+    },
+    "full/inputs/cgl_lf_limiter_heat_flux_suppression.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_limiter_heat_flux_suppression.athinput",
+      "sha256": "8d5a710feefd2623332b79f8fbb194bccb873c91a0189b69528934dfbcfadb65",
+      "bytes": 1648
+    },
+    "full/inputs/cgl_lf_timestep_refresh.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_timestep_refresh.athinput",
+      "sha256": "ec674e594abd073c74a7bed6e0b1fe72b01107733e2990f2a45d17040614f67e",
+      "bytes": 1195
+    },
+    "full/inputs/cgl_lf_field_reversal_1d.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_field_reversal_1d.athinput",
+      "sha256": "0975dd1492b9e3e4298694030459703be4ff1634bc7e01157f0a235f9bafbed0",
+      "bytes": 1207
+    },
+    "full/inputs/cgl_lf_hotspot.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_hotspot.athinput",
+      "sha256": "ff5e1f1dbf260752bcc3cda481ea2e4097d32b7479c740543def41e7d50f1efc",
+      "bytes": 1134
+    },
+    "full/inputs/cgl_lf_paper_eigen_alfven.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_paper_eigen_alfven.athinput",
+      "sha256": "675b6f06eb2c35a952f5f4c01ea220c87e180664f87265e7af8ff3df74006d78",
+      "bytes": 2341
+    },
+    "full/inputs/cgl_lf_field_reversal_2d.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/inputs/cgl_lf_field_reversal_2d.athinput",
+      "sha256": "42b283ef21ea3055d29278b2df9a1f480c8ca9440790652edd21d4e58ccb4050",
+      "bytes": 1212
+    },
+    "full/history/cgl_reconstruction_wenoz.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_reconstruction_wenoz.mhd.hst",
+      "sha256": "e9fa18cd165ed943ef962dd02d608bddf485071cf6d83cf612069b1b00528f5f",
+      "bytes": 18461
+    },
+    "full/history/cgl_lf_quant_perp_collisional.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_quant_perp_collisional.mhd.hst",
+      "sha256": "47b119ef85932d499308290b25fe737becda3d72887df4afecce84afd2049bc6",
+      "bytes": 219035
+    },
+    "full/history/cgl_collision_once.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_collision_once.mhd.hst",
+      "sha256": "be9ad9d7f32fdacffda41991fd06038e2a7e5fa1647a84122b70821f1411c2de",
+      "bytes": 7931
+    },
+    "full/history/cgl_lf_quant_parallel_collisional.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_quant_parallel_collisional.mhd.hst",
+      "sha256": "20f93e5cf72682aee53b2d453b1a1ac480c42a9ade0ad6facd52e8ca01c371d8",
+      "bytes": 71839
+    },
+    "full/history/cgl_lf_paper_eigen_alfven.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_paper_eigen_alfven.mhd.hst",
+      "sha256": "155cdd14790501e7bca32674b1b942657a4af6a669b12281daf847119a84b414",
+      "bytes": 11008
+    },
+    "full/history/cgl_lf_flux_limiter.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_flux_limiter.mhd.hst",
+      "sha256": "c9fb219b923d016867fe604246551a1e4b3d02056bbd4a4070671cc4f7aff18d",
+      "bytes": 2747
+    },
+    "full/history/cgl_lf_paper_eigen_fast.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_paper_eigen_fast.mhd.hst",
+      "sha256": "0d2aafab5f7a4b6a1124d86943be023ed63ad9ec1946049f15d2ea588c404793",
+      "bytes": 11008
+    },
+    "full/history/cgl_lf_quant_grad_b.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_quant_grad_b.mhd.hst",
+      "sha256": "d04d1a0b4256b4028d0c628c12891f367a3963ba139e4a4cdc5abd0dd5251359",
+      "bytes": 2747
+    },
+    "full/history/cgl_lf_field_reversal_2d.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_field_reversal_2d.mhd.hst",
+      "sha256": "e38def686c8aa133841b305546280f609543abbd19fdd7c7e9cb6f9da9508c40",
+      "bytes": 17016
+    },
+    "full/history/cgl_pure_paper_eigen_slow.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_pure_paper_eigen_slow.mhd.hst",
+      "sha256": "2fcd8751db8fb455c5f093eebd63d8af0a92c29671f396ca191b197338fd8caf",
+      "bytes": 5123
+    },
+    "full/history/cgl_lf_hotspot.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_hotspot.user.hst",
+      "sha256": "17ae2a257c410125d54f8fdcbfa2b969309dcebb2f15eb7de8df97a8abc7d816",
+      "bytes": 129130
+    },
+    "full/history/cgl_lf_limiter_mirror.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_limiter_mirror.mhd.hst",
+      "sha256": "db3c0caca089eff9e11d8683d61f801a2e98151b235a3b584da342414790c8a7",
+      "bytes": 2747
+    },
+    "full/history/cgl_lf_limiter_heat_flux_suppression.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_limiter_heat_flux_suppression.mhd.hst",
+      "sha256": "72ac80f73bb736bfbc7c93affd3aef1e17e924098fff332d5f7d761a18f91839",
+      "bytes": 2747
+    },
+    "full/history/cgl_lf_uniform_timestep.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_uniform_timestep.mhd.hst",
+      "sha256": "534669e9a8ac1d63cf5b29e24b6aa54a2f2efafd9797d02b139e969879185a11",
+      "bytes": 1996
+    },
+    "full/history/cgl_pure_paper_eigen_alfven.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_pure_paper_eigen_alfven.mhd.hst",
+      "sha256": "d073656404066e98e1ac0554ba257b303b68a875cd9dd215dc52a9d8f8b6c7ea",
+      "bytes": 5123
+    },
+    "full/history/cgl_lf_hotspot.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_hotspot.mhd.hst",
+      "sha256": "652fc8b70eaaa42249ead6abcb2725fb794dd249bd7c3e45ff22de867efb2b7f",
+      "bytes": 769518
+    },
+    "full/history/cgl_lf_field_wave.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_field_wave.mhd.hst",
+      "sha256": "9c09e41b605c576f1eeb27a129cb0ffe7de95651061a092c82e58badcd7883ad",
+      "bytes": 4249
+    },
+    "full/history/cgl_lf_limiter_firehose.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_limiter_firehose.mhd.hst",
+      "sha256": "69b803eec3238269f863fbb6c7609ec9d22712809eccec8a3a6a2780fe4bd5d1",
+      "bytes": 2747
+    },
+    "full/history/cgl_lf_oblique_decay_2d.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_oblique_decay_2d.mhd.hst",
+      "sha256": "5b296a97a3d70a2ea71a6ca2570118d639d6d1e269f91a6336c4169748e7cefc",
+      "bytes": 53815
+    },
+    "full/history/cgl_lf_quant_perp.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_quant_perp.mhd.hst",
+      "sha256": "4044168968cf0b244ec12e3ae4dc5e7a3d6bf158e209e80b1cc4adb86411642a",
+      "bytes": 140931
+    },
+    "full/history/cgl_lf_paper_oblique_wave.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_paper_oblique_wave.mhd.hst",
+      "sha256": "eb2f67fd6c24d0568a6ab0a3d7188b7f62d57af731f1208e46878db452b5144a",
+      "bytes": 6502
+    },
+    "full/history/cgl_lf_timestep_refresh.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_timestep_refresh.mhd.hst",
+      "sha256": "4b8f05fd39b0d0adf9863be80a3d0879e570e0eb220501c1675de99fef1f28a0",
+      "bytes": 2747
+    },
+    "full/history/cgl_lf_smr_decay_2d.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_smr_decay_2d.mhd.hst",
+      "sha256": "8835d2dc38dc43b31ed49a26fe22b83dca3a04da2e0f63d2e775abb4eff0722c",
+      "bytes": 41048
+    },
+    "full/history/cgl_lf_field_reversal_1d.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_field_reversal_1d.mhd.hst",
+      "sha256": "2c430edab4670e1a7371063ee099c45c09fbccbc63eb77f570f418eeedac328a",
+      "bytes": 17016
+    },
+    "full/history/cgl_pure_paper_eigen_fast.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_pure_paper_eigen_fast.mhd.hst",
+      "sha256": "e001b07fc3c5a37e08bd6de736d49a6e45b53ee38a4515d5ff7b0f0f1f452438",
+      "bytes": 5123
+    },
+    "full/history/cgl_lf_quant_parallel.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_quant_parallel.mhd.hst",
+      "sha256": "89383db6723fb0eb31de8827999d578c215c41e10aa6027ba8074835727dc0a1",
+      "bytes": 71839
+    },
+    "full/history/cgl_lf_density_contact.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_density_contact.mhd.hst",
+      "sha256": "e1e24c356b507ad7b9d496b5107a3ebfae20d479fe616766c9ca8e5d1620d9f1",
+      "bytes": 4249
+    },
+    "full/history/cgl_pure_paper_oblique_wave.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_pure_paper_oblique_wave.mhd.hst",
+      "sha256": "11b392cadc68f76d408dfbfe7819a8133b532732d44e3163428a53949d6716ca",
+      "bytes": 3017
+    },
+    "full/history/cgl_lf_paper_eigen_slow.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_lf_paper_eigen_slow.mhd.hst",
+      "sha256": "5cbf3222a8fb467777ce74fb12de399b7fb76cb078a52d329a0440148597833d",
+      "bytes": 11008
+    },
+    "full/history/cgl_reconstruction_ppmx.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/history/cgl_reconstruction_ppmx.mhd.hst",
+      "sha256": "ac11cf41b33a13736bea851441293a5368a584b982d4c128db7abc33e7a9e50f",
+      "bytes": 18461
+    },
+    "full/data/cgl_lf_quant_perp.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_quant_perp.decay.csv",
+      "sha256": "a2ae609aa545ca7e9db7658725f103b9f2ce372593c48684907544ceea2ec600",
+      "bytes": 455
+    },
+    "full/data/cgl_lf_density_contact.mhd_w.00003.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_density_contact.mhd_w.00003.tab",
+      "sha256": "c3b23516a4d2f8464567c51f7a886868cfa405f00665bd635554a8470012bead",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_quant_perp_collisional.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_quant_perp_collisional.decay.csv",
+      "sha256": "62817368539d9574f0819e5004a176714b913aed4e84789e23120193196c4810",
+      "bytes": 478
+    },
+    "full/data/cgl_lf_oblique_decay_2d.xslice.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_oblique_decay_2d.xslice.00001.tab",
+      "sha256": "97584e0c412afabe7fef0644602ba435ab6e617b268b8777f75c8a511128bdb1",
+      "bytes": 12057
+    },
+    "full/data/cgl_pure_paper_oblique_wave.paper_oblique_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_pure_paper_oblique_wave.paper_oblique_wave.csv",
+      "sha256": "d537440742b22d59293a9c7c039dfeb4033c7beb1eb43ea841bcd92bffbb954d",
+      "bytes": 611
+    },
+    "full/data/cgl_lf_density_contact.mhd_w.00004.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_density_contact.mhd_w.00004.tab",
+      "sha256": "c3b23516a4d2f8464567c51f7a886868cfa405f00665bd635554a8470012bead",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_smr_decay_2d.yslice.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_smr_decay_2d.yslice.00000.tab",
+      "sha256": "5f44423b288d33c1f8acb3868319840054d9038dd3e89d95f69efab2d957866d",
+      "bytes": 6104
+    },
+    "full/data/cgl_lf_oblique_decay_2d.rotated_decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_oblique_decay_2d.rotated_decay.csv",
+      "sha256": "a8d8c3c4c7f2f3d5e4e3e3d60c2c4e6247b90fbb7a5b7ad7e5ee6f9c4656560a",
+      "bytes": 347
+    },
+    "full/data/cgl_lf_paper_eigen_alfven.paper_eigen_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_paper_eigen_alfven.paper_eigen_wave.csv",
+      "sha256": "39ef64a426116256910964c97e6154fe81cfaf95f4cffbcbeb113e67d4b0af8c",
+      "bytes": 1674
+    },
+    "full/data/cgl_pure_paper_eigen_slow.paper_eigen_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_pure_paper_eigen_slow.paper_eigen_wave.csv",
+      "sha256": "a7ff0e21d69e3949aaa384ec86c6ab83ca6851bee36d88d73d272282b82c9f2b",
+      "bytes": 1648
+    },
+    "full/data/cgl_lf_smr_decay_2d.yslice.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_smr_decay_2d.yslice.00001.tab",
+      "sha256": "b977b0b85b535715129436fa51483d88b0cd045ce53dd22111f80d1d877cdeb7",
+      "bytes": 6105
+    },
+    "full/data/cgl_lf_quant_parallel.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_quant_parallel.decay.csv",
+      "sha256": "1453258bed213e65434044d2f11dd7b52514777fbce7a4026806db85d08b463b",
+      "bytes": 456
+    },
+    "full/data/cgl_lf_density_contact.mhd_w.00002.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_density_contact.mhd_w.00002.tab",
+      "sha256": "62518cc6d8c39fe243f99532d3eb5d4cea9a13405bf6d937e43633145097b7e8",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_oblique_decay_2d.xslice.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_oblique_decay_2d.xslice.00000.tab",
+      "sha256": "9027ea06ca2840354fe4dce12564177199a495a2c3ac06ed2920d8871b3cdc04",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_paper_eigen_slow.paper_eigen_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_paper_eigen_slow.paper_eigen_wave.csv",
+      "sha256": "edfcea40da197b108c31adc5a94f12504eeac6ca1eef4a926fd8984071977382",
+      "bytes": 1614
+    },
+    "full/data/cgl_lf_limiter_heat_flux_suppression.mhd_w.00002.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_limiter_heat_flux_suppression.mhd_w.00002.tab",
+      "sha256": "6f45076da815ea275b9d1084299bf2c502a92a4daea8771c99c8a526c82d2d9c",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_paper_oblique_wave.paper_oblique_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_paper_oblique_wave.paper_oblique_wave.csv",
+      "sha256": "57948b1d4e693803d65710c72825803af926e8f22bf3d421b127e4146eaf863e",
+      "bytes": 608
+    },
+    "full/data/cgl_lf_paper_eigen_fast.paper_eigen_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_paper_eigen_fast.paper_eigen_wave.csv",
+      "sha256": "a35011a73a8329b2d31f8e610eeb583a199df17ce273f34facb74b0c35f77e10",
+      "bytes": 1673
+    },
+    "full/data/cgl_pure_paper_eigen_fast.paper_eigen_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_pure_paper_eigen_fast.paper_eigen_wave.csv",
+      "sha256": "c9166a25f72c39a160642913e91606e479968f32dda8d6f3a7a60b55ea6d2193",
+      "bytes": 1679
+    },
+    "full/data/cgl_lf_flux_limiter.flux_limiter_cells.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_flux_limiter.flux_limiter_cells.csv",
+      "sha256": "e6d67188859b249bdb86b9ddcdcc4677ce1d529f6b931dbbc0c45decdef97a88",
+      "bytes": 8156
+    },
+    "full/data/cgl_lf_flux_limiter.flux_limiter_faces.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_flux_limiter.flux_limiter_faces.csv",
+      "sha256": "dc19e45151e7c0c589adfe3d37969fac7028e0b92397bcd42d56bee8319c4849",
+      "bytes": 8081
+    },
+    "full/data/cgl_lf_field_wave.field_aligned_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_field_wave.field_aligned_wave.csv",
+      "sha256": "eca5d36c0f1bb536890b61fc41b5383c067ad88d271f6facdecd415038f2a526",
+      "bytes": 550
+    },
+    "full/data/cgl_lf_limiter_heat_flux_suppression.mhd_w.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_limiter_heat_flux_suppression.mhd_w.00001.tab",
+      "sha256": "6f45076da815ea275b9d1084299bf2c502a92a4daea8771c99c8a526c82d2d9c",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_smr_decay_2d.rotated_decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_smr_decay_2d.rotated_decay.csv",
+      "sha256": "1049b013cd76246ba1ebd9c3df06716c2e01e94145ff5cb5ddd8f5cc281d2ef8",
+      "bytes": 329
+    },
+    "full/data/cgl_lf_smr_decay_2d.xslice.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_smr_decay_2d.xslice.00001.tab",
+      "sha256": "551098f36cd069fe08022d02636b22821aac9554b518e6435c9674fdd88cb976",
+      "bytes": 9081
+    },
+    "full/data/cgl_lf_density_contact.mhd_w.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_density_contact.mhd_w.00001.tab",
+      "sha256": "06f35bb32e3c6541e7d230f60cd4eddfdb61d35f038d4062bdaff828b0bbe7b1",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_oblique_decay_2d.yslice.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_oblique_decay_2d.yslice.00000.tab",
+      "sha256": "71569af06d6317faf7f14bbf56b78d2509531f42ae5d2bd259cb4ccfc5ce924f",
+      "bytes": 12056
+    },
+    "full/data/cgl_pure_paper_eigen_alfven.paper_eigen_wave.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_pure_paper_eigen_alfven.paper_eigen_wave.csv",
+      "sha256": "d2198a5b334a3cd36c37aaeca095279521a5829d3f5a02e5555a57492423109c",
+      "bytes": 1678
+    },
+    "full/data/cgl_lf_limiter_heat_flux_suppression.mhd_w.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_limiter_heat_flux_suppression.mhd_w.00000.tab",
+      "sha256": "96db5cd3ab558f0102a965afe8a195a022f140c47ae31d9484ba8954e637e3f9",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_quant_parallel_collisional.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_quant_parallel_collisional.decay.csv",
+      "sha256": "8017d56c876ff9d72477f776494cf7513b09e4b4b36777b523a41b382fb6906f",
+      "bytes": 478
+    },
+    "full/data/cgl_lf_oblique_decay_2d.yslice.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_oblique_decay_2d.yslice.00001.tab",
+      "sha256": "ce1d9b462cde3082c0adafb3f2e555779349afe96d96d7ea9b973f9b21de54f8",
+      "bytes": 12057
+    },
+    "full/data/cgl_lf_density_contact.mhd_w.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_density_contact.mhd_w.00000.tab",
+      "sha256": "d6904f6ea1f7039b8f8649d3210bfaaaea0ddcff3ac6dac8ec427339ac468357",
+      "bytes": 12056
+    },
+    "full/data/cgl_lf_smr_decay_2d.xslice.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_smr_decay_2d.xslice.00000.tab",
+      "sha256": "2e62a199190032cbd294b12cb6cb523d1a0db2447ee163f7b500c7a5209a629c",
+      "bytes": 9080
+    },
+    "full/data/cgl_lf_quant_grad_b.grad_b.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_quant_grad_b.grad_b.csv",
+      "sha256": "c04970e43c4a5f8cee3d04a868be8806350d189ee89cdbd493abc44e241b71ad",
+      "bytes": 6095
+    },
+    "full/data/cgl_lf_limiter_heat_flux_suppression.limiter_heat_flux_suppression_faces.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/data/cgl_lf_limiter_heat_flux_suppression.limiter_heat_flux_suppression_faces.csv",
+      "sha256": "cc682a525b3c5fe0db25ed440ff251bbbb262a605cbe62d1260b30cf977b80e4",
+      "bytes": 10822
+    },
+    "paper-smoke/manifest.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/manifest.json",
+      "sha256": "2613fb42e06d0825499a5feca1f691deb225527806c6a1f14978062d6ce06c67",
+      "bytes": 24330
+    },
+    "paper-smoke/summary.md": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/summary.md",
+      "sha256": "1e8bdeb1ddf7078cb57c442afa68385fd27ee4d2b56efbeb2ffc805e2dd3d643",
+      "bytes": 2614
+    },
+    "paper-smoke/logs/paper_smoke_passive_alfvenic.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/logs/paper_smoke_passive_alfvenic.log",
+      "sha256": "faf74c38588d0f1471a5a908924738c87e6923ac10f06124e4efff8e6d088814",
+      "bytes": 677
+    },
+    "paper-smoke/logs/paper_smoke_active_alfvenic.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/logs/paper_smoke_active_alfvenic.log",
+      "sha256": "dd65ca28be1c3145496b33a1751e338dba1d830660aa8481b02fbb6615346954",
+      "bytes": 740
+    },
+    "paper-smoke/logs/paper_smoke_active_random.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/logs/paper_smoke_active_random.log",
+      "sha256": "0dc77d49e9a3660f8522f921d9329ab56c4964111ae0a1c790c0262c2d75d1a2",
+      "bytes": 740
+    },
+    "paper-smoke/inputs/paper_smoke_active_alfvenic.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/inputs/paper_smoke_active_alfvenic.athinput",
+      "sha256": "5379ec7e53c33e6bf80be5778c34c8054b497460823a1226e9e4609e01962733",
+      "bytes": 2133
+    },
+    "paper-smoke/inputs/paper_smoke_passive_alfvenic.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/inputs/paper_smoke_passive_alfvenic.athinput",
+      "sha256": "67d6c66981b767b88a280608a40a510fadfbd751c81f687c2d19ccae3a135129",
+      "bytes": 2140
+    },
+    "paper-smoke/inputs/paper_smoke_active_random.athinput": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/inputs/paper_smoke_active_random.athinput",
+      "sha256": "5379ec7e53c33e6bf80be5778c34c8054b497460823a1226e9e4609e01962733",
+      "bytes": 2133
+    },
+    "paper-smoke/history/paper_smoke_active_random.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/history/paper_smoke_active_random.mhd.hst",
+      "sha256": "ecab09f681bced455b866c96bb4ebaa8237025ebd006d7f694c84f0efa950f54",
+      "bytes": 3732
+    },
+    "paper-smoke/history/paper_smoke_active_alfvenic.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/history/paper_smoke_active_alfvenic.mhd.hst",
+      "sha256": "bd3649d0ce31805e99a337f79ed407bee349fd8ae1ceec2d261136ac31229335",
+      "bytes": 3732
+    },
+    "paper-smoke/history/paper_smoke_passive_alfvenic.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/history/paper_smoke_passive_alfvenic.mhd.hst",
+      "sha256": "2d2f8bb1392a43beada569da55469034e98fa6a0b705ea7e90fe83bc9ce35ac7",
+      "bytes": 3024
+    },
+    "paper-smoke/history/paper_smoke_active_random.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/history/paper_smoke_active_random.user.hst",
+      "sha256": "e8f5b6df3d976dd1064a74c8af49d4767ccafe3053c0649f7fc3956075ae297f",
+      "bytes": 2808
+    },
+    "paper-smoke/history/paper_smoke_active_alfvenic.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/history/paper_smoke_active_alfvenic.user.hst",
+      "sha256": "6f7b45b52cee2b3e3b37a200a8fcebaf856388e79ba994cfa9d6d7726690d419",
+      "bytes": 2808
+    },
+    "paper-smoke/history/paper_smoke_passive_alfvenic.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/history/paper_smoke_passive_alfvenic.user.hst",
+      "sha256": "d3921dbccb53f1b6097507559e2210d8bdff671a9a7974217424ea5654694631",
+      "bytes": 2207
+    },
+    "paper-smoke/data/paper_smoke_active_alfvenic.mhd_w_bcc.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_alfvenic.mhd_w_bcc.00000.tab",
+      "sha256": "c0647968c72c2a593da4064e6697ba32e726ea940e2cc18c607c324157f6194e",
+      "bytes": 2279
+    },
+    "paper-smoke/data/paper_smoke_passive_alfvenic.turb_force.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_passive_alfvenic.turb_force.00000.tab",
+      "sha256": "7d655fe12aaaffd9b10cd044ea98c6f26c30587347b227286ae324f5981af37c",
+      "bytes": 1005
+    },
+    "paper-smoke/data/paper_smoke_passive_alfvenic.turb_force.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_passive_alfvenic.turb_force.00001.tab",
+      "sha256": "d3df85043cb3b20049236060796b30795d4fc06b01b2478512d7adcf6107da6b",
+      "bytes": 1005
+    },
+    "paper-smoke/data/paper_smoke_active_alfvenic.mhd_w_bcc.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_alfvenic.mhd_w_bcc.00001.tab",
+      "sha256": "7a831ef7c14f537f152bbd8a89044c8699e26ed75dd03ce4e3a73f7d3ecc271c",
+      "bytes": 2279
+    },
+    "paper-smoke/data/paper_smoke_active_random.turb_force.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_random.turb_force.00001.tab",
+      "sha256": "9da4519fa6b31db289fd5d76ada3ed32b24b1f79dd4f2e3cb707a8eb8b3363bf",
+      "bytes": 1005
+    },
+    "paper-smoke/data/paper_smoke_active_alfvenic.turb_force.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_alfvenic.turb_force.00000.tab",
+      "sha256": "7d655fe12aaaffd9b10cd044ea98c6f26c30587347b227286ae324f5981af37c",
+      "bytes": 1005
+    },
+    "paper-smoke/data/paper_smoke_passive_alfvenic.mhd_w_bcc.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_passive_alfvenic.mhd_w_bcc.00000.tab",
+      "sha256": "6291925d54707b84092dd2f69d55bc896c8c8b5f18ffc9908634d1d47a922963",
+      "bytes": 2279
+    },
+    "paper-smoke/data/paper_smoke_active_random.mhd_w_bcc.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_random.mhd_w_bcc.00000.tab",
+      "sha256": "c0647968c72c2a593da4064e6697ba32e726ea940e2cc18c607c324157f6194e",
+      "bytes": 2279
+    },
+    "paper-smoke/data/paper_smoke_active_random.turb_force.00000.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_random.turb_force.00000.tab",
+      "sha256": "7d655fe12aaaffd9b10cd044ea98c6f26c30587347b227286ae324f5981af37c",
+      "bytes": 1005
+    },
+    "paper-smoke/data/paper_smoke_active_random.mhd_w_bcc.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_random.mhd_w_bcc.00001.tab",
+      "sha256": "fb2995de62842268876f1107c15cd724d5c31c9cc26ed299d41ca3bffc36aac6",
+      "bytes": 2279
+    },
+    "paper-smoke/data/paper_smoke_active_alfvenic.turb_force.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_active_alfvenic.turb_force.00001.tab",
+      "sha256": "c2e7f638c0bd6904eb21511bceb22b7cea1246184aeb48f7ba84099845a81c56",
+      "bytes": 1005
+    },
+    "paper-smoke/data/paper_smoke_passive_alfvenic.mhd_w_bcc.00001.tab": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke/data/paper_smoke_passive_alfvenic.mhd_w_bcc.00001.tab",
+      "sha256": "6ec0aef4b9feedef52daec10b6efdb391e45326bb57efb55dd733174a13c9f95",
+      "bytes": 2279
+    },
+    "metadata-failures/acceptance-hip/paper-smoke.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip/paper-smoke.log",
+      "sha256": "6f0e7138fa074676ce08de147d380d5cdce312b934b3a1a091f1e75755f28436",
+      "bytes": 123
+    },
+    "metadata-failures/acceptance-hip/full.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip/full.log",
+      "sha256": "6f0e7138fa074676ce08de147d380d5cdce312b934b3a1a091f1e75755f28436",
+      "bytes": 123
+    },
+    "metadata-failures/acceptance-hip/runner-manifest.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip/runner-manifest.json",
+      "sha256": "964defa92a842af013cd3a376fb9c62797551dca5f0d74689f3be23e050d8f9c",
+      "bytes": 44539
+    }
+  }
+}

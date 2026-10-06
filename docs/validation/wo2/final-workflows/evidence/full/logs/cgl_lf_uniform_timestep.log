@@ -1,0 +1,20 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+CGL LF collision_relaxation passed: measured_paniso=-0.6 expected_paniso=-0.6 time=0 nu_coll=10
+elapsed=2.706361e-02 cycle=0 time=0.000000e+00 dt=2.010366e-01
+
+Terminating on cycle limit
+time=0.000000e+00 cycle=0
+tlim=1.000000e+30 nlim=0
+
+MeshBlock-cycles = 0
+cpu time used  = 1.523880e-03
+zone-cycles/cpu_second = 0.000000e+00
+particle-updates/cpu_second = 0.000000e+00

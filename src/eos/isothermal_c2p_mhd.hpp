@@ -1,5 +1,12 @@
 #ifndef EOS_ISOTHERMAL_C2P_MHD_HPP_
 #define EOS_ISOTHERMAL_C2P_MHD_HPP_
+//========================================================================================
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
+//========================================================================================
+//! \file isothermal_c2p_mhd.hpp
+//! \brief Single-state isothermal MHD conserved-to-primitive conversion.
 
 //----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_IsothermalMHD()

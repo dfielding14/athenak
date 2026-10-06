@@ -39,6 +39,17 @@ selected messages shrink by 71.43%, while physical states stay bitwise identical
 on CPU/HIP and one/four ranks. Paired GPU timings show no consistent speedup;
 see the [Task 3 report](validation/wo2/task3/README.md).
 
+Task4 releases passive CGL on uniform periodic meshes. Density, momentum and B
+use the native isothermal flow path; persistent IEN/IAN store the two J/A
+invariants, while LF temporarily evolves thermal U and magnetic moment.
+Histories distinguish `thermal-U`, `cgl-J` and `cgl-A`, and restart encoding
+guards prevent mixing active/passive states. The
+[model contract](source/modules/cgl_passive.md) documents initialization,
+matched-timestep flow identity, unsupported source combinations, and the absence
+of irreversible shock heating. The [Task4 report](validation/wo2/task4/README.md)
+records exact forced-flow/restart tests, independent heating/convergence checks,
+and both planar and nonzero-transport 3D paper cases.
+
 Task 6 is adapted: existing A/mu-aware primitive prolongation is verified on the
 GPU, and a separately demonstrated periodic conservation defect is corrected.
 Independent corner magnetic ghosts can give different LF fluxes on a shared
@@ -52,6 +63,19 @@ refined meshes. Stored inflow is converted using the final ghost magnetic field;
 all destination arrays. The [boundary contract](source/modules/cgl_lf_boundaries.md)
 requires idempotent user ghost fills. The [validation report](validation/wo2/task5/README.md)
 includes an independent negative control and CPU/GPU/MPI halo/state checks.
+
+Task7 fuses directional LF face launches without changing their arithmetic.
+All 2,018,316 face values in the final 23 paired configurations agree bitwise;
+only two diagnostic reduction sums can differ at rounding level. Detailed
+profiling preserves its directional path; ordinary profiling reports the
+aggregate `heat_flux_total` bucket. The [Task7 report](validation/wo2/task7/README.md)
+records standalone safe/full speedups near 1.20x in 2D and 1.48–1.51x in 3D.
+These task-specific gains are not multiplied into a combined speedup claim.
+
+Optional Tasks8–9 were not selected. The final report preserves the exact
+Frontier build/runtime contract, unchanged scientific bounds, accepted B4
+limitation, and distinctions between physical validation, smoke tests, and
+focused float checks.
 
 The following sections preserve the WO1 implementation record.
 

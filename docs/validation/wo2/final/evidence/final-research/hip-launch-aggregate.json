@@ -1,0 +1,3079 @@
+{
+  "classification": "Ordered union of broad HIP-launch suite and corrective reruns. Self-building Serial helpers and unchanged Git-metadata workflow unit remain CPU coverage; application reruns use HIP. Scientific tolerances unchanged; all initial failures retained.",
+  "original_suite_counts": {
+    "passed": 235,
+    "failed": 0,
+    "xfailed": 2,
+    "skipped": 0
+  },
+  "original_test_count": 237,
+  "evidence": [
+    {
+      "path": "baseline/final-hip-launch-cpu/results.xml",
+      "sha256": "b10547e60bac2eca6610efa531da7e8d0eda614f6f1387986485168f0f8bcfa5",
+      "tests": 237
+    },
+    {
+      "path": "baseline/final-helper-rerun-cpu/results.xml",
+      "sha256": "2e94f75fd366eab5d01ce34de8d503a9e1b0b968ac5598a592db922a59cbf9da",
+      "tests": 10
+    },
+    {
+      "path": "baseline/final-float-fixed-cpu/results.xml",
+      "sha256": "d5e803e133b3e35ab83066b5b7d1c0affd13acfb1f871912f868bf4e349781c6",
+      "tests": 6
+    },
+    {
+      "path": "baseline/final-fastspeed-portable-cpu/results.xml",
+      "sha256": "f49d3ffa10c70a423af5ab1284584b506d9ae53b5bed421dbea441654f1c8c3b",
+      "tests": 2
+    },
+    {
+      "path": "baseline/final-workflow-unit-cpu/results.xml",
+      "sha256": "7d9f8a3bc494e0621d1ba80aa6dbfcff85b20fd3229751a41b491356134177b5",
+      "tests": 2
+    },
+    {
+      "path": "baseline/task7-final-profile-fixed-hip-cpu/results.xml",
+      "sha256": "aba73e54737479082be8cbc13224e1ac252ee57538333c126156276a8d2b7bd1",
+      "tests": 2
+    },
+    {
+      "path": "baseline/final-task1-followup-hip-cpu/results.xml",
+      "sha256": "af0d3d2fee4fdae81dcf5be2440016a06ea250aa91fbdbe9a5c55d2117a31157",
+      "tests": 11
+    }
+  ],
+  "results": [
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_lf_amr_3d_churn_gpu",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_lf_amr_primitive_churn_gpu",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_projection_cpu::test_cgl_amr_projection_rejects_nonfinite_magnetic_fields",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_amr_projection_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_amr_projection_reject0/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_walls_cpu::test_cgl_amr_walls_after_final_field_refresh",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "assert 27 == 216"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_c2p_pressure_floor_cpu::test_cgl_c2p_pressure_floor_energy_consistency[False]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_c2p_pressure_floor_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_c2p_pressure_floor_en0/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "failed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": "AssertionError: ld.lld: error: undefined symbol: Kokkos::Impl::host_abort(char const*)\n  >>> referenced by cgl_c2p_pressure_floor_test.cpp\n  >>>               /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-helper-rerun-cpu/pytest-tmp/test_cgl_c2p_pressure_floor_en0/build/src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_c2p_pressure_floor_test.cpp.o:(Kokkos::abort(char const*))\n  clang++: error: linker command failed with exit code 1 (use -v to see invocation)\n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz', ...p.o:(Kokkos::abort(char const*))\\nclang++: error: linker command failed with exit code 1 (use -v to see invocation)\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-float-fixed-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_c2p_pressure_floor_cpu::test_cgl_c2p_pressure_floor_energy_consistency[True]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_c2p_pressure_floor_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_c2p_pressure_floor_en1/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "failed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": "AssertionError: Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_c2p_pressure_floor_test.cpp.o\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/pgen/unit_tests/cgl_c2p_pressure_floor_test.cpp:22:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/ideal_c2p_mhd.hpp:17:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:19:11: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n     19 |   return {log(ppar) + 2.0*logb - 3.0*logr,\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:19:11: note: insert an explicit cast to silence this issue\n     19 |   return {log(ppar) + 2.0*logb - 3.0*logr,\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |           static_cast<Real>(             )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:20:11: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n     20 |           log(pperp) - log(ppar) + 2.0*logr - 3.0*logb};\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:20:11: note: insert an explicit cast to silence this issue\n     20 |           log(pperp) - log(ppar) + 2.0*logr - 3.0*logb};\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |           static_cast<Real>(                          )\n  2 errors generated.\n  make: *** [src/CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_c2p_pressure_floor_test.cpp.o] Error 1\n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['make', '-f', 'src/CMakeFiles/athena.dir/build.make', 'src/CMakeFiles/athena.dir/pgen/unit_test...es/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_c2p_pressure_floor_test.cpp.o] Error 1\\n\").returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-float-fixed-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_fast_speed_cpu::test_cgl_active_hlle_uses_scaled_literature_discriminant[False]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_fast_speed_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_active_hlle_uses_scal0/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-float-fixed-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-fastspeed-portable-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_fast_speed_cpu::test_cgl_active_hlle_uses_scaled_literature_discriminant[True]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_fast_speed_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_active_hlle_uses_scal1/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "failed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": "AssertionError: Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:140:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                           ^~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:140:27: note: insert an explicit cast to silence this issue\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                           ^~~~~~~~~~~\n        |                           static_cast<Real>( )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                        ^~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                        ^~~~~~~~~~~\n        |                                        static_cast<Real>( )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                                     ^~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:140:53: note: insert an explicit cast to silence this issue\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                                     ^~~~~~~~~~~\n        |                                                     static_cast<Real>( )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type 'typename __gnu_cxx::__promote_2<float, int>::__type' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue\n    172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:173:5: error: non-constant-expression cannot be narrowed from type 'typename __gnu_cxx::__promote_2<float, int>::__type' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:173:5: note: insert an explicit cast to silence this issue\n    173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:174:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue\n    174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                      )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:180:6: note: insert an explicit cast to silence this issue\n    180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:181:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue\n    181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:184:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:184:6: note: insert an explicit cast to silence this issue\n    184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:185:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:185:5: note: insert an explicit cast to silence this issue\n    185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:188:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:188:6: note: insert an explicit cast to silence this issue\n    188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                                     )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:189:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:189:5: note: insert an explicit cast to silence this issue\n    189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                     )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:190:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:190:5: note: insert an explicit cast to silence this issue\n    190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                         )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:219:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:219:6: note: insert an explicit cast to silence this issue\n    219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:220:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:220:5: note: insert an explicit cast to silence this issue\n    220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:221:5: note: insert an explicit cast to silence this issue\n    221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:223:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:223:6: note: insert an explicit cast to silence this issue\n    223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:224:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:224:5: note: insert an explicit cast to silence this issue\n    224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:225:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/coordinates/cartesian_ks.hpp:225:5: note: insert an explicit cast to silence this issue\n    225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  fatal error: too many errors emitted, stopping now [-ferror-limit=]\n  20 errors generated.\n  make: *** [src/CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o] Error 1\n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['make', '-f', 'src/CMakeFiles/athena.dir/build.make', 'src/CMakeFiles/athena.dir/pgen/unit_test...CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o] Error 1\\n\").returncode"
+        },
+        {
+          "state": "failed",
+          "evidence": "baseline/final-float-fixed-cpu/results.xml",
+          "detail": "AssertionError: Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                           ^~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:27: note: insert an explicit cast to silence this issue\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                           ^~~~~~~~~~~\n        |                           static_cast<Real>( )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                        ^~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                        ^~~~~~~~~~~\n        |                                        static_cast<Real>( )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                                     ^~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:53: note: insert an explicit cast to silence this issue\n    140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};\n        |                                                     ^~~~~~~~~~~\n        |                                                     static_cast<Real>( )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type 'typename __gnu_cxx::__promote_2<float, int>::__type' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue\n    172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:173:5: error: non-constant-expression cannot be narrowed from type 'typename __gnu_cxx::__promote_2<float, int>::__type' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:173:5: note: insert an explicit cast to silence this issue\n    173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:174:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue\n    174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                      )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'\n     48 | #define SQR(x) ( (x)*(x) )\n        |                ^\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:180:6: note: insert an explicit cast to silence this issue\n    180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:181:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue\n    181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:184:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:184:6: note: insert an explicit cast to silence this issue\n    184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:185:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:185:5: note: insert an explicit cast to silence this issue\n    185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                                   )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:188:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:188:6: note: insert an explicit cast to silence this issue\n    188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                                     )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:189:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:189:5: note: insert an explicit cast to silence this issue\n    189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                                     )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:190:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:190:5: note: insert an explicit cast to silence this issue\n    190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                         )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:219:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:219:6: note: insert an explicit cast to silence this issue\n    219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:220:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:220:5: note: insert an explicit cast to silence this issue\n    220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:221:5: note: insert an explicit cast to silence this issue\n    221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:223:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:223:6: note: insert an explicit cast to silence this issue\n    223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],\n        |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |      static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:224:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:224:5: note: insert an explicit cast to silence this issue\n    224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:225:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n    225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:225:5: note: insert an explicit cast to silence this issue\n    225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},\n        |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |     static_cast<Real>(                  )\n  fatal error: too many errors emitted, stopping now [-ferror-limit=]\n  20 errors generated.\n  make: *** [src/CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o] Error 1\n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['make', '-f', 'src/CMakeFiles/athena.dir/build.make', 'src/CMakeFiles/athena.dir/pgen/unit_test...CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o] Error 1\\n\").returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-fastspeed-portable-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_heat_flux_limiter_cpu::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[double]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_heat_flux_limiter_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_heat_flux_limiter_and0/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_heat_flux_limiter_cpu::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[single]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_heat_flux_limiter_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_heat_flux_limiter_and1/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_collision_rates_once_per_cycle_with_and_without_lf[False]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_collision_rates_once_per_cycle_with_and_without_lf[True]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_collision_refreshes_next_timestep_from_relaxed_state",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_fofc_live_flux_mutation",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[diode-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[diode-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[outflow-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[outflow-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[periodic-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[periodic-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[reflect-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_allows_representation_preserving_boundaries[reflect-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_amr_conserved_prolongation_stays_admissible",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_amr_primitive_prolongation_rejects_pressure_work_recording",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_background_collision_advances_one_physical_timestep",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_conflicting_legacy_threshold_is_rejected",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[fast-1000]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[fast-10]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[fast-200]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[fast-50]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[safe-1000]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[safe-10]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[safe-200]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_density_contact_stability[safe-50]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_eigen_field_initialization_uses_meshblock_coordinates",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_explicit_reference_agrees_with_capped_sts",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_explicit_reference_executes_both_half_sweeps",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_explicit_reference_finite_collision_split",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_explicit_reference_rejects_sts_configuration",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_face_collision_rates_add[false-18-fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_face_collision_rates_add[false-18-safe]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_face_collision_rates_add[true-119-fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_face_collision_rates_add[true-119-safe]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_fast_relaxed_mode_does_not_enable_backup",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[full-fast-1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[full-fast-2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[full-safe-1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[full-safe-2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[none-fast-1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[none-fast-2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[none-safe-1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_field_reversal_stability[none-safe-2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_final_refresh_is_meshblock_layout_independent",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_firehose_threshold_policies_are_distinct",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_heat_flux_cap_face_activity_is_reported",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_heat_flux_cap_fractions_are_meshblock_layout_independent",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[full-fast-30-8.660254037844387-5.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[full-fast-45-7.0710678118654755-7.0710678118654755]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[full-safe-30-8.660254037844387-5.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[full-safe-45-7.0710678118654755-7.0710678118654755]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[none-fast-30-8.660254037844387-5.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[none-fast-45-7.0710678118654755-7.0710678118654755]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[none-safe-30-8.660254037844387-5.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_hotspot_preserves_minima_and_energy[none-safe-45-7.0710678118654755-7.0710678118654755]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_firehose_threshold_is_rejected",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_integrator_is_rejected",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_backup_factor-0.99->= 1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_backup_factor-inf->= 1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_threshold--1-> 0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[firehose_threshold-0-> 0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[limiter_backup_nu--1->= 0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[limiter_backup_nu-nan->= 0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[mirror_backup_factor-0.99->= 1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[mirror_threshold-0-> 0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_numeric_threshold_is_rejected[mirror_threshold-nan-> 0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_arithmetic=invalid-cgl_lf_arithmetic]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_diagnostics=invalid-cgl_lf_diagnostics]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_sts_flux=invalid-cgl_lf_sts_flux]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_runtime_mode_is_rejected[mhd/cgl_lf_sts_flux=physical-requires <mhd>/cgl_lf_diagnostics = 'none']",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_runtime_mode_is_rejected[option4-requires <mhd>/cgl_lf_arithmetic = 'fast']",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_sts_safety_is_rejected[-0.1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_sts_safety_is_rejected[0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_sts_safety_is_rejected[1.01]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_sts_safety_is_rejected[inf]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_invalid_sts_safety_is_rejected[nan]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_legacy_hardwall_requires_migration",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_limiter_occupancy_remains_admissible",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_low_field_faces_disable_transport_cleanly",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "assert 0.0 > 0.0"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_no_diagnostics_restart_clears_heat_flux_counters",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_numeric_threshold_matches_legacy_policy",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_forcing_seed_is_deterministic_and_selectable",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_history_uses_only_configured_backup",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_inputs_explicitly_set_thresholds",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks[rk1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks[rk2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks[rk3]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_passive_delta_must_match_eos_mode",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_passive_delta_smoke",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_random_forcing_leaves_cartesian_amplitudes_unprojected",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_snapshot_analysis_uses_both_pressures",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_snapshot_window_skips_unselected_field_reads",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_paper_type_two_rejects_alfvenic_policy",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_post_sweep_timestep_refresh[0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_post_sweep_timestep_refresh[3000]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_profile_detail_reports_directional_probe_buckets",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/task7-final-profile-fixed-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_profile_summary_reports_core_buckets",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: assert 'heat_flux_flux1' in '\\nRoot grid = 1 x 1 x 1 MeshBlocks\\nTotal number of MeshBlocks = 1\\nNumber of logical  levels of refinement = 0 (1 le...rabolic_recv_u                      5.733690e-04    5.733690e-04               9.0             9.0      6.370767e-05\\n'"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/task7-final-profile-fixed-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_quantitative_decay_and_diagnostics",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_relaxed_mode_does_not_enable_backup",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_relaxed_mode_obeys_configured_walls[cgl_lf_firehose_policy.athinput-cgl_ci_relaxed_firehose_recovery-flags1]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_relaxed_mode_obeys_configured_walls[cgl_lf_limiter.athinput-cgl_ci_relaxed_mirror_recovery-flags0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_restart_marker_round_trips_terminal_time",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_restart_preserves_final_state_and_admissibility",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_restart_with_finite_collision_preserves_corrected_split",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_runtime_mode_matrix_preserves_short_decay_state",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_scaled_face_row_timestep[1e+200-1e-200-0.0-1e-100-1.0-1.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_scaled_face_row_timestep[1e-200-1.0-1.0-1.0-0.0-1.6e-199]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_staggered_checkerboard_timestep_and_stability[0.01-2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_staggered_checkerboard_timestep_and_stability[0.01-3]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_staggered_checkerboard_timestep_and_stability[0.1-2]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_staggered_checkerboard_timestep_and_stability[0.1-3]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_stiff_limiter_relaxes_to_selected_firehose_threshold",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[explicit-false]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[explicit-true]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[sts-false]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry[sts-true]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_sts_safety_changes_only_sts_budget[explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_sts_safety_changes_only_sts_budget[sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_sts_safety_is_loaded_from_restart",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_transport_proxy_uses_additive_configured_rates",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_uniform_collisional_timestep[1.0-6.283185307179586-0.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_uniform_collisional_timestep[1.0-6.283185307179586-10.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_uniform_collisional_timestep[1.0-6.283185307179586-100.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_uniform_collisional_timestep[1.4e+308-1.4e+308-0.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_uniform_collisional_timestep[1e+154-1e-154-1.4e+308]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_paper_initializer_supports_pure_cgl_without_lf",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_reconstruction_pressure_peak[ppmx]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_reconstruction_pressure_peak[wenoz]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_rank_local_binary_reader_keeps_unequal_rank_files",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_mpicpu::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisional-parallel]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "assert 93 >= 100"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisional-perp]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisionless-parallel]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "assert 93 >= 100"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisionless-perp]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_eigen_wave_rejects_disabled_lf[fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_eigen_wave_rejects_disabled_lf[slow]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-uniform_lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-uniform_lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-varying_pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-0.0-varying_pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-uniform_lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-uniform_lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-varying_pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-1.0-varying_pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-uniform_lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-uniform_lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-varying_pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[0.0-10000000000.0-varying_pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-uniform_lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-uniform_lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-varying_pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-0.0-varying_pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-uniform_lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-uniform_lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-varying_pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-1.0-varying_pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-uniform_lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-uniform_lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-varying_pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_cellwise_relaxation[3.0-10000000000.0-varying_pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_wall_ordering[lf-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_wall_ordering[lf-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_wall_ordering[pure-firehose]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_limiter_stress_matches_wall_ordering[pure-mirror]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_lf_field_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_lf_paper_eigen_alfven]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_lf_paper_eigen_fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_lf_paper_eigen_slow]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_lf_paper_oblique_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_pure_paper_eigen_alfven]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_pure_paper_eigen_fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_pure_paper_eigen_slow]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_short_wave_is_resolved[cgl_pure_paper_oblique_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_lf_field_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_lf_paper_eigen_alfven]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_lf_paper_eigen_fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_lf_paper_eigen_slow]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_lf_paper_oblique_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_pure_paper_eigen_alfven]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_pure_paper_eigen_fast]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_pure_paper_eigen_slow]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_convergence_over_noninteger_periods[cgl_pure_paper_oblique_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_rejects_ineffective_reference[cgl_lf_field_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_rejects_ineffective_reference[cgl_lf_paper_eigen_slow]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_wave_rejects_ineffective_reference[cgl_lf_paper_oblique_wave]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[1d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[1d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[3d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[3d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[mixed2d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[mixed2d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[smr-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_uniform_boundary_cpu[smr-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_user_matches_inflow_cpu[explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_cpu::test_cgl_lf_user_matches_inflow_cpu[sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_oblique_decay_cpu::test_cgl_lf_oblique_decay_agrees_across_blocks[x]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_oblique_decay_cpu::test_cgl_lf_oblique_decay_agrees_across_blocks[y]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_oblique_decay_cpu::test_cgl_lf_smr_decay_conserves_total_energy",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_cpu::test_cgl_lf_smr_conservation_cpu[2-False-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_cpu::test_cgl_lf_smr_conservation_cpu[2-False-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_cpu::test_cgl_lf_smr_conservation_cpu[2-True-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_cpu::test_cgl_lf_smr_conservation_cpu[2-True-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_cpu::test_cgl_lf_smr_conservation_cpu[3-False-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_cpu::test_cgl_lf_smr_conservation_cpu[3-True-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_outflow_cpu::test_cgl_lf_smr_outflow_cpu[0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_outflow_cpu::test_cgl_lf_smr_outflow_cpu[4]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_barriers_cpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_default_off_cpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_fallback_cpu[collision]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_fallback_cpu[explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_fallback_cpu[limiter]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_fallback_cpu[strict]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_rejection_cpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_restart_cpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_temporal_cpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_cpu::test_cgl_lf_sts_merge_wall_cpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_turb_driving_cpu::test_cgl_lf_amr_with_turbulence_driving_restarts_reproducibly",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_parameters_cpu::test_cgl_constructor_parameters[False]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_constructor_parameter0/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-float-fixed-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_parameters_cpu::test_cgl_constructor_parameters[True]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_cgl_constructor_parameter1/build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "failed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": "AssertionError: Building CXX object src/CMakeFiles/athena.dir/eos/cgl_mhd.cpp.o\n  Building CXX object src/CMakeFiles/athena.dir/eos/eos.cpp.o\n  Building CXX object src/CMakeFiles/athena.dir/globals.cpp.o\n  Building CXX object src/CMakeFiles/athena.dir/parameter_input.cpp.o\n  Building CXX object src/CMakeFiles/athena.dir/outputs/io_wrapper.cpp.o\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_mhd.cpp:18:\n  In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/ideal_c2p_mhd.hpp:17:\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:19:11: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n     19 |   return {log(ppar) + 2.0*logb - 3.0*logr,\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:19:11: note: insert an explicit cast to silence this issue\n     19 |   return {log(ppar) + 2.0*logb - 3.0*logr,\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |           static_cast<Real>(             )\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:20:11: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]\n     20 |           log(pperp) - log(ppar) + 2.0*logr - 3.0*logb};\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n  /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source/src/eos/cgl_passive.hpp:20:11: note: insert an explicit cast to silence this issue\n     20 |           log(pperp) - log(ppar) + 2.0*logr - 3.0*logb};\n        |           ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~\n        |           static_cast<Real>(                          )\n  2 errors generated.\n  make: *** [src/CMakeFiles/athena.dir/build.make:504: src/CMakeFiles/athena.dir/eos/cgl_mhd.cpp.o] Error 1\n  make: *** Waiting for unfinished jobs....\n  \nassert 2 == 0\n +  where 2 = CompletedProcess(args=['make', '-f', 'src/CMakeFiles/athena.dir/build.make', 'src/CMakeFiles/athena.dir/eos/cgl_mhd.cp...dir/build.make:504: src/CMakeFiles/athena.dir/eos/cgl_mhd.cpp.o] Error 1\\nmake: *** Waiting for unfinished jobs....\\n\").returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-float-fixed-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_passive_fast_path_cpu::test_passive_cgl_signals_and_initializer_fence",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "AssertionError: -- The C compiler identification is CrayClang 20.0.0\n  -- The CXX compiler identification is CrayClang 20.0.0\n  -- Cray Programming Environment 2.7.35 C\n  -- Detecting C compiler ABI info\n  -- Detecting C compiler ABI info - done\n  -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped\n  -- Detecting C compile features\n  -- Detecting C compile features - done\n  -- Cray Programming Environment 2.7.35 CXX\n  -- Detecting CXX compiler ABI info\n  -- Detecting CXX compiler ABI info - done\n  -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped\n  -- Detecting CXX compile features\n  -- Detecting CXX compile features - done\n  -- Setting build type to 'Release' as none was specified.\n  -- Including user-specified problem generator file: unit_tests/cgl_passive_fast_path_test\n  -- Setting default Kokkos CXX standard to 17\n  -- Kokkos version: 4.4.0\n  -- The project name is: Kokkos\n  -- Using internal gtest for testing\n  -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-hip-launch-cpu/pytest-tmp/test_passive_cgl_signals_and_i0/unit-build/generated/Kokkos_Version_Info.cpp\n  -- Using -std=c++17 for C++17 standard as feature\n  -- Built-in Execution Spaces:\n  --     Device Parallel: NoTypeDefined\n  --     Host Parallel: NoTypeDefined\n  --       Host Serial: SERIAL\n  -- \n  -- Architectures:\n  -- Found TPLLIBDL: /usr/include  \n  -- Using internal desul_atomics copy\n  -- Experimental mdspan support is enabled\n  -- Looking for C++ include experimental/mdspan\n  -- Looking for C++ include experimental/mdspan - not found\n  -- Looking for C++ include mdspan\n  -- Looking for C++ include mdspan - not found\n  -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include\n  -- Kokkos Backends: SERIAL\n  -- Configuring incomplete, errors occurred!\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos\n  CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):\n    check_git_write Function invoked with incorrect arguments for function\n    named: check_git_write\n  Call Stack (most recent call first):\n    kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n    kokkos/CMakeLists.txt:217 (check_git_setup)\n  \n  \n  \nassert 1 == 0\n +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\\n  kokkos/CMakeLists.txt:217 (check_git_setup)\\n\\n\\n').returncode"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-helper-rerun-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_passive_workflow_cpu::test_passive_smoke_executes_with_unchanged_catalog",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "subprocess.CalledProcessError: Command '['git', 'status', '--short', '--untracked-files=all']' returned non-zero exit status 128."
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-workflow-unit-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_passive_workflow_cpu::test_passive_smoke_uses_physical_energy_columns",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": ""
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-workflow-unit-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_weak_field_cpu::test_weak_field_contact_remains_bounded[-10.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "xfailed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "Accepted T-B4 sharp-contact limitation of A transport; see docs/validation/wo1/review/weak-field/README.md"
+        }
+      ],
+      "final": "xfailed"
+    },
+    {
+      "test": "test_cgl_weak_field_cpu::test_weak_field_contact_remains_bounded[10.0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "xfailed",
+          "evidence": "baseline/final-hip-launch-cpu/results.xml",
+          "detail": "Accepted T-B4 sharp-contact limitation of A transport; see docs/validation/wo1/review/weak-field/README.md"
+        }
+      ],
+      "final": "xfailed"
+    }
+  ]
+}

@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-failure-diagnosis-app-cpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2890 items / 2888 deselected / 2 selected
+
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh FAILED [ 50%]
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_profile_summary_reports_core_buckets FAILED [100%]
+
+=================================== FAILURES ===================================
+_________________ test_cgl_amr_walls_after_final_field_refresh _________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py:23: in test_cgl_amr_walls_after_final_field_refresh
+    assert states[-2]["n_mbs"] == 216
+E   assert 27 == 216
+_______________ test_cgl_lf_profile_summary_reports_core_buckets _______________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py:213: in test_cgl_lf_profile_summary_reports_core_buckets
+    assert bucket in output
+E   AssertionError: assert 'heat_flux_flux1' in '\nRoot grid = 1 x 1 x 1 MeshBlocks\nTotal number of MeshBlocks = 1\nNumber of logical  levels of refinement = 0 (1 levels total)\nNumber of physical levels of refinement = 0 (1 levels total)\nNumber of parallel ranks = 1\nCGL Landau-fluid profiling enabled; timing regions use Kokkos fences and are intended for profiling runs only.\n\nSetup complete, executing task list(s)...\n\nelapsed=1.942585e-03 cycle=0 time=0.000000e+00 dt=1.000000e-05\nCGL LF parallel_decay passed: measured_amp=9.999803e-03 expected_amp=9.999803e-03 rel_err=3.606291e-08 rel_tol=5.000000e-02 cos_amp=1.317484e-18 cos_limit=2.000000e-04\nelapsed=3.009147e-03 cycle=1 time=1.000000e-05 dt=2.000000e-05\n\nTerminating on cycle limit\ntime=1.000000e-05 cycle=1\ntlim=1.000000e-05 nlim=1\n\nMeshBlock-cycles = 1\ncpu time used  = 1.070249e-03\nzone-cycles/cpu_second = 5.979917e+04\nparticle-updates/cpu_second = 0.000000e+00\n\nCGL Landau-fluid profile summary (shutdown)\n  ranks=1 meshblocks_total=1 meshblocks_rank0=1 meshblock_cells=64x1x1 global_cells=64x1x1\n  lf_k_parallel=3.200000e+01 coeff_mode=local strict_admissibility=false backup_limiter=false diagnostics=full arithmetic=safe sts_flux=weighted profile_detail...eep_begin_conversion                3.210200e-05    3.210200e-05               2.0             2.0      1.605100e-05\nsts_update_copies                     4.258200e-05    4.258200e-05               6.0             6.0      7.097000e-06\nsts_update_kernel                     1.647170e-04    1.647170e-04               6.0             6.0      2.745283e-05\nprimitive_refresh                     2.162200e-05    2.162200e-05               6.0             6.0      3.603667e-06\nadmissibility                         1.547900e-05    1.547900e-05               6.0             6.0      2.579833e-06\nsweep_end_conversion                  8.246000e-06    8.246000e-06               2.0             2.0      4.123000e-06\npost_sweep_collisions                 6.913000e-06    6.913000e-06               2.0             2.0      3.456500e-06\nparabolic_init_recv                   2.796000e-06    2.796000e-06               6.0             6.0      4.660000e-07\nparabolic_send_u                      1.554710e-04    1.554710e-04               9.0             9.0      1.727456e-05\nparabolic_recv_u                      6.940400e-05    6.940400e-05               9.0             9.0      7.711556e-06\n'
+----------------------------- Captured stderr call -----------------------------
+rm: cannot remove '*.dat': No such file or directory
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-failure-diagnosis-app-cpu/results.xml -
+=========================== short test summary info ============================
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_profile_summary_reports_core_buckets
+===================== 2 failed, 2888 deselected in 35.86s ======================

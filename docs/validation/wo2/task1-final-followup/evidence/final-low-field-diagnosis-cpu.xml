@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="1" skipped="0" tests="1" time="6.269" timestamp="2026-10-06T19:18:10.669022" hostname="login10"><testcase classname="final-research.regression-source.tst.test_suite.cgl.test_cgl_landau_fluid_cpu" name="test_cgl_lf_low_field_faces_disable_transport_cleanly" time="0.985"><failure message="assert 0.0 &gt; 0.0">../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py:673: in test_cgl_lf_low_field_faces_disable_transport_cleanly
+    assert history["lf_nstage"][-1] &gt; 0.0
+E   assert 0.0 &gt; 0.0</failure></testcase></testsuite></testsuites>

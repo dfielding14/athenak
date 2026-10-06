@@ -1,0 +1,19 @@
+{
+  "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun",
+  "test_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-portable",
+  "updated_files": [
+    {
+      "path": "src/mhd/rsolvers/cgl_pressure_traction.hpp",
+      "sha256": "9de16296b1e14dbd314c88146c72ec15f5fd95c1efed299352c0626b69cab05c"
+    },
+    {
+      "path": "src/mhd/rsolvers/hlle_cgl.hpp",
+      "sha256": "cfb10fd44e78744802f67f5c24453d9545f5b38985fe7304d6c827e255a961fb"
+    },
+    {
+      "path": "src/mhd/rsolvers/llf_mhd_singlestate.hpp",
+      "sha256": "2fc7916b4b232a46d5726a10ff2384b90abca759655e7dbdb198aeefaf4eb643"
+    }
+  ],
+  "proof": "pressure-traction-extraction.json; moved literal function without arithmetic changes"
+}

@@ -1,0 +1,50 @@
+{
+  "classification": "Functional final GPU regression validation; no performance claim",
+  "allocation": "5629018",
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+  "binary_sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027",
+  "runtime_script": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/run_pytest.sh",
+  "runtime_script_sha256": "f3ab9b7a94192cdee37ace0849bdd082f975ea3c7971e850b26676d48d9fc3fb",
+  "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/regression-source",
+  "runs": [
+    {
+      "label": "final-task1-16gpu",
+      "suite_name": "mpi-gpu",
+      "backend": "hip",
+      "ranks": [
+        16
+      ],
+      "passed": 1,
+      "case_names": [
+        "test_cgl_lf_amr_3d_churn_mpi_gpu"
+      ],
+      "xml": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-16gpu-mpi-gpu/results.xml",
+      "xml_sha256": "f9b0b1b24652cc91ddcadba42c6428772b655c6e640dd4b476145632efa776fa"
+    },
+    {
+      "label": "final-task1-followup-hip",
+      "suite_name": "cpu",
+      "backend": "hip",
+      "ranks": [
+        1,
+        4
+      ],
+      "passed": 11,
+      "case_names": [
+        "test_cgl_lf_amr_primitive_churn_gpu",
+        "test_cgl_lf_amr_3d_churn_gpu",
+        "test_cgl_amr_walls_after_final_field_refresh",
+        "test_cgl_lf_low_field_faces_disable_transport_cleanly",
+        "test_cgl_lf_post_sweep_timestep_refresh[0]",
+        "test_cgl_lf_post_sweep_timestep_refresh[3000]",
+        "test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks",
+        "test_decay_resolves_closure_coefficients[collisionless-parallel]",
+        "test_decay_resolves_closure_coefficients[collisionless-perp]",
+        "test_decay_resolves_closure_coefficients[collisional-parallel]",
+        "test_decay_resolves_closure_coefficients[collisional-perp]"
+      ],
+      "xml": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/results.xml",
+      "xml_sha256": "af0d3d2fee4fdae81dcf5be2440016a06ea250aa91fbdbe9a5c55d2117a31157"
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=2.553867e-02 cycle=0 time=0.000000e+00 dt=1.766152e-04
+elapsed=4.651905e-02 cycle=1 time=1.766152e-04 dt=1.766152e-04
+elapsed=5.602181e-02 cycle=2 time=3.532304e-04 dt=1.766152e-04
+elapsed=6.575797e-02 cycle=3 time=5.298455e-04 dt=1.766152e-04
+elapsed=7.514938e-02 cycle=4 time=7.064607e-04 dt=1.766152e-04
+elapsed=8.485023e-02 cycle=5 time=8.830759e-04 dt=1.766152e-04
+elapsed=9.426184e-02 cycle=6 time=1.059691e-03 dt=1.766152e-04
+elapsed=1.039555e-01 cycle=7 time=1.236306e-03 dt=1.766152e-04
+elapsed=1.133333e-01 cycle=8 time=1.412921e-03 dt=1.766152e-04
+elapsed=1.230589e-01 cycle=9 time=1.589537e-03 dt=1.766152e-04
+elapsed=1.324641e-01 cycle=10 time=1.766152e-03 dt=1.766152e-04
+elapsed=1.420965e-01 cycle=11 time=1.942767e-03 dt=5.723303e-05
+CGL paper_eigen_wave slow passed against supplied eigenmode: lambda=(-2.628085e+00,-1.163146e+01) max_rel_err=1.574155e-06 rel_tol=1.000000e-03 max_abs_err=7.870774e-11 zero_abs_tol=1.000000e-08
+elapsed=1.537694e-01 cycle=12 time=2.000000e-03 dt=1.144661e-04
+
+Terminating on time limit
+time=2.000000e-03 cycle=12
+tlim=2.000000e-03 nlim=-1
+
+MeshBlock-cycles = 12
+cpu time used  = 1.282365e-01
+zone-cycles/cpu_second = 2.395573e+04
+particle-updates/cpu_second = 0.000000e+00

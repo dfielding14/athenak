@@ -1,4 +1,11 @@
-// Independent passive/isothermal validation initial data. Built-in regression pgen.
+//========================================================================================
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
+//========================================================================================
+//! \file cgl_passive_validation.cpp
+//! \brief Independent passive/isothermal validation initial data.
+
 #include <cmath>
 #include <cstdlib>
 #include <iostream>

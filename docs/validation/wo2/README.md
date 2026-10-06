@@ -10,6 +10,35 @@ inputs, raw outputs, and scheduler logs are retained under
 Conservative A and both strict B4 expected failures remain unchanged. The
 unresolved sharp-contact limitation is not treated as a passing test.
 
+## Scope and task triage
+
+| Task | Triage | Result and evidence |
+| --- | --- | --- |
+| 0 / 0-P1 | Implemented | Frontier baseline, compiler contract, magnetic-boundary diagnosis and physical-corner refill; details below. |
+| 1 | Adapted and implemented | Actual face-Jacobian row bound and independent `sts_safety`; [derivation, limits and measurements](task1/README.md). |
+| 2 | Adapted and implemented | Default-off transactional merging with a restricted eligibility gate; [splitting, rollback and timings](task2/README.md). |
+| 3 | Existing conversion retained; communication implemented | Compact IEN/IAN messages, exact state preservation and measured payload reduction; [report](task3/README.md). |
+| 4 | Adapted and implemented | Passive J/A model and native isothermal flow; 240 standalone plus 240 final integrated application cases; [release gates](task4/README.md). |
+| 5 | Adapted and implemented | Representation-aware inflow and user boundaries, including explicit LF and refinement; [report](task5/README.md). |
+| 6 | Existing prolongation verified; demonstrated conservation gap fixed | GPU A/mu transfer checks and common same-level LF face fluxes; [report](task6/README.md). |
+| 7 | Implemented | Direction-kernel fusion; 23 final paired cases preserve all 2,018,316 compared face values exactly; [correctness and paired GPU measurements](task7/README.md). |
+| 8 | Unselected optional work | Entropy-variable face-flux redesign is not included. |
+| 9 | Unselected optional work | No general float-portability, new collision split, mirror-threshold or other backlog redesign is claimed. |
+
+All eight executed tasks have separate commits. Final clean CPU/HIP builds pass.
+Combined runtime acceptance includes 235 CPU checks and 235 HIP-launch checks,
+each retaining the two strict B4 expected failures; 52 dedicated GPU checks;
+20 CPU-MPI and 20 HIP-MPI checks; all 29 GPU workflow cases and three paper-smoke
+cases; 240 passive applications plus 80 additional four-rank CPU applications;
+and four-rank restart plus two-node 16-GPU AMR checks. All 25 CPU and 25 HIP
+accepted/release comparison pairs pass. These overlapping counts describe
+distinct suites, not a single monolithic invocation. The
+[workflow evidence](final-workflows/README.md) and
+[final timestep-test followups](task1-final-followup/README.md) retain original
+failures and the precise changes needed to keep the original scientific gates.
+The [final integration report](final/README.md) records completed results,
+released executable hashes, retained failures, and the limits of each claim.
+
 The [Task 1 report](task1/README.md) records the new timestep bound, independent
 proof checks, changed expectations and paired GPU measurements.
 
@@ -55,6 +84,34 @@ The corrected HIP reference compiles all application and Kokkos objects with
 `-fno-cray -mno-daz-ftz` and links with `-no-pie`. Inherited CCE 18 include-path
 overrides are cleared when selecting CCE 20. No reduction or physics formula
 was changed to compensate for the compiler.
+
+The accepted HIP runtime also uses the following environment after loading the
+same Cray/ROCm modules and library paths. Preserve this contract when reproducing
+the GPU results:
+
+```bash
+export MPICH_GPU_SUPPORT_ENABLED=1
+export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0
+export MPICH_OFI_NIC_POLICY=GPU
+export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
+export HSA_XNACK=1
+export MPICH_MPIIO_HINTS='*:romio_cb_write=disable'
+export MPICH_OFI_NUM_CQ_ENTRIES=131072
+export FI_MR_CACHE_MONITOR=kdreg2
+export FI_CXI_RX_MATCH_MODE=software
+export OMP_NUM_THREADS=1
+export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
+```
+
+Launch HIP ranks with `srun --exact --threads-per-core=1 --cpu-bind=threads
+-c7 --gpus-per-task=1 --gpu-bind=closest`, supplying the desired node/rank counts.
+CPU-only executables instead use `MPICH_GPU_SUPPORT_ENABLED=0` and no GPUs.
+Task4's first final HIP4 wrapper omitted part of this runtime contract and
+intermittently faulted in both fused and unfused executables. Six consecutive
+probes and all 80 final four-rank passive cases passed after restoring the full
+contract. This isolates a reproducibility requirement, not the exact origin of
+the offending memory address; the [Task4 report](task4/README.md) retains both
+failed and successful runs.
 
 Frozen corrected binaries:
 
@@ -229,7 +286,7 @@ also has different B_y (.221240235 versus .222438189), producing p_parallel
 The ordinary cell-centered flux correction synchronizes coarse/fine interfaces
 only, leaving these same-level flux estimates independent.
 
-The proposed separate correctness fix synchronizes IEN/IAN face fluxes between
+The accepted separate correctness fix synchronizes IEN/IAN face fluxes between
 same-level neighbors during multilevel LF sweeps, retaining the existing
 coarse/fine correction and all boundary/projection work. It caches both original
 estimates and forms an identical overflow-safe symmetric mean. Equal inputs are
@@ -238,14 +295,16 @@ contraction. The existing mesh startup guard rejects shearing boxes with
 refinement, so no remapped shear face enters this path. Generic MPI send/receive
 completion already covers these request slots.
 
-CPU/HIP scratch binaries compile and link. Runtime conservation, MPI, GPU, and
-smooth-convergence acceptance of this fix remain pending. The new permanent
-regression draft deliberately keeps a 5e-12 absolute conservation tolerance for
-both energy and magnetic moment, requires every repair counter to stay zero,
-and checks frozen active fields and one/four-rank identity. It correctly rejects
-the old baseline; the tolerance has not been weakened.
+All 24 standalone and 24 combined CPU/HIP one/four-rank cases pass. Maximum
+energy/magnetic-moment integral drift is `4.44e-16`; frozen active fields remain
+exact and repair counters stay zero. The permanent regression retains its
+`5e-12` absolute conservation tolerance and rejects the old baseline. Independent
+halo checks and three-resolution GPU measurements verify representation
+consistency and approximately second-order integral errors; maximum-norm
+convergence is weaker. The [Task 6 report](task6/README.md) records the complete
+scope and measurements.
 
-Evidence under this directory:
+Detailed diagnosis artifacts under `WO2/p1-research`:
 
 - `runs/task6-ledger-hip/trace-{conserved,primitive}/stage-ledger.json`
 - `runs/task6-ledger-hip/trace-{conserved,primitive}/face-balance.json`
@@ -276,3 +335,23 @@ The [Task5 report](task5/README.md) records analytic halo checks, full-precision
 inflow/user agreement, a representation-blind negative control, and all 56
 standalone/combined CPU/HIP regression results, including one/four ranks.
 Passive mode retains its separately documented periodic-only scope.
+
+## Final compatibility and test adaptations
+
+The new passive helper required two explicit `Real` result casts to preserve
+the existing focused float checks. They are identity conversions in the accepted
+double builds: the complete CPU object and HIP device instruction/constant
+sections are byte-identical, as recorded in the
+[compiler proof](passive-cast-equivalence/README.md). The existing CGL pressure
+traction function was also moved unchanged to a shared header, preventing the
+new passive HLLE include from importing unrelated relativistic float failures.
+The focused pressure-floor, fast-speed and constructor checks pass in double
+and float. This does not claim full-application float portability.
+
+The timestep tests retain their physical input decks, pressure amplitudes,
+collision settings, strict diagnostics, and error bounds. Existing STS ratio
+caps preserve the original AMR event sequence and the quantitative decay
+tests' minimum of 100 steps. Zero LF rows now correctly expect zero stages;
+the heated MPI test expects the bound-derived 13 post-sweep stages. Fusion's
+ordinary profiling test checks the aggregate flux timer; detailed directional
+profiling remains checked unchanged. No scientific assertion was weakened.

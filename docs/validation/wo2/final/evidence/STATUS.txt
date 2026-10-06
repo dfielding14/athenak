@@ -1,0 +1,11 @@
+WO2 complete. All builds and tests ran under /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2.
+Implementation worktree: /autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2
+Branch: c/cgl-lf-wo2. Tasks 0 through 7 have separate commits; optional Tasks 8 and 9 remain unselected.
+CPU and HIP-launch aggregates each: 235 passed, 2 unchanged strict B4 expected failures.
+Dedicated GPU: 52 passed; CPU MPI and HIP MPI: 20 passed each; four-rank AMR restart and two-node 16-GPU AMR churn passed.
+GPU workflows: 29 full + 3 paper smoke passed.
+Combined passive package: CPU1/HIP1/HIP4, 240 applications / 18 groups passed. Additional final release CPU4: 80 applications / 6 groups / 65 checks passed.
+Final fusion comparison: 23 pairs, 66 snapshots, 2,018,316 face values bitwise equal; bounded diagnostic reduction roundoff separately recorded.
+Clean release CPU/HIP builds pass. Accepted/release comparisons: 25 pairs per backend, 100 successful applications, exact fields/history/normalized live restart state, zero repairs.
+All initial failures and explicit corrective reruns retained. No weakened scientific tolerances; original user engineering guide unchanged.
+Final allocation 5629018 released and COMPLETED. See implementation docs/validation/wo2/final/README.md for evidence, hashes and limits.

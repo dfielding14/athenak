@@ -1,0 +1,70 @@
+# LF-only tanh current sheet, one-cell width, seeded at 1e-8.
+<job>
+basename = cgl_lf_field_reversal_2d
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = 0
+x1max = 1
+ix1_bc = outflow
+ox1_bc = outflow
+nx2 = 16
+x2min = 0
+x2max = 0.25
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0
+x3max = 1
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 64
+nx2 = 16
+nx3 = 1
+<time>
+evolution = kinematic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 20
+cfl_number = 0.4
+nlim = 20
+tlim = 1.0e3
+ndiag = 1
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = background
+lf_c_parallel0 = 1
+cgl_lf_strict_admissibility = false
+cgl_lf_arithmetic = safe
+cgl_lf_diagnostics = full
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+reconstruct = plm
+rsolver = advect
+gamma = 1.666666666666667
+dfloor = 1e-12
+pfloor = 1e-12
+tfloor = 1e-12
+bfloor = 1e-10
+nu_coll = 0
+mirror_limiter = false
+firehose_limiter = false
+backup_limiters = false
+<problem>
+pgen_name = cgl_landau_fluid
+test_mode = field_reversal
+user_srcs = true
+b0 = 0.03
+ppar0 = 1
+pperp0 = 1
+rho0 = 1
+amp = 1e-08
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

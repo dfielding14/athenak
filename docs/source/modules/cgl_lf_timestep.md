@@ -6,7 +6,7 @@ coefficients specified below held fixed. The resulting parabolic reference
 step is `2 / Lambda`. The RKL2 controller multiplies it by
 `time/sts_safety` (default `0.9`, finite and in `(0, 1]`). Advective and explicit
 parabolic limits continue to use `time/cfl_number`; see
-[Super Time Stepping](super_time_stepping.md#timestep-control).
+[Super Time Stepping](super_time_stepping.md).
 
 ## Face Geometry And Temperature Variables
 

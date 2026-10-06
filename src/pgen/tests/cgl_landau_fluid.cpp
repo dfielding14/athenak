@@ -156,7 +156,8 @@ TestMode ParseMode(ParameterInput *pin) {
        "collision_relaxation, grad_b, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "density_contact, timestep_refresh, field_reversal, staggered_checkerboard, hotspot, or low_field");
+       "density_contact, timestep_refresh, field_reversal, staggered_checkerboard, "
+       "hotspot, or low_field");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -1781,9 +1782,9 @@ void CheckStaggeredCheckerboard(ParameterInput *pin, Mesh *pm) {
   const Real guide = pin->GetReal("problem","bz0");
   const Real amplitude = pin->GetReal("problem","b0");
   Real divmax=0.0, bcc_error=0.0, deviation=0.0;
-  for (int k=ind.ks;k<=ind.ke;++k) {
-    for (int j=ind.js;j<=ind.je;++j) {
-      for (int i=ind.is;i<=ind.ie;++i) {
+  for (int k=ind.ks; k<=ind.ke; ++k) {
+    for (int j=ind.js; j<=ind.je; ++j) {
+      for (int i=ind.is; i<=ind.ie; ++i) {
         Real div=(bx(0,k,j,i+1)-bx(0,k,j,i))/hx +
                  (by(0,k,j+1,i)-by(0,k,j,i))/hy;
         if (pm->three_d) div += (bz(0,k+1,j,i)-bz(0,k,j,i))/hz;
@@ -1935,7 +1936,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
             (!pmy_mesh_->three_d || pmy_mesh_->mesh_indcs.nx3%2 == 0),
             "staggered checkerboard requires even periodic grid dimensions");
     Require(bz0 > pmhd->peos->eos_data.bfloor && bx0 > 0.0,
-            "staggered checkerboard requires positive amplitude and resolved guide field");
+            "staggered checkerboard requires positive amplitude "
+            "and resolved guide field");
   }
   const Real eig_rho_re = pin->GetOrAddReal("problem", "eigen_rho_re", 0.0);
   const Real eig_rho_im = pin->GetOrAddReal("problem", "eigen_rho_im", 0.0);

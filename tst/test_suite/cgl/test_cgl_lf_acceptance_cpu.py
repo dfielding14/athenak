@@ -109,7 +109,12 @@ def decay_reference(chi_parallel, chi_perp, nu, time, component):
 def test_decay_resolves_closure_coefficients(tmp_path, component, nu):
     mode = ("parallel", "perp")[component]
     name = f"cgl_lf_quant_{mode}" + ("_collisional" if nu else "")
-    result = run_case(tmp_path, name, "problem/validation_output=true",
+    # For this aligned, fixed-coefficient closure, dt_FE = dx**2/(2*chi_parallel).
+    # With sts_safety=0.9, a cap of 8 gives 2*128**2/(0.9*8*(2*pi)**2) > 115
+    # full-step equivalents per parallel damping time; retain >=100 resolved
+    # cycles without changing the physical duration or either closure coefficient.
+    result = run_case(tmp_path, name, "time/sts_max_dt_ratio=8",
+                      "problem/validation_output=true",
                       f"problem/validation_output_dir={tmp_path}")
     assert result.returncode == 0, result.stdout + result.stderr
     cycles = int(re.findall(r"cycle=(\d+)", result.stdout)[-1])

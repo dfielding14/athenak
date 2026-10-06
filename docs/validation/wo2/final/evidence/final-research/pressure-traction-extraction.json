@@ -1,0 +1,9 @@
+{
+  "reason": "New passive HLLE dependency imported unrelated GR float narrowing failures into existing focused CGL check",
+  "moved_function": "mhd::SingleStateLLF_CGLPressureTraction",
+  "body_sha256": "fe75fa46a2ee37adf9014ab856a37efab3a21420bfeb45f842839dfa14ff164a",
+  "literal_body_preserved": true,
+  "numerical_expression_changes": false,
+  "new_header": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/src/mhd/rsolvers/cgl_pressure_traction.hpp",
+  "note": "Kept existing hlle_mhd include to avoid unrelated include-order changes."
+}

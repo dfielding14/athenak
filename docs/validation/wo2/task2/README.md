@@ -3,9 +3,9 @@
 Triage: **adapted and implemented**. The default-off implementation is suitable for the tested, narrow eligibility
 scope. With Task 1's timestep bound and the final-refill fix, paired GPU timings
 show 1.77× and 1.49× median speedups in a separate eligible thermal-wave fixture.
-The final build and regression pass containing all accepted WO2 tasks is still
-pending; this report describes the independently composed Task 1 + refill + Task 2
-CPU/HIP binaries.
+This report describes the independently composed Task 1 + refill + Task 2
+CPU/HIP binaries. Acceptance of the complete composition is recorded separately
+in the [WO2 report](../README.md).
 
 ## Scope and scheduling
 

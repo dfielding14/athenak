@@ -1,0 +1,32 @@
+Wrote CGL-LF validation figures to /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full/figures
+Running CGL-LF full workflow with /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/launch_final.py
+  cgl_lf_smr_decay_2d
+  cgl_lf_oblique_decay_2d
+  cgl_lf_timestep_refresh
+  cgl_lf_density_contact
+  cgl_lf_uniform_timestep
+  cgl_lf_hotspot
+  cgl_lf_field_reversal_1d
+  cgl_lf_field_reversal_2d
+  cgl_reconstruction_ppmx
+  cgl_reconstruction_wenoz
+  cgl_collision_once
+  cgl_lf_quant_parallel
+  cgl_lf_quant_parallel_collisional
+  cgl_lf_quant_perp
+  cgl_lf_quant_perp_collisional
+  cgl_lf_quant_grad_b
+  cgl_lf_flux_limiter
+  cgl_lf_limiter_heat_flux_suppression
+  cgl_lf_limiter_mirror
+  cgl_lf_limiter_firehose
+  cgl_lf_field_wave
+  cgl_lf_paper_oblique_wave
+  cgl_pure_paper_oblique_wave
+  cgl_pure_paper_eigen_alfven
+  cgl_pure_paper_eigen_slow
+  cgl_pure_paper_eigen_fast
+  cgl_lf_paper_eigen_alfven
+  cgl_lf_paper_eigen_slow
+  cgl_lf_paper_eigen_fast
+Wrote result bundle to /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/full

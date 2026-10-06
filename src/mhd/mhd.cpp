@@ -354,8 +354,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
        (psrc != nullptr && (psrc->ism_cooling || psrc->rel_cooling)) ||
        pmy_pack->pmesh->multilevel || pin->DoesBlockExist("shearing_box") ||
        pin->DoesBlockExist("ion-neutral") || pin->DoesBlockExist("radiation"))) {
-    std::cout << "### FATAL ERROR: passive J/A has not yet validated "
-              << "AMR, viscosity, resistivity, cooling, shearing-box, or coupled-fluid consumers" << std::endl;
+    std::cout
+      << "### FATAL ERROR: passive J/A has not yet validated "
+      << "AMR, viscosity, resistivity, cooling, shearing-box, or coupled-fluid consumers"
+      << std::endl;
     std::exit(EXIT_FAILURE);
   }
 

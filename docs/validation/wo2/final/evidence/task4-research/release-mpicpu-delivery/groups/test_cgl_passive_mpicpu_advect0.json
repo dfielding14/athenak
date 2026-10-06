@@ -1,0 +1,145 @@
+{
+  "execute": true,
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+  "binary_sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+  "records": [
+    {
+      "name": "advection-64",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+      "binary_sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+      "configuration": {
+        "nx": 64,
+        "mode": 3,
+        "thermal": 0.1,
+        "tlim": 0.2
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n4",
+        "--ntasks-per-node=4",
+        "--threads-per-core=1",
+        "--cpu-bind=cores",
+        "-c1",
+        "--gpus-per-node=0",
+        "--overlap",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-64/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-64",
+      "input_sha256": "f5ce244426c8f68928170e85f2537e70e804e521e1d87e57b2a919e410a006a6",
+      "exit_code": 0,
+      "seconds": 1.0195846720598638,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-64/rst/passive_validation.00001.rst",
+      "restart_sha256": "016bbbe1bcc11a49cc79785ebbcb58ec11bb79c0def89a853624366a4977424b",
+      "time": 0.2,
+      "cycle": 87
+    },
+    {
+      "name": "advection-128",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+      "binary_sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+      "configuration": {
+        "nx": 128,
+        "mode": 3,
+        "thermal": 0.1,
+        "tlim": 0.2
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n4",
+        "--ntasks-per-node=4",
+        "--threads-per-core=1",
+        "--cpu-bind=cores",
+        "-c1",
+        "--gpus-per-node=0",
+        "--overlap",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-128/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-128",
+      "input_sha256": "e5f8bf9ba09eba848f7b3eff3ea884ad83f034074a1f6d12a97e2c9beddb472f",
+      "exit_code": 0,
+      "seconds": 1.1196713668759912,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-128/rst/passive_validation.00001.rst",
+      "restart_sha256": "7913762a70cc9d83f24cfa46bc02ea81158327e86e37a0722b7d7e9995e68822",
+      "time": 0.2,
+      "cycle": 173
+    },
+    {
+      "name": "advection-256",
+      "passive": true,
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+      "binary_sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+      "configuration": {
+        "nx": 256,
+        "mode": 3,
+        "thermal": 0.1,
+        "tlim": 0.2
+      },
+      "restart_input": null,
+      "expected_failure": null,
+      "command": [
+        "srun",
+        "--exact",
+        "-N1",
+        "-n4",
+        "--ntasks-per-node=4",
+        "--threads-per-core=1",
+        "--cpu-bind=cores",
+        "-c1",
+        "--gpus-per-node=0",
+        "--overlap",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+        "-i",
+        "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-256/input.athinput"
+      ],
+      "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-256",
+      "input_sha256": "b2c0dba87914b1c85b375c6a9934c8da60e30b658246c5c61f54b67baae8406f",
+      "exit_code": 0,
+      "seconds": 1.219966032076627,
+      "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/advection-256/rst/passive_validation.00001.rst",
+      "restart_sha256": "e8ec2b5a047878faad0084170d0f17eec5aec2509dde40446482029918cdd929",
+      "time": 0.2,
+      "cycle": 345
+    }
+  ],
+  "checks": [
+    {
+      "name": "advection-64",
+      "passed": true,
+      "l1_error": 0.00019264331152020475
+    },
+    {
+      "name": "advection-128",
+      "passed": true,
+      "l1_error": 4.680665440720891e-05
+    },
+    {
+      "name": "advection-256",
+      "passed": true,
+      "l1_error": 1.1097772337869717e-05
+    },
+    {
+      "name": "advection-refinement",
+      "passed": true,
+      "order": 2.0587950397289276,
+      "errors": [
+        0.00019264331152020475,
+        4.680665440720891e-05,
+        1.1097772337869717e-05
+      ]
+    }
+  ]
+}

@@ -190,7 +190,9 @@ def test_cgl_amr_restart_and_conservation_mpi_gpu():
 def test_cgl_lf_amr_3d_churn_mpi_gpu():
     try:
         basename = "cgl_mpigpu_lf_3d_churn"
-        _launch(2, 16, "cgl_lf_amr_3d_current.athinput", basename)
+        # Match the fixed physical AMR switch under Task1's larger LF bound.
+        _launch(2, 16, "cgl_lf_amr_3d_current.athinput", basename,
+                "time/sts_max_dt_ratio=0.13")
         user = _history(basename, "user")
         mhd = _history(basename, "mhd")
         _assert_clean(user, mhd)

@@ -1,0 +1,18 @@
+{
+  "status": "paused-before-any-release-solver-initialization",
+  "reason": "Release CPU ELF requires libamdhip64.so.6, unavailable in CPU-only runtime environment. Every recorded release process exited127; accepted runs completed0. This does not evaluate numerical equivalence.",
+  "coordinator_pid": 2372488,
+  "recorded_cases": 13,
+  "binary_hashes": {
+    "accepted": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+      "sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a"
+    },
+    "release": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-cpu/src/athena",
+      "sha256": "56458a1528c6103db18ba65b6e9ab9f22908b8b08ccf976f7654ab5ee25681a4"
+    }
+  },
+  "results_preserved": "final-research/release-equivalence-cpu-5629018/results.json",
+  "link_environment_observation": "build_release.sh loads rocm/6.4.2 before backend branch and unloads only craype-accel-amd-gfx90a for CPU; accepted fused CPU was separately linked with CPU modules."
+}

@@ -1,0 +1,9 @@
+{
+  "created": "2026-10-06T23:42:04.488313+00:00",
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+  "sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+  "source_manifest": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-source-manifest.json",
+  "build_log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-cpu.log",
+  "cpu_relink_manifest": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-cpu-link-manifest.json",
+  "runtime_acceptance": "pending release equivalence; earlier combined equivalent source suites recorded separately"
+}

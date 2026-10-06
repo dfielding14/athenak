@@ -1,0 +1,45 @@
+
+Root grid = 4 x 4 x 1 MeshBlocks
+Total number of MeshBlocks = 40
+Number of logical  levels of refinement = 3 (4 levels total)
+Number of physical levels of refinement = 1 (2 levels total)
+Number of parallel ranks = 1
+CGL Landau-fluid profiling enabled; timing regions use Kokkos fences and are intended for profiling runs only.
+
+Setup complete, executing task list(s)...
+
+elapsed=6.578635e-01 cycle=0 time=0.000000e+00 dt=2.776739e-03
+CGL LF rotated_decay passed: k_parallel=5.441398e+00 measured_amp=3.686375e-05 expected_amp=3.678794e-05 rel_err=2.060699e-03 rel_tol=1.000000e-02
+
+Terminating on time limit
+time=1.329808e-01 cycle=52
+tlim=1.329808e-01 nlim=-1
+
+MeshBlock-cycles = 2080
+cpu time used  = 1.912001e+00
+zone-cycles/cpu_second = 6.962341e+04
+particle-updates/cpu_second = 0.000000e+00
+
+CGL Landau-fluid profile summary (shutdown)
+  ranks=1 meshblocks_total=40 meshblocks_rank0=40 meshblock_cells=8x8x1 global_cells=32x32x1
+  lf_k_parallel=6.283185e+00 coeff_mode=background strict_admissibility=true backup_limiter=false diagnostics=full arithmetic=safe sts_flux=weighted profile_detail=false last_nstages=7 max_nstages=7
+  timing: rank_mean_s is averaged over ranks; rank_max_s is the slowest rank. heat_flux_total includes the three directional flux regions.
+bucket                                 rank_mean_s      rank_max_s   calls_rank_mean  calls_rank_max    max_s_per_call
+heat_flux_total                       4.866805e-01    4.866805e-01             728.0           728.0      6.685172e-04
+heat_flux_precompute                  1.603275e-02    1.603275e-02             728.0           728.0      2.202300e-05
+heat_flux_work_diagnostics            7.630330e-04    7.630330e-04             728.0           728.0      1.048122e-06
+timestep_reduction                    2.375205e-02    2.375205e-02             157.0           157.0      1.512870e-04
+sweep_begin_conversion                1.112366e-02    1.112366e-02             104.0           104.0      1.069583e-04
+sts_update_copies                     1.447484e-02    1.447484e-02             728.0           728.0      1.988302e-05
+sts_update_kernel                     3.400785e-02    3.400785e-02             728.0           728.0      4.671408e-05
+primitive_refresh                     3.710560e-02    3.710560e-02             728.0           728.0      5.096924e-05
+admissibility                         5.268474e-02    5.268474e-02             936.0           936.0      5.628712e-05
+sweep_end_conversion                  2.614706e-03    2.614706e-03             104.0           104.0      2.514140e-05
+post_sweep_collisions                 2.994282e-03    2.994282e-03             104.0           104.0      2.879117e-05
+parabolic_init_recv                   3.045446e-03    3.045446e-03             728.0           728.0      4.183305e-06
+parabolic_send_flux                   1.073448e-01    1.073448e-01             832.0           832.0      1.290202e-04
+parabolic_recv_flux                   8.671232e-02    8.671232e-02             832.0           832.0      1.042215e-04
+parabolic_restrict_u                  2.330746e-02    2.330746e-02             989.0           989.0      2.356669e-05
+parabolic_send_u                      1.087818e-01    1.087818e-01             833.0           833.0      1.305904e-04
+parabolic_recv_u                      9.817728e-02    9.817728e-02             833.0           833.0      1.178599e-04
+parabolic_prolongate                  5.019066e-01    5.019066e-01             833.0           833.0      6.025290e-04

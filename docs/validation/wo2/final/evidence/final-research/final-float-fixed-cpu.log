@@ -1,0 +1,181 @@
+...F..                                                                   [100%]
+=================================== FAILURES ===================================
+________ test_cgl_active_hlle_uses_scaled_literature_discriminant[True] ________
+../../../../../final-research/test-source-rerun/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py:52: in test_cgl_active_hlle_uses_scaled_literature_discriminant
+    _run(
+../../../../../final-research/test-source-rerun/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: Building CXX object src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:27: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+E           |                           ^~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:27: note: insert an explicit cast to silence this issue
+E       140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+E           |                           ^~~~~~~~~~~
+E           |                           static_cast<Real>( )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:40: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+E           |                                        ^~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:40: note: insert an explicit cast to silence this issue
+E       140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+E           |                                        ^~~~~~~~~~~
+E           |                                        static_cast<Real>( )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:53: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+E           |                                                     ^~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:140:53: note: insert an explicit cast to silence this issue
+E       140 |   Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
+E           |                                                     ^~~~~~~~~~~
+E           |                                                     static_cast<Real>( )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:172:5: error: non-constant-expression cannot be narrowed from type 'typename __gnu_cxx::__promote_2<float, int>::__type' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+E        48 | #define SQR(x) ( (x)*(x) )
+E           |                ^
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:172:5: note: insert an explicit cast to silence this issue
+E       172 |     SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+E        48 | #define SQR(x) ( (x)*(x) )
+E           |                ^
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:173:5: error: non-constant-expression cannot be narrowed from type 'typename __gnu_cxx::__promote_2<float, int>::__type' (aka 'double') to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+E        48 | #define SQR(x) ( (x)*(x) )
+E           |                ^
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:173:5: note: insert an explicit cast to silence this issue
+E       173 |     SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+E        48 | #define SQR(x) ( (x)*(x) )
+E           |                ^
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:174:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+E        48 | #define SQR(x) ( (x)*(x) )
+E           |                ^
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:174:5: note: insert an explicit cast to silence this issue
+E       174 |     SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                                      )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/athena.hpp:48:16: note: expanded from macro 'SQR'
+E        48 | #define SQR(x) ( (x)*(x) )
+E           |                ^
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/pgen/unit_tests/cgl_fast_speed_test.cpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/hlle_cgl.hpp:19:
+E     In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/mhd/rsolvers/llf_mhd_singlestate.hpp:20:
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:180:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:180:6: note: insert an explicit cast to silence this issue
+E       180 |     {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |      static_cast<Real>(                                                   )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:181:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:181:5: note: insert an explicit cast to silence this issue
+E       181 |     x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                                                   )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:184:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:184:6: note: insert an explicit cast to silence this issue
+E       184 |     {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |      static_cast<Real>(                                                   )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:185:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:185:5: note: insert an explicit cast to silence this issue
+E       185 |     y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                                                   )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:188:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:188:6: note: insert an explicit cast to silence this issue
+E       188 |     {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |      static_cast<Real>(                                     )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:189:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:189:5: note: insert an explicit cast to silence this issue
+E       189 |     z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                                     )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:190:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:190:5: note: insert an explicit cast to silence this issue
+E       190 |     - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                         )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:219:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:219:6: note: insert an explicit cast to silence this issue
+E       219 |     {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |      static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:220:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:220:5: note: insert an explicit cast to silence this issue
+E       220 |     2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:221:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:221:5: note: insert an explicit cast to silence this issue
+E       221 |     2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:223:6: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:223:6: note: insert an explicit cast to silence this issue
+E       223 |     {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+E           |      ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |      static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:224:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:224:5: note: insert an explicit cast to silence this issue
+E       224 |     2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                  )
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:225:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+E       225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E     /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun/src/coordinates/cartesian_ks.hpp:225:5: note: insert an explicit cast to silence this issue
+E       225 |     2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
+E           |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+E           |     static_cast<Real>(                  )
+E     fatal error: too many errors emitted, stopping now [-ferror-limit=]
+E     20 errors generated.
+E     make: *** [src/CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o] Error 1
+E     
+E   assert 2 == 0
+E    +  where 2 = CompletedProcess(args=['make', '-f', 'src/CMakeFiles/athena.dir/build.make', 'src/CMakeFiles/athena.dir/pgen/unit_test...CMakeFiles/athena.dir/build.make:2259: src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o] Error 1\n").returncode
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-float-fixed-cpu/results.xml -
+=========================== short test summary info ============================
+FAILED ../../../../../final-research/test-source-rerun/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py::test_cgl_active_hlle_uses_scaled_literature_discriminant[True]
+1 failed, 5 passed, 2884 deselected in 134.83s (0:02:14)

@@ -1,0 +1,33 @@
+{
+  "command": [
+    "srun",
+    "--exact",
+    "-N1",
+    "-n",
+    "1",
+    "--ntasks-per-node",
+    "1",
+    "--threads-per-core=1",
+    "--cpu-bind=threads",
+    "-c7",
+    "--gpus-per-task=1",
+    "--gpu-bind=closest",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-hip",
+    "-i",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-hip-ready-5629018/inputs/lf2d-fast-none-1rank.athinput"
+  ],
+  "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-hip-ready-5629018/lf2d-fast-none-1rank/release",
+  "returncode": 0,
+  "binary_sha256": "6530c1b31a7d99077f3ff5932d4b1c790e33be38c1fa222cfda097f87b339f9e",
+  "input_sha256": "55b4c1761067ac6afc5c746d2d9c670d1b508e2c6e7e79428d358e8d00aa06a1",
+  "final_time": 0.0077520808270906925,
+  "lf_cell_stages": 229376.0,
+  "repair_counters": {
+    "lf_dfloor": 0.0,
+    "lf_pfloor": 0.0,
+    "lf_nonfin": 0.0,
+    "lf_nonpos": 0.0,
+    "lf_hardbd": 0.0,
+    "lf_hwproj": 0.0
+  }
+}

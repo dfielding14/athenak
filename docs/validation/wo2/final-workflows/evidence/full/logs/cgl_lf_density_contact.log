@@ -1,0 +1,23 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=5.644933e-01 cycle=0 time=0.000000e+00 dt=1.704733e-04
+elapsed=8.880197e-01 cycle=1 time=1.704733e-04 dt=1.704733e-04
+elapsed=1.273426e+00 cycle=2 time=3.409466e-04 dt=1.704733e-04
+CGL LF density_contact: contrast=2.000000e+02 cycles=3 max_delta_T=6.243640e-07 sweep_ratio=1.000000e+01
+elapsed=1.667978e+00 cycle=3 time=5.114199e-04 dt=1.704733e-04
+
+Terminating on cycle limit
+time=5.114199e-04 cycle=3
+tlim=1.000000e+00 nlim=3
+
+MeshBlock-cycles = 3
+cpu time used  = 1.103498e+00
+zone-cycles/cpu_second = 1.739921e+02
+particle-updates/cpu_second = 0.000000e+00

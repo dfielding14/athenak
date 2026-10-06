@@ -1,0 +1,18 @@
+..F.................                                                     [100%]
+=================================== FAILURES ===================================
+_______ test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks ________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py:118: in test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks
+    assert history["lf_nstage"][-1] == 64 * (7 + post_stages)
+E   assert 1280.0 == (64 * (7 + 11))
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 19:11:21,834 - INFO - Executing command: mpirun -np 1 ./athena -i ../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput problem/heating_rate=0
+2026-10-06 19:11:22,017 - INFO - Executing command: mpirun -np 4 ./athena -i ../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput problem/heating_rate=0
+2026-10-06 19:11:22,377 - INFO - Executing command: mpirun -np 1 ./athena -i ../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput problem/heating_rate=3000
+------------------------------ Captured log call -------------------------------
+INFO     root:testutils.py:50 Executing command: mpirun -np 1 ./athena -i ../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput problem/heating_rate=0
+INFO     root:testutils.py:50 Executing command: mpirun -np 4 ./athena -i ../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput problem/heating_rate=0
+INFO     root:testutils.py:50 Executing command: mpirun -np 1 ./athena -i ../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput problem/heating_rate=3000
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-mpi-cpu-cpu/results.xml -
+=========================== short test summary info ============================
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks
+1 failed, 19 passed, 2870 deselected in 315.61s (0:05:15)

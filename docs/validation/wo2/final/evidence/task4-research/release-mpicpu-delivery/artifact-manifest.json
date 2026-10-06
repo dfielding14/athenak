@@ -1,0 +1,57 @@
+{
+  "source_run": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018",
+  "files": {
+    "README.md": {
+      "sha256": "5233a0cecfc648e647adca8817c1c83c31b4927e607bbafc0d821bb289002a23",
+      "bytes": 1389
+    },
+    "groups/test_cgl_passive_mpicpu_advect0.json": {
+      "sha256": "dbaccaf5ee83d44840c90507b82add28784a43861089c028e44c96d9f82ff658",
+      "bytes": 5803
+    },
+    "groups/test_cgl_passive_mpicpu_fences0.json": {
+      "sha256": "1b2bf65c015d0e12e58d6a48cf6e05f918ed30a7c2f2136cb629f0e706116e92",
+      "bytes": 28175
+    },
+    "groups/test_cgl_passive_mpicpu_heatin0.json": {
+      "sha256": "1274dbb6ecb087ae7ddce2780d19173ef138f58d3edc8d81f37595029b1e9324",
+      "bytes": 11346
+    },
+    "groups/test_cgl_passive_mpicpu_identi0.json": {
+      "sha256": "76c3d999227575325ba3d21fa4dd211daadba771ca16effefe6763bb6953cab5",
+      "bytes": 62381
+    },
+    "groups/test_cgl_passive_mpicpu_linear0.json": {
+      "sha256": "354832587ed8361f6601f1aa56e077dc84d32aef88ff9c3f69b8ff18bf1acde6",
+      "bytes": 16585
+    },
+    "groups/test_cgl_passive_mpicpu_restar0.json": {
+      "sha256": "099a1075e3092ca3aba87c8a8a734bc771490a7e20c3540aad854316fa6364b5",
+      "bytes": 18414
+    },
+    "manifest.json": {
+      "sha256": "96a9e0284210924644f7eceb51caff63253ab7ca6457b2092edecfb0229fd8fd",
+      "bytes": 5529
+    },
+    "modules.txt": {
+      "sha256": "2c309e44145f592236c24583aefb77127797906aff3fcbe1ecbb2e62a8931bdd",
+      "bytes": 309
+    },
+    "pytest.log": {
+      "sha256": "62f276a3576f82c1c21a511d009921f09f894e6160a1639724ecf1b159fe396c",
+      "bytes": 26340
+    },
+    "run_release_mpicpu.py": {
+      "sha256": "bf32d748d95337a7279b0bed8f3070d73926ed45e59282fc8d1b36564bab9287",
+      "bytes": 3623
+    },
+    "run_release_mpicpu.sh": {
+      "sha256": "ddfa393b80754effa8e7bbe3ac49138e26eded679a1bcef1af2c65f6bbfe67f7",
+      "bytes": 1609
+    },
+    "stage_release_mpicpu.py": {
+      "sha256": "d313d3fab50c74387620ad3f8032ed232f4c560f56e7dbb847c8a35ee77706f2",
+      "bytes": 2705
+    }
+  }
+}

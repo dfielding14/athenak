@@ -1,0 +1,1 @@
+<?xml version="1.0" encoding="utf-8"?><testsuites><testsuite name="pytest" errors="0" failures="0" skipped="0" tests="1" time="8.197" timestamp="2026-10-06T19:37:42.203659" hostname="login10"><testcase classname="final-research.source-release.tst.test_suite.cgl.test_cgl_amr_mpi_gpu" name="test_cgl_amr_restart_and_conservation_mpi_gpu" time="8.057" /></testsuite></testsuites>

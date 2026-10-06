@@ -506,7 +506,8 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     lf_c_parallel0 = pin->GetReal("mhd", "lf_c_parallel0");
     if (!(lf_c_parallel0 > 0.0) || !std::isfinite(lf_c_parallel0)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<mhd>/lf_c_parallel0 must be finite and positive." << std::endl;
+                << std::endl << "<mhd>/lf_c_parallel0 must be finite and positive."
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
   } else if (coeff_mode != "local") {
@@ -2279,7 +2280,8 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
   const Real cpar0 = lf_c_parallel0;
   auto size = pmy_pack->pmb->mb_size;
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
-  Kokkos::parallel_reduce("cgl_lf_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
+  Kokkos::parallel_reduce("cgl_lf_newdt",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     const int m = idx/nkji;
     const int k = (idx - m*nkji)/nji + ks;
@@ -2432,9 +2434,11 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
           // materializing an overflowing pressure ratio or squaring it.
           const Real log_ratio = CGLLFLogAbs(face.pperp)-CGLLFLogAbs(face.ppar);
           const Real log_drift = 2.0*CGLLFLogAdd(0.0,log_ratio)+log_grad_b-log_bar;
-          const Real log_factor = CGLLFLogAbs(face.rho)-CGLLFLogAbs(rho)-CGLLFLogAbs(dx[dir]);
+          const Real log_factor = CGLLFLogAbs(face.rho)-CGLLFLogAbs(rho)
+                                - CGLLFLogAbs(dx[dir]);
           const Real log_para = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtEightOverPi,
-              cgl::kThreePiMinusEight/cgl::kSqrtEightPi)+log_bn+log_grad_parallel+log_factor;
+              cgl::kThreePiMinusEight/cgl::kSqrtEightPi)
+              +log_bn+log_grad_parallel+log_factor;
           const Real log_perp = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtTwoOverPi,
               2.0/cgl::kSqrtTwoPi)+log_bn+CGLLFLogAdd(log_grad_perp,log_drift)+log_factor;
           log_face_parallel = CGLLFLogAdd(log_para,

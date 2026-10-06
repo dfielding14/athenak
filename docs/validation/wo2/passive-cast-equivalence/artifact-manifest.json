@@ -1,0 +1,241 @@
+{
+  "proof_passed": true,
+  "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/passive-cast-proof",
+  "files": [
+    {
+      "path": "README.md",
+      "bytes": 2953,
+      "sha256": "65e450601e4aa52dc79d45055ec85c04c0fed5f3490be149eb9e04f2a25f8aef"
+    },
+    {
+      "path": "audit_proof.py",
+      "bytes": 2396,
+      "sha256": "86749dc022c56b1ab15714dd8464ba6e1a6baf706709473daab1cc24469dd686"
+    },
+    {
+      "path": "compile_proof.py",
+      "bytes": 3349,
+      "sha256": "69da530a26dffb48c7316caee219f9f31a8e6b4c451795b54edb0dc6841c3d99"
+    },
+    {
+      "path": "cpu/ir.diff",
+      "bytes": 8120,
+      "sha256": "747f3ab25f3b09756841694cfb2d5db25bd12a03594648f186a6dba8d6add5be"
+    },
+    {
+      "path": "cpu/manifest.json",
+      "bytes": 10548,
+      "sha256": "a2d2f349b00a1480d81d2e394a3266ba9c80a3a72edce40b228ab02d5d656ece"
+    },
+    {
+      "path": "cpu/new-cgl_passive.hpp",
+      "bytes": 7212,
+      "sha256": "6aab543c81027c9320572748fdb61fd8c6f3f5791d0c0eca2db10b3d31edda28"
+    },
+    {
+      "path": "cpu/new-ir.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "cpu/new-metadata-normalized.ll",
+      "bytes": 70105,
+      "sha256": "a7741d651ee0a6a1d9c0a801c666af143f68681e280aeeca2bfd6acd0f3a6ed2"
+    },
+    {
+      "path": "cpu/new-object.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "cpu/new.ll",
+      "bytes": 69964,
+      "sha256": "aba57be8985347a8a2c65cb87b0205209ff75c91041d0bda1739148591c0ac96"
+    },
+    {
+      "path": "cpu/new.o",
+      "bytes": 5904,
+      "sha256": "eab5aefd0873df5bade5a3f65945135e441bd6fd53ba5a3ee40fccd152cf0fb1"
+    },
+    {
+      "path": "cpu/old-cgl_passive.hpp",
+      "bytes": 7174,
+      "sha256": "af42f80c995261f39f967bdb703cd2c1ac25a9def765f170f0e5659825c0da02"
+    },
+    {
+      "path": "cpu/old-ir.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "cpu/old-metadata-normalized.ll",
+      "bytes": 70105,
+      "sha256": "a7741d651ee0a6a1d9c0a801c666af143f68681e280aeeca2bfd6acd0f3a6ed2"
+    },
+    {
+      "path": "cpu/old-object.log",
+      "bytes": 0,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": "cpu/old.ll",
+      "bytes": 69964,
+      "sha256": "8a79e040b7f139dd4eac2b8a02e3013c68c45f155640686af974b23d14de9e85"
+    },
+    {
+      "path": "cpu/old.o",
+      "bytes": 5904,
+      "sha256": "eab5aefd0873df5bade5a3f65945135e441bd6fd53ba5a3ee40fccd152cf0fb1"
+    },
+    {
+      "path": "cpu-build.log",
+      "bytes": 2173,
+      "sha256": "418223033686badd969eced37280f5c8bd13e684355eadd74128d72a244aac49"
+    },
+    {
+      "path": "equivalence-audit.json",
+      "bytes": 1812,
+      "sha256": "64e143d9be0328b997ccfe2ce309aef7bca79f180b9cc516ccffe897535cc1b3"
+    },
+    {
+      "path": "extract_device_sections.sh",
+      "bytes": 827,
+      "sha256": "70ba0ed6d124ef9e15b48c01083c3f6d30e82752f718f887f923d82e59f9a3bb"
+    },
+    {
+      "path": "hip/ir.diff",
+      "bytes": 1647,
+      "sha256": "d37de33ccbf55cc18b997e42e725fc33b4046ece49493c297dd06c97ddca0d12"
+    },
+    {
+      "path": "hip/manifest.json",
+      "bytes": 11927,
+      "sha256": "410192e298eabb3f140675bc3fce6133193869497bfde66e5b8d93a40121e32f"
+    },
+    {
+      "path": "hip/new-cgl_passive.hpp",
+      "bytes": 7212,
+      "sha256": "6aab543c81027c9320572748fdb61fd8c6f3f5791d0c0eca2db10b3d31edda28"
+    },
+    {
+      "path": "hip/new-device.disassembly",
+      "bytes": 101140,
+      "sha256": "6822d5e50c1ead01a3eef9519e27ae1b89f111757c22a11222aa593ed5620bb7"
+    },
+    {
+      "path": "hip/new-device.rodata",
+      "bytes": 32912,
+      "sha256": "19a526ad549807ff70d4632ba9fc515ae0296349e453a8d6ff602e9b87354c38"
+    },
+    {
+      "path": "hip/new-device.text",
+      "bytes": 6868,
+      "sha256": "01dc37dc30d09821754155aa70e90336cd9ee0c310832002c2c2d1d092716ec5"
+    },
+    {
+      "path": "hip/new-ir.log",
+      "bytes": 205,
+      "sha256": "59e691b33cfb706952590e6b31f1a8e3c173da5dd5da1fe732354b99cd186ebd"
+    },
+    {
+      "path": "hip/new-metadata-normalized.ll",
+      "bytes": 46002,
+      "sha256": "980e3b9763f50a39932c6ebe3fd556664a98cb9c5ba1f76912032d1cc66eb1e9"
+    },
+    {
+      "path": "hip/new-object.log",
+      "bytes": 102,
+      "sha256": "191b0a1d0c4a79964530bd83ff0d6b45b9800f01e36748716c7741804ee847b4"
+    },
+    {
+      "path": "hip/new.fatbin",
+      "bytes": 53128,
+      "sha256": "4b80bf8d8083c943989c40a42f3cfccd2538660b44eb153a9249936cec54a3af"
+    },
+    {
+      "path": "hip/new.hsaco",
+      "bytes": 49024,
+      "sha256": "2fc9cd373a4c5efdc6a7fe66cc4c3d5812226c93665c9649da6560a8b3cd15c6"
+    },
+    {
+      "path": "hip/new.ll",
+      "bytes": 46012,
+      "sha256": "405ac19e78d6c67a647d997e2c7d3610843ea8df0e33bbae61879fcacb7b148c"
+    },
+    {
+      "path": "hip/new.o",
+      "bytes": 65096,
+      "sha256": "0dbac25267756ea946a3c98710f3275c41cf9dfdea3fcadbeb3d04baaa819e64"
+    },
+    {
+      "path": "hip/old-cgl_passive.hpp",
+      "bytes": 7174,
+      "sha256": "af42f80c995261f39f967bdb703cd2c1ac25a9def765f170f0e5659825c0da02"
+    },
+    {
+      "path": "hip/old-device.disassembly",
+      "bytes": 101140,
+      "sha256": "2622d0cca88e573828d44d0275d974dbc405e2d5d5c226a7d6f3e63da5796c6c"
+    },
+    {
+      "path": "hip/old-device.rodata",
+      "bytes": 32912,
+      "sha256": "19a526ad549807ff70d4632ba9fc515ae0296349e453a8d6ff602e9b87354c38"
+    },
+    {
+      "path": "hip/old-device.text",
+      "bytes": 6868,
+      "sha256": "01dc37dc30d09821754155aa70e90336cd9ee0c310832002c2c2d1d092716ec5"
+    },
+    {
+      "path": "hip/old-ir.log",
+      "bytes": 205,
+      "sha256": "59e691b33cfb706952590e6b31f1a8e3c173da5dd5da1fe732354b99cd186ebd"
+    },
+    {
+      "path": "hip/old-metadata-normalized.ll",
+      "bytes": 46002,
+      "sha256": "980e3b9763f50a39932c6ebe3fd556664a98cb9c5ba1f76912032d1cc66eb1e9"
+    },
+    {
+      "path": "hip/old-object.log",
+      "bytes": 102,
+      "sha256": "191b0a1d0c4a79964530bd83ff0d6b45b9800f01e36748716c7741804ee847b4"
+    },
+    {
+      "path": "hip/old.fatbin",
+      "bytes": 53128,
+      "sha256": "db004a12811aa93afb0a64edb4037ab0d04d6be12cf1ffa89cc596ab20feee34"
+    },
+    {
+      "path": "hip/old.hsaco",
+      "bytes": 49024,
+      "sha256": "2b583bc7464d8c0133d1d1004bda588dfab6c4e0624c69b038b66531a80144ba"
+    },
+    {
+      "path": "hip/old.ll",
+      "bytes": 46012,
+      "sha256": "72621c0be735acc12c6eee69516b18615b9a9a0f1f92164815e925c3141b4700"
+    },
+    {
+      "path": "hip/old.o",
+      "bytes": 65096,
+      "sha256": "91b3f42fa5b3753e6546d10819584d4770f48cf8a83c1d385d2a3724c6a66e60"
+    },
+    {
+      "path": "hip-build.log",
+      "bytes": 2174,
+      "sha256": "487d8388dffcc121d88fc900863be761c4f99d9f377550a12f82636bfca5737a"
+    },
+    {
+      "path": "probe.cpp",
+      "bytes": 1148,
+      "sha256": "9466e52b78675dd3d0faf036c0392a0bf2bb85903228be4195d26b4900bee2b1"
+    },
+    {
+      "path": "run.sh",
+      "bytes": 703,
+      "sha256": "da353c9334b4cf511ae9e1ca23876da475b4465434015a11a48150dc4c3114dd"
+    }
+  ]
+}

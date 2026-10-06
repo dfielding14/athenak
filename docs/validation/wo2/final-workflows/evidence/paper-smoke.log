@@ -1,0 +1,5 @@
+Running CGL-LF paper-smoke workflow with /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/launch_final.py
+  paper_smoke_active_alfvenic
+  paper_smoke_active_random
+  paper_smoke_passive_alfvenic
+Wrote result bundle to /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/acceptance-hip-final2/paper-smoke

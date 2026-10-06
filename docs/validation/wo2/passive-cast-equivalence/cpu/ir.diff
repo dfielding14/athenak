@@ -1,0 +1,94 @@
+--- 
++++ 
+@@ -47,14 +47,14 @@
+ entry:
+   %call.i = tail call double @log(double noundef %rho) #12, !dbg !31, !tbaa !35 ; include/eos/cgl_passive.hpp:18:21
+   %call1.i = tail call double @log(double noundef %bmag) #12, !dbg !37, !tbaa !35 ; include/eos/cgl_passive.hpp:18:38
+-  %call2.i = tail call double @log(double noundef %ppar) #12, !dbg !38, !tbaa !35 ; include/eos/cgl_passive.hpp:19:11
+-  %0 = tail call double @llvm.fmuladd.f64(double %call1.i, double 2.000000e+00, double %call2.i), !dbg !39 ; include/eos/cgl_passive.hpp:19:21
+-  %1 = tail call double @llvm.fmuladd.f64(double %call.i, double -3.000000e+00, double %0), !dbg !40 ; include/eos/cgl_passive.hpp:19:32
+-  %call3.i = tail call double @log(double noundef %pperp) #12, !dbg !41, !tbaa !35 ; include/eos/cgl_passive.hpp:20:11
+-  %call4.i = tail call double @log(double noundef %ppar) #12, !dbg !42, !tbaa !35 ; include/eos/cgl_passive.hpp:20:24
+-  %sub.i = fsub double %call3.i, %call4.i, !dbg !43 ; include/eos/cgl_passive.hpp:20:22
+-  %2 = tail call double @llvm.fmuladd.f64(double %call.i, double 2.000000e+00, double %sub.i), !dbg !44 ; include/eos/cgl_passive.hpp:20:34
+-  %3 = tail call double @llvm.fmuladd.f64(double %call1.i, double -3.000000e+00, double %2), !dbg !45 ; include/eos/cgl_passive.hpp:20:45
++  %call2.i = tail call double @log(double noundef %ppar) #12, !dbg !38, !tbaa !35 ; include/eos/cgl_passive.hpp:19:29
++  %0 = tail call double @llvm.fmuladd.f64(double %call1.i, double 2.000000e+00, double %call2.i), !dbg !39 ; include/eos/cgl_passive.hpp:19:39
++  %1 = tail call double @llvm.fmuladd.f64(double %call.i, double -3.000000e+00, double %0), !dbg !40 ; include/eos/cgl_passive.hpp:19:50
++  %call3.i = tail call double @log(double noundef %pperp) #12, !dbg !41, !tbaa !35 ; include/eos/cgl_passive.hpp:20:29
++  %call4.i = tail call double @log(double noundef %ppar) #12, !dbg !42, !tbaa !35 ; include/eos/cgl_passive.hpp:20:42
++  %sub.i = fsub double %call3.i, %call4.i, !dbg !43 ; include/eos/cgl_passive.hpp:20:40
++  %2 = tail call double @llvm.fmuladd.f64(double %call.i, double 2.000000e+00, double %sub.i), !dbg !44 ; include/eos/cgl_passive.hpp:20:52
++  %3 = tail call double @llvm.fmuladd.f64(double %call1.i, double -3.000000e+00, double %2), !dbg !45 ; include/eos/cgl_passive.hpp:20:63
+   store double %1, ptr %out, align 8, !dbg !46, !tbaa !47 ; probe.cpp:13:10
+   %arrayidx1 = getelementptr inbounds nuw i8, ptr %out, i64 8, !dbg !49 ; probe.cpp:14:3
+   store double %3, ptr %arrayidx1, align 8, !dbg !50, !tbaa !47 ; probe.cpp:14:10
+@@ -66,14 +66,14 @@
+ entry:
+   %call.i.i = tail call double @log(double noundef %rho) #12, !dbg !53, !tbaa !35 ; include/eos/cgl_passive.hpp:18:21
+   %call1.i.i = tail call double @log(double noundef %bmag) #12, !dbg !57, !tbaa !35 ; include/eos/cgl_passive.hpp:18:38
+-  %call2.i.i = tail call double @log(double noundef %ppar) #12, !dbg !58, !tbaa !35 ; include/eos/cgl_passive.hpp:19:11
+-  %0 = tail call double @llvm.fmuladd.f64(double %call1.i.i, double 2.000000e+00, double %call2.i.i), !dbg !59 ; include/eos/cgl_passive.hpp:19:21
+-  %1 = tail call double @llvm.fmuladd.f64(double %call.i.i, double -3.000000e+00, double %0), !dbg !60 ; include/eos/cgl_passive.hpp:19:32
+-  %call3.i.i = tail call double @log(double noundef %pperp) #12, !dbg !61, !tbaa !35 ; include/eos/cgl_passive.hpp:20:11
+-  %call4.i.i = tail call double @log(double noundef %ppar) #12, !dbg !62, !tbaa !35 ; include/eos/cgl_passive.hpp:20:24
+-  %sub.i.i = fsub double %call3.i.i, %call4.i.i, !dbg !63 ; include/eos/cgl_passive.hpp:20:22
+-  %2 = tail call double @llvm.fmuladd.f64(double %call.i.i, double 2.000000e+00, double %sub.i.i), !dbg !64 ; include/eos/cgl_passive.hpp:20:34
+-  %3 = tail call double @llvm.fmuladd.f64(double %call1.i.i, double -3.000000e+00, double %2), !dbg !65 ; include/eos/cgl_passive.hpp:20:45
++  %call2.i.i = tail call double @log(double noundef %ppar) #12, !dbg !58, !tbaa !35 ; include/eos/cgl_passive.hpp:19:29
++  %0 = tail call double @llvm.fmuladd.f64(double %call1.i.i, double 2.000000e+00, double %call2.i.i), !dbg !59 ; include/eos/cgl_passive.hpp:19:39
++  %1 = tail call double @llvm.fmuladd.f64(double %call.i.i, double -3.000000e+00, double %0), !dbg !60 ; include/eos/cgl_passive.hpp:19:50
++  %call3.i.i = tail call double @log(double noundef %pperp) #12, !dbg !61, !tbaa !35 ; include/eos/cgl_passive.hpp:20:29
++  %call4.i.i = tail call double @log(double noundef %ppar) #12, !dbg !62, !tbaa !35 ; include/eos/cgl_passive.hpp:20:42
++  %sub.i.i = fsub double %call3.i.i, %call4.i.i, !dbg !63 ; include/eos/cgl_passive.hpp:20:40
++  %2 = tail call double @llvm.fmuladd.f64(double %call.i.i, double 2.000000e+00, double %sub.i.i), !dbg !64 ; include/eos/cgl_passive.hpp:20:52
++  %3 = tail call double @llvm.fmuladd.f64(double %call1.i.i, double -3.000000e+00, double %2), !dbg !65 ; include/eos/cgl_passive.hpp:20:63
+   %mul.i = fmul double %rho, %1, !dbg !66 ; include/eos/cgl_passive.hpp:27:14
+   %mul3.i = fmul double %rho, %3, !dbg !67 ; include/eos/cgl_passive.hpp:27:23
+   store double %mul.i, ptr %out, align 8, !dbg !68, !tbaa !47 ; probe.cpp:19:10
+@@ -330,14 +330,14 @@
+ !35 = !{!36, !36, i64 0}
+ !36 = !{!"int", !22, i64 0}
+ !37 = !DILocation(line: 18, column: 38, scope: !32, inlinedAt: !34)
+-!38 = !DILocation(line: 19, column: 11, scope: !32, inlinedAt: !34)
+-!39 = !DILocation(line: 19, column: 21, scope: !32, inlinedAt: !34)
+-!40 = !DILocation(line: 19, column: 32, scope: !32, inlinedAt: !34)
+-!41 = !DILocation(line: 20, column: 11, scope: !32, inlinedAt: !34)
+-!42 = !DILocation(line: 20, column: 24, scope: !32, inlinedAt: !34)
+-!43 = !DILocation(line: 20, column: 22, scope: !32, inlinedAt: !34)
+-!44 = !DILocation(line: 20, column: 34, scope: !32, inlinedAt: !34)
+-!45 = !DILocation(line: 20, column: 45, scope: !32, inlinedAt: !34)
++!38 = !DILocation(line: 19, column: 29, scope: !32, inlinedAt: !34)
++!39 = !DILocation(line: 19, column: 39, scope: !32, inlinedAt: !34)
++!40 = !DILocation(line: 19, column: 50, scope: !32, inlinedAt: !34)
++!41 = !DILocation(line: 20, column: 29, scope: !32, inlinedAt: !34)
++!42 = !DILocation(line: 20, column: 42, scope: !32, inlinedAt: !34)
++!43 = !DILocation(line: 20, column: 40, scope: !32, inlinedAt: !34)
++!44 = !DILocation(line: 20, column: 52, scope: !32, inlinedAt: !34)
++!45 = !DILocation(line: 20, column: 63, scope: !32, inlinedAt: !34)
+ !46 = !DILocation(line: 13, column: 10, scope: !29)
+ !47 = !{!48, !48, i64 0}
+ !48 = !{!"double", !22, i64 0}
+@@ -350,14 +350,14 @@
+ !55 = distinct !DISubprogram(name: "PassiveEncode", scope: !33, file: !33, line: 24, type: !8, scopeLine: 25, flags: DIFlagPrototyped, spFlags: DISPFlagDefinition | DISPFlagOptimized, unit: !0)
+ !56 = distinct !DILocation(line: 18, column: 18, scope: !52)
+ !57 = !DILocation(line: 18, column: 38, scope: !32, inlinedAt: !54)
+-!58 = !DILocation(line: 19, column: 11, scope: !32, inlinedAt: !54)
+-!59 = !DILocation(line: 19, column: 21, scope: !32, inlinedAt: !54)
+-!60 = !DILocation(line: 19, column: 32, scope: !32, inlinedAt: !54)
+-!61 = !DILocation(line: 20, column: 11, scope: !32, inlinedAt: !54)
+-!62 = !DILocation(line: 20, column: 24, scope: !32, inlinedAt: !54)
+-!63 = !DILocation(line: 20, column: 22, scope: !32, inlinedAt: !54)
+-!64 = !DILocation(line: 20, column: 34, scope: !32, inlinedAt: !54)
+-!65 = !DILocation(line: 20, column: 45, scope: !32, inlinedAt: !54)
++!58 = !DILocation(line: 19, column: 29, scope: !32, inlinedAt: !54)
++!59 = !DILocation(line: 19, column: 39, scope: !32, inlinedAt: !54)
++!60 = !DILocation(line: 19, column: 50, scope: !32, inlinedAt: !54)
++!61 = !DILocation(line: 20, column: 29, scope: !32, inlinedAt: !54)
++!62 = !DILocation(line: 20, column: 42, scope: !32, inlinedAt: !54)
++!63 = !DILocation(line: 20, column: 40, scope: !32, inlinedAt: !54)
++!64 = !DILocation(line: 20, column: 52, scope: !32, inlinedAt: !54)
++!65 = !DILocation(line: 20, column: 63, scope: !32, inlinedAt: !54)
+ !66 = !DILocation(line: 27, column: 14, scope: !55, inlinedAt: !56)
+ !67 = !DILocation(line: 27, column: 23, scope: !55, inlinedAt: !56)
+ !68 = !DILocation(line: 19, column: 10, scope: !52)

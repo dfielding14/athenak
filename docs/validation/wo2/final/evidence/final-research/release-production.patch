@@ -1,0 +1,501 @@
+diff --git a/docs/source/engineering/cgl_amr_code_review_and_remediation_plan.md b/docs/source/engineering/cgl_amr_code_review_and_remediation_plan.md
+index 14217fdbc..16c799eed 100644
+--- a/docs/source/engineering/cgl_amr_code_review_and_remediation_plan.md
++++ b/docs/source/engineering/cgl_amr_code_review_and_remediation_plan.md
+@@ -723,6 +723,11 @@ also verifies that relaxation advanced exactly one physical timestep.
+ 
+ ### F6: LF-aware physical and user boundaries
+ 
++**WO2 update (2026-10-06):** the historical guard below is superseded for active
++CGL by representation-aware inflow and user fills, verified for explicit/STS
++and refined meshes. See [the boundary contract](../modules/cgl_lf_boundaries.md).
++Passive CGL retains its separate uniform-periodic restriction.
++
+ F6 was implemented on 2026-07-08 as a configuration-time guard. Both STS and
+ explicit LF split integration now reject fixed-inflow and user boundaries on
+ any active mesh face. During LF stages `IAN` temporarily stores magnetic
+diff --git a/docs/source/modules/cgl_amr.md b/docs/source/modules/cgl_amr.md
+index 9a9a33381..44bb15452 100644
+--- a/docs/source/modules/cgl_amr.md
++++ b/docs/source/modules/cgl_amr.md
+@@ -91,9 +91,18 @@ on that path explicitly require the magnetic-moment representation. At the end
+ of the split LF sweep, AthenaK converts back to conserved anisotropy before
+ ordinary hyperbolic evolution, output, or restart.
+ 
+-LF split integration rejects inflow and user boundaries at construction:
+-they have no magnetic-moment-aware `IAN` contract, with support deferred to
+-WO2. Periodic, outflow, reflecting, and diode boundaries are supported.
++Active-CGL LF supports inflow and user boundaries in explicit and STS runs,
++including refined meshes. Fixed inflow converts stored A using the final ghost
++magnetic field. User callbacks must follow the
++[representation-aware contract](cgl_lf_boundaries.md), including idempotent
++fills after prolongation. Periodic, outflow, reflecting and diode boundaries
++remain supported. Passive CGL currently requires a uniform periodic mesh.
++
++Multilevel LF stages exchange only IEN/IAN while retaining magnetic fills and
++the existing projection helpers. They also synchronize same-level LF face
++fluxes: independently prolonged transverse corner ghosts can otherwise give
++two fluxes on the same physical face and violate global conservation. Existing
++coarse/fine correction remains in place.
+ 
+ ### Magnetic fields and diagnostics
+ 
+diff --git a/docs/source/modules/cgl_lf_timestep.md b/docs/source/modules/cgl_lf_timestep.md
+index 43b30dc76..d1ac09228 100644
+--- a/docs/source/modules/cgl_lf_timestep.md
++++ b/docs/source/modules/cgl_lf_timestep.md
+@@ -6,7 +6,7 @@ coefficients specified below held fixed. The resulting parabolic reference
+ step is `2 / Lambda`. The RKL2 controller multiplies it by
+ `time/sts_safety` (default `0.9`, finite and in `(0, 1]`). Advective and explicit
+ parabolic limits continue to use `time/cfl_number`; see
+-[Super Time Stepping](super_time_stepping.md#timestep-control).
++[Super Time Stepping](super_time_stepping.md).
+ 
+ ## Face Geometry And Temperature Variables
+ 
+diff --git a/docs/validation/wo2/README.md b/docs/validation/wo2/README.md
+index 6cd91aad7..ce5f0d94e 100644
+--- a/docs/validation/wo2/README.md
++++ b/docs/validation/wo2/README.md
+@@ -10,6 +10,25 @@ inputs, raw outputs, and scheduler logs are retained under
+ Conservative A and both strict B4 expected failures remain unchanged. The
+ unresolved sharp-contact limitation is not treated as a passing test.
+ 
++## Scope and task triage
++
++| Task | Triage | Result and evidence |
++| --- | --- | --- |
++| 0 / 0-P1 | Implemented | Frontier baseline, compiler contract, magnetic-boundary diagnosis and physical-corner refill; details below. |
++| 1 | Adapted and implemented | Actual face-Jacobian row bound and independent `sts_safety`; [derivation, limits and measurements](task1/README.md). |
++| 2 | Adapted and implemented | Default-off transactional merging with a restricted eligibility gate; [splitting, rollback and timings](task2/README.md). |
++| 3 | Existing conversion retained; communication implemented | Compact IEN/IAN messages, exact state preservation and measured payload reduction; [report](task3/README.md). |
++| 4 | Implemented candidate; final integration pending | Passive J/A model and native isothermal flow, with 240 standalone application cases; [release gates](task4/README.md). |
++| 5 | Adapted and implemented | Representation-aware inflow and user boundaries, including explicit LF and refinement; [report](task5/README.md). |
++| 6 | Existing prolongation verified; demonstrated conservation gap fixed | GPU A/mu transfer checks and common same-level LF face fluxes; [report](task6/README.md). |
++| 7 | Validated standalone candidate; final integration pending | Direction-kernel fusion, unchanged face arithmetic and paired 2D/3D GPU measurements. |
++| 8 | Unselected optional work | Entropy-variable face-flux redesign is not included. |
++| 9 | Unselected optional work | No general float-portability, new collision split, mirror-threshold or other backlog redesign is claimed. |
++
++The final combined CPU/HIP builds pass. Runtime acceptance of the complete
++composition is in progress on allocation `5629018`; the task-specific evidence
++below does not substitute for that final gate.
++
+ The [Task 1 report](task1/README.md) records the new timestep bound, independent
+ proof checks, changed expectations and paired GPU measurements.
+ 
+@@ -56,6 +75,34 @@ The corrected HIP reference compiles all application and Kokkos objects with
+ overrides are cleared when selecting CCE 20. No reduction or physics formula
+ was changed to compensate for the compiler.
+ 
++The accepted HIP runtime also uses the following environment after loading the
++same Cray/ROCm modules and library paths. Preserve this contract when reproducing
++the GPU results:
++
++```bash
++export MPICH_GPU_SUPPORT_ENABLED=1
++export MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED=0
++export MPICH_OFI_NIC_POLICY=GPU
++export MPICH_GPU_IPC_CACHE_MAX_SIZE=1000
++export HSA_XNACK=1
++export MPICH_MPIIO_HINTS='*:romio_cb_write=disable'
++export MPICH_OFI_NUM_CQ_ENTRIES=131072
++export FI_MR_CACHE_MONITOR=kdreg2
++export FI_CXI_RX_MATCH_MODE=software
++export OMP_NUM_THREADS=1
++export LD_LIBRARY_PATH="${CRAY_LD_LIBRARY_PATH}:${LD_LIBRARY_PATH:-}"
++```
++
++Launch HIP ranks with `srun --exact --threads-per-core=1 --cpu-bind=threads
++-c7 --gpus-per-task=1 --gpu-bind=closest`, supplying the desired node/rank counts.
++CPU-only executables instead use `MPICH_GPU_SUPPORT_ENABLED=0` and no GPUs.
++Task4's first final HIP4 wrapper omitted part of this runtime contract and
++intermittently faulted in both fused and unfused executables. Six consecutive
++probes and all 80 final four-rank passive cases passed after restoring the full
++contract. This isolates a reproducibility requirement, not the exact origin of
++the offending memory address; the [Task4 report](task4/README.md) retains both
++failed and successful runs.
++
+ Frozen corrected binaries:
+ 
+ | Backend | Retained executable | SHA-256 |
+@@ -229,7 +276,7 @@ also has different B_y (.221240235 versus .222438189), producing p_parallel
+ The ordinary cell-centered flux correction synchronizes coarse/fine interfaces
+ only, leaving these same-level flux estimates independent.
+ 
+-The proposed separate correctness fix synchronizes IEN/IAN face fluxes between
++The accepted separate correctness fix synchronizes IEN/IAN face fluxes between
+ same-level neighbors during multilevel LF sweeps, retaining the existing
+ coarse/fine correction and all boundary/projection work. It caches both original
+ estimates and forms an identical overflow-safe symmetric mean. Equal inputs are
+@@ -238,14 +285,16 @@ contraction. The existing mesh startup guard rejects shearing boxes with
+ refinement, so no remapped shear face enters this path. Generic MPI send/receive
+ completion already covers these request slots.
+ 
+-CPU/HIP scratch binaries compile and link. Runtime conservation, MPI, GPU, and
+-smooth-convergence acceptance of this fix remain pending. The new permanent
+-regression draft deliberately keeps a 5e-12 absolute conservation tolerance for
+-both energy and magnetic moment, requires every repair counter to stay zero,
+-and checks frozen active fields and one/four-rank identity. It correctly rejects
+-the old baseline; the tolerance has not been weakened.
++All 24 standalone and 24 combined CPU/HIP one/four-rank cases pass. Maximum
++energy/magnetic-moment integral drift is `4.44e-16`; frozen active fields remain
++exact and repair counters stay zero. The permanent regression retains its
++`5e-12` absolute conservation tolerance and rejects the old baseline. Independent
++halo checks and three-resolution GPU measurements verify representation
++consistency and approximately second-order integral errors; maximum-norm
++convergence is weaker. The [Task 6 report](task6/README.md) records the complete
++scope and measurements.
+ 
+-Evidence under this directory:
++Detailed diagnosis artifacts under `WO2/p1-research`:
+ 
+ - `runs/task6-ledger-hip/trace-{conserved,primitive}/stage-ledger.json`
+ - `runs/task6-ledger-hip/trace-{conserved,primitive}/face-balance.json`
+diff --git a/src/diffusion/cgl_landau_fluid.cpp b/src/diffusion/cgl_landau_fluid.cpp
+index 1feb515cd..fd96dcdf4 100644
+--- a/src/diffusion/cgl_landau_fluid.cpp
++++ b/src/diffusion/cgl_landau_fluid.cpp
+@@ -506,7 +506,8 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
+     lf_c_parallel0 = pin->GetReal("mhd", "lf_c_parallel0");
+     if (!(lf_c_parallel0 > 0.0) || !std::isfinite(lf_c_parallel0)) {
+       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+-                << std::endl << "<mhd>/lf_c_parallel0 must be finite and positive." << std::endl;
++                << std::endl << "<mhd>/lf_c_parallel0 must be finite and positive."
++                << std::endl;
+       std::exit(EXIT_FAILURE);
+     }
+   } else if (coeff_mode != "local") {
+@@ -2279,7 +2280,8 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
+   const Real cpar0 = lf_c_parallel0;
+   auto size = pmy_pack->pmb->mb_size;
+   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
+-  Kokkos::parallel_reduce("cgl_lf_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
++  Kokkos::parallel_reduce("cgl_lf_newdt",
++      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
+   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
+     const int m = idx/nkji;
+     const int k = (idx - m*nkji)/nji + ks;
+@@ -2432,9 +2434,11 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
+           // materializing an overflowing pressure ratio or squaring it.
+           const Real log_ratio = CGLLFLogAbs(face.pperp)-CGLLFLogAbs(face.ppar);
+           const Real log_drift = 2.0*CGLLFLogAdd(0.0,log_ratio)+log_grad_b-log_bar;
+-          const Real log_factor = CGLLFLogAbs(face.rho)-CGLLFLogAbs(rho)-CGLLFLogAbs(dx[dir]);
++          const Real log_factor = CGLLFLogAbs(face.rho)-CGLLFLogAbs(rho)
++                                - CGLLFLogAbs(dx[dir]);
+           const Real log_para = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtEightOverPi,
+-              cgl::kThreePiMinusEight/cgl::kSqrtEightPi)+log_bn+log_grad_parallel+log_factor;
++              cgl::kThreePiMinusEight/cgl::kSqrtEightPi)
++              +log_bn+log_grad_parallel+log_factor;
+           const Real log_perp = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtTwoOverPi,
+               2.0/cgl::kSqrtTwoPi)+log_bn+CGLLFLogAdd(log_grad_perp,log_drift)+log_factor;
+           log_face_parallel = CGLLFLogAdd(log_para,
+diff --git a/src/eos/cgl_mhd.cpp b/src/eos/cgl_mhd.cpp
+index 35bd46940..2b4e11f5d 100644
+--- a/src/eos/cgl_mhd.cpp
++++ b/src/eos/cgl_mhd.cpp
+@@ -206,7 +206,8 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
+ 
+     // set FOFC flag and quit loop if this function called only to check floors
+     if (only_testfloors) {
+-      if (dfloor_used || (!eos.passive && (efloor_used || tfloor_used || nonfinite_input ||
++      if (dfloor_used || (!eos.passive &&
++          (efloor_used || tfloor_used || nonfinite_input ||
+           !Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp) ||
+           !(w.e >= eos.pfloor) || !(w.pp >= eos.pfloor)))) {
+         fofc_(m,k,j,i) = true;
+@@ -471,7 +472,8 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
+     // call p2c function
+     HydCons1D u;
+     if (passive) cgl::PassiveP2C(w, bfloor, u);
+-    else SingleP2C_CGLMHD(w, bfloor, u);
++    else
++      SingleP2C_CGLMHD(w, bfloor, u);
+     // Same representation contract for boundary callbacks and temporary targets.
+     if (magnetic_moment) {
+       const Real bmag = sqrt(SQR(w.bx) + SQR(w.by) + SQR(w.bz));
+diff --git a/src/eos/cgl_passive.hpp b/src/eos/cgl_passive.hpp
+index 03006bd4a..1db285928 100644
+--- a/src/eos/cgl_passive.hpp
++++ b/src/eos/cgl_passive.hpp
+@@ -1,5 +1,12 @@
+ #ifndef EOS_CGL_PASSIVE_HPP_
+ #define EOS_CGL_PASSIVE_HPP_
++//========================================================================================
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
++//========================================================================================
++//! \file cgl_passive.hpp
++//! \brief Passive CGL material invariants and thermodynamic conversions.
+ 
+ #include <limits>
+ 
+diff --git a/src/eos/isothermal_c2p_mhd.hpp b/src/eos/isothermal_c2p_mhd.hpp
+index cb47b5321..c75fb6133 100644
+--- a/src/eos/isothermal_c2p_mhd.hpp
++++ b/src/eos/isothermal_c2p_mhd.hpp
+@@ -1,5 +1,12 @@
+ #ifndef EOS_ISOTHERMAL_C2P_MHD_HPP_
+ #define EOS_ISOTHERMAL_C2P_MHD_HPP_
++//========================================================================================
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
++//========================================================================================
++//! \file isothermal_c2p_mhd.hpp
++//! \brief Single-state isothermal MHD conserved-to-primitive conversion.
+ 
+ //----------------------------------------------------------------------------------------
+ //! \!fn void SingleC2P_IsothermalMHD()
+diff --git a/src/mhd/mhd.cpp b/src/mhd/mhd.cpp
+index 07bb4d1b0..6c23a16fa 100644
+--- a/src/mhd/mhd.cpp
++++ b/src/mhd/mhd.cpp
+@@ -354,8 +354,10 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
+        (psrc != nullptr && (psrc->ism_cooling || psrc->rel_cooling)) ||
+        pmy_pack->pmesh->multilevel || pin->DoesBlockExist("shearing_box") ||
+        pin->DoesBlockExist("ion-neutral") || pin->DoesBlockExist("radiation"))) {
+-    std::cout << "### FATAL ERROR: passive J/A has not yet validated "
+-              << "AMR, viscosity, resistivity, cooling, shearing-box, or coupled-fluid consumers" << std::endl;
++    std::cout
++      << "### FATAL ERROR: passive J/A has not yet validated "
++      << "AMR, viscosity, resistivity, cooling, shearing-box, or coupled-fluid consumers"
++      << std::endl;
+     std::exit(EXIT_FAILURE);
+   }
+ 
+diff --git a/src/outputs/history.cpp b/src/outputs/history.cpp
+index 4ea27dee6..0eaff945a 100644
+--- a/src/outputs/history.cpp
++++ b/src/outputs/history.cpp
+@@ -297,7 +297,8 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
+     pdata->label[IEN] = eos_data.passive ? "cgl-J" : "tot-E";
+   }
+   if (eos_data.is_cgl) {
+-    pdata->label[IAN] = eos_data.passive ? "cgl-A" : "aam-D"; // CGL conserved anisotropy A, legacy column label
++    // CGL conserved anisotropy A; preserve the legacy active-CGL column label.
++    pdata->label[IAN] = eos_data.passive ? "cgl-A" : "aam-D";
+   }
+   pdata->label[nmhd_  ] = "1-KE";
+   pdata->label[nmhd_+1] = "2-KE";
+diff --git a/src/pgen/pgen.cpp b/src/pgen/pgen.cpp
+index 2145efb47..655fd79cf 100644
+--- a/src/pgen/pgen.cpp
++++ b/src/pgen/pgen.cpp
+@@ -136,7 +136,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
+   }
+ 
+   if (pmhd != nullptr) {
+-    const bool encoded_passive = pin->DoesParameterExist("mhd", "passive_restart_encoding");
++    const bool encoded_passive =
++        pin->DoesParameterExist("mhd", "passive_restart_encoding");
+     const bool passive = pmhd->peos->eos_data.passive;
+     if (encoded_passive != passive ||
+         (encoded_passive && pin->GetInteger("mhd", "passive_restart_encoding") != 1)) {
+@@ -995,9 +996,10 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
+       pmy_mesh_->pmb_pack->pmhd->peos->eos_data.passive &&
+       pgen_fun_name != "turb" && pgen_fun_name != "cgl_lf_paper" &&
+       pgen_fun_name != "cgl_passive_validation") {
+-    std::cout << "### FATAL ERROR: this built-in pgen has no passive J/A initializer; "
+-              << "use turb, cgl_lf_paper, or a custom pgen calling the EOS PrimToCons interface"
+-              << std::endl;
++    std::cout
++      << "### FATAL ERROR: this built-in pgen has no passive J/A initializer; "
++      << "use turb, cgl_lf_paper, or a custom pgen calling the EOS PrimToCons interface"
++      << std::endl;
+     std::exit(EXIT_FAILURE);
+   }
+ 
+diff --git a/src/pgen/tests/cgl_landau_fluid.cpp b/src/pgen/tests/cgl_landau_fluid.cpp
+index f8064e4e6..e9f9395b1 100644
+--- a/src/pgen/tests/cgl_landau_fluid.cpp
++++ b/src/pgen/tests/cgl_landau_fluid.cpp
+@@ -156,7 +156,8 @@ TestMode ParseMode(ParameterInput *pin) {
+        "collision_relaxation, grad_b, flux_limiter, "
+        "limiter_heat_flux_suppression, limiter_stress, "
+        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
+-       "density_contact, timestep_refresh, field_reversal, staggered_checkerboard, hotspot, or low_field");
++       "density_contact, timestep_refresh, field_reversal, staggered_checkerboard, "
++       "hotspot, or low_field");
+ }
+ 
+ const char *ModeName(const TestMode mode) {
+@@ -1781,9 +1782,9 @@ void CheckStaggeredCheckerboard(ParameterInput *pin, Mesh *pm) {
+   const Real guide = pin->GetReal("problem","bz0");
+   const Real amplitude = pin->GetReal("problem","b0");
+   Real divmax=0.0, bcc_error=0.0, deviation=0.0;
+-  for (int k=ind.ks;k<=ind.ke;++k) {
+-    for (int j=ind.js;j<=ind.je;++j) {
+-      for (int i=ind.is;i<=ind.ie;++i) {
++  for (int k=ind.ks; k<=ind.ke; ++k) {
++    for (int j=ind.js; j<=ind.je; ++j) {
++      for (int i=ind.is; i<=ind.ie; ++i) {
+         Real div=(bx(0,k,j,i+1)-bx(0,k,j,i))/hx +
+                  (by(0,k,j+1,i)-by(0,k,j,i))/hy;
+         if (pm->three_d) div += (bz(0,k+1,j,i)-bz(0,k,j,i))/hz;
+@@ -1935,7 +1936,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
+             (!pmy_mesh_->three_d || pmy_mesh_->mesh_indcs.nx3%2 == 0),
+             "staggered checkerboard requires even periodic grid dimensions");
+     Require(bz0 > pmhd->peos->eos_data.bfloor && bx0 > 0.0,
+-            "staggered checkerboard requires positive amplitude and resolved guide field");
++            "staggered checkerboard requires positive amplitude "
++            "and resolved guide field");
+   }
+   const Real eig_rho_re = pin->GetOrAddReal("problem", "eigen_rho_re", 0.0);
+   const Real eig_rho_im = pin->GetOrAddReal("problem", "eigen_rho_im", 0.0);
+diff --git a/src/pgen/tests/cgl_lf_boundary.cpp b/src/pgen/tests/cgl_lf_boundary.cpp
+index ab04ca3e4..3e5c6e640 100644
+--- a/src/pgen/tests/cgl_lf_boundary.cpp
++++ b/src/pgen/tests/cgl_lf_boundary.cpp
+@@ -1,6 +1,11 @@
+ //========================================================================================
+-// AthenaK CGL-LF fixed-state and PrimToCons user-boundary regression.
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
+ //========================================================================================
++//! \file cgl_lf_boundary.cpp
++//! \brief CGL-LF fixed-state and PrimToCons user-boundary regression.
++
+ #include <cmath>
+ #include "athena.hpp"
+ #include "mesh/mesh.hpp"
+diff --git a/src/pgen/tests/cgl_passive_validation.cpp b/src/pgen/tests/cgl_passive_validation.cpp
+index 250041a31..1c4535bb5 100644
+--- a/src/pgen/tests/cgl_passive_validation.cpp
++++ b/src/pgen/tests/cgl_passive_validation.cpp
+@@ -1,4 +1,11 @@
+-// Independent passive/isothermal validation initial data. Built-in regression pgen.
++//========================================================================================
++// AthenaXXX astrophysical plasma code
++// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
++// Licensed under the 3-clause BSD License (the "LICENSE")
++//========================================================================================
++//! \file cgl_passive_validation.cpp
++//! \brief Independent passive/isothermal validation initial data.
++
+ #include <cmath>
+ #include <cstdlib>
+ #include <iostream>
+diff --git a/src/srcterms/srcterms.cpp b/src/srcterms/srcterms.cpp
+index 99d8fcc7d..8d826be4e 100644
+--- a/src/srcterms/srcterms.cpp
++++ b/src/srcterms/srcterms.cpp
+@@ -122,7 +122,9 @@ void SourceTerms::ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos
+   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+     Real src = bdt*g*w0(m,IDN,k,j,i);
+     u0(m,dir,k,j,i) += src;
+-    if (eos_data.is_ideal && !eos_data.passive) { u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i); }
++    if (eos_data.is_ideal && !eos_data.passive) {
++      u0(m,IEN,k,j,i) += src*w0(m,dir,k,j,i);
++    }
+   });
+ 
+   return;
+diff --git a/tst/test_suite/cgl/test_cgl_amr_gpu.py b/tst/test_suite/cgl/test_cgl_amr_gpu.py
+index fda0063cf..178344cb4 100644
+--- a/tst/test_suite/cgl/test_cgl_amr_gpu.py
++++ b/tst/test_suite/cgl/test_cgl_amr_gpu.py
+@@ -385,7 +385,10 @@ def test_cgl_amr_repair_counters_survive_restart_gpu():
+ 
+ def test_cgl_lf_amr_primitive_churn_gpu():
+     try:
+-        _run("cgl_lf_amr_primitive_churn.athinput", "cgl_amr_gpu_lf_churn")
++        # Cap only the cycle duration so the fixed physical-time threshold
++        # still samples both refinement and derefinement with the new LF bound.
++        _run("cgl_lf_amr_primitive_churn.athinput", "cgl_amr_gpu_lf_churn",
++             "time/sts_max_dt_ratio=0.1")
+         user = _user_history("cgl_amr_gpu_lf_churn")
+         mhd = _mhd_history("cgl_amr_gpu_lf_churn")
+         _assert_clean_user(user)
+@@ -404,7 +407,9 @@ def test_cgl_lf_amr_primitive_churn_gpu():
+ 
+ def test_cgl_lf_amr_3d_churn_gpu():
+     try:
+-        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn")
++        # Preserve the original cycle-three AMR event at fixed switch time.
++        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn",
++             "time/sts_max_dt_ratio=0.13")
+         user = _user_history("cgl_amr_gpu_lf_3d_churn")
+         mhd = _mhd_history("cgl_amr_gpu_lf_3d_churn")
+         _assert_clean_user(user, max_ndiv=1.0e-12)
+diff --git a/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py b/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py
+index 80047532d..54233e0a7 100644
+--- a/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py
++++ b/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py
+@@ -190,7 +190,9 @@ def test_cgl_amr_restart_and_conservation_mpi_gpu():
+ def test_cgl_lf_amr_3d_churn_mpi_gpu():
+     try:
+         basename = "cgl_mpigpu_lf_3d_churn"
+-        _launch(2, 16, "cgl_lf_amr_3d_current.athinput", basename)
++        # Match the fixed physical AMR switch under Task1's larger LF bound.
++        _launch(2, 16, "cgl_lf_amr_3d_current.athinput", basename,
++                "time/sts_max_dt_ratio=0.13")
+         user = _history(basename, "user")
+         mhd = _history(basename, "mhd")
+         _assert_clean(user, mhd)
+diff --git a/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py b/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py
+index 4d7746089..efb558b25 100644
+--- a/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py
++++ b/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py
+@@ -13,7 +13,9 @@ def test_cgl_amr_walls_after_final_field_refresh(tmp_path):
+     result = subprocess.run(
+         [str(Path("athena").resolve()), "-i",
+          str(source / "cgl_lf_amr_3d_current.athinput"), "-d", str(tmp_path),
+-         "time/nlim=3", "output2/variable=mhd_w_bcc", "output2/id=state"],
++         # Restore the original cycle-three event using only a timestep cap.
++         "time/sts_max_dt_ratio=0.13", "time/nlim=3",
++         "output2/variable=mhd_w_bcc", "output2/id=state"],
+         capture_output=True, text=True, check=False,
+     )
+     assert result.returncode == 0, result.stdout + result.stderr
+diff --git a/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py b/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py
+index e0c452cae..61392f0b2 100644
+--- a/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py
++++ b/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py
+@@ -670,7 +670,10 @@ def test_cgl_lf_low_field_faces_disable_transport_cleanly():
+             "problem/amp=0.5",
+         )
+         history = testutils.athena_read.hst("cgl_ci_low_field.mhd.hst")
+-        assert history["lf_nstage"][-1] > 0.0
++        # Every face is disabled below bfloor, so the discrete LF row is zero.
++        # The timestep controller skips LF stages; the pgen still checks the
++        # physical pressure state against its initial values at 1e-13.
++        assert history["lf_nstage"][-1] == 0.0
+         assert history["lf_qface"][-1] == 0.0
+         assert history["lf_qprwrk"][-1] == 0.0
+         assert history["lf_qpewrk"][-1] == 0.0
+diff --git a/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py b/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py
+index ad1d03f27..e5d78f020 100644
+--- a/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py
++++ b/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py
+@@ -107,7 +107,10 @@ def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
+ def test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks():
+     input_file = "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput"
+     try:
+-        for heating_rate, post_stages in ((0, 7), (3000, 11)):
++        # Task1's aligned row gives dt_FE=h^2/(2*chi), chi=sqrt(8/pi)/(2*pi).
++        # The cap is 20*0.9*dt_FE; p_after=1+(2/3)*heating_rate*dt_cycle.
++        # A half-sweep ratio 10*sqrt(p_after) requires 7 or 13 RKL2 stages.
++        for heating_rate, post_stages in ((0, 7), (3000, 13)):
+             histories = []
+             for nranks in (1, 4):
+                 Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)
+diff --git a/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py b/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py
+index 2a782d19f..6f5096022 100644
+--- a/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py
++++ b/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py
+@@ -109,7 +109,12 @@ def decay_reference(chi_parallel, chi_perp, nu, time, component):
+ def test_decay_resolves_closure_coefficients(tmp_path, component, nu):
+     mode = ("parallel", "perp")[component]
+     name = f"cgl_lf_quant_{mode}" + ("_collisional" if nu else "")
+-    result = run_case(tmp_path, name, "problem/validation_output=true",
++    # For this aligned, fixed-coefficient closure, dt_FE = dx**2/(2*chi_parallel).
++    # With sts_safety=0.9, a cap of 8 gives 2*128**2/(0.9*8*(2*pi)**2) > 115
++    # full-step equivalents per parallel damping time; retain >=100 resolved
++    # cycles without changing the physical duration or either closure coefficient.
++    result = run_case(tmp_path, name, "time/sts_max_dt_ratio=8",
++                      "problem/validation_output=true",
+                       f"problem/validation_output_dir={tmp_path}")
+     assert result.returncode == 0, result.stdout + result.stderr
+     cycles = int(re.findall(r"cycle=(\d+)", result.stdout)[-1])

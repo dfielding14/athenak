@@ -1,0 +1,95 @@
+--- a/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py
++++ b/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py
+@@ -109,7 +109,12 @@
+ def test_decay_resolves_closure_coefficients(tmp_path, component, nu):
+     mode = ("parallel", "perp")[component]
+     name = f"cgl_lf_quant_{mode}" + ("_collisional" if nu else "")
+-    result = run_case(tmp_path, name, "problem/validation_output=true",
++    # For this aligned, fixed-coefficient closure, dt_FE = dx**2/(2*chi_parallel).
++    # With sts_safety=0.9, a cap of 8 gives 2*128**2/(0.9*8*(2*pi)**2) > 115
++    # full-step equivalents per parallel damping time; retain >=100 resolved
++    # cycles without changing the physical duration or either closure coefficient.
++    result = run_case(tmp_path, name, "time/sts_max_dt_ratio=8",
++                      "problem/validation_output=true",
+                       f"problem/validation_output_dir={tmp_path}")
+     assert result.returncode == 0, result.stdout + result.stderr
+     cycles = int(re.findall(r"cycle=(\d+)", result.stdout)[-1])
+--- a/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py
++++ b/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py
+@@ -670,7 +670,10 @@
+             "problem/amp=0.5",
+         )
+         history = testutils.athena_read.hst("cgl_ci_low_field.mhd.hst")
+-        assert history["lf_nstage"][-1] > 0.0
++        # Every face is disabled below bfloor, so the discrete LF row is zero.
++        # The timestep controller skips LF stages; the pgen still checks the
++        # physical pressure state against its initial values at 1e-13.
++        assert history["lf_nstage"][-1] == 0.0
+         assert history["lf_qface"][-1] == 0.0
+         assert history["lf_qprwrk"][-1] == 0.0
+         assert history["lf_qpewrk"][-1] == 0.0
+--- a/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py
++++ b/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py
+@@ -107,7 +107,10 @@
+ def test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks():
+     input_file = "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput"
+     try:
+-        for heating_rate, post_stages in ((0, 7), (3000, 11)):
++        # Task1's aligned row gives dt_FE=h^2/(2*chi), chi=sqrt(8/pi)/(2*pi).
++        # The cap is 20*0.9*dt_FE; p_after=1+(2/3)*heating_rate*dt_cycle.
++        # A half-sweep ratio 10*sqrt(p_after) requires 7 or 13 RKL2 stages.
++        for heating_rate, post_stages in ((0, 7), (3000, 13)):
+             histories = []
+             for nranks in (1, 4):
+                 Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)
+--- a/tst/test_suite/cgl/test_cgl_amr_gpu.py
++++ b/tst/test_suite/cgl/test_cgl_amr_gpu.py
+@@ -385,7 +385,10 @@
+ 
+ def test_cgl_lf_amr_primitive_churn_gpu():
+     try:
+-        _run("cgl_lf_amr_primitive_churn.athinput", "cgl_amr_gpu_lf_churn")
++        # Cap only the cycle duration so the fixed physical-time threshold
++        # still samples both refinement and derefinement with the new LF bound.
++        _run("cgl_lf_amr_primitive_churn.athinput", "cgl_amr_gpu_lf_churn",
++             "time/sts_max_dt_ratio=0.1")
+         user = _user_history("cgl_amr_gpu_lf_churn")
+         mhd = _mhd_history("cgl_amr_gpu_lf_churn")
+         _assert_clean_user(user)
+@@ -404,7 +407,9 @@
+ 
+ def test_cgl_lf_amr_3d_churn_gpu():
+     try:
+-        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn")
++        # Preserve the original cycle-three AMR event at fixed switch time.
++        _run("cgl_lf_amr_3d_current.athinput", "cgl_amr_gpu_lf_3d_churn",
++             "time/sts_max_dt_ratio=0.13")
+         user = _user_history("cgl_amr_gpu_lf_3d_churn")
+         mhd = _mhd_history("cgl_amr_gpu_lf_3d_churn")
+         _assert_clean_user(user, max_ndiv=1.0e-12)
+--- a/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py
++++ b/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py
+@@ -13,7 +13,9 @@
+     result = subprocess.run(
+         [str(Path("athena").resolve()), "-i",
+          str(source / "cgl_lf_amr_3d_current.athinput"), "-d", str(tmp_path),
+-         "time/nlim=3", "output2/variable=mhd_w_bcc", "output2/id=state"],
++         # Restore the original cycle-three event using only a timestep cap.
++         "time/sts_max_dt_ratio=0.13", "time/nlim=3",
++         "output2/variable=mhd_w_bcc", "output2/id=state"],
+         capture_output=True, text=True, check=False,
+     )
+     assert result.returncode == 0, result.stdout + result.stderr
+--- a/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py
++++ b/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py
+@@ -190,7 +190,9 @@
+ def test_cgl_lf_amr_3d_churn_mpi_gpu():
+     try:
+         basename = "cgl_mpigpu_lf_3d_churn"
+-        _launch(2, 16, "cgl_lf_amr_3d_current.athinput", basename)
++        # Match the fixed physical AMR switch under Task1's larger LF bound.
++        _launch(2, 16, "cgl_lf_amr_3d_current.athinput", basename,
++                "time/sts_max_dt_ratio=0.13")
+         user = _history(basename, "user")
+         mhd = _history(basename, "mhd")
+         _assert_clean(user, mhd)

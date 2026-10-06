@@ -1,0 +1,26 @@
+[
+  {
+    "case": "2d-ratio1-initial",
+    "returncode": 0,
+    "dt": 0.0007640153045230761,
+    "sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a"
+  },
+  {
+    "case": "2d-ratio0.1-initial",
+    "returncode": 0,
+    "dt": 0.0002726252111153027,
+    "sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a"
+  },
+  {
+    "case": "3d-ratio1-initial",
+    "returncode": 0,
+    "dt": 0.0007499284262490022,
+    "sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a"
+  },
+  {
+    "case": "3d-ratio0.1-initial",
+    "returncode": 0,
+    "dt": 0.00013127838454403447,
+    "sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a"
+  }
+]

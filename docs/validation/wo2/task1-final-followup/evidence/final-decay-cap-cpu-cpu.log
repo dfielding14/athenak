@@ -1,0 +1,13 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-decay-cap-cpu-cpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2890 items / 2886 deselected / 4 selected
+
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisionless-parallel] PASSED [ 25%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisionless-perp] PASSED [ 50%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisional-parallel] PASSED [ 75%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisional-perp] PASSED [100%]
+
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-decay-cap-cpu-cpu/results.xml -
+====================== 4 passed, 2886 deselected in 9.67s ======================

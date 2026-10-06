@@ -723,6 +723,11 @@ also verifies that relaxation advanced exactly one physical timestep.
 
 ### F6: LF-aware physical and user boundaries
 
+**WO2 update (2026-10-06):** the historical guard below is superseded for active
+CGL by representation-aware inflow and user fills, verified for explicit/STS
+and refined meshes. See [the boundary contract](../modules/cgl_lf_boundaries.md).
+Passive CGL retains its separate uniform-periodic restriction.
+
 F6 was implemented on 2026-07-08 as a configuration-time guard. Both STS and
 explicit LF split integration now reject fixed-inflow and user boundaries on
 any active mesh face. During LF stages `IAN` temporarily stores magnetic

@@ -1,0 +1,360 @@
+{
+  "classification": "Task1 final test adaptation; exact final CPU and HIP validation passed, including two-node 16-GPU AMR churn",
+  "files": {
+    "task1-final-regression.patch": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task1-final-regression.patch",
+      "sha256": "61f2d84c5317f54611a94f89b5f599229207d8f9ed6f7575512d1685ebaddc59",
+      "bytes": 4978
+    },
+    "task1-final-regression.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task1-final-regression.json",
+      "sha256": "99a2134d5611094c2d7008a274bd0bb43936a92e2aa867393d035cfb0b4be095",
+      "bytes": 1663
+    },
+    "task1-input-immutability.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task1-input-immutability.json",
+      "sha256": "3f4608bb4fcf98a47c8ce6a681a4bf7b1c4fac9e2277939908da389bfba15615",
+      "bytes": 216
+    },
+    "amr_cap_probe.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr_cap_probe.py",
+      "sha256": "43dcd05418d220993fa49c3a2b032d082b5aeaea7ac592b320127e9a3fba19c9",
+      "bytes": 1290
+    },
+    "run_amr_cap_probe.sh": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/run_amr_cap_probe.sh",
+      "sha256": "b1878ffb9eee1da98361fe1e4685edb0b0f71a6601bd4a9ef1f831b515e7d9c7",
+      "bytes": 424
+    },
+    "amr_cap_candidate.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr_cap_candidate.py",
+      "sha256": "d1e732aaa296410ec575131b38de07116dd9d302469e510d0fddf4ab0fa9de14",
+      "bytes": 2027
+    },
+    "run_amr_cap_candidate.sh": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/run_amr_cap_candidate.sh",
+      "sha256": "edcf5b36ddd186f7b28cf8408d9ea1f4d1c8e0445ae4bb9f94a058d398a1f916",
+      "bytes": 428
+    },
+    "amr-cap-probe.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe.log",
+      "sha256": "4f784085a8363a350384f90ede0f4139eeb918da4cadc2b1b61ba50bb2f1a0b7",
+      "bytes": 2281
+    },
+    "amr-cap-candidate.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate.log",
+      "sha256": "88aeec64583a089c3acf9bccff849cccd5bef8a16fb2f9a2bd9ae762dd97dcd0",
+      "bytes": 3199
+    },
+    "final-low-field-diagnosis-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-low-field-diagnosis-cpu.log",
+      "sha256": "065a3baf33a5f90bbac7c06a5980746194cd5eba6ba227f805f5e9a6426f6cb6",
+      "bytes": 2128
+    },
+    "final-timestep-mpi-cpu-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-timestep-mpi-cpu-cpu.log",
+      "sha256": "87609919be93e48ee2a9f4a04e0ac81b05a0aa6b426f11c1b9f6fae4b6ccfb3c",
+      "bytes": 753
+    },
+    "final-task1-followup-cpu-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-task1-followup-cpu-cpu.log",
+      "sha256": "2a230dcc10324911845f5fce085f0160e2154ffe85cd805501d40b9b1b612414",
+      "bytes": 1386
+    },
+    "final-task1-churn-cpu-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-task1-churn-cpu-cpu.log",
+      "sha256": "b606a98eae1045d4a40944077a7f68945c3a35ec03cb7dc620ec69e9fc41a504",
+      "bytes": 842
+    },
+    "final-amr-diagnosis-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-amr-diagnosis-cpu.log",
+      "sha256": "b17b10c2b029c46e44a11060087f840e0a8ce02c6299bae1cb9bf6c554774533",
+      "bytes": 2008
+    },
+    "final-failure-diagnosis-app-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-failure-diagnosis-app-cpu.log",
+      "sha256": "4418bfec6e24f746eb314fa91399d7fb9fee967e1f6578e7b16dcaaf5522a0cd",
+      "bytes": 4459
+    },
+    "initial-cap-probes.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/results.json",
+      "sha256": "b324cd5d82fcd75716013975d653f05256693a7b69463fcb4ae9cd466ba393da",
+      "bytes": 716
+    },
+    "cap-candidate.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/results.json",
+      "sha256": "ae8b3b351cabc9c0ff6a1777094729b25f8a259cf3b99f7f2fe6ef954b7b1b04",
+      "bytes": 2178
+    },
+    "final-task1-followup-cpu-cpu.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-cpu-cpu/results.xml",
+      "sha256": "a83b018ffc644505e630684783a7464d909868b42c4e3b1714cfe7176ea9ddf6",
+      "bytes": 1081
+    },
+    "final-task1-churn-cpu-cpu.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-churn-cpu-cpu/results.xml",
+      "sha256": "7a4dd37ad321e1bbb445bc758304faa43eb5b5a8dba8b1eda15754885d778b57",
+      "bytes": 510
+    },
+    "final-timestep-mpi-cpu-cpu.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-timestep-mpi-cpu-cpu/results.xml",
+      "sha256": "fd729e7d279a4870ddb425b8e86234c1669602ae0dbd01d5876af41886c902fd",
+      "bytes": 407
+    },
+    "final-low-field-diagnosis-cpu.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-low-field-diagnosis-cpu/results.xml",
+      "sha256": "970d265215f6611eab6af8244a2f9296d463cda86b993ec8751d623226f2a8cf",
+      "bytes": 677
+    },
+    "amr-cap-probe/2d-ratio1-initial/cgl_lf_amr_primitive_churn.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio1-initial/cgl_lf_amr_primitive_churn.user.hst",
+      "sha256": "be1b9705b0264ba349e95ddee0c883a5b4b268c7298c6bde1404c852a210689e",
+      "bytes": 1672
+    },
+    "amr-cap-probe/2d-ratio1-initial/stdout.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio1-initial/stdout.log",
+      "sha256": "3213d2a3580e9f82406b478f9fcccf1353a5e7224b5d10c3f7467d04c223f781",
+      "bytes": 676
+    },
+    "amr-cap-probe/2d-ratio1-initial/command.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio1-initial/command.json",
+      "sha256": "b426abebb30db3a6821bf3c67e8f710944c18b6cbbed088ca7c17e79ba59b4c9",
+      "bytes": 382
+    },
+    "amr-cap-probe/2d-ratio1-initial/cgl_lf_amr_primitive_churn.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio1-initial/cgl_lf_amr_primitive_churn.mhd.hst",
+      "sha256": "fefeea8cf6c93c3ddbe114cf04f5760dd037565e1c86ba025dfeaf51a5a44180",
+      "bytes": 1996
+    },
+    "amr-cap-probe/2d-ratio0.1-initial/cgl_lf_amr_primitive_churn.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio0.1-initial/cgl_lf_amr_primitive_churn.mhd.hst",
+      "sha256": "bfccb272c940d4cf1b1a7bdbba376111b35489e84ad87058cdbe47b0cfd6c827",
+      "bytes": 1996
+    },
+    "amr-cap-probe/2d-ratio0.1-initial/cgl_lf_amr_primitive_churn.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio0.1-initial/cgl_lf_amr_primitive_churn.user.hst",
+      "sha256": "c475ea9413510018c19cc80b5ffab513cb5c8c569b7750f93a6b2915dfa098ad",
+      "bytes": 1672
+    },
+    "amr-cap-probe/2d-ratio0.1-initial/command.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio0.1-initial/command.json",
+      "sha256": "dbdcd41ca6aa0527a98a7d641089cd89c2331ce9f6bd06a492932fdf33804702",
+      "bytes": 384
+    },
+    "amr-cap-probe/2d-ratio0.1-initial/stdout.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/2d-ratio0.1-initial/stdout.log",
+      "sha256": "1b6c55f4686f44258eab1fe35987c85509f773af8869ff34495e572d28fac40e",
+      "bytes": 676
+    },
+    "amr-cap-probe/3d-ratio1-initial/stdout.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio1-initial/stdout.log",
+      "sha256": "7daf47bee6477625657c9fb56fb3f5c18e89bb467f6906c2efaf399e5e17a667",
+      "bytes": 678
+    },
+    "amr-cap-probe/3d-ratio1-initial/command.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio1-initial/command.json",
+      "sha256": "0aec9a30111cc46058fa65f5a05175e8d2534e42741e397bfbc1cc0d102e023a",
+      "bytes": 377
+    },
+    "amr-cap-probe/3d-ratio1-initial/cgl_lf_amr_3d_current.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio1-initial/cgl_lf_amr_3d_current.user.hst",
+      "sha256": "b324280d4f600ff1b46aaf984a0f2db1afc33eeb83d1ae3436370d517f642a89",
+      "bytes": 1672
+    },
+    "amr-cap-probe/3d-ratio1-initial/cgl_lf_amr_3d_current.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio1-initial/cgl_lf_amr_3d_current.mhd.hst",
+      "sha256": "1cac2b333607b4699134989330f7fbca8b0254e39f78a18f77d9b2a94192a26c",
+      "bytes": 1996
+    },
+    "amr-cap-probe/3d-ratio0.1-initial/cgl_lf_amr_3d_current.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio0.1-initial/cgl_lf_amr_3d_current.user.hst",
+      "sha256": "04b47d907c036cd8f5f6bb8e2f61f1dc3b2d18ddeefaa7e5ac7d3191bc6f043b",
+      "bytes": 1672
+    },
+    "amr-cap-probe/3d-ratio0.1-initial/stdout.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio0.1-initial/stdout.log",
+      "sha256": "88eabc2745a1313915aadc1417657d1914f323a8bb370b69203414ab99b39a5f",
+      "bytes": 678
+    },
+    "amr-cap-probe/3d-ratio0.1-initial/command.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio0.1-initial/command.json",
+      "sha256": "e2a72af5217279a774f6b6efe5e64bdce35cdcb0e80ec504fb812fdb274e525e",
+      "bytes": 379
+    },
+    "amr-cap-probe/3d-ratio0.1-initial/cgl_lf_amr_3d_current.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-probe/3d-ratio0.1-initial/cgl_lf_amr_3d_current.mhd.hst",
+      "sha256": "c7f96acf50583e093ff10e0e4f5d5c22513e36ba68412143fea12c45c91de952",
+      "bytes": 1996
+    },
+    "amr-cap-candidate/3d/stdout.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/3d/stdout.log",
+      "sha256": "3113377eccc29868f82ac396722a673aa5b985e73bda30fd2de7bf147e4ac0a6",
+      "bytes": 881
+    },
+    "amr-cap-candidate/3d/cgl_lf_amr_3d_current.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/3d/cgl_lf_amr_3d_current.mhd.hst",
+      "sha256": "d66447414c2ceda724852131e8fae90dc246bcd80f419755eab2bcb8a73f145b",
+      "bytes": 4249
+    },
+    "amr-cap-candidate/3d/command.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/3d/command.json",
+      "sha256": "2b3ea4e21da9824f19024be945ceb9ab8ad48e3ca0f5bcc5d3b09d97f7b57bf1",
+      "bytes": 434
+    },
+    "amr-cap-candidate/3d/cgl_lf_amr_3d_current.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/3d/cgl_lf_amr_3d_current.user.hst",
+      "sha256": "a59fce8cc557ee7050d4ad88a42089c940fa32aa92442e00bf8aa7150c2ab5c1",
+      "bytes": 3550
+    },
+    "amr-cap-candidate/2d/cgl_lf_amr_primitive_churn.mhd.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/2d/cgl_lf_amr_primitive_churn.mhd.hst",
+      "sha256": "7fc43ab9f5f81493287b29ab4afc43bc3ed8535c6f2f218d628b061157256b47",
+      "bytes": 6502
+    },
+    "amr-cap-candidate/2d/stdout.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/2d/stdout.log",
+      "sha256": "0bcfea307db2ca9584cb170d747dc0f38617f0f1817693f45654e1425dd6cb90",
+      "bytes": 1066
+    },
+    "amr-cap-candidate/2d/cgl_lf_amr_primitive_churn.user.hst": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/2d/cgl_lf_amr_primitive_churn.user.hst",
+      "sha256": "fd9154a19ac69c4d45e742ee265c482b97591aebdc00de40c23766f17c0d18a8",
+      "bytes": 5428
+    },
+    "amr-cap-candidate/2d/command.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/amr-cap-candidate/2d/command.json",
+      "sha256": "912f1b348336cd113704d242dac473529c6f9897ac8c2eef549fbbee73f5f05d",
+      "bytes": 384
+    },
+    "before-decay-task1-final-regression.patch": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/delivery/docs/validation/wo2/task1-final-followup/evidence/task1-final-regression.patch",
+      "sha256": "cd421aebe3cd4757173e7d99ce4a950dce6c661825094ed715717e81dc328410",
+      "bytes": 3944
+    },
+    "before-decay-task1-final-regression.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/delivery/docs/validation/wo2/task1-final-followup/evidence/task1-final-regression.json",
+      "sha256": "180d9e61e91d109215cfd3f3a893d3a034ba5b0400a8f06d5e61114921f0ce6c",
+      "bytes": 1418
+    },
+    "apply_task1_followup_tests.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/apply_task1_followup_tests.py",
+      "sha256": "bb478dda635d4efc3cb5c3c1aafcc8e268dac0c8a427d32b01ed769913c50b64",
+      "bytes": 4371
+    },
+    "decay-cap-audit.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/decay-cap-audit.json",
+      "sha256": "6b4518a63de275e8a1374f6a1ee34d3bf59e4136ace0002bb89ba9c4f0868938",
+      "bytes": 2484
+    },
+    "final-decay-cap-cpu-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-decay-cap-cpu-cpu.log",
+      "sha256": "0f70185313273345d40595fcbc5d8ac9bad9d136bb820faa47e3606d9b517520",
+      "bytes": 1265
+    },
+    "final-cpu-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-cpu-cpu.log",
+      "sha256": "236b891ebc30430ea0b47a2914066e8052402afe7a57ad5e54ebf765313803a0",
+      "bytes": 50640
+    },
+    "decay-cap-results.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-decay-cap-cpu-cpu/results.xml",
+      "sha256": "820ec6ac640999b28199fd44ab006f511e0f533f177bdd81faf8fcabd4d39b81",
+      "bytes": 957
+    },
+    "cgl_lf_quant_perp_collisional.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co3/cgl_lf_quant_perp_collisional.decay.csv",
+      "sha256": "a7eef2cf5b369d9974c01b21b3a527dd412b2503464a95d769f6ca2d77d7cb03",
+      "bytes": 478
+    },
+    "cgl_lf_quant_parallel.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co0/cgl_lf_quant_parallel.decay.csv",
+      "sha256": "df728c17f9ce0588f0ae78bcf2eeafb3faba83b757fd5c78c64c6ddee3e28b35",
+      "bytes": 456
+    },
+    "cgl_lf_quant_parallel_collisional.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co2/cgl_lf_quant_parallel_collisional.decay.csv",
+      "sha256": "254cd742bbdca7270c05feade26cd3ad5ce26c07e69de5a39a219effe975f826",
+      "bytes": 478
+    },
+    "cgl_lf_quant_perp.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-decay-cap-cpu-cpu/pytest-tmp/test_decay_resolves_closure_co1/cgl_lf_quant_perp.decay.csv",
+      "sha256": "963ceb3d2bef3cb56d5a112b96077b144756da1ed9399f1028482b6990e69518",
+      "bytes": 455
+    },
+    "final-run_pytest.sh": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/run_pytest.sh",
+      "sha256": "f3ab9b7a94192cdee37ace0849bdd082f975ea3c7971e850b26676d48d9fc3fb",
+      "bytes": 1979
+    },
+    "final-pytest_baseline.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/scripts/pytest_baseline.py",
+      "sha256": "c3a93df74f1df34c64dd6b3f2b3f597c6c9aa347eaa1a6720e3409c3e5de47f8",
+      "bytes": 2158
+    },
+    "final-launch.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/scripts/launch.py",
+      "sha256": "c18071379e6c0597c355275e28d59ec6cf7b79c6b73220b2c3322ed7101ca9f5",
+      "bytes": 1159
+    },
+    "final-task1-16gpu-results.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-16gpu-mpi-gpu/results.xml",
+      "sha256": "f9b0b1b24652cc91ddcadba42c6428772b655c6e640dd4b476145632efa776fa",
+      "bytes": 367
+    },
+    "final-task1-16gpu-mpi-gpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-task1-16gpu-mpi-gpu.log",
+      "sha256": "6f60ff19d9598abad3d1e95434ffa5f7e16d0ea2d85efae67fd6ba896011fa24",
+      "bytes": 706
+    },
+    "final-task1-16gpu-launch.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-task1-16gpu-launch.log",
+      "sha256": "2dbde499597a507032c4303009832edec22cb0a33053cb0fc776031958306b14",
+      "bytes": 2030
+    },
+    "final-task1-followup-hip-results.xml": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/results.xml",
+      "sha256": "af0d3d2fee4fdae81dcf5be2440016a06ea250aa91fbdbe9a5c55d2117a31157",
+      "bytes": 2112
+    },
+    "final-task1-followup-hip-cpu.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-task1-followup-hip-cpu.log",
+      "sha256": "d13c9a1d87501e8b43d1721938027b618e8e702a6dc086b7f0bced068accae0b",
+      "bytes": 2352
+    },
+    "final-task1-followup-hip-launch.log": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/final-task1-followup-hip-launch.log",
+      "sha256": "2dbde499597a507032c4303009832edec22cb0a33053cb0fc776031958306b14",
+      "bytes": 2030
+    },
+    "hip-cgl_lf_quant_parallel.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/pytest-tmp/test_decay_resolves_closure_co0/cgl_lf_quant_parallel.decay.csv",
+      "sha256": "fd5c96a6e0f32060249389055748afe88f8587c5261d6676be8e925f2e1331de",
+      "bytes": 456
+    },
+    "hip-cgl_lf_quant_perp.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/pytest-tmp/test_decay_resolves_closure_co1/cgl_lf_quant_perp.decay.csv",
+      "sha256": "963ceb3d2bef3cb56d5a112b96077b144756da1ed9399f1028482b6990e69518",
+      "bytes": 455
+    },
+    "hip-cgl_lf_quant_parallel_collisional.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/pytest-tmp/test_decay_resolves_closure_co2/cgl_lf_quant_parallel_collisional.decay.csv",
+      "sha256": "254cd742bbdca7270c05feade26cd3ad5ce26c07e69de5a39a219effe975f826",
+      "bytes": 478
+    },
+    "hip-cgl_lf_quant_perp_collisional.decay.csv": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/pytest-tmp/test_decay_resolves_closure_co3/cgl_lf_quant_perp_collisional.decay.csv",
+      "sha256": "a7eef2cf5b369d9974c01b21b3a527dd412b2503464a95d769f6ca2d77d7cb03",
+      "bytes": 478
+    },
+    "task1-final-gpu-followup.json": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task1-final-gpu-followup.json",
+      "sha256": "7dbafe355e97fc6f341f6fdd656944b22e85e9bc13333340ebfff0f6f4b7cb9f",
+      "bytes": 2143
+    },
+    "archive_task1_gpu_followup.py": {
+      "original_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/archive_task1_gpu_followup.py",
+      "sha256": "2d635cb053c856fb321103641c0bfa5b7e1c42d1c90d82de98833bace286287d",
+      "bytes": 4323
+    }
+  }
+}

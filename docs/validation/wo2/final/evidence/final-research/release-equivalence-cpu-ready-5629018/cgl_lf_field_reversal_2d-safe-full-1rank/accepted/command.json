@@ -1,0 +1,33 @@
+{
+  "command": [
+    "srun",
+    "--exact",
+    "-N1",
+    "-n",
+    "1",
+    "--ntasks-per-node",
+    "1",
+    "--threads-per-core=1",
+    "--cpu-bind=threads",
+    "-c1",
+    "--gpus-per-node=0",
+    "--overlap",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+    "-i",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-cpu-ready-5629018/inputs/cgl_lf_field_reversal_2d-safe-full-1rank.athinput"
+  ],
+  "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-cpu-ready-5629018/cgl_lf_field_reversal_2d-safe-full-1rank/accepted",
+  "returncode": 0,
+  "binary_sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a",
+  "input_sha256": "7a9cf11266c7ba909d6f5b5c1e624d5987781fa4030b3d41b34573b50e26cf52",
+  "final_time": 0.13956492066153908,
+  "lf_cell_stages": 286720.0,
+  "repair_counters": {
+    "lf_dfloor": 0.0,
+    "lf_pfloor": 0.0,
+    "lf_nonfin": 0.0,
+    "lf_nonpos": 0.0,
+    "lf_hardbd": 0.0,
+    "lf_hwproj": 0.0
+  }
+}

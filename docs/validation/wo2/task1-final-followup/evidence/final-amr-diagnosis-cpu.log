@@ -1,0 +1,25 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-amr-diagnosis-cpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2890 items / 2889 deselected / 1 selected
+
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py::test_cgl_lf_amr_primitive_churn_gpu FAILED [100%]
+
+=================================== FAILURES ===================================
+_____________________ test_cgl_lf_amr_primitive_churn_gpu ______________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py:395: in test_cgl_lf_amr_primitive_churn_gpu
+    assert np.any(transitions > 0.0)
+E   assert False
+E    +  where False = <function any at 0x7f919ff94430>(array([0., 0., 0., 0., 0., 0.]) > 0.0)
+E    +    where <function any at 0x7f919ff94430> = np.any
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 19:13:24,954 - INFO - Executing command: ./athena -i ../../../inputs/tests/cgl_lf_amr_primitive_churn.athinput job/basename=cgl_amr_gpu_lf_churn
+rm: cannot remove '*.dat': No such file or directory
+------------------------------ Captured log call -------------------------------
+INFO     root:testutils.py:50 Executing command: ./athena -i ../../../inputs/tests/cgl_lf_amr_primitive_churn.athinput job/basename=cgl_amr_gpu_lf_churn
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-amr-diagnosis-cpu/results.xml -
+=========================== short test summary info ============================
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py::test_cgl_lf_amr_primitive_churn_gpu
+!!!!!!!!!!!!!!!!!!!!!!!!!! stopping after 1 failures !!!!!!!!!!!!!!!!!!!!!!!!!!!
+====================== 1 failed, 2889 deselected in 6.27s ======================

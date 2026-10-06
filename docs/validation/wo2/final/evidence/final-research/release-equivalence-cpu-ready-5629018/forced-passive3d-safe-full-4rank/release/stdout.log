@@ -1,0 +1,39 @@
+
+Root grid = 2 x 2 x 2 MeshBlocks
+Total number of MeshBlocks = 8
+Number of logical  levels of refinement = 1 (2 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 4
+  Rank = 0: 2 MeshBlocks, cost = 2
+  Rank = 1: 2 MeshBlocks, cost = 2
+  Rank = 2: 2 MeshBlocks, cost = 2
+  Rank = 3: 2 MeshBlocks, cost = 2
+Load Balancing:
+  Maximum normalized cost = 1, Average = 1
+Initialising turbulence driving module
+ dedt = 0.02 tcorr = 1 dt_update = 0.01
+
+Setup complete, executing task list(s)...
+
+elapsed=8.538996e-01 cycle=0 time=0.000000e+00 dt=1.035135e-02
+elapsed=8.931956e-01 cycle=1 time=1.035135e-02 dt=1.033759e-02
+elapsed=9.320981e-01 cycle=2 time=2.068895e-02 dt=1.032276e-02
+elapsed=9.677593e-01 cycle=3 time=3.101170e-02 dt=1.030797e-02
+elapsed=1.003593e+00 cycle=4 time=4.131968e-02 dt=1.029259e-02
+elapsed=1.038966e+00 cycle=5 time=5.161227e-02 dt=1.027674e-02
+elapsed=1.074945e+00 cycle=6 time=6.188901e-02 dt=1.023682e-02
+elapsed=1.110224e+00 cycle=7 time=7.212582e-02 dt=1.019187e-02
+elapsed=1.146209e+00 cycle=8 time=8.231769e-02 dt=1.015822e-02
+elapsed=1.181557e+00 cycle=9 time=9.247591e-02 dt=1.012721e-02
+elapsed=1.217620e+00 cycle=10 time=1.026031e-01 dt=1.010357e-02
+elapsed=1.253042e+00 cycle=11 time=1.127067e-01 dt=1.009066e-02
+elapsed=1.844550e+00 cycle=12 time=1.227974e-01 dt=1.008574e-02
+
+Terminating on cycle limit
+time=1.227974e-01 cycle=12
+tlim=1.000000e+00 nlim=12
+
+MeshBlock-cycles = 96
+cpu time used  = 9.906559e-01
+zone-cycles/cpu_second = 4.961561e+04
+particle-updates/cpu_second = 0.000000e+00

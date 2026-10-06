@@ -1,0 +1,80 @@
+{
+  "scope": "Formatting/comments only; exact literal token identity",
+  "before_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/style-research/rebased-before",
+  "candidate_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/style-research/rebased-candidate",
+  "normalization": "C++ token spellings after removing comments/whitespace only; no string-literal folding",
+  "diagnostic_note": "Line wrapping changes source line numbers and thus diagnostic __LINE__ values/debug locations; numerical/operator tokens and message contents are unchanged.",
+  "files": {
+    "src/diffusion/cgl_landau_fluid.cpp": {
+      "before_sha256": "70354aee97d46a8a0b50d542f4dcff348730235792c8607c411330f8af2dce53",
+      "after_sha256": "c25d3c6ee3d7a5ba219b65d58851c9920ac5260a9fd8270c7ec3cf599d2cb963",
+      "token_count": 35203,
+      "normalized_token_sha256": "a6492712914cccdfcfbc83ec89471d0db8f0dc4ba517b188f18e8fe8ac3b45cb",
+      "tokens_identical": true
+    },
+    "src/eos/cgl_mhd.cpp": {
+      "before_sha256": "d64fad9b75c64fbd7edbd9ef7fe05bfbd1f59ad506ad94db6bb00648407d0baf",
+      "after_sha256": "7f128e902e222778ceea1dc529f756fb1a084da2641ac66cdfcb6257dff6dee3",
+      "token_count": 6145,
+      "normalized_token_sha256": "94a34c7c3aa9aafc8e7d2fe51b2d5fe54992d65574b7e2350c5f5c457db71f17",
+      "tokens_identical": true
+    },
+    "src/eos/cgl_passive.hpp": {
+      "before_sha256": "6aab543c81027c9320572748fdb61fd8c6f3f5791d0c0eca2db10b3d31edda28",
+      "after_sha256": "6a0c80d74d3ab97d042a664c97c7c6e0e9374244b27c3157bc33d50d3abcfe4a",
+      "token_count": 1638,
+      "normalized_token_sha256": "4d7f76af083f624a58d69c399f49b6aa0661c803998b6912deb9003e08024d88",
+      "tokens_identical": true
+    },
+    "src/eos/isothermal_c2p_mhd.hpp": {
+      "before_sha256": "e26c4fdc0aea579ebc80dc6f4a2982cee0b45c0a6a7469ba98dbdfc8872df246",
+      "after_sha256": "6141d1990ca76068a7c2ec1de234646814db8620d134e2d55c33f92803e34eda",
+      "token_count": 161,
+      "normalized_token_sha256": "9aa2ae771c8c03e66e3282a4a21c8220ab4f664660b83dc0662a0684c8b535c4",
+      "tokens_identical": true
+    },
+    "src/mhd/mhd.cpp": {
+      "before_sha256": "03d8bd43e4b503218021fd8e24948f897a45f0dc628973179daa803c70007915",
+      "after_sha256": "aded06b05f17aa0adeb8737c4574408f68d2f0cd53c716525f0d650ab69c82ef",
+      "token_count": 5160,
+      "normalized_token_sha256": "bdf4931d9334bd4d54557e8a74c62470d63514f858a78b20239c37cc334fa619",
+      "tokens_identical": true
+    },
+    "src/outputs/history.cpp": {
+      "before_sha256": "ac61d0a63c4680a36696b2ab3821614506c7e22748d66de14354a79bdab27f0a",
+      "after_sha256": "db0ced81c0e5eae32ba666a8550bd2b38948788df4b037d07928c35144834041",
+      "token_count": 4420,
+      "normalized_token_sha256": "fe4cd14a83e196aa59eca961c1d3728948d2816f6d4b48e92d22ac9857c9199d",
+      "tokens_identical": true
+    },
+    "src/pgen/pgen.cpp": {
+      "before_sha256": "30fd5a8e4ab7fc145c3cbc8fe39bbfbfa7966df1a250932494fb2b90aa288459",
+      "after_sha256": "a479df7e24445707cd1a9ceefd466ed59319575517c2e77c1d0e4402986e87fd",
+      "token_count": 8286,
+      "normalized_token_sha256": "3d0f57004dc365253983c9332a45b181bcdbb236b25a475e3c36ca50d6859d1e",
+      "tokens_identical": true
+    },
+    "src/pgen/tests/cgl_lf_boundary.cpp": {
+      "before_sha256": "e4c80cdeb5eebcd1de80ecac4a2a816d75ccb7aad9775faf3a664bd5a01d57a9",
+      "after_sha256": "e46e6ba7cfc3ece5b333fbfb337e28175347ea96d02a3ce4afe7e5b503255b23",
+      "token_count": 2015,
+      "normalized_token_sha256": "7c9995c059c0a034dfed574cdfc9382a66aa1a06e83a40c534e9127e86f71dc5",
+      "tokens_identical": true
+    },
+    "src/pgen/tests/cgl_passive_validation.cpp": {
+      "before_sha256": "913e627b97d4f2c5182d379374cfecc5f7e2136c3fcd7f177dc8a0cd0b9f96dd",
+      "after_sha256": "171ba42a1660ea8b397a4392ddc8f2f714431f9b949f797d61a00d71232b1b8c",
+      "token_count": 1081,
+      "normalized_token_sha256": "614a9dfe56909e3ba2857f9f8502b2ed1ba10fe4704c2af5d18d3eb96b883d3e",
+      "tokens_identical": true
+    },
+    "src/srcterms/srcterms.cpp": {
+      "before_sha256": "c4e2814d69b092798e1a74f19ffc44ce9d6bc1f1d1a067cd394a00fa48a391e2",
+      "after_sha256": "dabf74f200bc9c7075cfe0d9d7d2b78ee21944f47cec3f8549dbaeac20b765c1",
+      "token_count": 3028,
+      "normalized_token_sha256": "0d43b56b5d1016cc617dd52be90c84cd05c26bcedb189e78234ca3166f0fe460",
+      "tokens_identical": true
+    }
+  },
+  "patch_sha256": "eed478115edfc74c7b014386ce04e0bb1cf470e38e8252ea9f4e699672a889f4"
+}

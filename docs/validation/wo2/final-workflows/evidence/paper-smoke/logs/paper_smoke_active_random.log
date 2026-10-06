@@ -1,0 +1,23 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+Initialising turbulence driving module
+ dedt = 0.32 tcorr = 2 dt_update = 0.01
+
+Setup complete, executing task list(s)...
+
+elapsed=1.219784e+00 cycle=0 time=0.000000e+00 dt=9.682458e-03
+elapsed=1.857131e+00 cycle=1 time=9.682458e-03 dt=3.175416e-04
+elapsed=3.361411e+00 cycle=2 time=1.000000e-02 dt=6.350833e-04
+
+Terminating on time limit
+time=1.000000e-02 cycle=2
+tlim=1.000000e-02 nlim=-1
+
+MeshBlock-cycles = 2
+cpu time used  = 2.141636e+00
+zone-cycles/cpu_second = 9.562784e+02
+particle-updates/cpu_second = 0.000000e+00

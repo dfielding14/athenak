@@ -1,0 +1,10 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-task1-16gpu-mpi-gpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2 items / 1 deselected / 1 selected
+
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py::test_cgl_lf_amr_3d_churn_mpi_gpu PASSED [100%]
+
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-16gpu-mpi-gpu/results.xml -
+======================= 1 passed, 1 deselected in 5.47s ========================

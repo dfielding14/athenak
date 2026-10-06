@@ -1,0 +1,53 @@
+Tue Oct  6 23:06:15 UTC 2026
+frontier06527
+craype-x86-trento
+libfabric/2.3.1
+craype-network-ofi
+xpmem/1.0.1-1.5_1_gfb6998056825
+Core/26.05
+tmux/3.6a
+hsi/default
+lfs-wrapper/0.0.1
+DefApps
+craype-accel-amd-gfx90a
+PrgEnv-cray/8.6.0
+cray-dsmml/0.3.1
+cray-pmi/6.1.16
+craype/2.7.35
+perftools-base/25.09.0
+cpe/25.09
+rocm/6.4.2
+cce/20.0.0
+cray-libsci/25.09.0
+cray-mpich/9.0.1
+cray-python/3.11.7
+JobId=5629018 JobName=cgl_wo2_final
+   UserId=dfielding(18664) GroupId=dfielding(31188) MCS_label=N/A
+   Priority=43546726 Nice=0 Account=ast207 QOS=debug
+   JobState=RUNNING Reason=None Dependency=(null)
+   Requeue=0 Restarts=0 BatchFlag=1 Reboot=0 ExitCode=0:0
+   RunTime=00:00:16 TimeLimit=02:00:00 TimeMin=N/A
+   SubmitTime=2026-10-06T18:42:54 EligibleTime=2026-10-06T18:42:54
+   AccrueTime=2026-10-06T18:42:57
+   StartTime=2026-10-06T19:06:01 EndTime=2026-10-06T21:06:01 Deadline=N/A
+   SuspendTime=None SecsPreSuspend=0 LastSchedEval=2026-10-06T19:06:01 Scheduler=Backfill
+   Partition=batch AllocNode:Sid=login10:2105114
+   ReqNodeList=(null) ExcNodeList=(null)
+   NodeList=frontier[06527,09344]
+   BatchHost=frontier06527
+   NumNodes=2 NumCPUs=224 NumTasks=2 CPUs/Task=1 ReqB:S:C:T=0:0:*:1
+   ReqTRES=cpu=2,mem=1000G,node=2,billing=2
+   AllocTRES=cpu=224,mem=1000G,node=2,billing=224
+   Socks/Node=* NtasksPerN:B:S:C=0:0:*:* CoreSpec=*
+   MinCPUsNode=1 MinMemoryNode=0 MinTmpDiskNode=0
+   Features=(null) DelayBoot=00:00:00
+   OverSubscribe=NO Contiguous=0 Licenses=(null) LicensesAlloc=(null) Network=(null)
+   Command=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/scripts/final_allocation.sbatch
+   SubmitLine=sbatch scripts/final_allocation.sbatch
+   WorkDir=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+   AdminComment=GPU_SRANGE_SRC=default,GPU_POWER_CAP=560,GPU_POWER_CAP_SRC=default,GPU_COUNTERS=1,GPU_COUNTERS_SRC=default,GPU_SRANGE=500-1700
+   StdErr=
+   StdIn=/dev/null
+   StdOut=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/logs/final-allocation-5629018.log
+   TresPerNode=gres/gpu:8
+

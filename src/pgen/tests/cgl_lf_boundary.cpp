@@ -1,6 +1,11 @@
 //========================================================================================
-// AthenaK CGL-LF fixed-state and PrimToCons user-boundary regression.
+// AthenaXXX astrophysical plasma code
+// Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
+// Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
+//! \file cgl_lf_boundary.cpp
+//! \brief CGL-LF fixed-state and PrimToCons user-boundary regression.
+
 #include <cmath>
 #include "athena.hpp"
 #include "mesh/mesh.hpp"

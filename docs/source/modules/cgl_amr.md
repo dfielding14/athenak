@@ -91,9 +91,18 @@ on that path explicitly require the magnetic-moment representation. At the end
 of the split LF sweep, AthenaK converts back to conserved anisotropy before
 ordinary hyperbolic evolution, output, or restart.
 
-LF split integration rejects inflow and user boundaries at construction:
-they have no magnetic-moment-aware `IAN` contract, with support deferred to
-WO2. Periodic, outflow, reflecting, and diode boundaries are supported.
+Active-CGL LF supports inflow and user boundaries in explicit and STS runs,
+including refined meshes. Fixed inflow converts stored A using the final ghost
+magnetic field. User callbacks must follow the
+[representation-aware contract](cgl_lf_boundaries.md), including idempotent
+fills after prolongation. Periodic, outflow, reflecting and diode boundaries
+remain supported. Passive CGL currently requires a uniform periodic mesh.
+
+Multilevel LF stages exchange only IEN/IAN while retaining magnetic fills and
+the existing projection helpers. They also synchronize same-level LF face
+fluxes: independently prolonged transverse corner ghosts can otherwise give
+two fluxes on the same physical face and violate global conservation. Existing
+coarse/fine correction remains in place.
 
 ### Magnetic fields and diagnostics
 

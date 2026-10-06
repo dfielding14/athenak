@@ -1,0 +1,30 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=3.140776e-02 cycle=0 time=0.000000e+00 dt=1.376932e-04
+elapsed=1.271487e+00 cycle=100 time=1.376932e-02 dt=1.376932e-04
+elapsed=2.501633e+00 cycle=200 time=2.789354e-02 dt=1.618955e-04
+elapsed=3.728135e+00 cycle=300 time=4.948308e-02 dt=2.182197e-04
+elapsed=4.971514e+00 cycle=400 time=6.983939e-02 dt=1.941741e-04
+elapsed=6.209867e+00 cycle=500 time=9.050951e-02 dt=2.298888e-04
+elapsed=7.447529e+00 cycle=600 time=1.119492e-01 dt=1.974366e-04
+elapsed=8.687030e+00 cycle=700 time=1.331482e-01 dt=2.098795e-04
+elapsed=9.922642e+00 cycle=800 time=1.546345e-01 dt=2.257320e-04
+elapsed=1.115687e+01 cycle=900 time=1.749671e-01 dt=2.197771e-04
+elapsed=1.239455e+01 cycle=1000 time=1.966123e-01 dt=2.041286e-04
+CGL LF hotspot: min_tpar=9.99999999999956035e-01 min_tperp=9.99999999999999889e-01 energy_error=1.66533453693773481e-14 diffusion_times=1.00234247950859974e+01
+
+Terminating on time limit
+time=2.01000000000000012e-01 cycle=1022
+tlim=2.01000000000000012e-01 nlim=-1
+
+MeshBlock-cycles = 1022
+cpu time used  = 1.26373996734619141e+01
+zone-cycles/cpu_second = 3.31247906250000000e+05
+particle-updates/cpu_second = 0.00000000000000000e+00

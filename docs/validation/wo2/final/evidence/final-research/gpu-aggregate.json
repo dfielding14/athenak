@@ -1,0 +1,766 @@
+{
+  "classification": "Ordered union of 52 actual-GPU tests and cap-only AMR followups on the exact final fused HIP binary; separate passive18groups and MPIAMR2checks are recorded elsewhere.",
+  "original_suite_counts": {
+    "passed": 52,
+    "failed": 0,
+    "xfailed": 0,
+    "skipped": 0
+  },
+  "original_test_count": 52,
+  "evidence": [
+    {
+      "path": "baseline/final-gpu-cpu/results.xml",
+      "sha256": "79ae16e221f10572d320c5666d92f7614e96d86a23f11d5bdaa9d52562fa7183",
+      "tests": 52
+    },
+    {
+      "path": "baseline/final-task1-followup-hip-cpu/results.xml",
+      "sha256": "af0d3d2fee4fdae81dcf5be2440016a06ea250aa91fbdbe9a5c55d2117a31157",
+      "tests": 11
+    }
+  ],
+  "results": [
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_3d_and_passive_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_conservative_refinement_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_current_churn_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_primitive_smooth_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_primitive_stage_order_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_projection_stress_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_repair_accounting_tracks_only_transferred_states_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_repair_counters_survive_restart_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_amr_restart_through_regrid_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_lf_amr_3d_churn_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": "assert 13824.0 == 110592.0\n +  where 13824.0 = <function max at 0x7f636d995170>(array([13824., 13824., 13824., 13824., 13824., 13824., 13824., 13824.]))\n +    where <function max at 0x7f636d995170> = np.max"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_gpu::test_cgl_lf_amr_primitive_churn_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "failed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": "assert False\n +  where False = <function any at 0x7f636d994870>(array([0., 0., 0., 0., 0., 0.]) > 0.0)\n +    where <function any at 0x7f636d994870> = np.any"
+        },
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_amr_walls_cpu::test_cgl_amr_walls_after_final_field_refresh",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_low_field_faces_disable_transport_cleanly",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_post_sweep_timestep_refresh[0]",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_cpu::test_cgl_lf_post_sweep_timestep_refresh[3000]",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_landau_fluid_mpicpu::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisional-parallel]",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisional-perp]",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisionless-parallel]",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_acceptance_cpu::test_decay_resolves_closure_coefficients[collisionless-perp]",
+      "in_original_suite": false,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-task1-followup-hip-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[1d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[1d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[3d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[3d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[mixed2d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[mixed2d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[smr-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_uniform_boundary_gpu[smr-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_user_matches_inflow_gpu[explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_gpu::test_cgl_lf_user_matches_inflow_gpu[sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_mpi_gpu::test_cgl_lf_uniform_boundary_mpi_gpu[3d-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_mpi_gpu::test_cgl_lf_uniform_boundary_mpi_gpu[3d-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_mpi_gpu::test_cgl_lf_uniform_boundary_mpi_gpu[smr-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_boundary_mpi_gpu::test_cgl_lf_uniform_boundary_mpi_gpu[smr-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_gpu::test_cgl_lf_smr_conservation_gpu[2-False-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_gpu::test_cgl_lf_smr_conservation_gpu[2-False-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_gpu::test_cgl_lf_smr_conservation_gpu[2-True-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_gpu::test_cgl_lf_smr_conservation_gpu[2-True-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_gpu::test_cgl_lf_smr_conservation_gpu[3-False-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_gpu::test_cgl_lf_smr_conservation_gpu[3-True-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_mpi_gpu::test_cgl_lf_smr_conservation_mpi_gpu[2-False-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_mpi_gpu::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_mpi_gpu::test_cgl_lf_smr_conservation_mpi_gpu[2-True-explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_mpi_gpu::test_cgl_lf_smr_conservation_mpi_gpu[2-True-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_mpi_gpu::test_cgl_lf_smr_conservation_mpi_gpu[3-False-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_conservation_mpi_gpu::test_cgl_lf_smr_conservation_mpi_gpu[3-True-sts]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_outflow_gpu::test_cgl_lf_smr_outflow_gpu[0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_outflow_gpu::test_cgl_lf_smr_outflow_gpu[4]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_outflow_mpi_gpu::test_cgl_lf_smr_outflow_mpi_gpu[0]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_smr_outflow_mpi_gpu::test_cgl_lf_smr_outflow_mpi_gpu[4]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_barriers_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_default_off_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_fallback_gpu[collision]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_fallback_gpu[explicit]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_fallback_gpu[limiter]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_fallback_gpu[strict]",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_rejection_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_restart_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_temporal_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_gpu::test_cgl_lf_sts_merge_wall_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    },
+    {
+      "test": "test_cgl_lf_sts_merge_mpi_gpu::test_cgl_lf_sts_merge_rejection_mpi_gpu",
+      "in_original_suite": true,
+      "observations": [
+        {
+          "state": "passed",
+          "evidence": "baseline/final-gpu-cpu/results.xml",
+          "detail": ""
+        }
+      ],
+      "final": "passed"
+    }
+  ]
+}

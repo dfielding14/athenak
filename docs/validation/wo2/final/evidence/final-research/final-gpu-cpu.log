@@ -1,0 +1,29 @@
+........FF..........................................                     [100%]
+=================================== FAILURES ===================================
+_____________________ test_cgl_lf_amr_primitive_churn_gpu ______________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py:395: in test_cgl_lf_amr_primitive_churn_gpu
+    assert np.any(transitions > 0.0)
+E   assert False
+E    +  where False = <function any at 0x7f636d994870>(array([0., 0., 0., 0., 0., 0.]) > 0.0)
+E    +    where <function any at 0x7f636d994870> = np.any
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 19:12:00,004 - INFO - Executing command: ./athena -i ../../../inputs/tests/cgl_lf_amr_primitive_churn.athinput job/basename=cgl_amr_gpu_lf_churn
+rm: cannot remove '*.dat': No such file or directory
+------------------------------ Captured log call -------------------------------
+INFO     root:testutils.py:50 Executing command: ./athena -i ../../../inputs/tests/cgl_lf_amr_primitive_churn.athinput job/basename=cgl_amr_gpu_lf_churn
+_________________________ test_cgl_lf_amr_3d_churn_gpu _________________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py:414: in test_cgl_lf_amr_3d_churn_gpu
+    assert np.max(user["ncell"]) == 110592.0
+E   assert 13824.0 == 110592.0
+E    +  where 13824.0 = <function max at 0x7f636d995170>(array([13824., 13824., 13824., 13824., 13824., 13824., 13824., 13824.]))
+E    +    where <function max at 0x7f636d995170> = np.max
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 19:12:02,889 - INFO - Executing command: ./athena -i ../../../inputs/tests/cgl_lf_amr_3d_current.athinput job/basename=cgl_amr_gpu_lf_3d_churn
+rm: cannot remove '*.dat': No such file or directory
+------------------------------ Captured log call -------------------------------
+INFO     root:testutils.py:50 Executing command: ./athena -i ../../../inputs/tests/cgl_lf_amr_3d_current.athinput job/basename=cgl_amr_gpu_lf_3d_churn
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-gpu-cpu/results.xml -
+=========================== short test summary info ============================
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py::test_cgl_lf_amr_primitive_churn_gpu
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_gpu.py::test_cgl_lf_amr_3d_churn_gpu
+2 failed, 50 passed, 2838 deselected in 439.80s (0:07:19)

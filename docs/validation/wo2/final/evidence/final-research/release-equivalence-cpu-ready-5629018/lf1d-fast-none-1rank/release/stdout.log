@@ -1,0 +1,20 @@
+
+Root grid = 1 x 1 x 1 MeshBlocks
+Total number of MeshBlocks = 1
+Number of logical  levels of refinement = 0 (1 levels total)
+Number of physical levels of refinement = 0 (1 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=6.983088e-01 cycle=0 time=0.000000e+00 dt=1.081440e-03
+CGL LF parallel_decay passed: measured_amp=9.575667e-05 expected_amp=9.575548e-05 rel_err=1.240117e-05 rel_tol=3.000000e-03 cos_amp=1.702686e-20 cos_limit=1.000000e-10
+
+Terminating on cycle limit
+time=4.325760e-03 cycle=4
+tlim=9.973557e-02 nlim=4
+
+MeshBlock-cycles = 4
+cpu time used  = 6.334220e-01
+zone-cycles/cpu_second = 8.083079e+02
+particle-updates/cpu_second = 0.000000e+00

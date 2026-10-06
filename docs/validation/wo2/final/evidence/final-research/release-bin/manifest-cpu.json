@@ -1,0 +1,13 @@
+{
+  "created": "2026-10-06T23:42:04.488313+00:00",
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+  "sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+  "source_manifest": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-source-manifest.json",
+  "build_log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-cpu.log",
+  "cpu_relink_manifest": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-cpu-link-manifest.json",
+  "runtime_acceptance": "PASS: 25 accepted/release pairs (50 applications), exact fields/history/normalized restart state, all repair counters zero",
+  "acceptance_summary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-summary.json",
+  "acceptance_results": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-cpu-ready-5629018/results.json",
+  "additional_release_acceptance": "PASS: six four-rank passive groups, 80 applications, 65 checks, including resumed full-state restart",
+  "completed_utc": "2026-10-06T23:48:26.859060+00:00"
+}

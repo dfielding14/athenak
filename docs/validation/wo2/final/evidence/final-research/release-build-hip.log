@@ -1,0 +1,785 @@
+Unloading the cpe module is insufficient to restore the system defaults.
+Please run 'source
+/opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.[csh|sh]'. 
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: /opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+Core/26.05:
+   On September 15, 2026, the default Core module was upgraded from
+   Core/25.03 to Core/26.05. For more information on Core/26.05 including
+   package version changes please see: https://docs.olcf.ornl.gov/software/software-news.html#frontier-core-module-may-11-2026
+
+-------------------------------------------------------------------------------
+
+
+Activating Modules:
+  1) darshan-runtime/3.4.4-mpi
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.30
+
+The following have been reloaded with a version change:
+  1) cray-libsci/24.11.0 => cray-libsci/24.07.0
+  2) craype/2.7.33 => craype/2.7.32
+
+
+The following have been reloaded with a version change:
+  1) PrgEnv-cray/8.5.0 => PrgEnv-cray/8.6.0
+  2) cce/18.0.0 => cce/20.0.0
+  3) cray-dsmml/0.3.0 => cray-dsmml/0.3.1
+  4) cray-libsci/24.07.0 => cray-libsci/25.09.0
+  5) cray-mpich/8.1.30 => cray-mpich/9.0.1
+  6) cray-pmi/6.1.15.21 => cray-pmi/6.1.16
+  7) craype/2.7.32 => craype/2.7.35
+  8) darshan-runtime/3.4.4-mpi => darshan-runtime/3.4.7-mpi
+  9) perftools-base/24.07.0 => perftools-base/25.09.0
+
+-- The C compiler identification is CrayClang 20.0.0
+-- The CXX compiler identification is CrayClang 20.0.0
+-- Cray Programming Environment 2.7.35 C
+-- Detecting C compiler ABI info
+-- Detecting C compiler ABI info - done
+-- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+-- Detecting C compile features
+-- Detecting C compile features - done
+-- Cray Programming Environment 2.7.35 CXX
+-- Detecting CXX compiler ABI info
+-- Detecting CXX compiler ABI info - done
+-- Check for working CXX compiler: /opt/cray/pe/craype/2.7.35/bin/CC - skipped
+-- Detecting CXX compile features
+-- Detecting CXX compile features - done
+-- Found MPI_CXX: /opt/cray/pe/craype/2.7.35/bin/CC (found version "4.0") 
+-- Found MPI: TRUE (found version "4.0") found components: CXX 
+-- Setting default Kokkos CXX standard to 17
+-- Kokkos version: 4.4.0
+-- The project name is: Kokkos
+-- Using internal gtest for testing
+-- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/generated/Kokkos_Version_Info.cpp
+-- Compiler Version: 20.0.0
+-- SERIAL backend is being turned on to ensure there is at least one Host space. To change this, you must enable another host execution space and configure with -DKokkos_ENABLE_SERIAL=OFF or change CMakeCache.txt
+-- Using -std=c++17 for C++17 standard as feature
+-- Built-in Execution Spaces:
+--     Device Parallel: Kokkos::HIP
+--     Host Parallel: NoTypeDefined
+--       Host Serial: SERIAL
+-- 
+-- Architectures:
+--  ZEN3
+--  VEGA90A
+-- Found TPLLIBDL: /usr/include  
+-- Found TPLROCM: /opt/rocm-6.4.2/lib/libamdhip64.so  
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD
+-- Performing Test CMAKE_HAVE_LIBC_PTHREAD - Success
+-- Found Threads: TRUE  
+-- Using internal desul_atomics copy
+-- Experimental mdspan support is enabled
+-- Looking for C++ include experimental/mdspan
+-- Looking for C++ include experimental/mdspan - not found
+-- Looking for C++ include mdspan
+-- Looking for C++ include mdspan - not found
+-- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/../../tpls/mdspan/include
+-- Kokkos Backends: SERIAL;HIP
+-- Configuring done (3.1s)
+-- Generating done (0.5s)
+-- Build files have been written to: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip
+[  1%] Building CXX object kokkos/simd/src/CMakeFiles/kokkossimd.dir/Kokkos_SIMD_dummy.cpp.o
+-- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/generated/Kokkos_Version_Info.cpp
+[  1%] Built target AlwaysCheckGit
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  2%] Building CXX object kokkos/CMakeFiles/impl_git_version.dir/__/generated/Kokkos_Version_Info.cpp.o
+[  3%] Linking CXX static library libkokkossimd.a
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  3%] Built target kokkossimd
+[  3%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_CPUDiscovery.cpp.o
+[  5%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Abort.cpp.o
+[  5%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Command_Line_Parsing.cpp.o
+[  6%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Core.cpp.o
+[  6%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_ExecPolicy.cpp.o
+[  6%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Error.cpp.o
+[  7%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostBarrier.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  7%] Linking CXX static library libimpl_git_version.a
+[  7%] Built target impl_git_version
+[  7%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostSpace.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  8%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostSpace_deepcopy.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  8%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_HostThreadTeam.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  9%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_MemoryPool.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[  9%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Profiling.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 10%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_SharedAlloc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 10%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_Stacktrace.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 11%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/impl/Kokkos_hwloc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 11%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/HIP/Kokkos_HIP.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 12%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/HIP/Kokkos_HIP_DeepCopy.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 12%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/HIP/Kokkos_HIP_Instance.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 13%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/HIP/Kokkos_HIP_SharedAllocationRecord.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 13%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/HIP/Kokkos_HIP_Space.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 14%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/Serial/Kokkos_Serial.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 14%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/Serial/Kokkos_Serial_Task.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 15%] Building CXX object kokkos/core/src/CMakeFiles/kokkoscore.dir/__/__/tpls/desul/src/Lock_Array_HIP.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 15%] Linking CXX static library libkokkoscore.a
+[ 15%] Built target kokkoscore
+[ 16%] Building CXX object kokkos/containers/src/CMakeFiles/kokkoscontainers.dir/impl/Kokkos_UnorderedMap_impl.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 16%] Linking CXX static library libkokkoscontainers.a
+[ 16%] Built target kokkoscontainers
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/main.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/parameter_input.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/globals.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/buffs_fc.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_cc.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/buffs_cc.cpp.o
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_fc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: clang++warning: : argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]warning: 
+argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 20%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_part.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/bvals/bvals_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 21%] Building CXX object src/CMakeFiles/athena.dir/bvals/flux_correct_cc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/bvals/flux_correct_fc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 22%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolongation.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 23%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/hydro_bcs.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/bfield_bcs.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/bvals/bvals_part.cpp:354:15: warning: capture host side class data member by this pointer in device or host device lambda function may result in invalid memory access if this pointer is not accessible on device side [-Wgpu-maybe-wrong-side]
+  354 |       int p = sendlist.d_view(n).prtcl_indx;
+      |               ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:243:5: note: called by 'operator()'
+  243 |     function(i);
+      |     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:44:5: note: called by 'exec_range<void>'
+   44 |     m_functor(i);
+      |     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:69:22: note: called by 'operator()'
+   69 |       this->template exec_range<WorkTag>(iwork);
+      |                      ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:88:3: note: called by 'hip_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<(lambda at /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:240:3), Kokkos::RangePolicy<>>, 1024U, 1U>'
+   88 |   driver();
+      |   ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/bvals/bvals_part.cpp:473:15: warning: capture host side class data member by this pointer in device or host device lambda function may result in invalid memory access if this pointer is not accessible on device side [-Wgpu-maybe-wrong-side]
+  473 |       if (n < nprtcl_send) {
+      |               ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:243:5: note: called by 'operator()'
+  243 |     function(i);
+      |     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:44:5: note: called by 'exec_range<void>'
+   44 |     m_functor(i);
+      |     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:69:22: note: called by 'operator()'
+   69 |       this->template exec_range<WorkTag>(iwork);
+      |                      ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:88:3: note: called by 'hip_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<(lambda at /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:240:3), Kokkos::RangePolicy<>>, 1024U, 1U>'
+   88 |   driver();
+      |   ^
+2 warnings generated when compiling for gfx90a.
+[ 24%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/radiation_bcs.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/bvals/prolong_prims.cpp:15:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:92:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL33hip_parallel_launch_global_memoryINS0_11ParallelForIZN20MeshBoundaryValuesCC19PrimToConsFineBndryERKNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEERK13DvceFaceFld4DIdERSC_bEUlNS0_13HIPTeamMemberEE_NS_10TeamPolicyIJEEENS_3HIPEEEEEvPKT_': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   92 | __global__ static void hip_parallel_launch_global_memory(
+      |                        ^
+1 warning generated when compiling for gfx90a.
+[ 25%] Building CXX object src/CMakeFiles/athena.dir/bvals/physics/z4c_bcs.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 25%] Building CXX object src/CMakeFiles/athena.dir/coordinates/adm.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 26%] Building CXX object src/CMakeFiles/athena.dir/coordinates/coordinates.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 26%] Building CXX object src/CMakeFiles/athena.dir/coordinates/excision.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 27%] Building CXX object src/CMakeFiles/athena.dir/diffusion/conduction.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 27%] Building CXX object src/CMakeFiles/athena.dir/diffusion/cgl_landau_fluid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 28%] Building CXX object src/CMakeFiles/athena.dir/diffusion/hyperviscosity.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 28%] Building CXX object src/CMakeFiles/athena.dir/diffusion/resistivity.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 29%] Building CXX object src/CMakeFiles/athena.dir/diffusion/scalar_diffusion.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 29%] Building CXX object src/CMakeFiles/athena.dir/diffusion/sts_rkl2.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 30%] Building CXX object src/CMakeFiles/athena.dir/diffusion/viscosity.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 30%] Building CXX object src/CMakeFiles/athena.dir/driver/driver.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 31%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 31%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fluxes.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 32%] Building CXX object src/CMakeFiles/athena.dir/dyn_grmhd/dyn_grmhd_fofc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 32%] Building CXX object src/CMakeFiles/athena.dir/eos/eos.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/diffusion/cgl_landau_fluid.cpp:21:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZN14CGLLandauFluid13AddHeatFluxesERKNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEESF_RK13DvceFaceFld4DIdERK8EOS_DataddR13DvceFaceFld5DIdEEUliRN9array_sum10array_typeIdLi64EEEE_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISS_NS_9HostSpaceEEESS_E7ReducerEvEESZ_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+[ 33%] Building CXX object src/CMakeFiles/athena.dir/eos/cgl_mhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 33%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_hyd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZN14CGLLandauFluid13AddHeatFluxesERKNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEESF_RK13DvceFaceFld4DIdERK8EOS_DataddR13DvceFaceFld5DIdEEUliRN9array_sum10array_typeIdLi64EEEE2_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISS_NS_9HostSpaceEEESS_E7ReducerEvEESZ_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+2 warnings generated when compiling for gfx90a.
+[ 34%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_mhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 34%] Building CXX object src/CMakeFiles/athena.dir/eos/isothermal_hyd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/eos/cgl_mhd.cpp:14:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZN6CGLMHD10ConsToPrimERNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEERK13DvceFaceFld4DIdESF_SF_biiiiiiEUlRKiRiSM_SM_E_NS_9HostSpaceEJNS_3SumIiSO_EESQ_SQ_EEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISO_JSQ_SQ_SQ_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1ELm2EEEJiiiEEEE7ReducerEvEESW_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_11ParallelForIZ7par_forIZN6CGLMHD10CollisionsERNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEERKSD_SE_d16CGLCollisionModeiiiiiiEUliiiiE_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPERKiST_ST_ST_ST_ST_ST_ST_RKT_EUlST_E_NS_11RangePolicyIJEEESR_EELj1024ELj1EEEvSU_': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+2 warnings generated when compiling for gfx90a.
+[ 35%] Building CXX object src/CMakeFiles/athena.dir/eos/isothermal_mhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 35%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_srhyd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 36%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grhyd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 36%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_srmhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 37%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grmhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 37%] Building CXX object src/CMakeFiles/athena.dir/eos/noop_dyngrmhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 38%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/eos_compose.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 38%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/eos_hybrid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 39%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/piecewise_polytrope.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 39%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/unit_system.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 40%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/geodesic_grid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 40%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/spherical_grid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 41%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/gauss_legendre.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 41%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 42%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_fluxes.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/dyn_grmhd/dyn_grmhd_fluxes.cpp:12:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_11ParallelForIZ13par_for_outerIZN5dyngr10DynGRMHDPSIN9Primitive10EOSCompOSEINS6_10NormalLogsEEENS6_10ResetFloorEE10CalcFluxesIL16DynGRMHD_RSolver1EEE10TaskStatusP6DriveriEUlNS0_13HIPTeamMemberEiiE0_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPEmiiiiiRKT_EUlSH_E_NS_10TeamPolicyIJEEESR_EEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_11ParallelForIZ13par_for_outerIZN5dyngr10DynGRMHDPSIN9Primitive10EOSCompOSEINS6_7NQTLogsEEENS6_10ResetFloorEE10CalcFluxesIL16DynGRMHD_RSolver1EEE10TaskStatusP6DriveriEUlNS0_13HIPTeamMemberEiiE0_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPEmiiiiiRKT_EUlSH_E_NS_10TeamPolicyIJEEESR_EEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+2 warnings generated when compiling for gfx90a.
+[ 42%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_fofc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 43%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_newdt.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 43%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_sts.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 44%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/dyn_grmhd/dyn_grmhd_fofc.cpp:11:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_11ParallelForIZ7par_forIZN5dyngr10DynGRMHDPSIN9Primitive10EOSCompOSEINS6_10NormalLogsEEENS6_10ResetFloorEE4FOFCIL16DynGRMHD_RSolver1EEEvP6DriveriEUliiiiE1_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPERKiSR_SR_SR_SR_SR_SR_SR_RKT_EUlSR_E_NS_11RangePolicyIJEEESP_EEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+[ 44%] Building CXX object src/CMakeFiles/athena.dir/hydro/hydro_update.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 45%] Building CXX object src/CMakeFiles/athena.dir/ion-neutral/ion-neutral.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 45%] Building CXX object src/CMakeFiles/athena.dir/ion-neutral/ion-neutral_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_11ParallelForIZ7par_forIZN5dyngr10DynGRMHDPSIN9Primitive10EOSCompOSEINS6_7NQTLogsEEENS6_10ResetFloorEE4FOFCIL16DynGRMHD_RSolver1EEEvP6DriveriEUliiiiE1_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPERKiSR_SR_SR_SR_SR_SR_SR_RKT_EUlSR_E_NS_11RangePolicyIJEEESP_EEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+[ 46%] Building CXX object src/CMakeFiles/athena.dir/mesh/build_tree.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 46%] Building CXX object src/CMakeFiles/athena.dir/mesh/load_balance.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 47%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 47%] Building CXX object src/CMakeFiles/athena.dir/mesh/meshblock.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 48%] Building CXX object src/CMakeFiles/athena.dir/mesh/meshblock_pack.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:375:23: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  375 |     int nb_per_plevel[max_level];      // NOLINT(runtime/arrays)
+      |                       ^~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:375:23: note: implicit use of 'this' pointer is only allowed within the evaluation of a call to a 'constexpr' member function
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:376:27: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  376 |     float cost_per_plevel[max_level];  // NOLINT(runtime/arrays)
+      |                           ^~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:376:27: note: implicit use of 'this' pointer is only allowed within the evaluation of a call to a 'constexpr' member function
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:397:21: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  397 |     int nb_per_rank[global_variable::nranks];    // NOLINT(runtime/arrays)
+      |                     ^~~~~~~~~~~~~~~~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:397:21: note: read of non-const variable 'nranks' is not allowed in a constant expression
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/globals.hpp:12:21: note: declared here
+   12 | extern int my_rank, nranks;
+      |                     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:398:23: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  398 |     int cost_per_rank[global_variable::nranks];  // NOLINT(runtime/arrays)
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:398:23: note: read of non-const variable 'nranks' is not allowed in a constant expression
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/globals.hpp:12:21: note: declared here
+   12 | extern int my_rank, nranks;
+      |                     ^
+4 warnings generated when compiling for gfx90a.
+2 warnings generated when compiling for gfx90a.
+[ 48%] Building CXX object src/CMakeFiles/athena.dir/mesh/meshblock_tree.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 49%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh_refinement.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:375:23: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  375 |     int nb_per_plevel[max_level];      // NOLINT(runtime/arrays)
+      |                       ^~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:375:23: note: implicit use of 'this' pointer is only allowed within the evaluation of a call to a 'constexpr' member function
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:376:27: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  376 |     float cost_per_plevel[max_level];  // NOLINT(runtime/arrays)
+      |                           ^~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:376:27: note: implicit use of 'this' pointer is only allowed within the evaluation of a call to a 'constexpr' member function
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:397:21: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  397 |     int nb_per_rank[global_variable::nranks];    // NOLINT(runtime/arrays)
+      |                     ^~~~~~~~~~~~~~~~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:397:21: note: read of non-const variable 'nranks' is not allowed in a constant expression
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/globals.hpp:12:21: note: declared here
+   12 | extern int my_rank, nranks;
+      |                     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:398:23: warning: variable length arrays in C++ are a Clang extension [-Wvla-cxx-extension]
+  398 |     int cost_per_rank[global_variable::nranks];  // NOLINT(runtime/arrays)
+      |                       ^~~~~~~~~~~~~~~~~~~~~~~
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh.cpp:398:23: note: read of non-const variable 'nranks' is not allowed in a constant expression
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/globals.hpp:12:21: note: declared here
+   12 | extern int my_rank, nranks;
+      |                     ^
+4 warnings generated when compiling for host.
+[ 49%] Building CXX object src/CMakeFiles/athena.dir/mesh/refinement_criteria.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/dyn_grmhd/dyn_grmhd.cpp:17:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_11ParallelForIZ7par_forIZN5dyngr10DynGRMHDPSIN9Primitive10EOSCompOSEINS6_10NormalLogsEEENS6_10ResetFloorEE16AddCoordTermsEOSILi4EEEvRKNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEESN_dRSL_EUliiiiE_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPERKiS10_S10_S10_S10_S10_S10_S10_RKT_EUlS10_E_NS_11RangePolicyIJEEESY_EEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_11ParallelForIZ7par_forIZN5dyngr10DynGRMHDPSIN9Primitive10EOSCompOSEINS6_7NQTLogsEEENS6_10ResetFloorEE16AddCoordTermsEOSILi4EEEvRKNS_4ViewIPPPPPdJNS_11LayoutRightENS_8HIPSpaceEEEESN_dRSL_EUliiiiE_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPERKiS10_S10_S10_S10_S10_S10_S10_RKT_EUlS10_E_NS_11RangePolicyIJEEESY_EEEEvv': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+[ 50%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+2 warnings generated when compiling for gfx90a.
+[ 50%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_corner_e.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 51%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_ct.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 51%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fluxes.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 52%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fofc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/mesh/mesh_refinement.cpp:20:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:92:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL33hip_parallel_launch_global_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZN14MeshRefinement30RestrictCGLMHDPrimitivesToConsEPN3mhd3MHDENS5_22CGLAMRRestrictionScopeEEUliRmSA_SA_SA_SA_SA_SA_SA_SA_SA_SA_SA_E_NS_9HostSpaceEJNS_3SumImSC_EESE_SE_SE_SE_SE_SE_SE_SE_SE_SE_SE_EEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISC_JSE_SE_SE_SE_SE_SE_SE_SE_SE_SE_SE_SE_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1ELm2ELm3ELm4ELm5ELm6ELm7ELm8ELm9ELm10ELm11EEEJmmmmmmmmmmmmEEEE7ReducerEvEESK_NS_3HIPEEEEEvPKT_': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   92 | __global__ static void hip_parallel_launch_global_memory(
+      |                        ^
+[ 52%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_newdt.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+1 warning generated when compiling for gfx90a.
+[ 53%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_sts.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 53%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 54%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_update.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 54%] Building CXX object src/CMakeFiles/athena.dir/outputs/io_wrapper.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 55%] Building CXX object src/CMakeFiles/athena.dir/outputs/outputs.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 55%] Building CXX object src/CMakeFiles/athena.dir/outputs/basetype_output.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 56%] Building CXX object src/CMakeFiles/athena.dir/outputs/cartgrid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 56%] Building CXX object src/CMakeFiles/athena.dir/outputs/derived_variables.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 57%] Building CXX object src/CMakeFiles/athena.dir/outputs/binary.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 57%] Building CXX object src/CMakeFiles/athena.dir/outputs/eventlog.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 58%] Building CXX object src/CMakeFiles/athena.dir/outputs/formatted_table.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 58%] Building CXX object src/CMakeFiles/athena.dir/outputs/history.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 59%] Building CXX object src/CMakeFiles/athena.dir/outputs/restart.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 59%] Building CXX object src/CMakeFiles/athena.dir/outputs/spherical_surface.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 60%] Building CXX object src/CMakeFiles/athena.dir/outputs/coarsened_binary.cpp.o
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/outputs/history.cpp:17:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZN13HistoryOutput18LoadMHDHistoryDataEP11HistoryDataP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEEE_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISD_NS_9HostSpaceEEESD_E7ReducerEvEESK_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+1 warning generated when compiling for gfx90a.
+[ 60%] Building CXX object src/CMakeFiles/athena.dir/outputs/track_prtcl.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 61%] Building CXX object src/CMakeFiles/athena.dir/outputs/vtk_mesh.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 61%] Building CXX object src/CMakeFiles/athena.dir/outputs/vtk_prtcl.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/outputs/track_prtcl.cpp:54:22: warning: capture host side class data member by this pointer in device or host device lambda function may result in invalid memory access if this pointer is not accessible on device side [-Wgpu-maybe-wrong-side]
+   54 |     if (pi(PTAG,p) < ntrack) {
+      |                      ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:243:5: note: called by 'operator()'
+  243 |     function(i);
+      |     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:44:5: note: called by 'exec_range<void>'
+   44 |     m_functor(i);
+      |     ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:69:22: note: called by 'operator()'
+   69 |       this->template exec_range<WorkTag>(iwork);
+      |                      ^
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:88:3: note: called by 'hip_parallel_launch_local_memory<Kokkos::Impl::ParallelFor<(lambda at /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:240:3), Kokkos::RangePolicy<>>, 1024U, 1U>'
+   88 |   driver();
+      |   ^
+1 warning generated when compiling for gfx90a.
+[ 62%] Building CXX object src/CMakeFiles/athena.dir/particles/particles.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 62%] Building CXX object src/CMakeFiles/athena.dir/particles/particles_pushers.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 63%] Building CXX object src/CMakeFiles/athena.dir/particles/particles_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 63%] Building CXX object src/CMakeFiles/athena.dir/outputs/pdf.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 64%] Building CXX object src/CMakeFiles/athena.dir/pgen/pgen.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 64%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/advection.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 65%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/collapse.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 65%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cpaw.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 66%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cshock.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 66%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_fofc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 67%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_lf_boundary.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/pgen.cpp:18:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZN16ProblemGenerator12OutputErrorsEP14ParameterInputP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEERdE0_NS_9HostSpaceEJNS_3SumISE_SI_EENS_3MaxIdSI_EEEEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISI_JSK_SM_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1EEEJSE_dEEEE7ReducerEvEESS_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+1 warning generated when compiling for gfx90a.
+[ 67%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_landau_fluid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/cpaw.cpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZ16AlfvenWaveErrorsP14ParameterInputP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEERdE_NS_9HostSpaceEJNS_3SumISD_SH_EENS_3MaxIdSH_EEEEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISH_JSJ_SL_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1EEEJSD_dEEEE7ReducerEvEESR_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+1 warning generated when compiling for gfx90a.
+[ 68%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_passive_validation.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 68%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_lf_paper.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 69%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_lf_sbox.cpp.o
+[ 69%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/divb_amr.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/cgl_lf_paper.cpp:14:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZN12_GLOBAL__N_117CGLLFPaperHistoryEP11HistoryDataP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEEE_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISD_NS_9HostSpaceEEESD_E7ReducerEvEESK_NS_3HIPEEELj1024ELj1EEEvT_': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+1 warning generated when compiling for gfx90a.
+[ 70%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/diffusion.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 70%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/sts_diffusion.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 71%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/hyperviscous_shear.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 71%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/gr_bondi.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/diffusion.cpp:24:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZ15DiffusionErrorsP14ParameterInputP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEERdE_NS_9HostSpaceEJNS_3SumISD_SH_EENS_3MaxIdSH_EEEEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISH_JSJ_SL_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1EEEJSD_dEEEE7ReducerEvEESR_NS_3HIPEEELj1024ELj1EEEvT_': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+1 warning generated when compiling for gfx90a.
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/divb_amr.cpp:18:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZ14DivBAMRHistoryP11HistoryDataP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEERdSF_E_NS_9HostSpaceEJNS_3SumISD_SH_EENS_3MaxIdSH_EESL_EEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISH_JSJ_SL_SL_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1ELm2EEEJSD_ddEEEE7ReducerEvEESR_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+1 warning generated when compiling for gfx90a.
+[ 72%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/gr_monopole.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 72%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/linear_wave.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 73%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/lw_implode.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 73%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/orszag_tang.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 74%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/mri3d.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 74%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/shock_tube.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 75%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/shwave.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/mri3d.cpp:36:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:61:24: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL35hip_parallel_launch_constant_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZ10MRIHistoryP11HistoryDataP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEEE_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISC_NS_9HostSpaceEEESC_E7ReducerEvEESJ_NS_3HIPEEEEEvv': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   61 | __global__ static void hip_parallel_launch_constant_memory() {
+      |                        ^
+1 warning generated when compiling for gfx90a.
+[ 75%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/rad_beam.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 76%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/rad_linear_wave.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/shwave.cpp:27:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZ13ShwaveHistoryP11HistoryDataP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEEE_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISC_NS_9HostSpaceEEESC_E7ReducerEvEESJ_NS_3HIPEEELj1024ELj1EEEvT_': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+1 warning generated when compiling for gfx90a.
+[ 76%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/z4c_boosted_puncture.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/rad_beam.cpp:17:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_11ParallelForIZ7par_forIZN16ProblemGenerator13RadiationBeamEP14ParameterInputbEUliiiiiE_EvRKNSt7__cxx1112basic_stringIcSt11char_traitsIcESaIcEEENS_3HIPERKiSI_SI_SI_SI_SI_SI_SI_SI_SI_RKT_EUlSI_E_NS_11RangePolicyIJEEESG_EELj1024ELj1EEEvSJ_': desired occupancy was 4, final occupancy is 3 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+1 warning generated when compiling for gfx90a.
+[ 77%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/z4c_linear_wave.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 77%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/turb_forcing.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 78%] Building CXX object src/CMakeFiles/athena.dir/pgen/turb.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 78%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 79%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_fluxes.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 79%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_newdt.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 80%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_source.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/tests/z4c_linear_wave.cpp:20:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerINS0_31CombinedReductionFunctorWrapperIZ19Z4cLinearWaveErrorsP14ParameterInputP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEERdE_NS_9HostSpaceEJNS_3SumISD_SH_EENS_3MaxIdSH_EEEEENS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS0_15CombinedReducerISH_JSJ_SL_EEENS0_24CombinedReducerValueImplISt16integer_sequenceImJLm0ELm1EEEJSD_dEEEE7ReducerEvEESR_NS_3HIPEEELj1024ELj1EEEvT_': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+[ 80%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+1 warning generated when compiling for gfx90a.
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/pgen/turb.cpp:11:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/src/athena.hpp:13:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/Kokkos_Core.hpp:45:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/kokkos/KokkosCore_Config_DeclareBackend.hpp:23:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/decl/Kokkos_Declare_HIP.hpp:28:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_ParallelFor_Range.hpp:22:
+In file included from /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_BlockSize_Deduction.hpp:26:
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/kokkos/core/src/HIP/Kokkos_HIP_KernelLaunch.hpp:86:28: warning: failed to meet occupancy target given by 'amdgpu-waves-per-eu' in '_ZN6Kokkos4ImplL32hip_parallel_launch_local_memoryINS0_14ParallelReduceINS0_22CombinedFunctorReducerIZ16TurbulentHistoryP11HistoryDataP4MeshEUlRKiRN9array_sum10array_typeIdLi64EEEE_NS0_15FunctorAnalysisINS0_23FunctorPatternInterface6REDUCEENS_11RangePolicyIJEEENS_3SumISC_NS_9HostSpaceEEESC_E7ReducerEvEESJ_NS_3HIPEEELj1024ELj1EEEvT_': desired occupancy was 4, final occupancy is 2 [-Wpass-failed]
+   86 |     minBperSM) static void hip_parallel_launch_local_memory(const DriverType
+      |                            ^
+1 warning generated when compiling for gfx90a.
+[ 81%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_tetrad.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 81%] Building CXX object src/CMakeFiles/athena.dir/radiation/radiation_update.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 82%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection.cpp.o
+clang++: warning: [ 82%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection_cc.cpp.o
+argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 83%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection_fc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 83%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/orbital_advection_tasks.cpp.o
+[ 84%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 84%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box_cc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 85%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box_fc.cpp.o
+[ 85%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box_srcterms.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 86%] Building CXX object src/CMakeFiles/athena.dir/shearing_box/shearing_box_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 86%] Building CXX object src/CMakeFiles/athena.dir/srcterms/srcterms.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 87%] Building CXX object src/CMakeFiles/athena.dir/srcterms/srcterms_newdt.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 87%] Building CXX object src/CMakeFiles/athena.dir/srcterms/turb_driver.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 88%] Building CXX object src/CMakeFiles/athena.dir/tasklist/numerical_relativity.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 88%] Building CXX object src/CMakeFiles/athena.dir/units/units.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 89%] Building CXX object src/CMakeFiles/athena.dir/utils/change_rundir.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 89%] Building CXX object src/CMakeFiles/athena.dir/utils/derived_vars.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 90%] Building CXX object src/CMakeFiles/athena.dir/utils/show_config.cpp.o
+[ 90%] Building CXX object src/CMakeFiles/athena.dir/utils/lagrange_interpolator.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 91%] Building CXX object src/CMakeFiles/athena.dir/utils/tov/tov.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 91%] Building CXX object src/CMakeFiles/athena.dir/utils/tr_table.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 92%] Building CXX object src/CMakeFiles/athena.dir/utils/cart_grid.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 92%] Building CXX object src/CMakeFiles/athena.dir/utils/spherical_surface.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 93%] Building CXX object src/CMakeFiles/athena.dir/z4c/compact_object_tracker.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 93%] Building CXX object src/CMakeFiles/athena.dir/z4c/horizon_dump.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 94%] Building CXX object src/CMakeFiles/athena.dir/z4c/tmunu.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 94%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 95%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_adm.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 95%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_calcrhs.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 96%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_newdt.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 96%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_tasks.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 97%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_update.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 97%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_gauge.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 98%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_Sbc.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 98%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_calculate_weyl_scalars.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 99%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_wave_extr.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[ 99%] Building CXX object src/CMakeFiles/athena.dir/z4c/z4c_amr.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[100%] Building CXX object src/CMakeFiles/athena.dir/z4c/cce/cce.cpp.o
+clang++: warning: argument unused during compilation: '-mno-daz-ftz' [-Wunused-command-line-argument]
+[100%] Linking CXX executable athena
+[100%] Built target athena
+6530c1b31a7d99077f3ff5932d4b1c790e33be38c1fa222cfda097f87b339f9e  final-research/release-build-hip/src/athena

@@ -1,0 +1,42 @@
+{
+  "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source",
+  "test_source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/test-source-rerun",
+  "changes": [
+    {
+      "path": "src/eos/cgl_passive.hpp",
+      "before": "af42f80c995261f39f967bdb703cd2c1ac25a9def765f170f0e5659825c0da02",
+      "after": "6aab543c81027c9320572748fdb61fd8c6f3f5791d0c0eca2db10b3d31edda28"
+    },
+    {
+      "path": "tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py",
+      "before": "c0c65e4456ed61dd4884a00ec5dd32cea8ce5252d6689a980e1c1a5f69ddbfcf",
+      "after": "3e3090ab3ed29a276a6554b45e338a70b3e28c52d5a43b01cbbd0583b52df570"
+    },
+    {
+      "path": "tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py",
+      "before": "8dde075c55f150aebb5a2a46c64fc4cbea39fb248dd58368f845f1de7d0cd94d",
+      "after": "7b73db83a5b0afaac1d6837406b0b9d1ba7939ef158feec2179f7cb75a12538c"
+    },
+    {
+      "path": "tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py",
+      "before": "ca7a1b00e1b55514fac08c461dbd59f2a5a180788af1b2bf956d0db4a13c0f48",
+      "after": "d52a0ec8896f6393eea085ef4ee908e214e26850fba7e40edbc73428e59529dd"
+    },
+    {
+      "path": "tst/test_suite/cgl/test_cgl_amr_gpu.py",
+      "before": "8bd24048b347e977ad3b3b6c5a4d83abfbcdd935001c240182a4a8eefad6bb37",
+      "after": "a9625b3a6c12ab57d1c9bd813665fd09bb19008c369804b053deffe1c25909ee"
+    },
+    {
+      "path": "tst/test_suite/cgl/test_cgl_amr_walls_cpu.py",
+      "before": "4355c9a9655fb36427fa8bfc35fdfdc99b3c33c93c0f57d2b5968e6258373bd3",
+      "after": "9f495d6f1212271cae10d40f720e2369e2d34222e43f1b1ca9e76280c158b89c"
+    },
+    {
+      "path": "tst/test_suite/cgl/test_cgl_amr_mpi_gpu.py",
+      "before": "eebe58d59b66bc21af72183d08ea1579f5eafa017bae198e167ae865dd7e3d2a",
+      "after": "3d1245677cc2fb81c4bffa43eaf405dff6eb638c332c218408603d926a2a0edc"
+    }
+  ],
+  "note": "Kokkos location fixed, expected profiling/stage diagnostics and existing STS caps adapted; passive encoding aggregate casts toReal fix float narrowing and are no-ops in double. No scientific tolerance changed."
+}

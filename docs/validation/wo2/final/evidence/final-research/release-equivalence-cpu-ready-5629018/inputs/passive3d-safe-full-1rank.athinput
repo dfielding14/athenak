@@ -1,0 +1,87 @@
+<job>
+basename = passive_validation
+
+
+<mesh>
+nghost = 4
+nx1 = 16
+x1min = 0
+x1max = 1
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 16
+x2min = 0
+x2max = 1
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 16
+x3min = 0
+x3max = 1
+ix3_bc = periodic
+ox3_bc = periodic
+
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+
+
+<time>
+evolution = dynamic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = -1
+cfl_number = 0.3
+nlim = 4
+tlim = 1
+ndiag = 1
+
+
+<mhd>
+eos = cgl
+passive = true
+iso_sound_speed = 1.0
+reconstruct = plm
+rsolver = hlle
+fofc = true
+dfloor = 1e-12
+pfloor = 1e-12
+bfloor = 1e-10
+nu_coll = 0.3
+mirror_limiter = false
+firehose_limiter = false
+backup_limiters = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = background
+lf_c_parallel0 = 1.4142135623730951
+cgl_lf_strict_admissibility = true
+
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+cgl_lf_arithmetic = safe
+cgl_lf_diagnostics = full
+
+<problem>
+pgen_name = cgl_passive_validation
+case = 0
+amplitude = 0.1
+thermal_amplitude = 0.2
+p0 = 2.0
+
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1
+
+<output2>
+file_type = bin
+variable = mhd_w_bcc
+dcycle = 1000000
+
+<output3>
+file_type = rst
+dcycle = 1000000

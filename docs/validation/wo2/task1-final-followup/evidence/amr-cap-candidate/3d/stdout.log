@@ -1,0 +1,26 @@
+
+Root grid = 3 x 3 x 3 MeshBlocks
+Total number of MeshBlocks = 27
+Number of logical  levels of refinement = 3 (4 levels total)
+Number of physical levels of refinement = 1 (2 levels total)
+Number of parallel ranks = 1
+
+Setup complete, executing task list(s)...
+
+elapsed=6.885703e-01 cycle=0 time=0.000000e+00 dt=1.706619e-04
+elapsed=1.749587e+00 cycle=1 time=1.706619e-04 dt=3.892336e-05
+elapsed=4.341262e+00 cycle=2 time=2.095853e-04 dt=4.811358e-05
+elapsed=9.455530e+00 cycle=3 time=2.576988e-04 dt=9.622717e-05
+
+Terminating on cycle limit
+time=2.576988e-04 cycle=3
+tlim=2.000000e-02 nlim=3
+
+Current number of MeshBlocks = 27
+189 MeshBlocks created, 189 deleted by AMR
+0 communicated for load balancing, load balancing efficiency = 0.000000e+00
+
+MeshBlock-cycles = 459
+cpu time used  = 8.766967e+00
+zone-cycles/cpu_second = 2.680608e+04
+particle-updates/cpu_second = 0.000000e+00

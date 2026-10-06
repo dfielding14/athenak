@@ -136,7 +136,8 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   }
 
   if (pmhd != nullptr) {
-    const bool encoded_passive = pin->DoesParameterExist("mhd", "passive_restart_encoding");
+    const bool encoded_passive =
+        pin->DoesParameterExist("mhd", "passive_restart_encoding");
     const bool passive = pmhd->peos->eos_data.passive;
     if (encoded_passive != passive ||
         (encoded_passive && pin->GetInteger("mhd", "passive_restart_encoding") != 1)) {
@@ -995,9 +996,10 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
       pmy_mesh_->pmb_pack->pmhd->peos->eos_data.passive &&
       pgen_fun_name != "turb" && pgen_fun_name != "cgl_lf_paper" &&
       pgen_fun_name != "cgl_passive_validation") {
-    std::cout << "### FATAL ERROR: this built-in pgen has no passive J/A initializer; "
-              << "use turb, cgl_lf_paper, or a custom pgen calling the EOS PrimToCons interface"
-              << std::endl;
+    std::cout
+      << "### FATAL ERROR: this built-in pgen has no passive J/A initializer; "
+      << "use turb, cgl_lf_paper, or a custom pgen calling the EOS PrimToCons interface"
+      << std::endl;
     std::exit(EXIT_FAILURE);
   }
 

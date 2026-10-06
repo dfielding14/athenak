@@ -13,7 +13,9 @@ def test_cgl_amr_walls_after_final_field_refresh(tmp_path):
     result = subprocess.run(
         [str(Path("athena").resolve()), "-i",
          str(source / "cgl_lf_amr_3d_current.athinput"), "-d", str(tmp_path),
-         "time/nlim=3", "output2/variable=mhd_w_bcc", "output2/id=state"],
+         # Restore the original cycle-three event using only a timestep cap.
+         "time/sts_max_dt_ratio=0.13", "time/nlim=3",
+         "output2/variable=mhd_w_bcc", "output2/id=state"],
         capture_output=True, text=True, check=False,
     )
     assert result.returncode == 0, result.stdout + result.stderr

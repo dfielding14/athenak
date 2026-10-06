@@ -1,0 +1,20 @@
+============================= test session starts ==============================
+platform linux -- Python 3.11.7, pytest-8.2.2, pluggy-1.5.0 -- /opt/cray/pe/python/3.11.7/bin/python3
+cachedir: baseline/final-task1-followup-hip-cpu/pytest-cache
+rootdir: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2
+collecting ... collected 2890 items / 2879 deselected / 11 selected
+
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_amr_gpu.py::test_cgl_lf_amr_primitive_churn_gpu PASSED [  9%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_amr_gpu.py::test_cgl_lf_amr_3d_churn_gpu PASSED [ 18%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh PASSED [ 27%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_low_field_faces_disable_transport_cleanly PASSED [ 36%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_post_sweep_timestep_refresh[0] PASSED [ 45%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_post_sweep_timestep_refresh[3000] PASSED [ 54%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_landau_fluid_mpicpu.py::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks PASSED [ 63%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisionless-parallel] PASSED [ 72%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisionless-perp] PASSED [ 81%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisional-parallel] PASSED [ 90%]
+../../../../../final-research/regression-source/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisional-perp] PASSED [100%]
+
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-task1-followup-hip-cpu/results.xml -
+===================== 11 passed, 2879 deselected in 33.31s =====================

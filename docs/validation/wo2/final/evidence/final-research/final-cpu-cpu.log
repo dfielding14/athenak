@@ -1,0 +1,666 @@
+FFFFFFFFF.............................F................................. [ 30%]
+........................................................................ [ 60%]
+......................F.F............................................... [ 91%]
+..............FFFF.xx                                                    [100%]
+=================================== FAILURES ===================================
+__________ test_cgl_amr_projection_rejects_nonfinite_magnetic_fields ___________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_projection_cpu.py:30: in test_cgl_amr_projection_rejects_nonfinite_magnetic_fields
+    _run(
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_projection_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_amr_projection_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_amr_projection_reject0/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+_________________ test_cgl_amr_walls_after_final_field_refresh _________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py:23: in test_cgl_amr_walls_after_final_field_refresh
+    assert states[-2]["n_mbs"] == 216
+E   assert 27 == 216
+____________ test_cgl_c2p_pressure_floor_energy_consistency[False] _____________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py:46: in test_cgl_c2p_pressure_floor_energy_consistency
+    _run(configure)
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_c2p_pressure_floor_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_c2p_pressure_floor_en0/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+_____________ test_cgl_c2p_pressure_floor_energy_consistency[True] _____________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py:46: in test_cgl_c2p_pressure_floor_energy_consistency
+    _run(configure)
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_c2p_pressure_floor_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_c2p_pressure_floor_en1/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+_______ test_cgl_active_hlle_uses_scaled_literature_discriminant[False] ________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py:48: in test_cgl_active_hlle_uses_scaled_literature_discriminant
+    _run(configure)
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_fast_speed_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_active_hlle_uses_scal0/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+________ test_cgl_active_hlle_uses_scaled_literature_discriminant[True] ________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py:48: in test_cgl_active_hlle_uses_scaled_literature_discriminant
+    _run(configure)
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_fast_speed_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_active_hlle_uses_scal1/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+____ test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[double] ____
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_heat_flux_limiter_cpu.py:52: in test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints
+    _run(configure)
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_heat_flux_limiter_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_heat_flux_limiter_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_heat_flux_limiter_and0/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+____ test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[single] ____
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_heat_flux_limiter_cpu.py:52: in test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints
+    _run(configure)
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_heat_flux_limiter_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_heat_flux_limiter_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_heat_flux_limiter_and1/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+_______________ test_cgl_lf_profile_summary_reports_core_buckets _______________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py:213: in test_cgl_lf_profile_summary_reports_core_buckets
+    assert bucket in output
+E   AssertionError: assert 'heat_flux_flux1' in '\nRoot grid = 1 x 1 x 1 MeshBlocks\nTotal number of MeshBlocks = 1\nNumber of logical  levels of refinement = 0 (1 le...rabolic_recv_u                      4.799300e-05    4.799300e-05               9.0             9.0      5.332556e-06\n'
+----------------------------- Captured stderr call -----------------------------
+rm: cannot remove '*.dat': No such file or directory
+____________ test_cgl_lf_low_field_faces_disable_transport_cleanly _____________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py:673: in test_cgl_lf_low_field_faces_disable_transport_cleanly
+    assert history["lf_nstage"][-1] > 0.0
+E   assert 0.0 > 0.0
+----------------------------- Captured stderr call -----------------------------
+2026-10-06 19:13:49,355 - INFO - Executing command: ./athena -i ../../../inputs/tests/cgl_lf_decay.athinput job/basename=cgl_ci_low_field time/evolution=kinematic time/nlim=1 time/tlim=1.0e-5 mhd/rsolver=advect problem/test_mode=low_field problem/b0=5.0e-11 problem/amp=0.5
+rm: cannot remove '*.dat': No such file or directory
+------------------------------ Captured log call -------------------------------
+INFO     root:testutils.py:50 Executing command: ./athena -i ../../../inputs/tests/cgl_lf_decay.athinput job/basename=cgl_ci_low_field time/evolution=kinematic time/nlim=1 time/tlim=1.0e-5 mhd/rsolver=advect problem/test_mode=low_field problem/b0=5.0e-11 problem/amp=0.5
+_______ test_decay_resolves_closure_coefficients[collisionless-parallel] _______
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py:116: in test_decay_resolves_closure_coefficients
+    assert cycles >= 100
+E   assert 93 >= 100
+________ test_decay_resolves_closure_coefficients[collisional-parallel] ________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py:116: in test_decay_resolves_closure_coefficients
+    assert cycles >= 100
+E   assert 93 >= 100
+____________________ test_cgl_constructor_parameters[False] ____________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_parameters_cpu.py:15: in test_cgl_constructor_parameters
+    _run([
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_constructor_parameter0/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+____________________ test_cgl_constructor_parameters[True] _____________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_parameters_cpu.py:15: in test_cgl_constructor_parameters
+    _run([
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py:16: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_cgl_constructor_parameter1/build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+________________ test_passive_cgl_signals_and_initializer_fence ________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_passive_fast_path_cpu.py:175: in test_passive_cgl_signals_and_initializer_fence
+    _run([
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_passive_fast_path_cpu.py:22: in _run
+    assert result.returncode == 0, result.stdout + result.stderr
+E   AssertionError: -- The C compiler identification is CrayClang 20.0.0
+E     -- The CXX compiler identification is CrayClang 20.0.0
+E     -- Cray Programming Environment 2.7.35 C
+E     -- Detecting C compiler ABI info
+E     -- Detecting C compiler ABI info - done
+E     -- Check for working C compiler: /opt/cray/pe/craype/2.7.35/bin/cc - skipped
+E     -- Detecting C compile features
+E     -- Detecting C compile features - done
+E     -- Cray Programming Environment 2.7.35 CXX
+E     -- Detecting CXX compiler ABI info
+E     -- Detecting CXX compiler ABI info - done
+E     -- Check for working CXX compiler: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/compiler-research/wrappers/wo2-cxx-noftz - skipped
+E     -- Detecting CXX compile features
+E     -- Detecting CXX compile features - done
+E     -- Setting build type to 'Release' as none was specified.
+E     -- Including user-specified problem generator file: unit_tests/cgl_passive_fast_path_test
+E     -- Setting default Kokkos CXX standard to 17
+E     -- Kokkos version: 4.4.0
+E     -- The project name is: Kokkos
+E     -- Using internal gtest for testing
+E     -- Configured git information in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_passive_cgl_signals_and_i0/unit-build/generated/Kokkos_Version_Info.cpp
+E     -- Using -std=c++17 for C++17 standard as feature
+E     -- Built-in Execution Spaces:
+E     --     Device Parallel: NoTypeDefined
+E     --     Host Parallel: NoTypeDefined
+E     --       Host Serial: SERIAL
+E     -- 
+E     -- Architectures:
+E     -- Found TPLLIBDL: /usr/include  
+E     -- Using internal desul_atomics copy
+E     -- Experimental mdspan support is enabled
+E     -- Looking for C++ include experimental/mdspan
+E     -- Looking for C++ include experimental/mdspan - not found
+E     -- Looking for C++ include mdspan
+E     -- Looking for C++ include mdspan - not found
+E     -- Using internal mdspan directory /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/core/src/../../tpls/mdspan/include
+E     -- Kokkos Backends: SERIAL
+E     -- Configuring incomplete, errors occurred!
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     fatal: not a git repository: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/kokkos/../../athenak-df/.git/worktrees/athenak-cgl-wo2-baseline/modules/kokkos
+E     CMake Error at kokkos/cmake/build_env_info.cmake:96 (check_git_write):
+E       check_git_write Function invoked with incorrect arguments for function
+E       named: check_git_write
+E     Call Stack (most recent call first):
+E       kokkos/cmake/build_env_info.cmake:116 (check_git_version)
+E       kokkos/CMakeLists.txt:217 (check_git_setup)
+E     
+E     
+E     
+E   assert 1 == 0
+E    +  where 1 = CompletedProcess(args=['cmake', '-S', '/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused'...t):\n  kokkos/cmake/build_env_info.cmake:116 (check_git_version)\n  kokkos/CMakeLists.txt:217 (check_git_setup)\n\n\n').returncode
+______________ test_passive_smoke_executes_with_unchanged_catalog ______________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_passive_workflow_cpu.py:23: in test_passive_smoke_executes_with_unchanged_catalog
+    result = workflow.execute_workflow(SimpleNamespace(workflow="paper-smoke"), paths)
+../../../../../final-research/source-fused/scripts/cgl_lf_workflow.py:1657: in execute_workflow
+    source_status = git_worktree_status()
+../../../../../final-research/source-fused/scripts/cgl_lf_workflow.py:938: in git_worktree_status
+    result = subprocess.run(
+/opt/cray/pe/python/3.11.7/lib/python3.11/subprocess.py:571: in run
+    raise CalledProcessError(retcode, process.args,
+E   subprocess.CalledProcessError: Command '['git', 'status', '--short', '--untracked-files=all']' returned non-zero exit status 128.
+================================== XFAILURES ===================================
+________________ test_weak_field_contact_remains_bounded[10.0] _________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_weak_field_cpu.py:43: in test_weak_field_contact_remains_bounded
+    assert np.max(ratio) <= 2.0, (path, np.max(ratio))
+E   AssertionError: (PosixPath('/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_weak_field_contact_remain0/tab/cgl_weak_field_transport.mhd_w.00005.tab'), 3.0052200316546487)
+E   assert 3.0052200316546487 <= 2.0
+E    +  where 3.0052200316546487 = <function max at 0x7f8e459dcf30>(array([1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        , 1.      ...       ,\n       1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        ]))
+E    +    where <function max at 0x7f8e459dcf30> = np.max
+________________ test_weak_field_contact_remains_bounded[-10.0] ________________
+../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_weak_field_cpu.py:43: in test_weak_field_contact_remains_bounded
+    assert np.max(ratio) <= 2.0, (path, np.max(ratio))
+E   AssertionError: (PosixPath('/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/pytest-tmp/test_weak_field_contact_remain1/tab/cgl_weak_field_transport.mhd_w.00005.tab'), 3.0052200316546487)
+E   assert 3.0052200316546487 <= 2.0
+E    +  where 3.0052200316546487 = <function max at 0x7f8e459dcf30>(array([1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        , 1.      ...       ,\n       1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        ]))
+E    +    where <function max at 0x7f8e459dcf30> = np.max
+- generated xml file: /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/final-cpu-cpu/results.xml -
+=========================== short test summary info ============================
+XFAIL ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded[10.0] - Accepted T-B4 sharp-contact limitation of A transport; see docs/validation/wo1/review/weak-field/README.md
+XFAIL ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded[-10.0] - Accepted T-B4 sharp-contact limitation of A transport; see docs/validation/wo1/review/weak-field/README.md
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_projection_cpu.py::test_cgl_amr_projection_rejects_nonfinite_magnetic_fields
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_c2p_pressure_floor_energy_consistency[False]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_c2p_pressure_floor_energy_consistency[True]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py::test_cgl_active_hlle_uses_scaled_literature_discriminant[False]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_fast_speed_cpu.py::test_cgl_active_hlle_uses_scaled_literature_discriminant[True]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_heat_flux_limiter_cpu.py::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[double]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_heat_flux_limiter_cpu.py::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints[single]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_profile_summary_reports_core_buckets
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_landau_fluid_cpu.py::test_cgl_lf_low_field_faces_disable_transport_cleanly
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisionless-parallel]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_lf_acceptance_cpu.py::test_decay_resolves_closure_coefficients[collisional-parallel]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_parameters_cpu.py::test_cgl_constructor_parameters[False]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_parameters_cpu.py::test_cgl_constructor_parameters[True]
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_passive_fast_path_cpu.py::test_passive_cgl_signals_and_initializer_fence
+FAILED ../../../../../final-research/source-fused/tst/test_suite/cgl/test_cgl_passive_workflow_cpu.py::test_passive_smoke_executes_with_unchanged_catalog
+16 failed, 219 passed, 2653 deselected, 2 xfailed in 956.16s (0:15:56)

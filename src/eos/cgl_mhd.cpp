@@ -206,7 +206,8 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
 
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
-      if (dfloor_used || (!eos.passive && (efloor_used || tfloor_used || nonfinite_input ||
+      if (dfloor_used || (!eos.passive &&
+          (efloor_used || tfloor_used || nonfinite_input ||
           !Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp) ||
           !(w.e >= eos.pfloor) || !(w.pp >= eos.pfloor)))) {
         fofc_(m,k,j,i) = true;
@@ -471,7 +472,8 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
     // call p2c function
     HydCons1D u;
     if (passive) cgl::PassiveP2C(w, bfloor, u);
-    else SingleP2C_CGLMHD(w, bfloor, u);
+    else
+      SingleP2C_CGLMHD(w, bfloor, u);
     // Same representation contract for boundary callbacks and temporary targets.
     if (magnetic_moment) {
       const Real bmag = sqrt(SQR(w.bx) + SQR(w.by) + SQR(w.bz));

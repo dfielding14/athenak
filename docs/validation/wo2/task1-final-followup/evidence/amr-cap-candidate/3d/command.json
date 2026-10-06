@@ -1,0 +1,19 @@
+[
+  "srun",
+  "--exact",
+  "--overlap",
+  "-N",
+  "1",
+  "-n",
+  "1",
+  "-c",
+  "1",
+  "--gpus-per-node=0",
+  "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+  "-i",
+  "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-fused/inputs/tests/cgl_lf_amr_3d_current.athinput",
+  "time/sts_max_dt_ratio=0.13",
+  "time/nlim=3",
+  "output2/variable=mhd_w_bcc",
+  "output2/id=state"
+]

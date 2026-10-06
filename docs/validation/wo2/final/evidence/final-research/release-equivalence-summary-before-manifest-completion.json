@@ -1,0 +1,3437 @@
+{
+  "purpose": "Accepted fused to final release state equivalence",
+  "claims": "Exact field and history bytes, exact normalized restart bytes including diagnostics and live RNG state; no numerical tolerance.",
+  "limits": "Ordinary evolved-run outputs only. No resumed-run validation, new face coverage, or performance claim. Passive fixtures use PLM.",
+  "normalization": "Known 36 unused root-index bytes; forced cases additionally opt in to validated dormant seed1 startup RNG members and native RNG ABI padding. Raw hashes and precise byte ranges remain in result files.",
+  "backends": {
+    "cpu": {
+      "results": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-cpu-ready-5629018/results.json",
+      "results_sha256": "b4f6ea402dd9e9e8ba44a016b19c1ed599caebe9bc420f0500e54fa833f7dcde",
+      "binaries": {
+        "accepted": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-cpu",
+          "sha256": "6ed61d5ca0285511f64ab0cb9ede92a9d224c7fb303509834409ffbd49a2026a"
+        },
+        "release": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+          "sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46"
+        }
+      },
+      "cases": [
+        {
+          "name": "lf1d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "d725efaa747ab092a078ef1b84972ae3a04b9f440a4e2ca330ae037a66c279be",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.004325759567611748,
+          "lf_cell_stages": 5120.0
+        },
+        {
+          "name": "lf1d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "c30095491fe88b861d76566790b1d49223a05c045b086a60cb23508ed1ab3837",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.004325759567611748,
+          "lf_cell_stages": 5120.0
+        },
+        {
+          "name": "lf2d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "3b3ce033096131bd856c35f52d5e8324579a64313587a20fdd32537b0e2d8ea0",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.0077520808270906925,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf2d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "55b4c1761067ac6afc5c746d2d9c670d1b508e2c6e7e79428d358e8d00aa06a1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.0077520808270906925,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf3d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "d57df212bd41ae66edf81e8d3a5f23ebc723279835285efe72a7b0a673af5b56",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.027882257747743465,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "lf3d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "fb819aa6350ed29bbfc0aa169d76edfdc2887a8779b006b83999675bc2cb3c21",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.027882257747743465,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "low_b-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "c04d7efc30b83b69e6d9ef349a050d47821eb7b7478e06728a18f74093eda308",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 1.0,
+          "lf_cell_stages": 0.0
+        },
+        {
+          "name": "low_b-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "e486001d7653c021f3570dbfceb074c22b230ae0a4823201c5a0d38454ef8f74",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 1.0,
+          "lf_cell_stages": 0.0
+        },
+        {
+          "name": "smr_varied-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "3b010c01a73faeff5ba6af19483935335ae14b12790283fb9434613d84524a3c",
+          "files": {
+            ".bin": 2,
+            ".rst": 2,
+            ".hst": 2
+          },
+          "final_time": 0.005306443806444479,
+          "lf_cell_stages": 64000.0
+        },
+        {
+          "name": "smr_varied-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "d3a87d5cb71f65869ed70777c8e308a755e8a0a1415f2d838ee720b0931785be",
+          "files": {
+            ".bin": 2,
+            ".rst": 2,
+            ".hst": 2
+          },
+          "final_time": 0.005306443806445277,
+          "lf_cell_stages": 64000.0
+        },
+        {
+          "name": "lf2d-safe-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "f93656e2026b904534e210669055134d9ec444aad30fea1c0d0f0b4b5555d0d1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.007751702538833168,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf2d-fast-full-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "a92ea8b44154570573be261197a99988c7bce082da9dd2fa25ce407f25bacff7",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.010914979817234861,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf3d-safe-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "a5967c69399f24b607e3be29e6d2c65803653746095c9a9b75d39ac89940f0bd",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.027880996476911783,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "lf3d-fast-full-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "309173e774a8e0196fa2e99a808482b1d0b880de153a42cc22e09581192bccdf",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.02967485652789982,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "109e65f05000303ec14b3565b95e72fb2d5baa3708e3ef8c416cef919e931b1e",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.011073944493086074,
+          "lf_cell_stages": 3584.0
+        },
+        {
+          "name": "cgl_lf_field_reversal_1d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "abd8920491ef6ddeeaa52e1d255ba4ce038c91af7ff78fa38ad50fcebcb01dd3",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 48.45813842356642,
+          "lf_cell_stages": 17920.0
+        },
+        {
+          "name": "cgl_lf_field_reversal_2d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "7a9cf11266c7ba909d6f5b5c1e624d5987781fa4030b3d41b34573b50e26cf52",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.13956492066153908,
+          "lf_cell_stages": 286720.0
+        },
+        {
+          "name": "passive2d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "4048b00ce62f0d40647e548035a5bdb6da6e2aab99952e1367d1d7936a058aa1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.042781384358349626,
+          "lf_cell_stages": 10240.0
+        },
+        {
+          "name": "passive2d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "8f32fb4908733f400dcebee5400c4df2c45488ce31a3a15fdc14535854c898d4",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.042781384358349626,
+          "lf_cell_stages": 10240.0
+        },
+        {
+          "name": "passive2d-safe-none-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "3c3547cf984cc2d496a63db4a90ba184499b8968334ace5420a14ee1d942440c",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.042781384358349626,
+          "lf_cell_stages": 10240.0
+        },
+        {
+          "name": "passive3d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "665f4aaf01770b204aee81f31c8f64253464cc01675237df656e9c8d1ab656d1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.04139870177267688,
+          "lf_cell_stages": 163840.0
+        },
+        {
+          "name": "passive3d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "ab91a2af5a92ebe38c960e76c756e20a13487a73fbf87f31388dd0e79f833bd4",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.04139870177267688,
+          "lf_cell_stages": 163840.0
+        },
+        {
+          "name": "passive3d-safe-none-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "994d57ce4d27fc6a5e38a4645c506da04de546b320e70bd2b6a66427264d70b7",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.04139870177267688,
+          "lf_cell_stages": 163840.0
+        },
+        {
+          "name": "forced-passive3d-safe-full-1rank",
+          "ranks": 1,
+          "forced": true,
+          "input_sha256": "93c76ea1de59511c77533cc82cfc9d0163be515623350f619a8c304293b7c35e",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.12279735549429327,
+          "lf_cell_stages": 491520.0
+        },
+        {
+          "name": "forced-passive3d-safe-full-4rank",
+          "ranks": 4,
+          "forced": true,
+          "input_sha256": "93c76ea1de59511c77533cc82cfc9d0163be515623350f619a8c304293b7c35e",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.12279735549429327,
+          "lf_cell_stages": 491520.0
+        }
+      ],
+      "pairs": 25,
+      "applications": 50,
+      "rank_counts": {
+        "1": 20,
+        "4": 5
+      },
+      "file_pairs": {
+        ".bin": 50,
+        ".hst": 27,
+        ".rst": 50
+      },
+      "raw_restart_differences": [
+        {
+          "case": "smr_varied-safe-full-1rank",
+          "file": "rst/smr_varied.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "fd3efe87c40e98edfd54d0ec5f9e96c3acebf92812d47e610fd30077f7a0ffda",
+            "normalized_sha256": "aa352857b730b16b66448d02d6591820eeb904c757745508380d1d5f5a7013be"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "f5a00621360290a45835552842f743b0d8ff2ddc018ef24e3e8d266babb1f9e1",
+            "normalized_sha256": "aa352857b730b16b66448d02d6591820eeb904c757745508380d1d5f5a7013be"
+          }
+        },
+        {
+          "case": "smr_varied-safe-full-1rank",
+          "file": "rst/smr_varied.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7477,
+            "normalized_ranges": [
+              [
+                7597,
+                7633
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "8e59c92bbc2f32785bc9c8e6fb620bb09921d5876bb28dc31e2d838dacd46b9e",
+            "normalized_sha256": "ca059f70a72e4c08fd4d6a3b21418964b3f2d3f12faa0527392857d346cfb7bb"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7477,
+            "normalized_ranges": [
+              [
+                7597,
+                7633
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2c2d42c2a5f8207365ae808fcbabcd98e0ba92a0779f02c39e421f1dd09502c7",
+            "normalized_sha256": "ca059f70a72e4c08fd4d6a3b21418964b3f2d3f12faa0527392857d346cfb7bb"
+          }
+        },
+        {
+          "case": "smr_varied-fast-none-1rank",
+          "file": "rst/smr_varied.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "349993369917886775e834e5ce3d2753a86451b64b61879fd9b40e13cd521840",
+            "normalized_sha256": "3203826948fd7429e6c8f2cc9ddb0a56f37e9b37c303440cce1cb56dcb89e005"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "cd18540c0576824b3d3ecc3d09617c89727d2611f16ad9378457c6efbcbe473f",
+            "normalized_sha256": "3203826948fd7429e6c8f2cc9ddb0a56f37e9b37c303440cce1cb56dcb89e005"
+          }
+        },
+        {
+          "case": "smr_varied-fast-none-1rank",
+          "file": "rst/smr_varied.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7477,
+            "normalized_ranges": [
+              [
+                7597,
+                7633
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "ceac1fc5c9fa5175a63a66c0ca107ca9dd689a4a03d14e2b7a5ad18b2541b0ad",
+            "normalized_sha256": "1403855f46dcf3e1b5c8dac6fb894c6dd3074f6486e6d9baf2e53353554fbf5a"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7477,
+            "normalized_ranges": [
+              [
+                7597,
+                7633
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "e6bc61d91996ac3b417f43f364a63383e1d9e0970a65011d484b21b7f1229508",
+            "normalized_sha256": "1403855f46dcf3e1b5c8dac6fb894c6dd3074f6486e6d9baf2e53353554fbf5a"
+          }
+        },
+        {
+          "case": "lf2d-fast-full-4rank",
+          "file": "rst/lf2d.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7360,
+            "normalized_ranges": [
+              [
+                7480,
+                7516
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "748c97aa39045e3957527684b76523e4ee1ebf9f383411a032ddd11b17c3522e",
+            "normalized_sha256": "c59f9cd15e4bb18194192dcc6726d11ce7cf6f879b7821559f14cdd9ffdbb3c4"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7360,
+            "normalized_ranges": [
+              [
+                7480,
+                7516
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "b12085eaa6c143a1d16b487565466cf02cabd07c79c99c95d03c206ce38db3e7",
+            "normalized_sha256": "c59f9cd15e4bb18194192dcc6726d11ce7cf6f879b7821559f14cdd9ffdbb3c4"
+          }
+        },
+        {
+          "case": "lf2d-fast-full-4rank",
+          "file": "rst/lf2d.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7382,
+            "normalized_ranges": [
+              [
+                7502,
+                7538
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "9fb5e89f50a532e07db9ebdc5429012151a545af5dac6b00ba40cefcca58378e",
+            "normalized_sha256": "5edc8b54e72096d5e922dccc7d11360b8b5cf03a2e6d1f16acba04595cb20265"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7382,
+            "normalized_ranges": [
+              [
+                7502,
+                7538
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "c73b81c553a57872562f71eb7c09aebf4beba88c7a347cd90f67ececbc262479",
+            "normalized_sha256": "5edc8b54e72096d5e922dccc7d11360b8b5cf03a2e6d1f16acba04595cb20265"
+          }
+        },
+        {
+          "case": "lf3d-fast-full-4rank",
+          "file": "rst/lf3d.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7357,
+            "normalized_ranges": [
+              [
+                7477,
+                7513
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "6cc5aaa77571767a0316567a37e8ea12ea013ed5feaa73f5849126441c6c6f39",
+            "normalized_sha256": "39ccec035ca8c8ac557e23478023c4897024db55aa97a4d00a6ea613ff56af2a"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7357,
+            "normalized_ranges": [
+              [
+                7477,
+                7513
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2b98b41bda2d59b84e4262de5a936345f5ec4b03f8a02855f7c1dab48891a7b8",
+            "normalized_sha256": "39ccec035ca8c8ac557e23478023c4897024db55aa97a4d00a6ea613ff56af2a"
+          }
+        },
+        {
+          "case": "lf3d-fast-full-4rank",
+          "file": "rst/lf3d.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7478,
+            "normalized_ranges": [
+              [
+                7598,
+                7634
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "77b0167cb7421ef0c57835402375bb537c346fee50cf12ae2c604aad4cc6b1da",
+            "normalized_sha256": "17d835e7e78dbbc609d474f30e0f34c42cf767b9cd0963da9ed279c76188619c"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7478,
+            "normalized_ranges": [
+              [
+                7598,
+                7634
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "0d3f715451312c1bf58d7fdecc226cef769275cbad1605a63997f62bc041d996",
+            "normalized_sha256": "17d835e7e78dbbc609d474f30e0f34c42cf767b9cd0963da9ed279c76188619c"
+          }
+        },
+        {
+          "case": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+          "file": "rst/cgl_lf_checkerboard.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6993,
+            "normalized_ranges": [
+              [
+                7113,
+                7149
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "0a0a9a525e940a8cd4aa1bbc9a2ed6a4bb302f316943c57e5b187615cbbe541c",
+            "normalized_sha256": "a52eebe94308912b54f044915aff0f50cfb76fbe7472c9fe71caad9d0745e21e"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6993,
+            "normalized_ranges": [
+              [
+                7113,
+                7149
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "0e1ff7a3475dc9d92d7f8e5ed0841f273db230ed01f4b36de5909eaff8d9c3d0",
+            "normalized_sha256": "a52eebe94308912b54f044915aff0f50cfb76fbe7472c9fe71caad9d0745e21e"
+          }
+        },
+        {
+          "case": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+          "file": "rst/cgl_lf_checkerboard.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7114,
+            "normalized_ranges": [
+              [
+                7234,
+                7270
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "71f6f6556dfa31a9d66b4077d631a5301affd7f0af239be61f0f653cd0a9be4c",
+            "normalized_sha256": "6491a435e3cfd03540a61fd302cd30986d24b938142761bcbbb606c9a1bf15cc"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7114,
+            "normalized_ranges": [
+              [
+                7234,
+                7270
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "c4261e461d4f1f291c030a5115c4cc4e9e1c3128bce1d1c1291b90b7a9cb5792",
+            "normalized_sha256": "6491a435e3cfd03540a61fd302cd30986d24b938142761bcbbb606c9a1bf15cc"
+          }
+        },
+        {
+          "case": "cgl_lf_field_reversal_1d-safe-full-1rank",
+          "file": "rst/cgl_lf_field_reversal_1d.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6881,
+            "normalized_ranges": [
+              [
+                7001,
+                7037
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "cbd8a92b4d44ff88edf9f413714bbe5688193938316578db7d7daed0b20da610",
+            "normalized_sha256": "e270d807bd29380de3b20ddf338424ccd636dc2862492a96d191102c050e1d1f"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6881,
+            "normalized_ranges": [
+              [
+                7001,
+                7037
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "a5ffd6d62eb1d4ccce558638f68effeada4261e4d5767f52913d897949c5ff72",
+            "normalized_sha256": "e270d807bd29380de3b20ddf338424ccd636dc2862492a96d191102c050e1d1f"
+          }
+        },
+        {
+          "case": "cgl_lf_field_reversal_1d-safe-full-1rank",
+          "file": "rst/cgl_lf_field_reversal_1d.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6980,
+            "normalized_ranges": [
+              [
+                7100,
+                7136
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "8367df4f130136f7e467b90158ef24b696938757ce55429b748f6415ad75b7fa",
+            "normalized_sha256": "c84ad7cabf889ad7ee7cc5007dc0127eb2f923739b463242884c8250a3f68ead"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6980,
+            "normalized_ranges": [
+              [
+                7100,
+                7136
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "abfc1a675e041d7c486986b0c60fd0929308410bbf9b1e3d6bac39b6d48cb8a5",
+            "normalized_sha256": "c84ad7cabf889ad7ee7cc5007dc0127eb2f923739b463242884c8250a3f68ead"
+          }
+        },
+        {
+          "case": "cgl_lf_field_reversal_2d-safe-full-1rank",
+          "file": "rst/cgl_lf_field_reversal_2d.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6881,
+            "normalized_ranges": [
+              [
+                7001,
+                7037
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "103fed3fcc4ccb62c344d36839b7f188deb58f836e4cc6b6888ae128921de4d5",
+            "normalized_sha256": "1802e55eb9565caae2a9842f9cf51ed7d1478e342a2cf419652c4cfe11367448"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6881,
+            "normalized_ranges": [
+              [
+                7001,
+                7037
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "15905d708250fb6a27ed47e6e2a1134c112073a4769e575dce67d5c7398984fb",
+            "normalized_sha256": "1802e55eb9565caae2a9842f9cf51ed7d1478e342a2cf419652c4cfe11367448"
+          }
+        },
+        {
+          "case": "cgl_lf_field_reversal_2d-safe-full-1rank",
+          "file": "rst/cgl_lf_field_reversal_2d.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6991,
+            "normalized_ranges": [
+              [
+                7111,
+                7147
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "42bfee357289b2b88d9a1794c387107b594b55eee293212fe05a09b50b2f095f",
+            "normalized_sha256": "aa2f846080bf54e72fed1bbc630e6a70ea7e95a3ed4fb80a91d2021ea1f676e4"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6991,
+            "normalized_ranges": [
+              [
+                7111,
+                7147
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "27e752bdb6f299051fa1d6af829cba1e00a80357d28b140523822f136fe79d90",
+            "normalized_sha256": "aa2f846080bf54e72fed1bbc630e6a70ea7e95a3ed4fb80a91d2021ea1f676e4"
+          }
+        },
+        {
+          "case": "passive2d-safe-none-4rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "d0c3e8731b86308d0c84d361a9d5c54eb7f7081a43e61208346ff59f38dcfe3e",
+            "normalized_sha256": "1a9875ca1711aca3ad38cb3e98d3db0af142cf314f4e105db0803b27cc2b7047"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "f82dd7109c5e29cac360c53ed8cc60658574b7357d9749af4ebce108b73f68e4",
+            "normalized_sha256": "1a9875ca1711aca3ad38cb3e98d3db0af142cf314f4e105db0803b27cc2b7047"
+          }
+        },
+        {
+          "case": "passive2d-safe-none-4rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "05b9597cad41e3d863d0b47790978e92851f7dcb300cf3d93a7ed35afc9fc7ce",
+            "normalized_sha256": "a7dd9048c9a1ee84fa8defc65908231a4292d0ee60a64947dabc9999a47954aa"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "981fa6c3cbfd066f07af2d845835b5dfb72378e38ff805895effd71d373c4453",
+            "normalized_sha256": "a7dd9048c9a1ee84fa8defc65908231a4292d0ee60a64947dabc9999a47954aa"
+          }
+        },
+        {
+          "case": "passive3d-fast-none-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "d139519fc753042ef9a5b7b487d0988fe0b69eb8c41d88702546f5d3dbd39bec",
+            "normalized_sha256": "784b21f2ee110b02d991851a35cbcd180c27477c0a91319a65f65d410b38e02d"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "3c6529d45b900d6d9d1d1e1ef11385d83affef4b262603b4b4c37443f6ae1664",
+            "normalized_sha256": "784b21f2ee110b02d991851a35cbcd180c27477c0a91319a65f65d410b38e02d"
+          }
+        },
+        {
+          "case": "passive3d-fast-none-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "cd72d8e3fcdabe139df21eed2e5c9bab81ecd7a9c83a603f6ae1fbcab624a0d4",
+            "normalized_sha256": "4d41cb2fab38edc3bb1ebd1badc1ee0ac14cc2d6c39ba509855bde6d74a6bb45"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "ef387d4759a2280030582835ae9f7e95b1c2e7c2c550a42b394f9214696db8dc",
+            "normalized_sha256": "4d41cb2fab38edc3bb1ebd1badc1ee0ac14cc2d6c39ba509855bde6d74a6bb45"
+          }
+        },
+        {
+          "case": "passive3d-safe-none-4rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "fc58d70530dff7b65df564766be36469dd4237ce48e2fb289ff006c901be9f31",
+            "normalized_sha256": "fc5871683520c6abb9ecad5bb9b3f72e1ebf61ceb1a1120290839f8882cc3cf8"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "476a780f2bfc485c159c2980dcaf42a836e58ebcfdb44ceb83e5dde052610af0",
+            "normalized_sha256": "fc5871683520c6abb9ecad5bb9b3f72e1ebf61ceb1a1120290839f8882cc3cf8"
+          }
+        },
+        {
+          "case": "passive3d-safe-none-4rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "52aa65afe47ef63104d8b227b3daa102bb3a64773226ec9d4c567a4eb5584b1b",
+            "normalized_sha256": "ba80e726d8c6a4668fd495326638ebe23d9e69d20741c0922af3b0791894150e"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "f7c692a32d61f1633b8899303f721e8dab189ce54fb16ef50a5314aa4f2634f0",
+            "normalized_sha256": "ba80e726d8c6a4668fd495326638ebe23d9e69d20741c0922af3b0791894150e"
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "1b11740d9fc90ce1bda1b7532c20a865e62e8dfcab9395e75e463c4cc21d2ade",
+            "normalized_sha256": "d7c0ba095138ad28a76707d7354375f575822bfde7bf3726868d9a69ff1f2f14",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "16d64a92b7804844126c286a5688fc9238c75ae8ca2e252917012b6632c3b4bb",
+            "normalized_sha256": "d7c0ba095138ad28a76707d7354375f575822bfde7bf3726868d9a69ff1f2f14",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "969cd7260f226fc510ce5e5df6597b7a72e15bc0eb804a36823ccf0eafbc85f9",
+            "normalized_sha256": "e35639296e80c5e1ead5369b5982b8ddaef2c98d281480a2c1b1fef45c99e530",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "531a63868fdc67c76bc014808ea89f7027de1b972d4b6f3a8f36cdc2b76a3e9d",
+            "normalized_sha256": "e35639296e80c5e1ead5369b5982b8ddaef2c98d281480a2c1b1fef45c99e530",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-4rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "13933b5550225bb28584a77a4f58d3ce55c0bd99a16acc5c60756c09769234d9",
+            "normalized_sha256": "d7c0ba095138ad28a76707d7354375f575822bfde7bf3726868d9a69ff1f2f14",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "8f662c54061051b86584ee32604b32e7363c8ffc1f8e70534d315e60774d34e1",
+            "normalized_sha256": "d7c0ba095138ad28a76707d7354375f575822bfde7bf3726868d9a69ff1f2f14",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-4rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "8ad3fdb08df9fae9ef9e17a94c518ebacb236e2c7d3240ed75f9544734016266",
+            "normalized_sha256": "08d95ff82254c5636a2ce0013c9ed80030a032cd3605ebc8ecb021b1d8e5ec0f",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "e35cf67d14b749f4ff24c6e707acfc8e34d8eb8416d209f28f7ab4bf0dcb1109",
+            "normalized_sha256": "08d95ff82254c5636a2ce0013c9ed80030a032cd3605ebc8ecb021b1d8e5ec0f",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        }
+      ],
+      "all_repair_counters_zero": true,
+      "binary_hashes_unchanged": true,
+      "runtime_environment": {
+        "MPICH_GPU_SUPPORT_ENABLED": "0",
+        "LD_LIBRARY_PATH": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0/lib:/opt/cray/pe/mpich/9.0.1/gtl/lib:/opt/cray/pe/libsci/25.09.0/CRAYCLANG/20.0/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce-clang/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce/x86_64/lib:/opt/cray/pe/perftools/25.09.0/lib64:/opt/cray/pe/pmi/6.1.16/lib:/opt/cray/pe/dsmml/0.3.1/dsmml/lib:/opt/cray/pe/python/3.11.7/lib:/opt/cray/pe/papi/7.2.0.2/lib64:/opt/cray/libfabric/2.3.1/lib64",
+        "MPICH_OFI_NIC_POLICY": "NUMA",
+        "FI_MR_CACHE_MONITOR": "kdreg2",
+        "MPICH_MPIIO_HINTS": "*:romio_cb_write=disable",
+        "FI_CXI_ATS": "0",
+        "MPICH_DIR": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0",
+        "OMP_NUM_THREADS": "1"
+      }
+    },
+    "hip": {
+      "results": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-hip-ready-5629018/results.json",
+      "results_sha256": "e3e9076c949649320f2fe9742d8d6fd8b11d7ab7da09a07f524610f65f183a73",
+      "binaries": {
+        "accepted": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/bin/athena-hip",
+          "sha256": "ce444cd1c34992fbb9cb8e1b1ebb1d9ec569b4d0a93f1f969f7470ca395ca027"
+        },
+        "release": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-hip",
+          "sha256": "6530c1b31a7d99077f3ff5932d4b1c790e33be38c1fa222cfda097f87b339f9e"
+        }
+      },
+      "cases": [
+        {
+          "name": "lf1d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "d725efaa747ab092a078ef1b84972ae3a04b9f440a4e2ca330ae037a66c279be",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.004325759567611748,
+          "lf_cell_stages": 5120.0
+        },
+        {
+          "name": "lf1d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "c30095491fe88b861d76566790b1d49223a05c045b086a60cb23508ed1ab3837",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.004325759567611748,
+          "lf_cell_stages": 5120.0
+        },
+        {
+          "name": "lf2d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "3b3ce033096131bd856c35f52d5e8324579a64313587a20fdd32537b0e2d8ea0",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.0077520808270906925,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf2d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "55b4c1761067ac6afc5c746d2d9c670d1b508e2c6e7e79428d358e8d00aa06a1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.0077520808270906925,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf3d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "d57df212bd41ae66edf81e8d3a5f23ebc723279835285efe72a7b0a673af5b56",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.027882257747743465,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "lf3d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "fb819aa6350ed29bbfc0aa169d76edfdc2887a8779b006b83999675bc2cb3c21",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.027882257747743465,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "low_b-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "c04d7efc30b83b69e6d9ef349a050d47821eb7b7478e06728a18f74093eda308",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 1.0,
+          "lf_cell_stages": 0.0
+        },
+        {
+          "name": "low_b-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "e486001d7653c021f3570dbfceb074c22b230ae0a4823201c5a0d38454ef8f74",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 1.0,
+          "lf_cell_stages": 0.0
+        },
+        {
+          "name": "smr_varied-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "3b010c01a73faeff5ba6af19483935335ae14b12790283fb9434613d84524a3c",
+          "files": {
+            ".bin": 2,
+            ".rst": 2,
+            ".hst": 2
+          },
+          "final_time": 0.0053064438064455485,
+          "lf_cell_stages": 64000.0
+        },
+        {
+          "name": "smr_varied-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "d3a87d5cb71f65869ed70777c8e308a755e8a0a1415f2d838ee720b0931785be",
+          "files": {
+            ".bin": 2,
+            ".rst": 2,
+            ".hst": 2
+          },
+          "final_time": 0.005306443806442966,
+          "lf_cell_stages": 64000.0
+        },
+        {
+          "name": "lf2d-safe-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "f93656e2026b904534e210669055134d9ec444aad30fea1c0d0f0b4b5555d0d1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.007751702538833156,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf2d-fast-full-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "a92ea8b44154570573be261197a99988c7bce082da9dd2fa25ce407f25bacff7",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.010914979817234861,
+          "lf_cell_stages": 229376.0
+        },
+        {
+          "name": "lf3d-safe-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "a5967c69399f24b607e3be29e6d2c65803653746095c9a9b75d39ac89940f0bd",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.027880996476911765,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "lf3d-fast-full-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "309173e774a8e0196fa2e99a808482b1d0b880de153a42cc22e09581192bccdf",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.02967485652789982,
+          "lf_cell_stages": 1835008.0
+        },
+        {
+          "name": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "109e65f05000303ec14b3565b95e72fb2d5baa3708e3ef8c416cef919e931b1e",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.011073944493086074,
+          "lf_cell_stages": 3584.0
+        },
+        {
+          "name": "cgl_lf_field_reversal_1d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "abd8920491ef6ddeeaa52e1d255ba4ce038c91af7ff78fa38ad50fcebcb01dd3",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 48.45813842356644,
+          "lf_cell_stages": 17920.0
+        },
+        {
+          "name": "cgl_lf_field_reversal_2d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "7a9cf11266c7ba909d6f5b5c1e624d5987781fa4030b3d41b34573b50e26cf52",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.13956492066153908,
+          "lf_cell_stages": 286720.0
+        },
+        {
+          "name": "passive2d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "4048b00ce62f0d40647e548035a5bdb6da6e2aab99952e1367d1d7936a058aa1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.042781384358349626,
+          "lf_cell_stages": 10240.0
+        },
+        {
+          "name": "passive2d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "8f32fb4908733f400dcebee5400c4df2c45488ce31a3a15fdc14535854c898d4",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.042781384358349626,
+          "lf_cell_stages": 10240.0
+        },
+        {
+          "name": "passive2d-safe-none-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "3c3547cf984cc2d496a63db4a90ba184499b8968334ace5420a14ee1d942440c",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.042781384358349626,
+          "lf_cell_stages": 10240.0
+        },
+        {
+          "name": "passive3d-safe-full-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "665f4aaf01770b204aee81f31c8f64253464cc01675237df656e9c8d1ab656d1",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.04139870177267688,
+          "lf_cell_stages": 163840.0
+        },
+        {
+          "name": "passive3d-fast-none-1rank",
+          "ranks": 1,
+          "forced": false,
+          "input_sha256": "ab91a2af5a92ebe38c960e76c756e20a13487a73fbf87f31388dd0e79f833bd4",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.04139870177267688,
+          "lf_cell_stages": 163840.0
+        },
+        {
+          "name": "passive3d-safe-none-4rank",
+          "ranks": 4,
+          "forced": false,
+          "input_sha256": "994d57ce4d27fc6a5e38a4645c506da04de546b320e70bd2b6a66427264d70b7",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.04139870177267688,
+          "lf_cell_stages": 163840.0
+        },
+        {
+          "name": "forced-passive3d-safe-full-1rank",
+          "ranks": 1,
+          "forced": true,
+          "input_sha256": "93c76ea1de59511c77533cc82cfc9d0163be515623350f619a8c304293b7c35e",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.12279735549429327,
+          "lf_cell_stages": 491520.0
+        },
+        {
+          "name": "forced-passive3d-safe-full-4rank",
+          "ranks": 4,
+          "forced": true,
+          "input_sha256": "93c76ea1de59511c77533cc82cfc9d0163be515623350f619a8c304293b7c35e",
+          "files": {
+            ".bin": 2,
+            ".hst": 1,
+            ".rst": 2
+          },
+          "final_time": 0.12279735549429327,
+          "lf_cell_stages": 491520.0
+        }
+      ],
+      "pairs": 25,
+      "applications": 50,
+      "rank_counts": {
+        "1": 20,
+        "4": 5
+      },
+      "file_pairs": {
+        ".bin": 50,
+        ".hst": 27,
+        ".rst": 50
+      },
+      "raw_restart_differences": [
+        {
+          "case": "smr_varied-safe-full-1rank",
+          "file": "rst/smr_varied.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "51f30237d5435fc8ab46902378e08c0ddbdf0653e944c2b6bbbd444311f22bd9",
+            "normalized_sha256": "a32cc7cc801142ded7be390c8b3c8241b117627672dd1aeef757cb1e95ed20ed"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "e384b4d61f2b3e23c75a84012f0bae6d3a95aa6048bfb314415f6b1e136d19f1",
+            "normalized_sha256": "a32cc7cc801142ded7be390c8b3c8241b117627672dd1aeef757cb1e95ed20ed"
+          }
+        },
+        {
+          "case": "smr_varied-safe-full-1rank",
+          "file": "rst/smr_varied.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7488,
+            "normalized_ranges": [
+              [
+                7608,
+                7644
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "39429a820080681839e94d7c9576da4abdecb51682d7a1fe64f6a61765ad1bb8",
+            "normalized_sha256": "af3f7d0cca5907669900eb3a02eced24acad707cd6f8fe3c48224a1fbda1ed33"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7488,
+            "normalized_ranges": [
+              [
+                7608,
+                7644
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "c0a6b8a781a34c435a4cda133e3ae9a806535f7b528c3143bec86231a1c3d9c2",
+            "normalized_sha256": "af3f7d0cca5907669900eb3a02eced24acad707cd6f8fe3c48224a1fbda1ed33"
+          }
+        },
+        {
+          "case": "smr_varied-fast-none-1rank",
+          "file": "rst/smr_varied.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "3d4b688b23f6020d99fdab428e6525804586c2dcbc59afade35248b76149161f",
+            "normalized_sha256": "66bba36c3c7a34e80c7c269811dab6c673a1c68f451c5b279fef740a73eed322"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7334,
+            "normalized_ranges": [
+              [
+                7454,
+                7490
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "76c5866f5576f0d6463be191eaf168e6501d08e5f4b38db7a5e6c7d7687040db",
+            "normalized_sha256": "66bba36c3c7a34e80c7c269811dab6c673a1c68f451c5b279fef740a73eed322"
+          }
+        },
+        {
+          "case": "smr_varied-fast-none-1rank",
+          "file": "rst/smr_varied.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7488,
+            "normalized_ranges": [
+              [
+                7608,
+                7644
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "b43f48139d33f6884ab521bd9dc83ba38afd302ad23901cd8482d1570c39a0f0",
+            "normalized_sha256": "422acc8c4e960262f6a5a399ea3fc01183d76f705545831e6a443ca2acff2de4"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7488,
+            "normalized_ranges": [
+              [
+                7608,
+                7644
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "66ea11cf3072f0f138dfc1d6ba363a95c1894842d1170dc2746e037f344c447c",
+            "normalized_sha256": "422acc8c4e960262f6a5a399ea3fc01183d76f705545831e6a443ca2acff2de4"
+          }
+        },
+        {
+          "case": "lf2d-fast-full-4rank",
+          "file": "rst/lf2d.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7360,
+            "normalized_ranges": [
+              [
+                7480,
+                7516
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "b8318b821897392aa747c1004f777deeae201ec718be1cccebf6d64b396b1aff",
+            "normalized_sha256": "c59f9cd15e4bb18194192dcc6726d11ce7cf6f879b7821559f14cdd9ffdbb3c4"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7360,
+            "normalized_ranges": [
+              [
+                7480,
+                7516
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "903f226f764ab2dd936448473a3914504563a65c410ed11bb566750ab7a6876d",
+            "normalized_sha256": "c59f9cd15e4bb18194192dcc6726d11ce7cf6f879b7821559f14cdd9ffdbb3c4"
+          }
+        },
+        {
+          "case": "lf2d-fast-full-4rank",
+          "file": "rst/lf2d.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7382,
+            "normalized_ranges": [
+              [
+                7502,
+                7538
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "adfabfb28073c858778b419130d0841d1498629fd49edb1f176b0dcbdb9e6d82",
+            "normalized_sha256": "af572bc80008079cce293a45bc56144452854ee8dc9df498853db1ae41960aa1"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7382,
+            "normalized_ranges": [
+              [
+                7502,
+                7538
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "55f3cc3bb18eb98474121ff04cbfadc19566524aa5f4a5329d8f4a0b190c9f80",
+            "normalized_sha256": "af572bc80008079cce293a45bc56144452854ee8dc9df498853db1ae41960aa1"
+          }
+        },
+        {
+          "case": "lf3d-fast-full-4rank",
+          "file": "rst/lf3d.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7357,
+            "normalized_ranges": [
+              [
+                7477,
+                7513
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "c75f4b52c7affb9de429f6048cbd8cf61209b14fe7b32258a06d55a3f8b6d317",
+            "normalized_sha256": "39ccec035ca8c8ac557e23478023c4897024db55aa97a4d00a6ea613ff56af2a"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7357,
+            "normalized_ranges": [
+              [
+                7477,
+                7513
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "3ca0304aed617b65dd2651e92f1af93be67cbbe501175063e458fa825789f64a",
+            "normalized_sha256": "39ccec035ca8c8ac557e23478023c4897024db55aa97a4d00a6ea613ff56af2a"
+          }
+        },
+        {
+          "case": "lf3d-fast-full-4rank",
+          "file": "rst/lf3d.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7478,
+            "normalized_ranges": [
+              [
+                7598,
+                7634
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "9c18050fae50fb696f693dcd3b25e3b312b7d55621e613519d237f6577ce8086",
+            "normalized_sha256": "8a57e367fbda5334dccd3eddf6dd57717c3bfb20da9782521eb2325c5ce597d0"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7478,
+            "normalized_ranges": [
+              [
+                7598,
+                7634
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "3d66cceebee395450ca10fd5702ede071e75ef96686fbedb14b396fc43269a77",
+            "normalized_sha256": "8a57e367fbda5334dccd3eddf6dd57717c3bfb20da9782521eb2325c5ce597d0"
+          }
+        },
+        {
+          "case": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+          "file": "rst/cgl_lf_checkerboard.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6993,
+            "normalized_ranges": [
+              [
+                7113,
+                7149
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "30198cf3c891faa912905cca2d59fe56aa186f6189ca8751266eb66fdf5af150",
+            "normalized_sha256": "a52eebe94308912b54f044915aff0f50cfb76fbe7472c9fe71caad9d0745e21e"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6993,
+            "normalized_ranges": [
+              [
+                7113,
+                7149
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "8d483dcf3cd73c845a2f2575820d11f6dcede5eb2d6934e8c89f2af926917f48",
+            "normalized_sha256": "a52eebe94308912b54f044915aff0f50cfb76fbe7472c9fe71caad9d0745e21e"
+          }
+        },
+        {
+          "case": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+          "file": "rst/cgl_lf_checkerboard.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7114,
+            "normalized_ranges": [
+              [
+                7234,
+                7270
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "a438a9fd46bcbe3a1fd88595765cc3aed4ecc7dd8502acbe14a2c4e97317eb89",
+            "normalized_sha256": "47fb65f340e4da3bdd20b955180e886fba643a14158d9610d5643595148909d9"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 7114,
+            "normalized_ranges": [
+              [
+                7234,
+                7270
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "7e605737b99fd9427b02eb964c09f5d400880ff746081786202940d3b4c4622a",
+            "normalized_sha256": "47fb65f340e4da3bdd20b955180e886fba643a14158d9610d5643595148909d9"
+          }
+        },
+        {
+          "case": "passive2d-safe-full-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "f9cc9ba815efbc3e6713ba466083a6aa4f5a06de1a98ed0144018504957d02cc",
+            "normalized_sha256": "86b02cf5284260901b396a66448c3c8b91ab4030e8cf70df6f1513fa00afc5de"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "c542b450f31d9c39c2759e43368896047f4f9e63b62b435975eb8e847d2cb383",
+            "normalized_sha256": "86b02cf5284260901b396a66448c3c8b91ab4030e8cf70df6f1513fa00afc5de"
+          }
+        },
+        {
+          "case": "passive2d-safe-full-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2b4497a172fc75a6e27102c5b2d854b7e1e7c3913c3a9a144bb943020b7887c3",
+            "normalized_sha256": "9effccf67bee4782e2be5395535a0f1b10d7a16e0ec35211fcb5843e369e486c"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "17c16eb60b268bae429fe55272f993ff91a1a78705680d9c679ee680af1b7271",
+            "normalized_sha256": "9effccf67bee4782e2be5395535a0f1b10d7a16e0ec35211fcb5843e369e486c"
+          }
+        },
+        {
+          "case": "passive2d-fast-none-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "4c0dd60e838753f8719e5df63f8cc352157b4d3812e04ee424607b8da0846702",
+            "normalized_sha256": "42ab1b36ee7f1f67a9ec539f6257b5ab19dc26b8966459d6a7cee0bae668a078"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1e196d33dfb254fa03c3ddc3641629e47d52f6dd5007ba45ed88130ea135af7f",
+            "normalized_sha256": "42ab1b36ee7f1f67a9ec539f6257b5ab19dc26b8966459d6a7cee0bae668a078"
+          }
+        },
+        {
+          "case": "passive2d-fast-none-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "49f6d8d3ae1d5d17ce42310f78bd8ebee451d47e9cd17480d68441f06f86359b",
+            "normalized_sha256": "f64b5b6cdd622eac390407d857a68b2552960013820e5212fe2b4e29733b8457"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "026a0b4deed6bd2f7e6298a1f11ae1bb2eec6e36970416507cf05dd5c9725cdb",
+            "normalized_sha256": "f64b5b6cdd622eac390407d857a68b2552960013820e5212fe2b4e29733b8457"
+          }
+        },
+        {
+          "case": "passive2d-safe-none-4rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "59a3d24048512ab389d5011f1008383aaab8ec8138ecdefe09fb161d9fb262eb",
+            "normalized_sha256": "126331b447429d294ecd453f38f0bdeab7656b3e476839b12e3be25db8f4d13b"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "ec460c713349d56625bba39dda8ba6aae7305736d88e35093bd24a8fe1676b9b",
+            "normalized_sha256": "126331b447429d294ecd453f38f0bdeab7656b3e476839b12e3be25db8f4d13b"
+          }
+        },
+        {
+          "case": "passive2d-safe-none-4rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "23bc4227963578bfd77e73def0e4ce985fb220b87e73b88a4543407cced079ef",
+            "normalized_sha256": "b3ae7d0f5c138f1114360e38b83ebbb44d2aa61e61033e7cf60c996da2466623"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "6fdf2d995aebb2f0179bf6eb95717bc5ef95addc5231e854974f3fe5671bacc2",
+            "normalized_sha256": "b3ae7d0f5c138f1114360e38b83ebbb44d2aa61e61033e7cf60c996da2466623"
+          }
+        },
+        {
+          "case": "passive3d-safe-full-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "33d1f1fa0db7a9fb8e340ed44470b523783047a9ab13a7ca8877e798e835e18e",
+            "normalized_sha256": "f2536d2c18711c7322a0a4d90c3c57604d3d0573c135e0cf5ae8a8243b14be58"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1fa49660f33cfda04fce68a6c19eb61ad7e3c9b3c8f5704c321fcec154ed1520",
+            "normalized_sha256": "f2536d2c18711c7322a0a4d90c3c57604d3d0573c135e0cf5ae8a8243b14be58"
+          }
+        },
+        {
+          "case": "passive3d-safe-full-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "29575e9be035b7d8dbf9ae561b638f8c91f1b30e5ddf92aae57cc1d974424cde",
+            "normalized_sha256": "5636489a4f557c13321c1b5ab5d97aa96df4e3f5f2adeccb9b8961cead53c6ac"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "7e5a650b16d291294c1dac56819e9a4c133d18e0f89ba3c9eb3a0e50dd9d0a78",
+            "normalized_sha256": "5636489a4f557c13321c1b5ab5d97aa96df4e3f5f2adeccb9b8961cead53c6ac"
+          }
+        },
+        {
+          "case": "passive3d-fast-none-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "146ae2372be6a6174912171a73902010479ad71c913e1ec285c3be6abf70ae25",
+            "normalized_sha256": "76570e99bfa1f5f932ecda1c3c3b4d9dfcbc709d6c73ab008f4986a48009a384"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "1e53e772c67fb306ae9dc7ac5333b4033138bdc60cb7fea27d5c0b2824e742e5",
+            "normalized_sha256": "76570e99bfa1f5f932ecda1c3c3b4d9dfcbc709d6c73ab008f4986a48009a384"
+          }
+        },
+        {
+          "case": "passive3d-fast-none-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "2d4966cb4f6120d01eed00ca95d5b64ca3d020c3bbe9b8e7d5befed48662d1c9",
+            "normalized_sha256": "d9cdbeff3376046ca6dff7fd90cb8d05b0dd54e25db22603514f5981a2501fee"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "8d7d279d662bc2763be12e556e0e662f8404feadaa317502cdb507401c599d9d",
+            "normalized_sha256": "d9cdbeff3376046ca6dff7fd90cb8d05b0dd54e25db22603514f5981a2501fee"
+          }
+        },
+        {
+          "case": "passive3d-safe-none-4rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "e1fc91e26417943c6f95f25d7b404facf4406cbfae5fe3ac5389bf04b2b246b0",
+            "normalized_sha256": "045e9e92d470fc8cf7079b57c9ab26382654789865346d01746e7a35c5c54ea0"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 5895,
+            "normalized_ranges": [
+              [
+                6015,
+                6051
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "988070381493b9697763588b15a786ae444f84a332297811562673dd89909930",
+            "normalized_sha256": "045e9e92d470fc8cf7079b57c9ab26382654789865346d01746e7a35c5c54ea0"
+          }
+        },
+        {
+          "case": "passive3d-safe-none-4rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "4001aecad4f158bff1d2e25f6971e5fc56f4c2dda9001a27c96b0809305f436e",
+            "normalized_sha256": "1ec495daf8a158ec723958e5d61902aa32451247c98491e5a1dc2d841a6140cd"
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 6038,
+            "normalized_ranges": [
+              [
+                6158,
+                6194
+              ]
+            ],
+            "normalized_byte_count": 36,
+            "raw_sha256": "193ef2817d28f498097b01fbb343a4cbf826924b7ea6b5762d97d84d40945905",
+            "normalized_sha256": "1ec495daf8a158ec723958e5d61902aa32451247c98491e5a1dc2d841a6140cd"
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-1rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "695363cb973e2a2fb0990549c4eb15410114ea5fc4cd9c21fcc70c5e77fe3899",
+            "normalized_sha256": "6008ac22b5d0733519f723f267368eada2f852ff8784b908e58f526192fa0cd1",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "a0f001e8c298f129683ea1bdc00659f1c332f5227fff126c5f0861e5910eebbf",
+            "normalized_sha256": "6008ac22b5d0733519f723f267368eada2f852ff8784b908e58f526192fa0cd1",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-1rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "33dc98ceb69e7c54d7cfaddca9db30bd900e95f3baf0f012152bfb345a212e15",
+            "normalized_sha256": "6b58406b849512601e0a72e3c17e1d3e35ac642233d139d2bf51006db617fa74",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "da566b1d91e555a42a5fac3c1dfc7560f56efeaeeae0fce5a20987a644c3b85e",
+            "normalized_sha256": "6b58406b849512601e0a72e3c17e1d3e35ac642233d139d2bf51006db617fa74",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-4rank",
+          "file": "rst/passive_validation.00000.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "c8ebfd380706c1aa7e5faf780273ac78e1151baafcd3123df2e84dfc9b81ee63",
+            "normalized_sha256": "6008ac22b5d0733519f723f267368eada2f852ff8784b908e58f526192fa0cd1",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; explicitly opted-in verified dormant initial forcing RNG members only; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 8910,
+            "normalized_ranges": [
+              [
+                9030,
+                9066
+              ],
+              [
+                9578,
+                9850
+              ],
+              [
+                9854,
+                9858
+              ],
+              [
+                9858,
+                9866
+              ]
+            ],
+            "normalized_byte_count": 320,
+            "raw_sha256": "7b56a81fbf68d1c189a5c33fad31bfabcf585ee6bc4935e1ec7188e769f68403",
+            "normalized_sha256": "6008ac22b5d0733519f723f267368eada2f852ff8784b908e58f526192fa0cd1",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": true,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 0,
+              "time": 0.0,
+              "cycle": 0,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "idum": -1,
+              "iset": 0,
+              "retained_padding_range": [
+                9854,
+                9858
+              ],
+              "ranges": [
+                [
+                  9578,
+                  9850
+                ],
+                [
+                  9858,
+                  9866
+                ]
+              ],
+              "members": [
+                "idum2",
+                "iy",
+                "iv[0:32]",
+                "gset"
+              ],
+              "reason": "negative seed initializes shuffle state and zero cache flag initializes gset before use",
+              "source": "src/srcterms/turb_driver.cpp:507; src/utils/random.hpp:55,152; src/outputs/restart.cpp:329",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9854,
+                9858
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9570,
+              "rng_bytes": 296,
+              "time": 0.0,
+              "cycle": 0,
+              "idum": -1,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        },
+        {
+          "case": "forced-passive3d-safe-full-4rank",
+          "file": "rst/passive_validation.00001.rst",
+          "accepted": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "974771647ed7c521c1b29ed2057887b37eac5549499a8ca579bbcc94c78089c5",
+            "normalized_sha256": "3d9d9feacf872d01df567d27c898a6cb6f621e8165ac61b570ba950818a57cf0",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          },
+          "release": {
+            "rule": "zero only unused mesh_indcs cnx1/cnx2/cnx3/cis/cie/cjs/cje/cks/cke; independently opted-in verified four-byte RNG alignment padding only",
+            "source": "src/outputs/restart.cpp serializes RegionIndcs; src/mesh/mesh.cpp initializes only its root fine indices",
+            "real_bytes": 8,
+            "int_bytes": 4,
+            "binary_header_offset": 9042,
+            "normalized_ranges": [
+              [
+                9162,
+                9198
+              ],
+              [
+                9986,
+                9990
+              ]
+            ],
+            "normalized_byte_count": 40,
+            "raw_sha256": "e5a6be356228b979bb5445074632ce7954c6401b2cee5caab77033757fda10f7",
+            "normalized_sha256": "3d9d9feacf872d01df567d27c898a6cb6f621e8165ac61b570ba950818a57cf0",
+            "dormant_startup_forcing": {
+              "enabled": true,
+              "applied": false,
+              "metadata_version": 3,
+              "mode_count": 10,
+              "n_updates": 12,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "idum": 981218961,
+              "iset": 0,
+              "retained_padding_range": [
+                9986,
+                9990
+              ],
+              "reason": "not initial time and cycle",
+              "padding_normalized_by_separate_opt_in": true
+            },
+            "forcing_padding": {
+              "enabled": true,
+              "applied": true,
+              "range": [
+                9986,
+                9990
+              ],
+              "metadata_version": 3,
+              "rng_offset": 9702,
+              "rng_bytes": 296,
+              "time": 0.12279735549429327,
+              "cycle": 12,
+              "idum": 981218961,
+              "iset": 0,
+              "abi": "native double RNG_State: sizeof296, iset offset280 sizeof4, gset offset288 sizeof8",
+              "abi_compile_proof": "p1-research/rng_restart_abi.cpp",
+              "source": "src/utils/random.hpp:26-34; src/outputs/restart.cpp:328",
+              "rule": "zero only the four non-member alignment bytes between iset and gset"
+            }
+          }
+        }
+      ],
+      "all_repair_counters_zero": true,
+      "binary_hashes_unchanged": true,
+      "runtime_environment": {
+        "MPICH_GPU_SUPPORT_ENABLED": "1",
+        "LD_LIBRARY_PATH": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0/lib:/opt/cray/pe/mpich/9.0.1/gtl/lib:/opt/cray/pe/libsci/25.09.0/CRAYCLANG/20.0/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce-clang/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce/x86_64/lib:/opt/cray/pe/perftools/25.09.0/lib64:/opt/cray/pe/pmi/6.1.16/lib:/opt/cray/pe/dsmml/0.3.1/dsmml/lib:/opt/rocm-6.4.2/lib/roctracer:/opt/rocm-6.4.2/lib/rocprofiler:/opt/rocm-6.4.2/lib:/opt/cray/pe/python/3.11.7/lib:/opt/cray/pe/papi/7.2.0.2/lib64:/opt/cray/libfabric/2.3.1/lib64",
+        "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+        "HIP_LIB_PATH": "/opt/rocm-6.4.2/lib",
+        "MPICH_OFI_NIC_POLICY": "GPU",
+        "FI_CXI_RX_MATCH_MODE": "software",
+        "MPICH_OFI_NUM_CQ_ENTRIES": "131072",
+        "FI_MR_CACHE_MONITOR": "kdreg2",
+        "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+        "MPICH_MPIIO_HINTS": "*:romio_cb_write=disable",
+        "FI_CXI_ATS": "0",
+        "MPICH_DIR": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0",
+        "HSA_XNACK": "1",
+        "OMP_NUM_THREADS": "1"
+      }
+    }
+  },
+  "source_manifest": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-source-manifest.json",
+    "sha256": "389a473fba32b06dbd8ebd352cf4456835d347176dc3e6be1249c3bd392af658"
+  },
+  "binary_manifests": {
+    "cpu": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/manifest-cpu.json",
+      "sha256": "167ed5437db3d3c26fac4da552c01fd1dd98ef1659dfbe3fc94fb6561bc3b40a"
+    },
+    "hip": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/manifest-hip.json",
+      "sha256": "da904f96ad688488594741d1d24da93c7f02ee0758d11c56689960700dc003ca"
+    }
+  },
+  "retained_failed_attempt": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-equivalence-cpu-5629018",
+    "status": "Stopped after 13 pairs whose accepted applications passed and whose release processes failed at dynamic loading, before solver initialization.",
+    "cause": "The initial CPU link inherited ROCm and required libamdhip64.so.6. Unchanged objects were relinked in the CPU-only environment; the original failed-loader binary and logs are preserved."
+  }
+}

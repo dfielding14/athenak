@@ -1,0 +1,88 @@
+{
+  "purpose": "New four-rank CPU permanent passive acceptance, separate from prior CPU1/HIP1/HIP4 counts",
+  "started": "2026-10-06T23:42:32.129229+00:00",
+  "backend": "cpu",
+  "ranks": 4,
+  "slurm_job": "5629018",
+  "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-cpu",
+  "binary_sha256": "671441a4bbfb62f7192b7b6aaeaf8cc522603a84ea0482cab7f4d0408ab12d46",
+  "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release",
+  "command": [
+    "/opt/cray/pe/python/3.11.7/bin/python3",
+    "-m",
+    "pytest",
+    "-q",
+    "-s",
+    "-x",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/tst/test_suite/cgl/test_cgl_passive_mpicpu.py",
+    "--basetemp=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work"
+  ],
+  "launcher": "srun --exact -N1 -n4 --ntasks-per-node=4 --threads-per-core=1 --cpu-bind=cores -c1 --gpus-per-node=0 --overlap",
+  "expected_pytest_groups": 6,
+  "expected_applications": 80,
+  "expected_checks": 65,
+  "files": {
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/tst/test_suite/cgl/test_cgl_passive_mpicpu.py": "376e23e05ad20367c9f331e4b23ba1ea5fcf93ebac544aabdb94d7319a7ffed2",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/tst/test_suite/cgl/passive_acceptance.py": "8ec577d26a0da69380977884789823187437d00e7eae176ade9cbe391c082990",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/run_release_mpicpu.sh": "ddfa393b80754effa8e7bbe3ac49138e26eded679a1bcef1af2c65f6bbfe67f7",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/run_release_mpicpu.py": "bf32d748d95337a7279b0bed8f3070d73926ed45e59282fc8d1b36564bab9287",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-source-manifest.json": "389a473fba32b06dbd8ebd352cf4456835d347176dc3e6be1249c3bd392af658",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-cpu-link-manifest.json": "d05077f402533bd1339289eeebec7226c5d40fc0fd1561032c163acb515cdd0d"
+  },
+  "environment": {
+    "MPICH_GPU_SUPPORT_ENABLED": "0",
+    "LD_LIBRARY_PATH": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0/lib:/opt/cray/pe/mpich/9.0.1/gtl/lib:/opt/cray/pe/libsci/25.09.0/CRAYCLANG/20.0/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce-clang/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce/x86_64/lib:/opt/cray/pe/perftools/25.09.0/lib64:/opt/cray/pe/pmi/6.1.16/lib:/opt/cray/pe/dsmml/0.3.1/dsmml/lib:/opt/cray/pe/python/3.11.7/lib:/opt/cray/pe/papi/7.2.0.2/lib64:/opt/cray/libfabric/2.3.1/lib64",
+    "MPICH_OFI_NIC_POLICY": "NUMA",
+    "TMPDIR": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/tmp",
+    "FI_MR_CACHE_MONITOR": "kdreg2",
+    "MPICH_MPIIO_HINTS": "*:romio_cb_write=disable",
+    "PYTHONPATH": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/source-release/tst:/opt/cray/pe/python/3.11.7",
+    "FI_CXI_ATS": "0",
+    "MPICH_DIR": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0",
+    "OMP_NUM_THREADS": "1"
+  },
+  "status": "passed",
+  "returncode": 0,
+  "finished": "2026-10-06T23:44:25.921955+00:00",
+  "binary_hash_unchanged": true,
+  "groups": {
+    "test_cgl_passive_mpicpu_advect0": {
+      "result": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_advect0/results.json",
+      "sha256": "dbaccaf5ee83d44840c90507b82add28784a43861089c028e44c96d9f82ff658",
+      "applications": 3,
+      "checks": 4
+    },
+    "test_cgl_passive_mpicpu_fences0": {
+      "result": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_fences0/results.json",
+      "sha256": "1b2bf65c015d0e12e58d6a48cf6e05f918ed30a7c2f2136cb629f0e706116e92",
+      "applications": 19,
+      "checks": 19
+    },
+    "test_cgl_passive_mpicpu_heatin0": {
+      "result": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_heatin0/results.json",
+      "sha256": "1274dbb6ecb087ae7ddce2780d19173ef138f58d3edc8d81f37595029b1e9324",
+      "applications": 6,
+      "checks": 4
+    },
+    "test_cgl_passive_mpicpu_identi0": {
+      "result": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_identi0/results.json",
+      "sha256": "76c3d999227575325ba3d21fa4dd211daadba771ca16effefe6763bb6953cab5",
+      "applications": 35,
+      "checks": 23
+    },
+    "test_cgl_passive_mpicpu_linear0": {
+      "result": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_linear0/results.json",
+      "sha256": "354832587ed8361f6601f1aa56e077dc84d32aef88ff9c3f69b8ff18bf1acde6",
+      "applications": 7,
+      "checks": 9
+    },
+    "test_cgl_passive_mpicpu_restar0": {
+      "result": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task4-research/release-mpicpu-runs/final-release-cpu4-5629018/work/test_cgl_passive_mpicpu_restar0/results.json",
+      "sha256": "099a1075e3092ca3aba87c8a8a734bc771490a7e20c3540aad854316fa6364b5",
+      "applications": 10,
+      "checks": 6
+    }
+  },
+  "applications": 80,
+  "checks": 65
+}
