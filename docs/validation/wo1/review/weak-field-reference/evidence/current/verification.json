@@ -1,0 +1,116 @@
+{
+  "baseline_checks": [
+    {
+      "baseline": "/tmp/cgl-b4-compare-20261006/current/verification/baseline_v+10_bf1e-10",
+      "instrumented": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v+10_bf1e-10_cycles",
+      "command": [
+        "/tmp/cgl-b4-compare-20261006/current/athena-uninstrumented-7b3345fd",
+        "-i",
+        "/tmp/cgl-b4-compare-20261006/current/comparison.athinput",
+        "problem/weak_field_velocity=10",
+        "mhd/bfloor=1e-10",
+        "output1/variable=mhd_w_bcc",
+        "time/nlim=50"
+      ],
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "baseline": "/tmp/cgl-b4-compare-20261006/current/verification/baseline_v+10_bf1e-14",
+      "instrumented": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v+10_bf1e-14_cycles",
+      "command": [
+        "/tmp/cgl-b4-compare-20261006/current/athena-uninstrumented-7b3345fd",
+        "-i",
+        "/tmp/cgl-b4-compare-20261006/current/comparison.athinput",
+        "problem/weak_field_velocity=10",
+        "mhd/bfloor=1e-14",
+        "output1/variable=mhd_w_bcc",
+        "time/nlim=50"
+      ],
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "baseline": "/tmp/cgl-b4-compare-20261006/current/verification/baseline_v-10_bf1e-10",
+      "instrumented": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v-10_bf1e-10_cycles",
+      "command": [
+        "/tmp/cgl-b4-compare-20261006/current/athena-uninstrumented-7b3345fd",
+        "-i",
+        "/tmp/cgl-b4-compare-20261006/current/comparison.athinput",
+        "problem/weak_field_velocity=-10",
+        "mhd/bfloor=1e-10",
+        "output1/variable=mhd_w_bcc",
+        "time/nlim=50"
+      ],
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "baseline": "/tmp/cgl-b4-compare-20261006/current/verification/baseline_v-10_bf1e-14",
+      "instrumented": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v-10_bf1e-14_cycles",
+      "command": [
+        "/tmp/cgl-b4-compare-20261006/current/athena-uninstrumented-7b3345fd",
+        "-i",
+        "/tmp/cgl-b4-compare-20261006/current/comparison.athinput",
+        "problem/weak_field_velocity=-10",
+        "mhd/bfloor=1e-14",
+        "output1/variable=mhd_w_bcc",
+        "time/nlim=50"
+      ],
+      "nfiles": 52,
+      "differing_files": []
+    }
+  ],
+  "allmag_face_checks": [
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh0_v+10_bf1e-14_cycles",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh0_v+10_bf1e-14_cycles",
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh0_v+10_bf1e-14_time",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh0_v+10_bf1e-14_time",
+      "nfiles": 49,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh0_v-10_bf1e-14_cycles",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh0_v-10_bf1e-14_cycles",
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh0_v-10_bf1e-14_time",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh0_v-10_bf1e-14_time",
+      "nfiles": 49,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v+10_bf1e-14_cycles",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh1_v+10_bf1e-14_cycles",
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v+10_bf1e-14_time",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh1_v+10_bf1e-14_time",
+      "nfiles": 49,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v-10_bf1e-14_cycles",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh1_v-10_bf1e-14_cycles",
+      "nfiles": 52,
+      "differing_files": []
+    },
+    {
+      "wo1": "/tmp/cgl-b4-compare-20261006/current/runs/wo1_fh1_v-10_bf1e-14_time",
+      "original": "/tmp/cgl-b4-compare-20261006/current/runs/original_fh1_v-10_bf1e-14_time",
+      "nfiles": 49,
+      "differing_files": []
+    }
+  ],
+  "trace_counts_passed": true,
+  "physical_time_checks_passed": true
+}

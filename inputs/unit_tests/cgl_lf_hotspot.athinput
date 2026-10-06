@@ -1,0 +1,66 @@
+# LF-only Gaussian hotspot: 100x contrast, ten perpendicular diffusion times.
+<job>
+basename = cgl_lf_hotspot
+<mesh>
+nghost = 2
+nx1 = 64
+x1min = -0.5
+x1max = 0.5
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 64
+x2min = -0.5
+x2max = 0.5
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = -0.5
+x3max = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 64
+nx2 = 64
+nx3 = 1
+<time>
+evolution = kinematic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 1.0
+cfl_number = 0.3
+nlim = -1
+tlim = 0.201
+ndiag = 100
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+lf_k_parallel = 10.0
+lf_coefficient_mode = background
+lf_c_parallel0 = 1.0
+cgl_lf_strict_admissibility = true
+reconstruct = plm
+rsolver = advect
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+<problem>
+pgen_name = cgl_landau_fluid
+test_mode = hotspot
+user_srcs = true
+user_hist = true
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.0
+b0 = 7.0710678118654755
+by0 = 7.0710678118654755
+bz0 = 0.0
+hotspot_width = 0.04
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1

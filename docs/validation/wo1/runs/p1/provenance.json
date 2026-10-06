@@ -1,0 +1,5 @@
+{
+  "source_commit": "ba920f5fba7d6663e8d5a453246b505f987464cf",
+  "source_patch_sha256": "3e5f3b18a6fc356d99a145deca625fd9116a1cc804800a9b2c0601dfa2827c12",
+  "provenance_note": "P1 candidate atop docs-only G7. Parent confirmed both binaries rebuilt from this source and other builds/simulations paused during timing."
+}

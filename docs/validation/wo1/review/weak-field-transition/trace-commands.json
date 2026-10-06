@@ -1,0 +1,67 @@
+[
+  {
+    "name": "plm",
+    "args": [
+      "-i",
+      "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_weak_field_transport.athinput",
+      "time/nlim=5",
+      "mhd/reconstruct=plm",
+      "problem/weak_field_velocity=10",
+      "mhd/bfloor=1e-10",
+      "output1/variable=mhd_w_bcc"
+    ],
+    "returncode": 0
+  },
+  {
+    "name": "dc",
+    "args": [
+      "-i",
+      "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_weak_field_transport.athinput",
+      "time/nlim=5",
+      "mhd/reconstruct=dc",
+      "problem/weak_field_velocity=10",
+      "mhd/bfloor=1e-10",
+      "output1/variable=mhd_w_bcc"
+    ],
+    "returncode": 0
+  },
+  {
+    "name": "reverse",
+    "args": [
+      "-i",
+      "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_weak_field_transport.athinput",
+      "time/nlim=5",
+      "mhd/reconstruct=plm",
+      "problem/weak_field_velocity=-10",
+      "mhd/bfloor=1e-10",
+      "output1/variable=mhd_w_bcc"
+    ],
+    "returncode": 0
+  },
+  {
+    "name": "floor6",
+    "args": [
+      "-i",
+      "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_weak_field_transport.athinput",
+      "time/nlim=5",
+      "mhd/reconstruct=plm",
+      "problem/weak_field_velocity=10",
+      "mhd/bfloor=1e-6",
+      "output1/variable=mhd_w_bcc"
+    ],
+    "returncode": 0
+  },
+  {
+    "name": "all_magnetized",
+    "args": [
+      "-i",
+      "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/inputs/unit_tests/cgl_weak_field_transport.athinput",
+      "time/nlim=5",
+      "mhd/reconstruct=plm",
+      "problem/weak_field_velocity=10",
+      "mhd/bfloor=1e-14",
+      "output1/variable=mhd_w_bcc"
+    ],
+    "returncode": 0
+  }
+]

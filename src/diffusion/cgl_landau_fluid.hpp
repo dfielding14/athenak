@@ -107,19 +107,30 @@ class CGLLandauFluid {
   parabolic::ParabolicIntegratorMode mode;
   CGLLFDiagnostics diagnostics;
 
+  void SetFusedPrimitiveRefresh(bool enabled) {
+    fused_primitive_refresh_ = enabled;
+    precomputed_ = false;
+  }
+  bool UsesFusedPrimitiveRefresh() const {return fused_primitive_refresh_;}
+  void RefreshPrimitives(DvceArray5D<Real> &u, const DvceArray5D<Real> &bcc,
+                         DvceArray5D<Real> &w, const EOS_Data &eos,
+                         int il, int iu, int jl, int ju, int kl, int ku);
   void AddHeatFluxes(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
-                     const EOS_Data &eos, Real dt_sweep, Real rkl_weight,
+                     const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
+                     Real dt_sweep, Real rkl_weight,
                      DvceFaceFld5D<Real> &f);
   void AdvanceHeatFluxWorkDiagnostics(const parabolic::RKL2Coefficients &coeffs,
                                       int stage, int nstages);
   void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, int stage,
                                       Real pressure_power, Real anisotropic_power);
   void ResetHeatFluxDiagnostics();
-  void NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos);
+  void NewTimeStep(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
+                    const EOS_Data &eos);
   void RecordAdmissibility(const DvceArray5D<Real> &u, const DvceArray5D<Real> &w,
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
                            int dfloor_delta, int pfloor_delta,
-                           const char *sweep_name, int stage, int nstages);
+                           const char *sweep_name, int stage, int nstages,
+                           bool wall_checkpoint = false);
   bool ProfileEnabled() const {return profile_enabled_;}
   void AddProfileTime(CGLLFProfileBucket bucket, Real seconds);
   void ReportProfile(const char *context) const;
@@ -139,6 +150,10 @@ class CGLLandauFluid {
   std::uint64_t profile_counts_[kCGLLFProfileBucketCount] = {};
   Real profile_detail_sink_ = 0.0;
   DvceArray4D<Real> tpar_, tperp_, bmag_;
+  // C2P and LF use different norm expressions; retain both rounding histories.
+  DvceArray4D<Real> bmag_c2p_;
+  bool fused_primitive_refresh_ = false;
+  bool precomputed_ = false;
   Real stage_qpar_work_ = 0.0;
   Real stage_qperp_work_ = 0.0;
   Real sweep_qpar_work_ = 0.0;

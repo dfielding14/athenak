@@ -1,0 +1,8 @@
+{
+  "commit": "def0b6c79b84243324de3d033dca95aedb2c2ead",
+  "changed_tracked_files": [],
+  "added_source_files": [
+    "src/pgen/b4_contact.cpp"
+  ],
+  "kokkos": "08ceff92bcf3a828844480bc1e6137eb74028517"
+}

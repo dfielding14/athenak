@@ -38,6 +38,8 @@ tlim = 0.005
 ndiag = 1
 
 <mhd>
+firehose_threshold = 2.0
+mirror_threshold = 1.0
 eos = cgl
 passive = false
 mirror_limiter = true

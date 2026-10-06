@@ -1,0 +1,24 @@
+Your Athena++ distribution has now been configured with the following options:
+  Problem generator:          b4_reference
+  Coordinate system:          cartesian
+  Equation of state:          cgl
+  Riemann solver:             hlle
+  Magnetic fields:            ON
+  Number of scalars:          0
+  Special relativity:         OFF
+  General relativity:         OFF
+  Frame transformations:      OFF
+  Self-Gravity:               OFF
+  Super-Time-Stepping:        OFF
+  Shearing Box BCs:           OFF
+  Debug flags:                OFF
+  Code coverage flags:        OFF
+  Linker flags:                
+  Floating-point precision:   double
+  Number of ghost cells:      2
+  MPI parallelism:            OFF
+  OpenMP parallelism:         OFF
+  FFT:                        OFF
+  HDF5 output:                OFF
+  Compiler:                   clang++-apple
+  Compilation command:        clang++  -O3 -std=c++11

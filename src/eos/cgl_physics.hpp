@@ -11,16 +11,10 @@
 #include <limits>
 
 #include "athena.hpp"
+#include "eos/eos.hpp"
 
 namespace cgl {
 
-constexpr Real kFirehoseObliqueThreshold = -0.7;
-constexpr Real kFirehoseParallelThreshold = -1.0;
-// Emergency numerical overshoot bound, distinct from either activation policy.
-constexpr Real kFirehoseHardBound = -1.5;
-constexpr Real kMirrorThreshold = 0.5;
-constexpr Real kMirrorHardBound = 1.0;
-constexpr Real kBackupCollisionRate = 1.0e10;
 constexpr Real kSqrtTwoOverPi = 0.7978845608028654;
 constexpr Real kSqrtEightOverPi = 1.5957691216057308;
 constexpr Real kSqrtTwoPi = 2.5066282746310002;
@@ -29,80 +23,71 @@ constexpr Real kThreePiMinusEight = 1.4247779607693793;
 
 KOKKOS_INLINE_FUNCTION
 bool EffectiveBackupLimiter(const bool configured_backup,
-                            const bool landau_fluid_active,
-                            const bool instability_limiter_active,
-                            const bool strict_admissibility) {
-  return configured_backup ||
-         (landau_fluid_active && instability_limiter_active &&
-          !strict_admissibility);
+                            const bool, const bool, const bool) {
+  return configured_backup;
+}
+
+// Threshold parameters are positive coefficients of magnetic pressure B^2/2.
+KOKKOS_INLINE_FUNCTION
+Real FirehoseThreshold(const Real bsqr, const EOS_Data &eos) {
+  return -0.5*eos.firehose_threshold*bsqr;
 }
 
 KOKKOS_INLINE_FUNCTION
-bool FirehoseLimiterActive(const Real paniso, const Real bsqr,
-                           const Real firehose_threshold) {
-  return paniso <= firehose_threshold*bsqr;
+Real MirrorThreshold(const Real bsqr, const EOS_Data &eos) {
+  return 0.5*eos.mirror_threshold*bsqr;
 }
 
 KOKKOS_INLINE_FUNCTION
-bool FirehoseHardBoundViolated(const Real paniso, const Real bsqr) {
-  return paniso <= kFirehoseHardBound*bsqr;
+Real FirehoseBackupWall(const Real bsqr, const EOS_Data &eos) {
+  return fmax(eos.firehose_backup_factor*FirehoseThreshold(bsqr, eos), -bsqr);
 }
 
 KOKKOS_INLINE_FUNCTION
-bool MirrorLimiterActive(const Real paniso, const Real bsqr) {
-  return paniso >= kMirrorThreshold*bsqr;
+Real MirrorBackupWall(const Real bsqr, const EOS_Data &eos) {
+  return eos.mirror_backup_factor*MirrorThreshold(bsqr, eos);
 }
 
 KOKKOS_INLINE_FUNCTION
-bool MirrorHardBoundViolated(const Real paniso, const Real bsqr) {
-  return paniso >= kMirrorHardBound*bsqr;
+bool FirehoseLimiterActive(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso <= FirehoseThreshold(bsqr, eos);
 }
 
 KOKKOS_INLINE_FUNCTION
-bool ApplyHardwallLimiter(Real &ppar, Real &pperp, const Real bsqr,
-                          const bool mirror, const bool firehose,
-                          const Real firehose_threshold) {
-  const Real paniso = pperp - ppar;
-  Real limited_anisotropy = paniso;
-  if (firehose && paniso < firehose_threshold*bsqr) {
-    limited_anisotropy = firehose_threshold*bsqr;
-  } else if (mirror && paniso > kMirrorThreshold*bsqr) {
-    limited_anisotropy = kMirrorThreshold*bsqr;
-  }
-  if (limited_anisotropy == paniso) {
-    return false;
-  }
-
-  // Scattering preserves internal energy while pinning Delta p to the bound.
-  const Real piso = ONE_3RD*ppar + TWO_3RDS*pperp;
-  pperp = piso + ONE_3RD*limited_anisotropy;
-  ppar = piso - TWO_3RDS*limited_anisotropy;
-  return true;
+bool FirehoseHardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso <= FirehoseBackupWall(bsqr, eos);
 }
 
+KOKKOS_INLINE_FUNCTION
+bool MirrorLimiterActive(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso >= MirrorThreshold(bsqr, eos);
+}
+
+KOKKOS_INLINE_FUNCTION
+bool MirrorHardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos) {
+  return paniso >= MirrorBackupWall(bsqr, eos);
+}
+
+// A state on a wall is admissible; disabled backup walls are not constraints.
+KOKKOS_INLINE_FUNCTION
+bool HardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos,
+                       const bool backup) {
+  return paniso < -bsqr ||
+         (backup && (paniso < FirehoseBackupWall(bsqr, eos) ||
+                     paniso > MirrorBackupWall(bsqr, eos)));
+}
+
+// Background collisions are added by the caller. Soft and backup scattering add.
 KOKKOS_INLINE_FUNCTION
 Real LimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
-                          const Real limiter_rate, const bool mirror,
-                          const bool firehose, const Real firehose_threshold,
-                          const bool backup) {
+                          const EOS_Data &eos, const bool backup) {
   const Real paniso = pperp - ppar;
-  const Real rate = fmax(limiter_rate, static_cast<Real>(0.0));
-  Real nu = 0.0;
-  if (firehose) {
-    if (backup && FirehoseHardBoundViolated(paniso, bsqr)) {
-      nu = kBackupCollisionRate;
-    } else if (FirehoseLimiterActive(paniso, bsqr, firehose_threshold)) {
-      nu = rate;
-    }
-  }
-  if (mirror) {
-    if (backup && MirrorHardBoundViolated(paniso, bsqr)) {
-      nu = fmax(nu, kBackupCollisionRate);
-    } else if (MirrorLimiterActive(paniso, bsqr)) {
-      nu = fmax(nu, rate);
-    }
-  }
-  return nu;
+  const bool soft = (eos.flim && paniso < FirehoseThreshold(bsqr, eos)) ||
+                    (eos.mlim && paniso > MirrorThreshold(bsqr, eos));
+  const Real soft_rate = soft ? eos.lim_coll : 0.0;
+  const Real backup_rate = backup && HardBoundViolated(paniso, bsqr, eos, true)
+                               ? eos.limiter_backup_nu : 0.0;
+  return soft_rate + backup_rate;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -319,8 +304,11 @@ Real PerpendicularHeatFluxRatio(const Real cparallel, const Real rho,
   if (nu == std::numeric_limits<Real>::infinity()) {
     return -0.0*grad_tperp;
   }
+  // Use SHD97 eq. 49 / Sharma et al. (2006) eq. 12: the BGK moment
+  // denominator contains 2 nu, unlike the +nu printed in Squire et al. (2023)
+  // eq. 2.7. Divide before multiplying to retain the overflow-safe form.
   const Real collision_over_speed =
-      (nu/kSqrtTwoPi)/cparallel;
+      (nu/(0.5*kSqrtTwoPi))/cparallel;
   const Real response = 1.0/(lf_k + collision_over_speed);
   const Real temperature_term = rho*grad_tperp/pperp;
   const Real magnetic_term =
@@ -354,7 +342,7 @@ Real PerpendicularHeatFluxRatio(const Real cparallel, const Real rho,
   const Real log_k = Kokkos::log2(lf_k);
   const Real log_collision_over_speed =
       (nu > 0.0)
-          ? Kokkos::log2(nu) - Kokkos::log2(kSqrtTwoPi) -
+          ? 1.0 + Kokkos::log2(nu) - Kokkos::log2(kSqrtTwoPi) -
                 Kokkos::log2(cparallel)
           : negative_infinity;
   const Real log_denom_scale = fmax(log_k, log_collision_over_speed);

@@ -1,0 +1,16 @@
+{
+  "base_commit": "7b3345fd262a1cf826e9476fb40ca20a28a15881",
+  "branch": "c/cgl-lf-wo1",
+  "kokkos_commit": "08ceff92bcf3a828844480bc1e6137eb74028517",
+  "trace_scratch": "/tmp/cgl-b4-transition-20261001",
+  "prototype_scratch": "/tmp/cgl-b4-q-prototype-20261001",
+  "instrumentation_preserves_physical_outputs": true,
+  "floor_1e6_1e10_first_five_cycles_byte_identical": true,
+  "no_fofc_flux_replacement_first_five_cycles": true,
+  "binaries": {
+    "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build/src/athena": "1b2a9bc0234e32fc47dda2c169eab93ef2ff15dfba31394a4aeedbc47b9910ed",
+    "/tmp/cgl-b4-transition-20261001/athena-trace-baseline": "aaddcb89384fbed4ec5977bbb8890fae81f399d21d6aa5e67dba9bdf24fb344d",
+    "/tmp/cgl-b4-transition-20261001/build/src/athena": "3dd7884da1186aea08cf3508610fb3044e02cce1eeff5b482a96b4d38b571183",
+    "/tmp/cgl-b4-q-prototype-20261001/build/src/athena": "ecb194690572290668d640f14635e95c1af9dd3f1ea3dcaec63522d056bb36e0"
+  }
+}

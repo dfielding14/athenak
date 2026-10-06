@@ -1,0 +1,18 @@
+{
+  "source_commit": "896b593aa3c3e67b40aa4f72036c3631094a61af",
+  "source_patch_sha256": "18bbae7a9e2c80ae7974645a2995609be813287bde4d1502564af3a25906ee1f",
+  "provenance_note": "P3 candidate atop retained P2; P1 absent. Root confirmed CPU/MPI build and float/double C2P tests pass; no concurrent simulations/builds during timing.",
+  "binaries": {
+    "serial": {
+      "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build/src/athena",
+      "sha256": "3848c0d400d4af07f205fbb1c2dad4962aed2ae3372a826e2fc291d6da0e148b"
+    },
+    "mpi": {
+      "source": "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/tst/build-mpi/src/athena",
+      "sha256": "283fddc9fe86b04f3d2d536ee7d591f0f6ba34ffff6e7dfb9e0885ccdf6e927c"
+    }
+  },
+  "matrix_configurations": 24,
+  "repeats": 3,
+  "byte_comparison_failures": 0
+}

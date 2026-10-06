@@ -651,8 +651,8 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
 
   Real max_coarse_delta_error = 0.0;
   if (is_cgl && pm->multilevel && !pmhd->has_cgl_lf_split) {
-    // Decode the restricted anisotropy with its current field and compare it with
-    // the child Delta selected by primitive restriction.
+    // Compare the restricted state with the child mean Delta projected onto the
+    // coarse state's admissible interval. Averaging B can tighten its fluid wall.
     auto &cu = pmhd->coarse_u0;
     auto &cb = pmhd->coarse_b0;
     const int cis = indcs.cis, cie = indcs.cie;
@@ -666,7 +666,8 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
     const int cnmkji = pm->pmb_pack->nmb_thispack*cnkji;
     const int nchild_j = multi_d ? 2 : 1;
     const int nchild_k = three_d ? 2 : 1;
-    const Real bfloor = pmhd->peos->eos_data.bfloor;
+    const EOS_Data eos = pmhd->peos->eos_data;
+    const Real bfloor = eos.bfloor;
     Kokkos::parallel_reduce(
         "divb_amr_coarse_delta", Kokkos::RangePolicy<>(DevExeSpace(), 0, cnmkji),
     KOKKOS_LAMBDA(const int &idx, Real &max_error) {
@@ -696,12 +697,25 @@ void DivBAMRHistory(HistoryData *pdata, Mesh *pm) {
       const Real bx = 0.5*(cb.x1f(m,k,j,i) + cb.x1f(m,k,j,i+1));
       const Real by = 0.5*(cb.x2f(m,k,j,i) + cb.x2f(m,k,j+1,i));
       const Real bz = 0.5*(cb.x3f(m,k,j,i) + cb.x3f(m,k+1,j,i));
+      const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+      const Real kinetic = 0.5*(SQR(cu(m,IM1,k,j,i)) + SQR(cu(m,IM2,k,j,i)) +
+                                SQR(cu(m,IM3,k,j,i)))/cu(m,IDN,k,j,i);
+      const Real internal = cu(m,IEN,k,j,i) - kinetic - 0.5*bsqr;
+      Real lower = fmax(3.0*eos.pfloor - 2.0*internal, -bsqr);
+      Real upper = internal - 1.5*eos.pfloor;
+      if (eos.backup_lim) {
+        lower = fmax(lower, -0.5*eos.firehose_backup_factor*
+                                 eos.firehose_threshold*bsqr);
+        upper = fmin(upper, 0.5*eos.mirror_backup_factor*eos.mirror_threshold*bsqr);
+      }
+      const Real expected_delta = sqrt(bsqr) <= bfloor
+          ? 0.0 : fmin(fmax(fine_delta, lower), upper);
       Real p_parallel, p_perp;
       CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
           cu(m,IDN,k,j,i), cu(m,IM1,k,j,i), cu(m,IM2,k,j,i),
           cu(m,IM3,k,j,i), cu(m,IEN,k,j,i), cu(m,IAN,k,j,i),
           bx, by, bz, bfloor, p_parallel, p_perp);
-      max_error = fmax(max_error, fabs((p_perp - p_parallel) - fine_delta));
+      max_error = fmax(max_error, fabs((p_perp - p_parallel) - expected_delta));
     }, Kokkos::Max<Real>(max_coarse_delta_error));
   }
 

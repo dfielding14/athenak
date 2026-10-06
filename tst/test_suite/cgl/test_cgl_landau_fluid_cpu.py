@@ -54,10 +54,6 @@ def _run_paper(basename, *flags):
     testutils.run(PAPER_INPUT, [f"job/basename={basename}", *flags])
 
 
-def _run_paper_passive(basename, *flags):
-    testutils.run(PAPER_PASSIVE_INPUT, [f"job/basename={basename}", *flags])
-
-
 def _lf_mode_env(**updates):
     env = os.environ.copy()
     for name in (
@@ -206,10 +202,10 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
         assert result.returncode == 0, output
         assert "CGL Landau-fluid profiling enabled" in output
         assert "CGL Landau-fluid profile summary (shutdown)" in output
+        assert "sts_clear_flux" not in output
         for bucket in (
             "heat_flux_precompute",
             "heat_flux_flux1",
-            "sts_clear_flux",
             "sts_update_kernel",
             "primitive_refresh",
             "admissibility",
@@ -261,6 +257,116 @@ def test_cgl_lf_profile_detail_reports_directional_probe_buckets():
             "heat_flux_flux3_closure",
         ):
             assert bucket in output
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("dimension", (1, 2))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+@pytest.mark.parametrize("diagnostics", ("full", "none"))
+def test_cgl_lf_field_reversal_stability(dimension, arithmetic, diagnostics):
+    basename = f"cgl_ci_reversal_{dimension}d_{arithmetic}_{diagnostics}"
+    try:
+        _run_unit(
+            f"cgl_lf_field_reversal_{dimension}d.athinput", basename,
+            f"mhd/cgl_lf_arithmetic={arithmetic}",
+            f"mhd/cgl_lf_diagnostics={diagnostics}",
+            "mhd/cgl_lf_profile=true", "mhd/cgl_lf_profile_detail=true",
+        )
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        assert len(history["time"]) == 21
+        cells = 64 if dimension == 1 else 64 * 16
+        # Independent magnetic stiffness for the one-cell tanh sheet.
+        bmag = np.hypot(0.03, np.tanh(np.arange(64) + 0.5 - 32.0))
+        left = np.r_[bmag[0], bmag[:-1]]
+        right = np.r_[bmag[1:], bmag[-1]]
+        stiffness = max(1.0, np.max(2*bmag/(bmag + left)),
+                        np.max(2*bmag/(bmag + right)))
+        fac = 0.5 if dimension == 1 else 0.25
+        chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+        expected_dt = 20.0*0.4*fac/(64**2 * chi * stiffness)
+        np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                   rtol=2.0e-12, atol=0.0)
+        # Each of 20 cycles executes two seven-stage RKL2 sweeps at ratio 10.
+        assert history["lf_nstage"][-1] == cells * 20 * 2 * 7
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
+                     "lf_hwproj"):
+            assert np.all(history[name] == 0.0)
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("cpar,kpar,nu", (
+    (1.0, 2.0*np.pi, 0.0),
+    (1.0, 2.0*np.pi, 10.0),
+    (1.0, 2.0*np.pi, 100.0),
+    (1.4e308, 1.4e308, 0.0),
+    (1.0e154, 1.0e-154, 1.4e308),
+))
+def test_cgl_lf_uniform_collisional_timestep(cpar, kpar, nu):
+    from decimal import Decimal, localcontext
+
+    basename = "cgl_ci_uniform_timestep"
+    try:
+        _run_unit(
+            "cgl_lf_uniform_timestep.athinput", basename,
+            f"mhd/lf_c_parallel0={cpar:.17g}", f"mhd/lf_k_parallel={kpar:.17g}",
+            f"mhd/nu_coll={nu:.17g}",
+        )
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        # Independent coefficient evaluation; Decimal avoids reference overflow
+        # in cases that have a finite diffusivity but overflowing intermediates.
+        with localcontext() as context:
+            context.prec = 80
+            pi = Decimal("3.14159265358979323846264338327950288419716939937510")
+            c, k, frequency = (Decimal(str(value)) for value in (cpar, kpar, nu))
+            chi = 8*c*c / ((8*pi).sqrt()*c*k + (3*pi - 8)*frequency)
+            expected_dt = float(Decimal(20)*Decimal("0.4")*Decimal("0.5")
+                                / (Decimal(16)**2 * chi))
+        np.testing.assert_allclose(history["dt"][0], expected_dt, rtol=2.0e-12, atol=0.0)
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("contrast", (10, 50, 200, 1000))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+def test_cgl_lf_density_contact_stability(contrast, arithmetic):
+    try:
+        samples = []
+        for seed in (0.0, 1.0e-6):
+            basename = f"cgl_ci_contact_{contrast}_{arithmetic}_{seed:g}"
+            _run_unit(
+                "cgl_lf_density_contact.athinput", basename,
+                f"problem/density_contrast={contrast}", f"problem/amp={seed:.17g}",
+                f"mhd/cgl_lf_arithmetic={arithmetic}",
+            )
+            by_cycle = {}
+            for path in sorted(Path("tab").glob(f"{basename}.mhd_w.*.tab")):
+                data = testutils.athena_read.tab(str(path))
+                by_cycle[data["cycle"]] = data
+            assert set(by_cycle) == {0, 1, 2, 3}
+            history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+            assert history["lf_nstage"][-1] == 64 * 3 * 2 * 7
+            chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+            expected_dt = 20.0*0.4*0.5/(64**2 * chi * (contrast + 1.0)/2.0)
+            np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                       rtol=2.0e-12, atol=0.0)
+            for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
+                         "lf_hwproj"):
+                assert np.all(history[name] == 0.0)
+            samples.append(by_cycle)
+        growth = []
+        for cycle in range(4):
+            control, seeded = (sample[cycle] for sample in samples)
+            assert control["time"] == seeded["time"]
+            error = max(
+                np.max(np.abs(seeded[name]/seeded["dens"]
+                              - control[name]/control["dens"]))
+                for name in ("eint", "p_perp"))
+            growth.append(error / 1.0e-6)
+        print(f"density contrast={contrast} arithmetic={arithmetic}: growth={growth}, "
+              "stages_per_half_sweep=7, repair_counts=0")
+        assert max(growth) < 10.0
     finally:
         _cleanup()
 
@@ -564,6 +670,48 @@ def test_cgl_lf_background_collision_advances_one_physical_timestep():
         _cleanup()
 
 
+@pytest.mark.parametrize("soft_limiter", [False, True])
+def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(soft_limiter, tmp_path):
+    histories = []
+    try:
+        for lf in (False, True):
+            flags = []
+            source = (Path(UNIT_INPUT_ROOT) / "cgl_collision_once.athinput").read_text()
+            if lf:
+                source = source.replace("<mhd>", "<mhd>\ncgl_heat_flux = landau_fluid"
+                                        "\ncgl_heat_flux_integrator = sts"
+                                        "\nlf_k_parallel = 6.283185307179586")
+                source = source.replace("<time>", "<time>\nsts_integrator = rkl2")
+            input_path = tmp_path / f"collision_{int(lf)}.athinput"
+            input_path.write_text(source)
+            pperp = 1.2
+            if soft_limiter:
+                pperp = 1.8
+                flags += ["problem/test_mode=limiter_stress",
+                          "problem/limiter_kind=mirror", "problem/pperp0=1.8",
+                          "mhd/nu_coll=0", "mhd/mirror_limiter=true",
+                          "mhd/limiter_nu_coll=10"]
+            basename = f"cgl_ci_once_{int(lf)}"
+            testutils.run(str(input_path), [f"job/basename={basename}", *flags])
+            history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+            assert len(history["time"]) == 21
+            # Uniform rho=B=1: A=log(p_perp/p_parallel), with fixed thermal energy.
+            ratio = np.exp(history["aam-D"])
+            piso = (1.0 + 2.0 * pperp) / 3.0
+            measured = 3.0 * piso * (ratio - 1.0) / (1.0 + 2.0 * ratio)
+            if soft_limiter:
+                expected = np.r_[pperp - 1.0, 0.5 + (pperp - 1.5) * np.cumprod(
+                    1.0 / (1.0 + 10.0 * np.diff(history["time"])))]
+            else:
+                expected = (pperp - 1.0) * np.exp(-10.0 * history["time"])
+            np.testing.assert_allclose(measured, expected, rtol=1.0e-10, atol=0.0)
+            histories.append((history["time"], measured))
+        np.testing.assert_allclose(histories[0], histories[1], rtol=1.0e-10,
+                                   atol=1.0e-14)
+    finally:
+        _cleanup()
+
+
 def test_cgl_collision_refreshes_next_timestep_from_relaxed_state():
     try:
         _run(
@@ -607,15 +755,16 @@ def test_cgl_lf_firehose_threshold_policies_are_distinct():
         _cleanup()
 
 
-def test_cgl_lf_hardwall_projects_to_selected_firehose_threshold():
+def test_cgl_lf_stiff_limiter_relaxes_to_selected_firehose_threshold():
     try:
         _run(
             "cgl_lf_firehose_policy.athinput",
-            "cgl_ci_firehose_hardwall",
-            "mhd/limiter_hardwall=true",
+            "cgl_ci_firehose_stiff",
+            "mhd/limiter_nu_coll=1e10",
         )
-        history = testutils.athena_read.hst("cgl_ci_firehose_hardwall.mhd.hst")
-        assert history["lf_hwproj"][-1] > 0.0
+        history = testutils.athena_read.hst("cgl_ci_firehose_stiff.mhd.hst")
+        assert history["lf_hwproj"][-1] == 0.0
+        assert history["lf_firehs"][-1] > 0.0
         assert history["lf_hardbd"][-1] == 0.0
         assert history["lf_nonfin"][-1] == 0.0
         assert history["lf_nonpos"][-1] == 0.0
@@ -624,7 +773,8 @@ def test_cgl_lf_hardwall_projects_to_selected_firehose_threshold():
 
 
 @pytest.mark.parametrize("backup", ("false", "true"))
-def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
+@pytest.mark.parametrize("integrator", ("sts", "explicit"))
+def test_cgl_lf_strict_initial_hard_bound_is_rejected_at_sweep_entry(backup, integrator):
     command = [
         "./athena",
         "-i",
@@ -633,10 +783,14 @@ def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
         f"mhd/backup_limiters={backup}",
         "problem/ppar0=3.0",
         "problem/pperp0=1.0",
+        f"mhd/cgl_heat_flux_integrator={integrator}",
+        f"time/sts_integrator={'rkl2' if integrator == 'sts' else 'none'}",
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
     assert "strict admissibility failed" in result.stdout
+    assert "wall checkpoint" in result.stdout
+    assert "sweep=pre stage=0/" in result.stdout
     assert "hard_bound=" in result.stdout
 
 
@@ -661,7 +815,7 @@ def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
         ),
     ),
 )
-def test_cgl_lf_relaxed_mode_recovers_hard_bound_without_explicit_backup(
+def test_cgl_lf_relaxed_mode_obeys_configured_walls(
     input_name, basename, flags
 ):
     try:
@@ -678,7 +832,66 @@ def test_cgl_lf_relaxed_mode_recovers_hard_bound_without_explicit_backup(
         _cleanup()
 
 
-def test_cgl_lf_relaxed_face_backup_matches_explicit_backup():
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+@pytest.mark.parametrize(("backup", "expected_rate"), (("false", 18), ("true", 119)))
+def test_cgl_lf_face_collision_rates_add(tmp_path, arithmetic, backup, expected_rate):
+    source = Path(
+        f"{UNIT_INPUT_ROOT}/cgl_lf_limiter_heat_flux_suppression.athinput").read_text()
+    source = source.replace("nlim = 1", "nlim = 0", 1)
+    source = source.replace("limiter_nu_coll = 10.0", "limiter_nu_coll = 11.0", 1)
+    source = source.replace("backup_limiters = false", f"backup_limiters = {backup}", 1)
+    source = source.replace("pperp0 = 1.9", "pperp0 = 2.5", 1)
+    source = source.replace(
+        "<mhd>", "<mhd>\nnu_coll = 7.0\nlimiter_backup_nu = 101.0", 1)
+    source = source.replace(
+        "<problem>", f"<problem>\nexpected_nu_eff = {expected_rate}", 1)
+    staged = tmp_path / "additive_collision_rates.athinput"
+    staged.write_text(source)
+    try:
+        result = subprocess.run(
+            ["./athena", "-i", str(staged), "job/basename=cgl_ci_additive_rates"],
+            capture_output=True, text=True, check=False,
+            env=_lf_mode_env(ATHENAK_CGL_LF_ARITHMETIC=arithmetic),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        marker = f"prescribed collision-rate flux passed: nu_eff={expected_rate}"
+        assert marker in result.stdout
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_transport_proxy_uses_additive_configured_rates():
+    spec = importlib.util.spec_from_file_location("cgl_wo1_analyzer", PAPER_ANALYZER_PATH)
+    analyzer = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = analyzer
+    spec.loader.exec_module(analyzer)
+    delta = np.array([-1.5, -1.0, -0.75, -0.5, 0.5, 0.75, 1.0, 1.5])[None, None, :]
+    ones = np.ones_like(delta)
+    fields = {"dens": ones, "eint": 8.0*ones, "p_perp": 8.0+delta,
+              "bcc1": ones, "bcc2": 0.0*ones, "bcc3": 0.0*ones}
+    model = {
+        "lf_k_parallel": "1", "lf_coefficient_mode": "background",
+        "lf_c_parallel0": "2", "nu_coll": "7", "mirror_limiter": "true",
+        "firehose_limiter": "true", "firehose_threshold": "1",
+        "mirror_threshold": "1", "firehose_backup_factor": "2",
+        "mirror_backup_factor": "2", "limiter_backup_nu": "101",
+        "limiter_nu_coll": "11", "dfloor": "1e-12", "pfloor": "1e-12",
+        "tfloor": "1e-12", "bfloor": "1e-10",
+        "cgl_lf_strict_admissibility": "false",
+    }
+    for backup, expected in (
+        ("false", [11, 11, 11, 0, 0, 11, 11, 11]),
+        ("true", [112, 11, 11, 0, 0, 11, 11, 112]),
+    ):
+        model["backup_limiters"] = backup
+        result = analyzer.heat_flux_transport_proxy(
+            fields, (1.0, 1.0, 1.0), model, include_local_fields=True)
+        assert result["available"], result
+        np.testing.assert_array_equal(
+            result["local_fields"]["limiter_collision_rate"].ravel(), expected)
+
+
+def test_cgl_lf_relaxed_mode_does_not_enable_backup():
     common = (
         "mhd/cgl_lf_strict_admissibility=false",
         "problem/pperp0=2.5",
@@ -700,13 +913,12 @@ def test_cgl_lf_relaxed_face_backup_matches_explicit_backup():
         relaxed = _final_tab("cgl_ci_relaxed_face_backup")
         explicit = _final_tab("cgl_ci_explicit_face_backup")
         assert set(relaxed) == set(explicit)
-        for field in relaxed:
-            assert np.array_equal(relaxed[field], explicit[field])
+        assert not np.array_equal(relaxed["p_perp"], explicit["p_perp"])
     finally:
         _cleanup()
 
 
-def test_cgl_lf_fast_arithmetic_relaxed_face_backup_matches_explicit_backup():
+def test_cgl_lf_fast_relaxed_mode_does_not_enable_backup():
     common = (
         "mhd/cgl_lf_strict_admissibility=false",
         "problem/pperp0=2.5",
@@ -737,13 +949,12 @@ def test_cgl_lf_fast_arithmetic_relaxed_face_backup_matches_explicit_backup():
         relaxed = _final_tab("cgl_ci_fast_relaxed_face_backup")
         explicit = _final_tab("cgl_ci_fast_explicit_face_backup")
         assert set(relaxed) == set(explicit)
-        for field in relaxed:
-            assert np.array_equal(relaxed[field], explicit[field])
+        assert not np.array_equal(relaxed["p_perp"], explicit["p_perp"])
     finally:
         _cleanup()
 
 
-def test_cgl_lf_paper_history_reports_effective_relaxed_backup():
+def test_cgl_lf_paper_history_uses_only_configured_backup():
     try:
         _run_paper(
             "cgl_ci_relaxed_effective_nu",
@@ -752,13 +963,14 @@ def test_cgl_lf_paper_history_reports_effective_relaxed_backup():
             "mhd/backup_limiters=false",
             "problem/p_parallel0=1.0",
             "problem/p_perp0=2.25",
+            "mhd/limiter_nu_coll=17.0",
         )
         history = testutils.athena_read.hst(
             "cgl_ci_relaxed_effective_nu.user.hst"
         )
         mean_nu = history["nu_eff"][0] / history["volume"][0]
-        assert np.isclose(mean_nu, 1.0e10, rtol=1.0e-12)
-        assert history["hard_vol"][0] == history["volume"][0]
+        assert np.isclose(mean_nu, 17.0, rtol=1.0e-12)
+        assert history["hard_vol"][0] == 0.0
     finally:
         shutil.rmtree("rst", ignore_errors=True)
         _cleanup()
@@ -840,6 +1052,19 @@ def test_cgl_lf_explicit_reference_finite_collision_split():
         _assert_clean_lf_history(
             testutils.athena_read.hst("cgl_ci_explicit_collision.mhd.hst")
         )
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("method", ("ppmx", "wenoz"))
+def test_cgl_reconstruction_pressure_peak(method):
+    basename = f"cgl_ci_reconstruction_{method}"
+    try:
+        _run_unit(f"cgl_reconstruction_{method}.athinput", basename)
+        rows = Path(f"{basename}.log").read_text().splitlines()
+        count = sum(int(row.split()[-1]) for row in rows
+                    if row and not row.startswith("#"))
+        print(f"{method}: 50 cycles, FOFC count={count}")
     finally:
         _cleanup()
 
@@ -1055,10 +1280,11 @@ def test_cgl_lf_rejects_representation_blind_boundaries(
     assert expected in output
     assert "IAN slot temporarily stores magnetic moment" in output
     assert "do not have a magnetic-moment-aware boundary contract" in output
+    assert "support is deferred to WO2" in output
 
 
 @pytest.mark.parametrize("integrator", ("sts", "explicit"))
-@pytest.mark.parametrize("boundary", ("reflect", "outflow", "diode"))
+@pytest.mark.parametrize("boundary", ("periodic", "reflect", "outflow", "diode"))
 def test_cgl_lf_allows_representation_preserving_boundaries(integrator, boundary):
     try:
         flags = [
@@ -1087,9 +1313,59 @@ def test_cgl_lf_eigen_field_initialization_uses_meshblock_coordinates():
             "cgl_lf_paper_eigen_fast.athinput",
             "cgl_ci_lf_eigen_multiblock",
             "meshblock/nx1=64",
-            "time/nlim=0",
-            "time/tlim=1.0e-6",
         )
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize(
+    ("parameter", "value", "bound"),
+    (("firehose_threshold", "0", "> 0"),
+     ("firehose_threshold", "-1", "> 0"),
+     ("mirror_threshold", "0", "> 0"),
+     ("mirror_threshold", "nan", "> 0"),
+     ("mirror_backup_factor", "0.99", ">= 1"),
+     ("firehose_backup_factor", "0.99", ">= 1"),
+     ("firehose_backup_factor", "inf", ">= 1"),
+     ("limiter_backup_nu", "-1", ">= 0"),
+     ("limiter_backup_nu", "nan", ">= 0")),
+)
+def test_cgl_lf_invalid_numeric_threshold_is_rejected(tmp_path, parameter, value, bound):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_decay.athinput").read_text()
+    staged = tmp_path / "invalid_threshold.athinput"
+    staged.write_text(source.replace("<mhd>", f"<mhd>\n{parameter} = {value}", 1))
+    result = subprocess.run(
+        ["./athena", "-i", str(staged)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert f"<mhd>/{parameter} must be finite and {bound}" in result.stdout
+
+
+def test_cgl_lf_conflicting_legacy_threshold_is_rejected(tmp_path):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput").read_text()
+    staged = tmp_path / "conflicting_threshold.athinput"
+    staged.write_text(source.replace("<mhd>", "<mhd>\nfirehose_threshold = 2.0", 1))
+    result = subprocess.run(
+        ["./athena", "-i", str(staged)],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "firehose_threshold conflicts" in result.stdout
+
+
+def test_cgl_lf_numeric_threshold_matches_legacy_policy(tmp_path):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_firehose_policy.athinput").read_text()
+    staged = tmp_path / "numeric_threshold.athinput"
+    staged.write_text(source.replace("cgl_firehose_threshold = oblique",
+                                     "firehose_threshold = 1.4", 1))
+    try:
+        _run("cgl_lf_firehose_policy.athinput", "cgl_ci_legacy_threshold")
+        testutils.run(str(staged), ["job/basename=cgl_ci_numeric_threshold"])
+        legacy = testutils.athena_read.hst("cgl_ci_legacy_threshold.mhd.hst")
+        numeric = testutils.athena_read.hst("cgl_ci_numeric_threshold.mhd.hst")
+        for key in legacy:
+            np.testing.assert_array_equal(legacy[key], numeric[key])
     finally:
         _cleanup()
 
@@ -1140,16 +1416,19 @@ def test_cgl_lf_invalid_runtime_mode_is_rejected(option, expected):
     assert expected in result.stdout + result.stderr
 
 
-def test_cgl_lf_hardwall_requires_instability_limiter():
+def test_cgl_lf_legacy_hardwall_requires_migration(tmp_path):
+    source = Path(f"{INPUT_ROOT}/cgl_lf_decay.athinput").read_text()
+    path = tmp_path / "legacy_hardwall.athinput"
+    path.write_text(source.replace("limiter_hardwall = false", "limiter_hardwall = true"))
     command = [
         "./athena",
         "-i",
-        f"{INPUT_ROOT}/cgl_lf_decay.athinput",
-        "mhd/limiter_hardwall=true",
+        str(path),
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "limiter_hardwall requires" in result.stdout
+    assert "limiter_hardwall=true is no longer supported" in result.stdout
+    assert "limiter_nu_coll=1e10" in result.stdout
 
 
 def test_cgl_lf_paper_active_alfvenic_smoke_injects_energy_without_parallel_force():
@@ -1259,9 +1538,11 @@ def test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude():
         _cleanup()
 
 
-def test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence():
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+def test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks(integrator):
     try:
-        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4")
+        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4",
+                   f"time/integrator={integrator}")
         mhd = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.mhd.hst")
         user = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.user.hst")
         energy_delta = mhd["tot-E"][-1] - mhd["tot-E"][0]
@@ -1363,31 +1644,15 @@ def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
         _cleanup()
 
 
-def test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback():
-    try:
-        _run_paper_passive("cgl_ci_passive_iso", "time/nlim=4")
-        _run_paper_passive(
-            "cgl_ci_passive_aniso",
-            "time/nlim=4",
-            "problem/p_parallel0=5.2",
-            "problem/p_perp0=4.9",
-        )
-        isotropic = _final_variable_tab("cgl_ci_passive_iso", "mhd_w_bcc")
-        anisotropic = _final_variable_tab("cgl_ci_passive_aniso", "mhd_w_bcc")
-        for field in ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3"):
-            assert np.max(np.abs(isotropic[field] - anisotropic[field])) < 1.0e-12
-        assert np.max(np.abs(isotropic["eint"] - anisotropic["eint"])) > 1.0e-4
-        passive_iso = testutils.athena_read.hst("cgl_ci_passive_iso.mhd.hst")
-        passive_aniso = testutils.athena_read.hst("cgl_ci_passive_aniso.mhd.hst")
-        _assert_clean_lf_history(passive_iso)
-        _assert_clean_lf_history(passive_aniso)
-        assert np.all(passive_iso["lf_cpwrk"] == 0.0)
-        assert np.all(passive_iso["lf_cawrk"] == 0.0)
-        assert np.all(passive_aniso["lf_cpwrk"] == 0.0)
-        assert np.all(passive_aniso["lf_cawrk"] == 0.0)
-    finally:
-        shutil.rmtree("rst", ignore_errors=True)
-        _cleanup()
+def test_cgl_lf_paper_passive_delta_is_disabled():
+    result = subprocess.run(
+        ["./athena", "-i", PAPER_PASSIVE_INPUT],
+        capture_output=True, text=True, check=False,
+    )
+    assert result.returncode != 0
+    assert "passive=true is disabled" in result.stdout
+    assert "thermal energy equation is inconsistent" in result.stdout
+    assert "WO2 redesign" in result.stdout
 
 
 def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
@@ -1402,7 +1667,7 @@ def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
     assert "passive_delta must match" in result.stdout
 
 
-def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
+def test_cgl_lf_paper_type_two_rejects_alfvenic_policy():
     command = [
         "./athena",
         "-i",
@@ -1411,7 +1676,7 @@ def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "driving_type must be 0" in result.stdout
+    assert "driving_type = 2 requires mks24_random_unprojected" in result.stdout
 
 
 def test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend():
@@ -1438,6 +1703,31 @@ def test_cgl_lf_paper_physical_forcing_shell_requires_positive_unit():
     assert "k_shell_unit must be positive" in result.stdout
 
 
+def test_cgl_lf_paper_inputs_explicitly_set_thresholds():
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_workflow_test", PAPER_WORKFLOW_PATH
+    )
+    assert spec is not None and spec.loader is not None
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    expected_thresholds = {
+        "firehose_threshold": "2.0", "mirror_threshold": "1.0",
+        "mirror_backup_factor": "2.0", "firehose_backup_factor": "1.0",
+        "limiter_backup_nu": "1.0e10",
+    }
+    for path in PAPER_PRODUCTION_INPUT_ROOT.glob("*.athinput"):
+        source = path.read_text()
+        assert workflow.input_block_value(source, "mhd", "cgl_firehose_threshold") is None
+        for parameter, expected in expected_thresholds.items():
+            actual = workflow.input_block_value(source, "mhd", parameter)
+            assert actual == expected, path.name
+    for name, firehose in (("firehose", "1.4"), ("mirror", "2.0")):
+        source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_limiter_{name}.athinput").read_text()
+        assert workflow.input_block_value(source, "mhd", "firehose_threshold") == firehose
+        assert workflow.input_block_value(source, "mhd", "mirror_threshold") == "1.0"
+
+
 def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_workflow_test", PAPER_WORKFLOW_PATH
@@ -1456,7 +1746,13 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     ])
     assert args.reference_curves == ["fig2.json", "fig13.json"]
     assert args.allow_partial_reference_cases
-    all_paper_inputs = sorted(PAPER_PRODUCTION_INPUT_ROOT.glob("*.athinput"))
+    # This contract covers the 18 campaign inputs and two smoke inputs, not
+    # the additional wave and AMR fixtures sharing their directory.
+    all_paper_inputs = sorted(
+        path for group in ("standard", "nulim", "heat_flux", "compressive",
+                           "scale_separation", "smoke")
+        for path in PAPER_PRODUCTION_INPUT_ROOT.glob(f"cgl_lf_paper_{group}_*.athinput")
+    )
     assert len(all_paper_inputs) == 20
     for input_path in all_paper_inputs:
         source = input_path.read_text()
@@ -1577,30 +1873,19 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
         "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
         "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
     }
-    hardwall_paths = {
-        "cgl_lf_paper_standard_active_alfvenic_beta1.athinput",
-        "cgl_lf_paper_standard_active_alfvenic_beta10.athinput",
-        "cgl_lf_paper_standard_active_alfvenic_beta100.athinput",
-        "cgl_lf_paper_standard_active_random_beta10.athinput",
-        "cgl_lf_paper_standard_active_random_beta100.athinput",
-        "cgl_lf_paper_standard_passive_alfvenic_beta10.athinput",
-        "cgl_lf_paper_standard_passive_alfvenic_beta100.athinput",
-        "cgl_lf_paper_standard_passive_random_beta10.athinput",
-        "cgl_lf_paper_standard_passive_random_beta100.athinput",
-        "cgl_lf_paper_nulim_beta100_hardwall.athinput",
-        "cgl_lf_paper_heat_flux_beta10_strong.athinput",
-        "cgl_lf_paper_heat_flux_beta10_weak.athinput",
-        "cgl_lf_paper_compressive_active_random_beta1.athinput",
-        "cgl_lf_paper_compressive_active_random_beta100_sonic.athinput",
-        "cgl_lf_paper_scale_separation_beta10_nperp96.athinput",
-        "cgl_lf_paper_scale_separation_beta10_nperp384.athinput",
-    }
+
     for input_path in input_paths:
         source = input_path.read_text()
         for block in ("output2", "output3"):
             body = source.split(f"<{block}>", 1)[1].split("<", 1)[0]
             assert "single_file_per_rank = true" in body
         choices = workflow.model_choices(source, [])
+        assert choices["cgl_collision_split"] == "rates_once_at_cycle_end"
+        assert choices["firehose_threshold"] == "2.0"
+        assert choices["mirror_threshold"] == "1.0"
+        assert choices["mirror_backup_factor"] == "2.0"
+        assert choices["firehose_backup_factor"] == "1.0"
+        assert choices["limiter_backup_nu"] == "1.0e10"
         assert choices["time_integrator"] == "rk2"
         assert choices["time_sts_integrator"] == "rkl2"
         assert choices["time_sts_max_dt_ratio"] == "-1.0"
@@ -1612,8 +1897,7 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
         assert choices["output3_file_type"] == "rst"
         assert choices["output3_dt"] == "1.0"
         assert choices["output3_single_file_per_rank"] == "true"
-        expected_hardwall = "true" if input_path.name in hardwall_paths else "false"
-        assert choices["limiter_hardwall"] == expected_hardwall
+        assert choices["limiter_hardwall"] == "false"
     scale_resolutions = {
         "cgl_lf_paper_scale_separation_beta10_nperp96.athinput": (
             "96", "96", "192"
@@ -2503,7 +2787,7 @@ def test_cgl_lf_stage_i_groups_rank_local_output_products(tmp_path):
     assert stage_i.retained_product_paths(product) == groups[0]
 
 
-def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
+def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path, monkeypatch):
     spec = importlib.util.spec_from_file_location(
         "cgl_lf_stage_i_bundle_provenance_test", PAPER_STAGE_I_TOOL
     )
@@ -2511,6 +2795,8 @@ def test_cgl_lf_stage_i_requires_retained_source_bundle_provenance(tmp_path):
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "GIT", Path("/usr/bin/git").resolve())
 
     repository = tmp_path / "source"
     repository.mkdir()
@@ -2916,6 +3202,8 @@ def test_cgl_lf_stage_i_authenticates_historical_production_utility(
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "GIT", Path("/usr/bin/git").resolve())
 
     repository = tmp_path / "source"
     script = repository / "scripts" / "frontier" / "stage_i.py"
@@ -3089,6 +3377,8 @@ def test_cgl_lf_stage_i_isolates_epoch_and_checks_all_shared_root_jobs(
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "SYSTEM_PYTHON", Path("/usr/bin/python3").resolve())
 
     root = tmp_path / "root"
     paths = stage_i.initialize(root)
@@ -3998,6 +4288,8 @@ def test_cgl_lf_stage_i_recovers_ambiguous_atomic_submit(tmp_path, monkeypatch):
     stage_i = importlib.util.module_from_spec(spec)
     sys.modules[spec.name] = stage_i
     spec.loader.exec_module(stage_i)
+    # Keep executable authentication, using this host's root-owned system tool.
+    monkeypatch.setattr(stage_i, "SYSTEM_PYTHON", Path("/usr/bin/python3").resolve())
     batch_template = (
         "#!/bin/bash\n"
         f"BATCH_SCRIPT_SHA256={stage_i.BATCH_SCRIPT_DIGEST_PLACEHOLDER}\n"
@@ -5197,3 +5489,50 @@ def test_cgl_lf_amr_primitive_prolongation_rejects_pressure_work_recording():
         result.stdout
     )
     assert "<mhd>/cgl_lf_record_pressure_work = false" in result.stdout
+
+
+@pytest.mark.parametrize(("angle", "bx", "by"), (
+    (30, 8.660254037844387, 5.0),
+    (45, 7.0710678118654755, 7.0710678118654755),
+))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+@pytest.mark.parametrize("diagnostics", ("full", "none"))
+def test_cgl_lf_hotspot_preserves_minima_and_energy(
+    angle, bx, by, arithmetic, diagnostics
+):
+    profile = angle == 45 and arithmetic == "safe" and diagnostics == "full"
+    try:
+        result = subprocess.run(
+            ["./athena", "-i", f"{UNIT_INPUT_ROOT}/cgl_lf_hotspot.athinput",
+             "job/basename=cgl_ci_hotspot", f"problem/b0={bx}", f"problem/by0={by}"],
+            capture_output=True, text=True, check=False,
+            env=_lf_mode_env(
+                ATHENAK_CGL_LF_ARITHMETIC=arithmetic,
+                ATHENAK_CGL_LF_DIAGNOSTICS=diagnostics,
+                ATHENAK_CGL_LF_PROFILE="true" if profile else "false",
+                ATHENAK_CGL_LF_PROFILE_DETAIL="true" if profile else "false",
+            ),
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+        history = testutils.athena_read.hst("cgl_ci_hotspot.user.hst")
+        for name in ("min_tpar", "min_tperp"):
+            assert np.all(history[name] >= history[name][0] * (1.0 - 1.0e-12))
+        assert np.max(history["max_energy"]) <= 5.0e-13
+        assert "diffusion_times=" in result.stdout
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("heating_rate,post_stages", [(0, 7), (3000, 11)])
+def test_cgl_lf_post_sweep_timestep_refresh(heating_rate, post_stages):
+    try:
+        testutils.run(
+            "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput",
+            [f"problem/heating_rate={heating_rate}"],
+        )
+        history = testutils.athena_read.hst("cgl_lf_timestep_refresh.mhd.hst")
+        assert history["lf_nstage"][-1] == 64 * (7 + post_stages)
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd"):
+            assert history[name][-1] == 0
+    finally:
+        Path("cgl_lf_timestep_refresh.mhd.hst").unlink(missing_ok=True)

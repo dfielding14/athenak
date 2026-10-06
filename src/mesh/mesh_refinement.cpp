@@ -253,6 +253,20 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
       // faces. Refresh neighboring ghost fields and their primitives before the next
       // reconstruction consumes them.
       pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
+      if (pmbp->pmhd->peos->eos_data.is_cgl) {
+        // Transfer and face-field repair can move the final state beyond a wall.
+        // Project only after B and primitives are current; do not repeat any rates.
+        auto *pmhd = pmbp->pmhd;
+        pmhd->RequireCGLAnisotropyRepresentation("post-AMR CGL walls");
+        const auto &indcs = pmy_mesh->mb_indcs;
+        const int ni = indcs.nx1 + 2*indcs.ng;
+        const int nj = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
+        const int nk = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
+        pmhd->peos->Collisions(pmhd->w0, pmhd->bcc0, pmhd->u0, 0.0,
+                              CGLCollisionMode::walls_only,
+                              0, ni-1, 0, nj-1, 0, nk-1);
+        (void) pmhd->RestrictU(pdriver, 0);
+      }
     }
     if (pmbp->phydro != nullptr) {
       (void) pmbp->phydro->NewTimeStep(pdriver, pdriver->nexp_stages);

@@ -62,46 +62,33 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
 
     Real bxi = bx(m,k,j,i);
 
-    // Compute the conserved anisotropy A stored in the IAN slot.
+    // Compute the magnetic pressure and field magnitude on each side.
     Real pbl = 0.5*(bxi*bxi + SQR(wl_iby) + SQR(wl_ibz));
     Real pbr = 0.5*(bxi*bxi + SQR(wr_iby) + SQR(wr_ibz));
     Real bmagl = sqrt(2.*pbl);
     Real bmagr = sqrt(2.*pbr);
-
-    // Firehose parameter
-    Real fhl = 1. + (wl_ipp - wl_ipr)/(2.*pbl);
-    Real fhr = 1. + (wr_ipp - wr_ipr)/(2.*pbr);
-
-    Real anis_l = wl_idn * log(wl_ipp / wl_ipr * SQR(wl_idn)/(bmagl*SQR(bmagl)) );
-    Real anis_r = wr_idn * log(wr_ipp / wr_ipr * SQR(wr_idn)/(bmagr*SQR(bmagr)) );
 
     Real el = 0.5*wl_ipr + wl_ipp
               + 0.5*wl_idn*(SQR(wl_ivx)+SQR(wl_ivy)+SQR(wl_ivz)) + pbl;
     Real er = 0.5*wr_ipr + wr_ipp
               + 0.5*wr_idn*(SQR(wr_ivx)+SQR(wr_ivy)+SQR(wr_ivz)) + pbr;
 
-    //--- Step 2. Apply floor to magnetic field if necessary
-
-    // Involves resetting pprp and pprl each to 1/3*pprl+2/3*pprp, and
-    // resetting A assuming pprp=pprl with bfloor as the field.
-
-    if (bmagl < bfloor || bmagr < bfloor) {
-      // Revert to (adiabatic) MHD EOS if B < bmag_floor
-      // In this case, we calculate flux of E as if in adiabatic MHD, while the
-      // conserved variable A does nothing. We set pprp = pprl = 2/3*(E - pb - ke)
-      // in ConservedToPrimitive, which is like setting both to (2/3*pprp+1/3*pprl)
-      fhl = 1.;
-      fhr = 1.;
-      // Note: el and er are already correct when we average in this way
+    //--- Step 2. Isotropize each sub-floor state at fixed internal energy.
+    // Its advected A represents isotropy at the other side's field, so material
+    // leaving a weak-field cell does not inject the arbitrary bfloor into A/rho.
+    Real fhl = 1.0, fhr = 1.0;
+    if (bmagl > bfloor) {
+      fhl += (wl_ipp - wl_ipr)/(2.0*pbl);
+    } else {
       wl_ipr = TWO_3RDS*wl_ipp + ONE_3RD*wl_ipr;
       wl_ipp = wl_ipr;
+    }
+    if (bmagr > bfloor) {
+      fhr += (wr_ipp - wr_ipr)/(2.0*pbr);
+    } else {
       wr_ipr = TWO_3RDS*wr_ipp + ONE_3RD*wr_ipr;
       wr_ipp = wr_ipr;
-      // Although A is not used here, avoid producing NaNs before ConsToPrim resets it.
-      anis_l = wl_idn * log( SQR(wl_idn)/(bfloor*SQR(bfloor)) );
-      anis_r = wr_idn * log( SQR(wr_idn)/(bfloor*SQR(bfloor)) );
     }
-
 
     //--- Step 3. Compute fast magnetosonic speed in L,R states (MHD used Roe-averaged)
 
@@ -241,10 +228,6 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     //fl.e  -= bxi*(wl_iby*wl_ivy + wl_ibz*wl_ivz);
     //fr.e  -= bxi*(wr_iby*wr_ivy + wr_ibz*wr_ivz);
 
-    // Conserved-anisotropy fluxes.
-    fl.mu = anis_l*vxl;
-    fr.mu = anis_r*vxr;
-
     //B/E field fluxes for CT
     fl.by = wl_iby*vxl - bxi*wl_ivy;
     fr.by = wr_iby*vxr - bxi*wr_ivy;
@@ -259,9 +242,26 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
 
     // Treat A/rho as the advected scalar, flux is mass_flx*A/rho from upwind side.
     Real fdtmp = 0.5*(fl.d  + fr.d ) + (fl.d  - fr.d )*tmp;
-    anis_l /= wl_idn;
-    anis_r /= wr_idn;
-    Real fmutmp = ( fdtmp >= 0.0 ) ? fdtmp*anis_l : fdtmp*anis_r;
+    // Evaluate only the selected side, preserving the original rho*log()/rho order.
+    Real anis_upwind;
+    if (fdtmp >= 0.0) {
+      if (bmagl > bfloor) {
+        anis_upwind = wl_idn*log(wl_ipp/wl_ipr*SQR(wl_idn)/(bmagl*SQR(bmagl)));
+      } else {
+        const Real bref = fmax(bmagr, bfloor);
+        anis_upwind = wl_idn*log(SQR(wl_idn)/(bref*SQR(bref)));
+      }
+      anis_upwind /= wl_idn;
+    } else {
+      if (bmagr > bfloor) {
+        anis_upwind = wr_idn*log(wr_ipp/wr_ipr*SQR(wr_idn)/(bmagr*SQR(bmagr)));
+      } else {
+        const Real bref = fmax(bmagl, bfloor);
+        anis_upwind = wr_idn*log(SQR(wr_idn)/(bref*SQR(bref)));
+      }
+      anis_upwind /= wr_idn;
+    }
+    Real fmutmp = fdtmp*anis_upwind;
 
     flx(m,IDN,k,j,i) = fdtmp;
     flx(m,ivx,k,j,i) = 0.5*(fl.mx + fr.mx) + (fl.mx - fr.mx)*tmp;

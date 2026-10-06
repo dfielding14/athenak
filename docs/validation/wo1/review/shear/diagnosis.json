@@ -1,0 +1,17 @@
+{
+  "pre": {
+    "checks": 39,
+    "minimum_margin": 0.0,
+    "maximum_bad_cells": 0
+  },
+  "post": {
+    "checks": 39,
+    "minimum_margin": 0.0,
+    "maximum_bad_cells": 0
+  },
+  "after-LF": {
+    "checks": 1610,
+    "minimum_margin": -0.00012175638548181378,
+    "maximum_bad_cells": 1040
+  }
+}

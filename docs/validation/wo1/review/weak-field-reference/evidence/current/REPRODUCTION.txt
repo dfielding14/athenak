@@ -1,0 +1,65 @@
+Scratch-only AthenaK current-code four-variant experiment
+
+Base: 7b3345fd262a1cf826e9476fb40ca20a28a15881 from
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF
+No production or reference source was modified.
+
+Reproduction:
+1. Export base with git archive into a disposable source directory.
+2. Supply the same existing Kokkos checkout as source/kokkos.
+3. Configure Release with Athena_ENABLE_MPI=OFF and compile with -j2.
+   Preserve that binary as athena-uninstrumented-7b3345fd.
+4. Apply instrumentation-and-controls.patch with patch -p1.
+5. Rebuild -j2 and preserve as athena-instrumented-4way.
+6. Put the source and executables beside comparison.athinput and run_comparison.py.
+7. Run python3 run_comparison.py. It writes each exact invocation and B4 environment
+   in runs/<case>/command.json, stdout/stderr in run.log, raw cell/flux/stage records
+   in b4-state.csv, standard Athena primitive+B output in tab/, and summary.json.
+8. archive_and_verify.py records the checks made on this checkout; verification.json
+   is the completed result. sha256.json identifies the source patch, binaries, input,
+   and scripts used. prepare_instrumented.py is the construction record; the combined
+   patch is the self-contained reproduction artifact.
+
+Controls are presence-based environment variables: unset means disabled.
+B4_ORIGINAL_FACE=1 restores the pre-WO1 both-side weak-face fallback in HLLE and
+pre-WO1 weak A policy in LLF. It does not revert other current implementation changes.
+B4_NO_WALL=1 skips the unconditional fluid firehose wall and its encoded-A admissibility
+correction when backup=false. Every run explicitly disables collisions, optional
+mirror/firehose limiters, and backup walls. All other current numerics, including FOFC,
+remain unchanged.
+B4_TRACE=1 enables full stage snapshots for the first five cycles and coll_post cell
+snapshots thereafter. The EOS printf active-index window uses i>=3 and i<ni-3; full
+stage CSV snapshots always cover every active cell. Face printf detail retains the
+archived fixed contact-face window; full CSV face flux snapshots cover the domain.
+
+CSV cycle denotes the current driver cycle before increment. Thus coll_post cycle=n
+is completed physical cycle n+1, at time+dt. Summary cycles use the latter convention.
+Summary min_ratio/max_ratio are extrema over all completed cycle outputs; final has
+only final output extrema. First failure means pperp/ppar outside [0.5,2], the existing
+strict-contact criterion. Per-cycle sums of rho/E/A are unnormalized cell sums.
+Initial/setup snapshots can have a sentinel timestep; do not use those for physical
+elapsed time. Primitive pressure columns are reliable after c2p_post/coll_post.
+
+The matrix has 32 sharp runs (four variants, two velocities, two floors, two stopping
+conditions), plus six smooth runs (width .04, nx128/256/512, both wall settings).
+The negative-velocity sharp fixture is reflected, with weak field on the right.
+All common-time runs terminate exactly at t=.012. Smooth runs have bfloor=1e-14.
+
+Results requiring interpretation:
+- Default instrumented runs are byte-identical to fresh uninstrumented baseline for
+  every primitive+B output through 50 cycles, for both velocities and both floors.
+- Allmag original/WO1 face-policy outputs are byte-identical.
+- WO1 face/floor1e-10 sharp runs use no FOFC or pressure floors and fail at cycle5 with
+  either wall choice. Original-face and allmag runs fail at cycle1; pressure floors and
+  FOFC begin at cycle2 and limit later ratios. Do not interpret their ~2e12 plateau as
+  unconstrained A transport or compare it literally to a no-FOFC reference plateau.
+- Smooth results converge and agree with the reference results reported by root.
+
+Raw tables and the full per-cycle state records are retained for independent analysis.
+
+Compact package note: the original summary.json bytes are stored losslessly in
+summary.json.gz. Before plotting or replaying the saved analysis, decompress:
+  gzip -dc summary.json.gz > summary.json
+Run that command from this current-evidence directory, or use the equivalent
+package-root command documented in ../../README.md. The simulation harness
+still writes ordinary summary.json; no harness behavior was changed.

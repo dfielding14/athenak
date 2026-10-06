@@ -241,19 +241,46 @@ void CheckObliqueRegression(const EOS_Data &eos) {
 }
 
 void CheckDirectionalLimits(const EOS_Data &eos) {
-  const Real perpendicular = eos.IdealMHDFastSpeed(
-      2.0, 1.2, 0.7, 0.0, 1.0, 0.0, eos.bfloor);
-  RequireClose("perpendicular fast speed", perpendicular, std::sqrt(1.2));
-
-  const Real density = 1.3;
+  const Real tolerance = (sizeof(Real) == sizeof(float)) ? kTol : 1.0e-12;
   const Real ppar = 0.9;
   const Real pperp = 0.6;
-  const Real bx = 0.8;
-  const Real parallel = eos.IdealMHDFastSpeed(
-      density, ppar, pperp, bx, 0.0, 0.0, eos.bfloor);
-  RequireClose(
-      "parallel fast speed", parallel,
-      LiteratureFastSpeed(density, ppar, pperp, bx, 0.0, 0.0));
+  const Real densities[] = {0.01, 0.3, 4.0};
+  for (const Real density : densities) {
+    for (const Real bmag : {static_cast<Real>(0.8), static_cast<Real>(2.0)}) {
+      const std::string label = "rho=" + std::to_string(density)
+                             + ", B=" + std::to_string(bmag);
+      const Real parallel = eos.IdealMHDFastSpeed(
+          density, ppar, pperp, bmag, 0.0, 0.0, eos.bfloor);
+      RequireRelativeClose("parallel limit " + label, SQR(parallel),
+                           std::max(static_cast<Real>(3.0)*ppar,
+                                    SQR(bmag) + pperp - ppar)/density,
+                           tolerance);
+      const Real perpendicular = eos.IdealMHDFastSpeed(
+          density, ppar, pperp, 0.0, bmag, 0.0, eos.bfloor);
+      RequireRelativeClose("perpendicular limit " + label, SQR(perpendicular),
+                           (SQR(bmag) + 2.0*pperp)/density, tolerance);
+    }
+  }
+}
+
+void CheckIndependentEigenvalues(const EOS_Data &eos) {
+  // Offline numpy eigenvalues of the primitive 1D CGL Jacobian at v=0:
+  // momentum stress = p_perp I + (p_parallel-p_perp) bb + B^2 I/2 - BB;
+  // Dp_parallel = -p_parallel (div v + 2 bb:grad v),
+  // Dp_perp = -p_perp (2 div v - bb:grad v), with continuity and ideal induction.
+  // Columns: rho, p_parallel, p_perp, Bx, By, Bz, largest |eigenvalue|.
+  const Real states[][7] = {
+      {0.01, 0.9, 0.6, 0.8, 0.6, 0.0, 13.64355243397714},
+      {0.3, 1.2, 0.8, 0.7, -0.4, 0.5, 2.6890819006579081},
+      {4.0, 0.6, 1.0, 0.3, 0.8, -0.6, 0.86379984723740366}};
+  const Real tolerance = (sizeof(Real) == sizeof(float)) ? kTol : 1.0e-9;
+  for (const auto &state : states) {
+    RequireRelativeClose("independent oblique eigenvalue rho="
+                             + std::to_string(state[0]),
+                         eos.IdealMHDFastSpeed(state[0], state[1], state[2], state[3],
+                                              state[4], state[5], eos.bfloor),
+                         state[6], tolerance);
+  }
 }
 
 void CheckOrdinaryValueAgreement(const EOS_Data &eos) {
@@ -479,6 +506,7 @@ void RunCglFastSpeedChecks() {
   eos.bfloor = 1.0e-10;
   CheckObliqueRegression(eos);
   CheckDirectionalLimits(eos);
+  CheckIndependentEigenvalues(eos);
   CheckOrdinaryValueAgreement(eos);
   CheckFactoredDiscriminant(eos);
   CheckEndpointRanges(eos);

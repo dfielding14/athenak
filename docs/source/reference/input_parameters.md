@@ -134,7 +134,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `dyn_scratch` | int | 0 | dyn_grmhd.cpp:L120 |
 | `enforce_maximum` | bool | true | dyn_grmhd.cpp:L121 |
 | `eos` | string | required | mhd.cpp:L60 |
-| `passive` | bool | false | cgl_mhd.cpp |
+| `passive` | bool | false; true disabled pending WO2 thermal-energy redesign | cgl_mhd.cpp |
 | `cgl_heat_flux` | string | absent | cgl_landau_fluid.cpp |
 | `cgl_heat_flux_integrator` | string | sts | cgl_landau_fluid.cpp |
 | `lf_k_parallel` | Real | required when CGL LF is active | cgl_landau_fluid.cpp |
@@ -143,9 +143,14 @@ Complete list of all input parameters by block, extracted from source code.
 | `nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `mirror_limiter` | bool | false | cgl_mhd.cpp |
 | `firehose_limiter` | bool | false | cgl_mhd.cpp |
-| `cgl_firehose_threshold` | string | oblique (`oblique` or `parallel`) | cgl_mhd.cpp |
+| `firehose_threshold` | Real | 2.0 (positive coefficient of $-B^2/2$) | cgl_mhd.cpp |
+| `mirror_threshold` | Real | 1.0 (positive coefficient of $B^2/2$) | cgl_mhd.cpp |
+| `mirror_backup_factor` | Real | 2.0 (at least 1) | cgl_mhd.cpp |
+| `firehose_backup_factor` | Real | 1.0 (at least 1; wall clipped at $-B^2$) | cgl_mhd.cpp |
+| `limiter_backup_nu` | Real | 1e10 (inverse code time; LF suppression only) | cgl_mhd.cpp |
+| `cgl_firehose_threshold` | string | legacy alias: `oblique` = 1.4, `parallel` = 2.0; conflicts rejected | cgl_mhd.cpp |
 | `limiter_nu_coll` | Real | 0.0 | cgl_mhd.cpp |
-| `limiter_hardwall` | bool | false | cgl_mhd.cpp |
+| `limiter_hardwall` | bool | false; true rejected, migrate to finite `limiter_nu_coll` | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |
 | `cgl_lf_strict_admissibility` | bool | false | cgl_landau_fluid.cpp |
 | `cgl_lf_record_pressure_work` | bool | false | mhd.cpp |
@@ -439,7 +444,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `npeak` | Real | — (optional) | turb_driver.cpp:L72 |
 | `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
 | `spectrum` | string | `parabolic` | turb_driver.cpp |
-| `driving_type` | int | 0 (`0` three-dimensional, `1` planar) | turb_driver.cpp:L83 |
+| `driving_type` | int | 0 (`0` projected three-dimensional, `1` planar, `2` unprojected isotropic) | turb_driver.cpp:L83 |
 | `min_kz` | int | 0 | turb_driver.cpp:L85 |
 | `max_kz` | int | nhigh | turb_driver.cpp:L86 |
 | `min_kx` | int | 0 | turb_driver.cpp:L87 |

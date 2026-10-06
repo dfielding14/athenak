@@ -1,0 +1,9 @@
+{
+  "athena-uninstrumented-7b3345fd": "651e4ae2affa613c50a30398255f5ab273279ec900051c8907ff5196cd2a9cc7",
+  "athena-instrumented-4way": "cacac0f893e7f28cc13e00b1a8490069a0986c406b971a4a0471bdb5e3f98b49",
+  "comparison.athinput": "7c0ba59eb63e74ba416b010ae5d9623d56894b485f1ba45c387e633f27c54d61",
+  "instrumentation-and-controls.patch": "dc4e21a92ffa684687a71c9ab3431d1697d541b897d42a68fe904568ad62c9a3",
+  "prepare_instrumented.py": "813c828b4d3203208e3b969182555ce906b6d20ad746028ec35dbbb0bfc43a29",
+  "run_comparison.py": "fc5dc3e4422dc83ed1ec7bddd15e7fe720852dabed72f38c27258d460aca87f7",
+  "archive_and_verify.py": "618f6c936e3d8f3627938b88bacd6760156774f7c791aeea45fce589b62f769f"
+}

@@ -141,6 +141,7 @@ add_executable(
         pgen/tests/rad_linear_wave.cpp
         pgen/tests/z4c_boosted_puncture.cpp
         pgen/tests/z4c_linear_wave.cpp
+        pgen/tests/turb_forcing.cpp
         pgen/turb.cpp
 
         radiation/radiation.cpp
@@ -198,7 +199,9 @@ add_executable(
 # specify on command line using '-D PROBLEM=file' where 'file' is name of file in
 # pgen/ directory (not including .cpp extension)
 
-if (NOT ${PROBLEM} STREQUAL "built_in_pgens" AND NOT ${PROBLEM} STREQUAL "turb")
+if (${PROBLEM} STREQUAL "turb")
+  set_source_files_properties(pgen/turb.cpp PROPERTIES COMPILE_DEFINITIONS TURB_USER_PROBLEM)
+elseif (NOT ${PROBLEM} STREQUAL "built_in_pgens")
   target_sources(athena
       PRIVATE
           pgen/${PROBLEM}.cpp

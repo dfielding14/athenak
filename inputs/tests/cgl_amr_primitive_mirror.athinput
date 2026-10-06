@@ -1,4 +1,4 @@
-# Pure-CGL AMR primitive-prolongation mirror hard-wall stress.
+# Pure-CGL AMR primitive prolongation with stiff finite-rate mirror relaxation.
 
 <job>
 basename = cgl_amr_primitive_mirror
@@ -50,7 +50,8 @@ eos = cgl
 passive = false
 mirror_limiter = true
 firehose_limiter = false
-limiter_hardwall = true
+limiter_nu_coll = 1.0e10
+backup_limiters = false
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667

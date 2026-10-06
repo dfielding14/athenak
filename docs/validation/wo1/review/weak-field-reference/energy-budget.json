@@ -1,0 +1,130 @@
+[
+  {
+    "case": "wo1_fh1_v+10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 3.7816971776294395e-15
+  },
+  {
+    "case": "wo1_fh0_v+10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 3.854555563620465e-15
+  },
+  {
+    "case": "original_fh1_v+10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 6.308634170615335e-13
+  },
+  {
+    "case": "original_fh0_v+10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 6.308703559554374e-13
+  },
+  {
+    "case": "wo1_fh1_v-10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 3.7816971776294395e-15
+  },
+  {
+    "case": "wo1_fh0_v-10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 3.854555563620465e-15
+  },
+  {
+    "case": "original_fh1_v-10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 6.308634170615335e-13
+  },
+  {
+    "case": "original_fh0_v-10_bf1e-10_cycles",
+    "max_abs_mean_energy_residual": 6.308703559554374e-13
+  },
+  {
+    "case": "wo1_fh1_v+10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.49976208808323e-13
+  },
+  {
+    "case": "wo1_fh0_v+10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.497957975668214e-13
+  },
+  {
+    "case": "original_fh1_v+10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.49976208808323e-13
+  },
+  {
+    "case": "original_fh0_v+10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.497957975668214e-13
+  },
+  {
+    "case": "wo1_fh1_v-10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.49976208808323e-13
+  },
+  {
+    "case": "wo1_fh0_v-10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.497957975668214e-13
+  },
+  {
+    "case": "original_fh1_v-10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.49976208808323e-13
+  },
+  {
+    "case": "original_fh0_v-10_bf1e-14_cycles",
+    "max_abs_mean_energy_residual": 9.497957975668214e-13
+  },
+  {
+    "case": "wo1_fh1_v+10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 3.7816971776294395e-15
+  },
+  {
+    "case": "wo1_fh0_v+10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 3.854555563620465e-15
+  },
+  {
+    "case": "original_fh1_v+10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 6.050993039963259e-13
+  },
+  {
+    "case": "original_fh0_v+10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 6.050993039963259e-13
+  },
+  {
+    "case": "wo1_fh1_v-10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 3.7816971776294395e-15
+  },
+  {
+    "case": "wo1_fh0_v-10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 3.854555563620465e-15
+  },
+  {
+    "case": "original_fh1_v-10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 6.050993039963259e-13
+  },
+  {
+    "case": "original_fh0_v-10_bf1e-10_time",
+    "max_abs_mean_energy_residual": 6.050993039963259e-13
+  },
+  {
+    "case": "wo1_fh1_v+10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "wo1_fh0_v+10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "original_fh1_v+10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "original_fh0_v+10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "wo1_fh1_v-10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "wo1_fh0_v-10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "original_fh1_v-10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  },
+  {
+    "case": "original_fh0_v-10_bf1e-14_time",
+    "max_abs_mean_energy_residual": 9.03527253015568e-13
+  }
+]

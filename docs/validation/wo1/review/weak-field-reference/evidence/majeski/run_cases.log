@@ -1,0 +1,16 @@
+{"name": "nofc_bf1.0e-10_v10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.45776796340942383}
+{"name": "nofc_bf1.0e-10_v10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.03928804397583008}
+{"name": "nofc_bf1.0e-10_v-10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.039495229721069336}
+{"name": "nofc_bf1.0e-10_v-10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.0666801929473877}
+{"name": "nofc_bf1.0e-14_v10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.07457494735717773}
+{"name": "nofc_bf1.0e-14_v10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.040078163146972656}
+{"name": "nofc_bf1.0e-14_v-10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.04008078575134277}
+{"name": "nofc_bf1.0e-14_v-10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.04023599624633789}
+{"name": "fofc_bf1.0e-10_v10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.04036712646484375}
+{"name": "fofc_bf1.0e-10_v10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.07718396186828613}
+{"name": "fofc_bf1.0e-10_v-10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.03904891014099121}
+{"name": "fofc_bf1.0e-10_v-10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.0748448371887207}
+{"name": "fofc_bf1.0e-14_v10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.03912806510925293}
+{"name": "fofc_bf1.0e-14_v10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.07672786712646484}
+{"name": "fofc_bf1.0e-14_v-10.0_cycles50", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.04012417793273926}
+{"name": "fofc_bf1.0e-14_v-10.0_time012", "command": ["/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena", "-i", "input.athinput"], "returncode": 0, "walltime": 0.0760049819946289}

@@ -53,6 +53,45 @@ def mechanism_fields(amplitude=1.0):
     return fields, lengths
 
 
+@pytest.mark.parametrize("threshold_input, threshold, expected_rate", [
+    ("firehose_threshold = 2.0", 2.0, 0.0),
+    ("firehose_threshold = 1.4", 1.4, 7.0),
+    ("cgl_firehose_threshold = parallel", 2.0, 0.0),
+    ("cgl_firehose_threshold = oblique", 1.4, 7.0),
+])
+def test_heat_flux_reads_numeric_and_legacy_threshold_metadata(
+    analyzer, threshold_input, threshold, expected_rate
+):
+    workflow = load_module(
+        "cgl_lf_workflow_threshold_test", REPO_ROOT / "scripts/cgl_lf_workflow.py"
+    )
+    model = workflow.model_choices(f"""<mhd>
+{threshold_input}
+lf_k_parallel = 1.0
+firehose_limiter = true
+limiter_nu_coll = 7.0
+backup_limiters = false
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+bfloor = 1.0e-10
+""", [])
+    if threshold_input.startswith("cgl_"):
+        del model["firehose_threshold"]  # Archived before the numeric parameter existed.
+    else:
+        assert model["cgl_firehose_threshold"] == "none"
+    fields, lengths = mechanism_fields()
+    fields["p_perp"] = fields["eint"] - 0.8  # Between the -0.7 and -1 soft bounds.
+    result = analyzer.heat_flux_transport_proxy(
+        fields, lengths, model, include_local_fields=True
+    )
+    assert result["available"] is True
+    assert result["closure_model_choices"]["firehose_threshold"] == threshold
+    np.testing.assert_array_equal(
+        result["local_fields"]["limiter_collision_rate"], expected_rate
+    )
+
+
 def common_joint_ranges():
     """Return shared ranges spanning the focused multi-snapshot fixture."""
 

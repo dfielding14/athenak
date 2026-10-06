@@ -1,4 +1,4 @@
-# Pure-CGL AMR primitive-prolongation firehose hard-wall stress.
+# Pure-CGL AMR primitive prolongation with the unconditional fluid firehose wall.
 
 <job>
 basename = cgl_amr_primitive_firehose
@@ -51,7 +51,8 @@ passive = false
 mirror_limiter = false
 firehose_limiter = true
 cgl_firehose_threshold = parallel
-limiter_hardwall = true
+limiter_nu_coll = 1.0e10
+backup_limiters = false
 reconstruct = plm
 rsolver = hlle
 gamma = 1.666666666666667

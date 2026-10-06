@@ -1,0 +1,23 @@
+# Collisionless shearing hard-wall diagnosis
+
+The prior report said “first post-RK LF stage” but omitted the cycle. With `ndiag=1`, the failure is cycle 8, starting at t=0.06696971, post-sweep stage 1/21. It is not the first cycle. Instrumentation recorded active cells only, matching the production admissibility reduction.
+
+The after-RK wall projection runs before the post sweep. All 2048 active cells enter that sweep with $\Delta p+B^2$ between 0 and $5.27\times10^{-16}$. The first heat-flux update drives 1016 active cells below the wall, with minimum margin $-9.3546\times10^{-7}$. There are no density/pressure floors, nonfinite states, or nonpositive pressures. The failure is physical anisotropy transport across a state placed on the fluid wall, not missing wall scheduling, invalid ghosts, or floating-point wall rounding.
+
+With only strict failure disabled for diagnosis, the original collisionless case completes 39 cycles to t=0.3. All 78 pre/post sweep entry checks are admissible after the existing scheduled projections. The minimum intermediate margin is $-1.21756\times10^{-4}$. Intermediate crossings must remain reported; they are not zero in the repaired strict run.
+
+The fix retains WO1's operator ordering and changes strict wall validation to the sweep boundaries: check the input state before LF, and check the final state after the scheduled wall projection. Every LF stage still counts its unprojected hard-wall crossings and immediately rejects floors, nonfinite quantities, and nonpositive pressures. Boundary checks do not increment stage or diagnostic counts. No rates, walls, integrator coefficients, fluxes, timestep bounds, or runtime input switches were added or altered. Restore `nu_coll=0` in the shearing fixture.
+
+A negative-control binary omitting only `STSPostSweepCGLCollisions`' scheduled rates/wall call fails the new exit check at post stage 21/21 with 1018 hard-bound violations. The original invalid-initial-state negative controls still fail at pre-sweep stage 0/3 with 16 violations, both with and without configured backup walls. The retained test covers STS and explicit entry checks. The shear regression now requires nonzero recorded intermediate crossings, zero floor/nonfinite/nonpositive counts, and a final state inside the wall to float32 output precision; strict exit checks validate it in full Real precision.
+
+Evidence: instrumented/full.log, instrumented/nonfatal.log, diagnosis.json, mhd_sts.instrumented.cpp, check_negative_controls.py, negative-controls.log, check_serial.py, serial-results.json.
+
+# Final validation and restart diagnostic semantics
+
+The restored collisionless serial/MPI/restart regression passes at t=0.3 in 39 cycles. Capped STS and explicit reference both use 994 cycles to t=0.04. All original physical state tolerances (including restart atol=5e-6), magnetic references, divergence checks, and exact decomposition diagnostic comparisons remain unchanged. Safe RKL2 and fast arithmetic with profiling produce identical stage counts (3,297,280) and intermediate hard-wall counts (1,172,382). An additional full explicit run passes to t=0.3 in 7,605 cycles. Floors, nonfinite and nonpositive stage counts remain zero in each run.
+
+The old collisional fixture kept lf_hardbd=0, masking that its restart is only tolerance-equivalent, not bitwise. In the restored collisionless fixture, the continued run records 1,172,466 intermediate wall visits rather than 1,172,382: a difference of 84/3,297,280 = 2.54755e-5 in occupied stage-cell fraction. Final state differences remain inside the original tolerance (maximum pressure difference 8.34e-7, velocity 1.25e-6, field 4.32e-7). Even the old nu=30 run's restarted timestep differed by 2.21e-9; the collisionless difference after the first resumed cycle is 1.52e-10. A near-wall threshold-visit count is discontinuous under these already-accepted state differences and is not a conserved quantity. Therefore only its restart comparison uses an absolute occupancy-fraction tolerance of 1e-4, with each count also required positive and no larger than lf_nstage. All other integer counters remain exact. Strict entry/exit checks still use full Real precision, without tolerance. No speculative EOS change was made.
+
+A final post-wall checkpoint was placed after RestrictU, so any active-cell primitive recovery used by primitive restriction is also validated before the next operator. For the uniform shearing mesh RestrictU is a no-op.
+
+Final evidence includes mpi-results.json, mpi-validation.log, serial-results.json, serial-validation.log, mpi/commands.json and per-run logs/data; check_mpi.py and check_serial.py reproduce the checks.

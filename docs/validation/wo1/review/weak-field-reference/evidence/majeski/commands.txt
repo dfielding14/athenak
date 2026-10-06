@@ -1,0 +1,9 @@
+git -C /Users/dbf75/Work/Research/AthenaK/athenak-CGL archive def0b6c79b84243324de3d033dca95aedb2c2ead | tar -x -C /tmp/cgl-b4-compare-20261006/majeski/src
+Kokkos symlink: /Users/dbf75/.codex/worktrees/bf22/athenak-DF/kokkos, SHA 08ceff92bcf3a828844480bc1e6137eb74028517
+cmake -S src -B build -DPROBLEM=b4_contact -DAthena_ENABLE_MPI=OFF -DAthena_ENABLE_OPENMP=OFF -DKokkos_ENABLE_SERIAL=ON -DCMAKE_BUILD_TYPE=Release -DCMAKE_POLICY_VERSION_MINIMUM=3.5
+cmake --build build -j2
+python3 run_cases.py
+Updated b4_contact.cpp with optional profile_width (default0); cmake --build build -j2
+python3 run_smooth.py
+python3 run_cases.py (rerun sharp cases with final fixture; outputs verified byte-identical)
+python3 summarize.py

@@ -1,0 +1,62 @@
+[
+  {
+    "path": "current/runs/smooth_wo1_fh0_nx128/tab/cgl_weak_field_transport.mhd_w_bcc.00047.tab",
+    "sha256": "6fdc93b51055e2bafdb88c84fa1df53fdc2c0713ba377c3d7bb9e25d2b2d051d",
+    "bytes": 33634
+  },
+  {
+    "path": "current/runs/smooth_wo1_fh0_nx256/tab/cgl_weak_field_transport.mhd_w_bcc.00092.tab",
+    "sha256": "3d52f980b040b36596a179ec72baf1f070cc3300aa09a4acbaeed3d376443921",
+    "bytes": 67042
+  },
+  {
+    "path": "current/runs/smooth_wo1_fh0_nx512/tab/cgl_weak_field_transport.mhd_w_bcc.00182.tab",
+    "sha256": "9bfef6171f168da0faee64f9438746bcff40b604f5fcda5a2a083de7504d905d",
+    "bytes": 133859
+  },
+  {
+    "path": "current/runs/smooth_wo1_fh1_nx128/tab/cgl_weak_field_transport.mhd_w_bcc.00047.tab",
+    "sha256": "6fdc93b51055e2bafdb88c84fa1df53fdc2c0713ba377c3d7bb9e25d2b2d051d",
+    "bytes": 33634
+  },
+  {
+    "path": "current/runs/smooth_wo1_fh1_nx256/tab/cgl_weak_field_transport.mhd_w_bcc.00092.tab",
+    "sha256": "e95b4bda84afa6a5c37b007faca41292faba2b956744c9414e40d62b28d0e613",
+    "bytes": 67042
+  },
+  {
+    "path": "current/runs/smooth_wo1_fh1_nx512/tab/cgl_weak_field_transport.mhd_w_bcc.00182.tab",
+    "sha256": "9ad6ea6fee91ebdbe046ba118f61aa04e51a5f2afc069f13226ff8ea0c252821",
+    "bytes": 133859
+  },
+  {
+    "path": "majeski/runs/smooth_nx128_bf1.0e-14_v10.0_time012/tab/cgl_weak_field_transport.mhd_w_bcc.00047.tab",
+    "sha256": "8c4da55a416e44454a2815404d64002ef5d35ab3abda856c345ed4302cf55527",
+    "bytes": 33632
+  },
+  {
+    "path": "majeski/runs/smooth_nx256_bf1.0e-14_v10.0_time012/tab/cgl_weak_field_transport.mhd_w_bcc.00092.tab",
+    "sha256": "b06342ba4a40b8fadbc93ef93341434f3536b0766714b8b22129d8d9cdf2a08e",
+    "bytes": 67040
+  },
+  {
+    "path": "majeski/runs/smooth_nx512_bf1.0e-14_v10.0_time012/tab/cgl_weak_field_transport.mhd_w_bcc.00182.tab",
+    "sha256": "882d903c801aa2e7ef943556f5b8b408e5134c85155ecac4e47f202922a20c94",
+    "bytes": 133857
+  },
+  {
+    "path": "squire/runs/smooth_n128_t012/state_046_cycle_0.csv",
+    "sha256": "f8d9df23f20c44d3234e30460943addf1e7e54fad9cdc4f74065be2b75f41fcc",
+    "bytes": 22314
+  },
+  {
+    "path": "squire/runs/smooth_n256_t012/state_091_cycle_0.csv",
+    "sha256": "5eabb1cc6e55f711d3221757ad4f71154b7ef69fc29379ff885960abc1b719aa",
+    "bytes": 45251
+  },
+  {
+    "path": "squire/runs/smooth_n512_t012/state_181_cycle_0.csv",
+    "sha256": "89cf3dd1696ad45384e808c00a5de63ed2dc4eb52b87632447d5fc304d0de326",
+    "bytes": 90293
+  }
+]

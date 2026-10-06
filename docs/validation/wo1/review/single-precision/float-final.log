@@ -1,0 +1,220 @@
+[  2%] Built target kokkossimd
+[ 11%] Built target kokkoscore
+[ 11%] Built target AlwaysCheckGit
+[ 12%] Built target kokkoscontainers
+[ 13%] Built target impl_git_version
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/piecewise_polytrope.cpp.o
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/eos_hybrid.cpp.o
+[ 14%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/spherical_grid.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/geodesic-grid/geodesic_grid.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/eos_compose.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/eos/primitive-solver/unit_system.cpp.o
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/piecewise_polytrope.cpp:48:22: error: cannot initialize a parameter of type 'Real *' (aka 'float *') with an lvalue of type 'double[8]'
+   48 |   InitializeFromData(densities, gammas, P0, 1.0, np);
+      |                      ^~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/piecewise_polytrope.hpp:170:56: note: passing argument to parameter 'densities' here
+  170 |   KOKKOS_INLINE_FUNCTION bool InitializeFromData(Real *densities, Real *gammas,
+      |                                                        ^
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:37:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   37 |     CGS.Msun * CGS.G/(CGS.c*CGS.c)*1e-5, // Msun, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:37:5: note: insert an explicit cast to silence this issue
+   37 |     CGS.Msun * CGS.G/(CGS.c*CGS.c)*1e-5, // Msun, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                 )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:38:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   38 |     CGS.MeV * CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // MeV, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:38:5: note: insert an explicit cast to silence this issue
+   38 |     CGS.MeV * CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // MeV, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                            )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:41:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   41 |     CGS.c * 1e-5, // time, km
+      |     ^~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:41:5: note: insert an explicit cast to silence this issue
+   41 |     CGS.c * 1e-5, // time, km
+      |     ^~~~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:43:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   43 |     CGS.G/(CGS.c*CGS.c)*1e-5, // mass, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:43:5: note: insert an explicit cast to silence this issue
+   43 |     CGS.G/(CGS.c*CGS.c)*1e-5, // mass, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(      )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:44:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   44 |     CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // energy, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:44:5: note: insert an explicit cast to silence this issue
+   44 |     CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // energy, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:45:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   45 |     CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e10, // pressure, km^-2
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:45:5: note: insert an explicit cast to silence this issue
+   45 |     CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e10, // pressure, km^-2
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                  )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:46:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   46 |     CGS.kb*CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // temperature, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:46:5: note: insert an explicit cast to silence this issue
+   46 |     CGS.kb*CGS.G/(CGS.c*CGS.c*CGS.c*CGS.c)*1e-5, // temperature, km
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                         )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:62:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   62 |     1.0 / CGS.Msun, // mass, Msun
+      |     ^~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:62:5: note: insert an explicit cast to silence this issue
+   62 |     1.0 / CGS.Msun, // mass, Msun
+      |     ^~~~~~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:63:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   63 |     1.0 / (CGS.Msun * CGS.c*CGS.c), // energy, Msun
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:63:5: note: insert an explicit cast to silence this issue
+   63 |     1.0 / (CGS.Msun * CGS.c*CGS.c), // energy, Msun
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(            )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:74:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   74 |     CGS.G * CGS.MeV/(CGS.c*CGS.c*CGS.c*CGS.c)*1e13, // G, fm
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:74:5: note: insert an explicit cast to silence this issue
+   74 |     CGS.G * CGS.MeV/(CGS.c*CGS.c*CGS.c*CGS.c)*1e13, // G, fm
+      |     ^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+      |     static_cast<Real>(                            )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:80:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   80 |     CGS.c * 1e13, // time, fm
+      |     ^~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:80:5: note: insert an explicit cast to silence this issue
+   80 |     CGS.c * 1e13, // time, fm
+      |     ^~~~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:83:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   83 |     1.0/CGS.MeV, // energy, MeV
+      |     ^~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:83:5: note: insert an explicit cast to silence this issue
+   83 |     1.0/CGS.MeV, // energy, MeV
+      |     ^~~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:84:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   84 |     1e-39/CGS.MeV, // pressure, MeV/fm^3
+      |     ^~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:84:5: note: insert an explicit cast to silence this issue
+   84 |     1e-39/CGS.MeV, // pressure, MeV/fm^3
+      |     ^~~~~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:92:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   92 |     CGS.c/1e2,        // c
+      |     ^~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:92:5: note: insert an explicit cast to silence this issue
+   92 |     CGS.c/1e2,        // c
+      |     ^~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:93:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   93 |     CGS.G/1e3,        // G
+      |     ^~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:93:5: note: insert an explicit cast to silence this issue
+   93 |     CGS.G/1e3,        // G
+      |     ^~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:94:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   94 |     CGS.kb/1e7,       // kb
+      |     ^~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:94:5: note: insert an explicit cast to silence this issue
+   94 |     CGS.kb/1e7,       // kb
+      |     ^~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:95:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   95 |     CGS.Msun/1e3,     // Msun
+      |     ^~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:95:5: note: insert an explicit cast to silence this issue
+   95 |     CGS.Msun/1e3,     // Msun
+      |     ^~~~~~~~~~~~
+      |     static_cast<Real>( )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:96:5: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   96 |     CGS.MeV/1e7,      // MeV
+      |     ^~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/unit_system.cpp:96:5: note: insert an explicit cast to silence this issue
+   96 |     CGS.MeV/1e7,      // MeV
+      |     ^~~~~~~~~~~
+      |     static_cast<Real>( )
+1 error generated.
+make[2]: *** [src/CMakeFiles/athena.dir/eos/primitive-solver/piecewise_polytrope.cpp.o] Error 1
+make[2]: *** Waiting for unfinished jobs....
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:57:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+   57 |       Real * table_nb = table["nb"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:69:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+   69 |       Real * table_Q1 = table["Q1"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:77:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+   77 |       Real * table_Q2 = table["Q2"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:84:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+   84 |       Real * table_Q3 = table["Q3"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:91:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+   91 |       Real * table_Q4 = table["Q4"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:98:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+   98 |       Real * table_Q5 = table["Q5"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:105:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+  105 |       Real * table_Q7 = table["Q7"];
+      |              ^          ~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/eos/primitive-solver/eos_hybrid.cpp:113:14: error: cannot initialize a variable of type 'Real *' (aka 'float *') with an rvalue of type 'double *'
+  113 |       Real * table_cs2 = table["cs2"];
+      |              ^           ~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:62:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   62 |     Real p3[3] = {sin_ang*cos( 0.2*M_PI), sin_ang*sin( 0.2*M_PI), -cos_ang};
+      |                   ^~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:62:19: note: insert an explicit cast to silence this issue
+   62 |     Real p3[3] = {sin_ang*cos( 0.2*M_PI), sin_ang*sin( 0.2*M_PI), -cos_ang};
+      |                   ^~~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(    )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:62:43: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   62 |     Real p3[3] = {sin_ang*cos( 0.2*M_PI), sin_ang*sin( 0.2*M_PI), -cos_ang};
+      |                                           ^~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:62:43: note: insert an explicit cast to silence this issue
+   62 |     Real p3[3] = {sin_ang*cos( 0.2*M_PI), sin_ang*sin( 0.2*M_PI), -cos_ang};
+      |                                           ^~~~~~~~~~~~~~~~~~~~~~
+      |                                           static_cast<Real>(    )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:63:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   63 |     Real p4[3] = {sin_ang*cos(-0.4*M_PI), sin_ang*sin(-0.4*M_PI),  cos_ang};
+      |                   ^~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:63:19: note: insert an explicit cast to silence this issue
+   63 |     Real p4[3] = {sin_ang*cos(-0.4*M_PI), sin_ang*sin(-0.4*M_PI),  cos_ang};
+      |                   ^~~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(    )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:63:43: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   63 |     Real p4[3] = {sin_ang*cos(-0.4*M_PI), sin_ang*sin(-0.4*M_PI),  cos_ang};
+      |                                           ^~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:63:43: note: insert an explicit cast to silence this issue
+   63 |     Real p4[3] = {sin_ang*cos(-0.4*M_PI), sin_ang*sin(-0.4*M_PI),  cos_ang};
+      |                                           ^~~~~~~~~~~~~~~~~~~~~~
+      |                                           static_cast<Real>(    )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:64:19: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   64 |     Real p5[3] = {sin_ang*cos(-0.2*M_PI), sin_ang*sin(-0.2*M_PI), -cos_ang};
+      |                   ^~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:64:19: note: insert an explicit cast to silence this issue
+   64 |     Real p5[3] = {sin_ang*cos(-0.2*M_PI), sin_ang*sin(-0.2*M_PI), -cos_ang};
+      |                   ^~~~~~~~~~~~~~~~~~~~~~
+      |                   static_cast<Real>(    )
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:64:43: error: non-constant-expression cannot be narrowed from type 'double' to 'Real' (aka 'float') in initializer list [-Wc++11-narrowing]
+   64 |     Real p5[3] = {sin_ang*cos(-0.2*M_PI), sin_ang*sin(-0.2*M_PI), -cos_ang};
+      |                                           ^~~~~~~~~~~~~~~~~~~~~~
+/Users/dbf75/.codex/worktrees/bf22/athenak-DF/src/geodesic-grid/geodesic_grid.cpp:64:43: note: insert an explicit cast to silence this issue
+   64 |     Real p5[3] = {sin_ang*cos(-0.2*M_PI), sin_ang*sin(-0.2*M_PI), -cos_ang};
+      |                                           ^~~~~~~~~~~~~~~~~~~~~~
+      |                                           static_cast<Real>(    )
+18 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/eos/primitive-solver/unit_system.cpp.o] Error 1
+8 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/eos/primitive-solver/eos_hybrid.cpp.o] Error 1
+6 errors generated.
+make[2]: *** [src/CMakeFiles/athena.dir/geodesic-grid/geodesic_grid.cpp.o] Error 1
+make[1]: *** [src/CMakeFiles/athena.dir/all] Error 2
+make: *** [all] Error 2

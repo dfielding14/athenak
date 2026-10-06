@@ -1,0 +1,20 @@
+--- a/src/eos/ideal_c2p_mhd.hpp
++++ b/src/eos/ideal_c2p_mhd.hpp
+@@ -431,7 +431,7 @@
+   // The IAN/legacy IMU slot stores A. Keep it consistent with any pressure or field-floor
+   // correction so a subsequent C2P conversion recovers the same primitive state.
+   if (dfloor_used || pressure_floor_used || bfloor_used) {
+-    const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
++    const Real bmag_inv = (bmag > bfloor) ? bmag : 1.0;
+     u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
+     // Return the state recovered from the repaired conserved variables. If rounding
+     // puts a pressure below its floor, round each energy addition upward so the
+@@ -487,7 +487,7 @@
+     // pprp=pprl=(2/3*pprp+1/3*pprl). A has no dynamical effect in this limit.
+     const Real p_iso = TWO_3RDS*w.pp + ONE_3RD*w.e;
+     u.e  = 0.5*w.e + w.pp + 0.5*(w.d*(SQR(w.vx) + SQR(w.vy) + SQR(w.vz)) + bsqr );
+-    u.mu = CGLConservedAnisotropy(w.d, p_iso, p_iso, bfloor);
++    u.mu = CGLConservedAnisotropy(w.d, p_iso, p_iso, 1.0);
+   }
+   return;
+ }

@@ -30,7 +30,8 @@ cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
 lf_k_parallel = 32.0
 lf_coefficient_mode = local
-cgl_firehose_threshold = oblique
+firehose_threshold = 2.0
+mirror_threshold = 1.0
 cgl_lf_strict_admissibility = false
 ```
 
@@ -59,27 +60,48 @@ sweep the MHD task graph performs:
 This lifecycle prevents ordinary hyperbolic fluxes, output, and restart state
 from interpreting magnetic moment as pressure anisotropy.
 
-When LF and CGL collisions or limiter scattering are active, each pre/post LF
-half-sweep is followed by a collision source update over that same half-cycle
-duration. Chronologically this is `L(dt/2) C(dt/2) H(dt) L(dt/2) C(dt/2)`,
-where `L`, `C`, and `H` denote LF, collision, and hyperbolic updates. The two
-collision calls therefore advance one physical `dt`, matching the single
-full-step collision interval used when LF is disabled.
+CGL collision rates run once per full timestep. With LF, the pre-sweep and
+hyperbolic boundaries apply only the configured backup walls and the unconditional
+fluid firehose wall; the post-sweep applies exact background decay and monotone
+backward-Euler soft-limiter relaxation over the full timestep, then those walls.
+Without LF, rates and walls run after the hyperbolic timestep. Primitive recovery
+does not apply soft-threshold scattering.
 
 AthenaK records LF-stage health metrics in normal MHD history output whenever
 this closure is active. Set `cgl_lf_strict_admissibility = true` for
 verification runs to terminate immediately if an LF refresh produces
 non-finite or non-positive thermodynamic state, activates density or pressure
-floors, or crosses an emergency mirror/firehose bound. Emergency-bound
-reporting is independent of whether `backup_limiters` is enabled.
+floors. Hard walls are checked strictly at sweep entry and after the scheduled
+end-of-sweep projection. Intermediate LF crossings remain counted in `lf_hardbd`
+but do not abort: LF can cross a wall before that projection, even from an
+admissible initial state. The fluid firehose bound is always checked; configured
+backup walls are checked only when `backup_limiters` is enabled. No per-stage
+wall projection or soft scattering is added.
+
+At a face, $\nu_{\rm eff}$ is the sum of background collisions, one
+`limiter_nu_coll` contribution when an enabled soft threshold is exceeded, and
+one `limiter_backup_nu` contribution when backup limiting is enabled and a
+configured or fluid wall is exceeded. The two limiter contributions add.
+
+The perpendicular closure uses the BGK moment coefficient from SHD97 eq. 49
+and Sharma et al. (2006) eq. 12:
+
+$$
+\chi_\perp = \frac{2c_\parallel^2}
+{\sqrt{2\pi}c_\parallel k_\parallel+2\nu_{\rm eff}}.
+$$
+
+The factor $2\nu_{\rm eff}$ deliberately differs from the $+\nu_{\rm eff}$
+printed in Squire et al. (2023) eq. 2.7. It recovers
+$\chi_\perp\to c_\parallel^2/\nu_{\rm eff}$ for strong collisions.
 
 ## Closure Controls
 
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `eos` | required | Set to `cgl` for this feature. |
-| `passive` | `false` | When `true`, evolve CGL/LF pressures diagnostically while mass, momentum, and magnetic-field fluxes use the isothermal-MHD passive-Delta path. |
-| `iso_sound_speed` | required when `passive = true` | Isothermal sound speed used by passive-Delta momentum fluxes and signal speeds. |
+| `passive` | `false` | `true` is disabled: the passive thermal energy equation is inconsistent, pending WO2. |
+| `iso_sound_speed` | unused in active CGL | Retained for the disabled passive model; it does not bypass the `passive=true` fence. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
 | `lf_k_parallel` | required | Positive closure wavenumber magnitude. |
@@ -88,11 +110,16 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `nu_coll` | `0.0` | Background anisotropy-relaxation frequency. |
 | `mirror_limiter` | `false` | Enable mirror-limiter relaxation. |
 | `firehose_limiter` | `false` | Enable firehose-limiter relaxation. |
-| `cgl_firehose_threshold` | `oblique` | `oblique` activates at `beta Delta <= -1.4`; `parallel` activates at `beta Delta <= -2`. |
-| `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
-| `limiter_hardwall` | `false` | With an enabled instability limiter, replace its pressure-relaxation update by an energy-preserving projection to the selected mirror/firehose threshold. |
-| `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |
-| `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
+| `firehose_threshold` | `2.0` | Positive $\Lambda_{\rm FH}$; soft firehose threshold $\Delta p=-\Lambda_{\rm FH}B^2/2$. |
+| `mirror_threshold` | `1.0` | Positive $\Lambda_{\rm M}$; soft mirror threshold $\Delta p=+\Lambda_{\rm M}B^2/2$. |
+| `mirror_backup_factor` | `2.0` | Multiplier of the soft mirror threshold; at least 1. |
+| `firehose_backup_factor` | `1.0` | Multiplier of the soft firehose threshold; at least 1. The wall cannot lie below $-B^2$. |
+| `limiter_backup_nu` | `1e10` | Nonnegative LF heat-flux suppression frequency in inverse code time. |
+| `cgl_firehose_threshold` | absent | Legacy alias: `oblique` = 1.4, `parallel` = 2.0. Conflicting explicit numeric values are rejected. |
+| `limiter_nu_coll` | required when either limiter is enabled | Nonnegative finite soft-limiter relaxation frequency. |
+| `limiter_hardwall` | `false` | Legacy `true` is rejected. Use finite `limiter_nu_coll` for soft-threshold relaxation. |
+| `backup_limiters` | `false` | Project onto both configured backup walls; requires at least one soft limiter to be enabled. LF never enables this flag implicitly. |
+| `cgl_lf_strict_admissibility` | `false` | Fail immediately on LF floors or invalid states; enforce hard walls at sweep entry and after the scheduled end projection. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 | `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
 | `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |
@@ -104,7 +131,7 @@ The performance/safety switches can be overridden by
 `ATHENAK_CGL_LF_DIAGNOSTICS`, `ATHENAK_CGL_LF_ARITHMETIC`,
 `ATHENAK_CGL_LF_STS_FLUX`, `ATHENAK_CGL_LF_PROFILE`, and
 `ATHENAK_CGL_LF_PROFILE_DETAIL`. Production wall-time measurements should keep
-profiling disabled. The current fastest production mode is:
+profiling disabled. An available performance configuration is:
 
 ```ini
 <mhd>
@@ -119,18 +146,20 @@ At an operator face with `|B| <= bfloor`, LF does not construct a local field
 direction and applies zero heat-flux contribution at that face. The local
 accuracy campaign exercises this shutdown behavior with strict monitoring.
 
-MKS24 production simulations use the mirror threshold `beta Delta >= 1` and
-the parallel-firehose threshold `beta Delta <= -2`; paper reproduction inputs
-must therefore set `cgl_firehose_threshold = parallel` and
-`limiter_hardwall = true` explicitly for their hard-wall closure. In this
-mode, CGL primitive recovery pins newly unstable pressures to the selected
-threshold while preserving `0.5*p_parallel + p_perp`; ordinary `nu_coll`
-relaxation remains enabled, but finite-rate limiter pressure relaxation is
-replaced by the algebraic constraint. The
-oblique-firehose policy remains the default to preserve behavior of existing
-feature-branch inputs. In both policies `lf_mirror` and `lf_firehs` count
-physical threshold occupancy, while `lf_hardbd` counts emergency numerical
-overshoot and is a strict-validation failure.
+The paper inputs explicitly set `firehose_threshold = 2.0` and
+`mirror_threshold = 1.0`, corresponding to $\Delta p=-B^2$ and $B^2/2$.
+Their stiff soft-limiter rate is `limiter_nu_coll = 1e10`. The finite update
+approaches the soft threshold with residual
+$(\Delta p_0-\Delta p_{\rm threshold})/(1+\nu_{\rm lim}\,dt)$;
+it is applied once per cycle. This replaces the former
+`limiter_hardwall = true` soft projection during primitive recovery and AMR
+transfer. Remove that legacy setting when migrating an input, and set
+`backup_limiters` explicitly. Existing finite limiter rates are never overwritten
+by the parser. LF strictness does not change the backup setting.
+
+`lf_mirror` and `lf_firehs` count physical threshold occupancy. `lf_hardbd`
+counts violations of the unconditional fluid wall and enabled backup walls.
+The historical `lf_hwproj` column remains present and is zero for this closure.
 
 Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
@@ -145,11 +174,9 @@ once, and a coarse/fine interface is owned by its fine-side closure faces.
 Differences between successive rows give interval counts; normalize limiter
 counts by `lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
 diagnostic columns are preserved through CGL-LF restart files so interval
-analysis remains continuous across segments. `lf_hwproj` counts applications
-of the algebraic hard-wall constraint during CGL primitive-refresh task
-ranges, including refreshed support/ghost states; it is not a normalized
-active-cell occupancy statistic. It is expected to be nonzero in
-limiter-active hard-wall production intervals and is not a safety violation.
+analysis remains continuous across segments. `lf_hwproj` is retained for old
+history readers and is zero in new runs; old nonzero values describe the
+pre-WO1 primitive-recovery soft projection.
 `lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-applied owned-face
 contractions of the capped heat fluxes with their corresponding temperature
 jumps. They characterize the closure-generated face fluxes; shearing-box
@@ -162,7 +189,7 @@ equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
 compatibility.
 
-When `cgl_lf_diagnostics = none`, LF admissibility and hard-wall projection
+When `cgl_lf_diagnostics = none`, LF admissibility and threshold-occupancy
 counters remain active, but heat-flux face, cap, and q-work reductions are not
 collected. In that mode the corresponding heat-flux diagnostic columns should
 be treated as intentionally inactive rather than as measured zero cap
@@ -173,12 +200,17 @@ explicit-RK-applied contraction of velocity with the retained CGL
 pressure-traction divergence, and `lf_cawrk` is its `Delta p` anisotropic
 component. The retained face traction is corrected through the same AMR flux
 exchange used by the momentum update before the contraction is evaluated.
-Passive-Delta runs retain zeros for both fields because their diagnostic CGL
-pressures are not applied to flow momentum.
+Archived passive-Delta runs retain zeros for both fields because their
+diagnostic CGL pressures were not applied to flow momentum. New passive runs
+are disabled.
 
 ## Current Restrictions
 
 - CGL is not available for SR, GR, or dynamical-GR MHD.
+- `mhd/passive = true` is disabled pending the WO2 thermal-energy redesign.
+- LF split integration rejects inflow and user boundary conditions because
+  they do not have a magnetic-moment-aware `IAN` contract. Periodic, outflow,
+  reflecting, and diode boundaries remain supported.
 - CGL dynamic runs use `rsolver = hlle`; LLF and HLLD are rejected.
 - Ordinary `<mhd>/conductivity` is rejected with `eos = cgl`.
 - CGL LF with `cgl_heat_flux_integrator = sts` cannot be combined with
@@ -204,10 +236,11 @@ pressures are not applied to flow momentum.
   while `IAN` stores magnetic moment, then refreshes CGL primitives before
   the next stage. The pre-sweep uses the displacement at `t` and the
   post-sweep uses `t + dt`.
-- Modal `<turb_driving>` forcing is supported with CGL LF. It is applied in
-  the ordinary source-term task graph, outside the protected LF
-  magnetic-moment sweep; the routine strict AMR/restart regression exercises
-  this combined path.
+- Modal `<turb_driving>` forcing is supported with CGL LF. One kick and one
+  Ornstein-Uhlenbeck advance occur per cycle before the RK state copy. The
+  momentum kick and zero-net-momentum correction each add their exact kinetic
+  energy change to total energy, preserving thermal energy. This schedule
+  applies to all driven fluids, including two-fluid runs.
 
 ## Verification
 
@@ -215,22 +248,25 @@ Focused unit problems in `inputs/unit_tests/` exercise CGL transforms, CGL
 FOFC, LF parallel and perpendicular decay, magnetic-field-gradient coupling,
 flux limiting, limiter suppression, and a field-aligned wave. Routine
 regressions also exercise analytic uniform collisional relaxation and both
-firehose threshold policies. The LF
+firehose threshold policies. The strengthened acceptance suite additionally
+checks noninteger-period wave convergence, one-e-fold decay, exact cellwise
+limiter relaxation, oblique two-dimensional decay across block/rank layouts,
+and two-level SMR decay with total-energy conservation. See the
+{ref}`measured acceptance table <wo1-acceptance-checks>`. The LF
 quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 
-An active/passive-Delta reduced forced-turbulence initializer is registered as
-`pgen_name = cgl_lf_paper`; its smoke decks are
-`inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput` and
-`inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput`. They
-initialize `rho0 = 1`, `B0` along `z`, and
+A reduced forced-turbulence initializer is registered as
+`pgen_name = cgl_lf_paper`. Its active smoke deck is
+`inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`; the passive deck
+is retained as a disabled reference pending WO2. These decks initialize `rho0 = 1`, `B0` along `z`, and
 `p_parallel0 = p_perp0 = beta0 B0^2/2`, use the explicit MKS24
-`cgl_firehose_threshold = parallel` policy, and exercise the shared
-turbulence driver. Passive mode requires `mhd/passive = true` and
-`problem/passive_delta = true`; a routine regression verifies that changing
-stable diagnostic initial anisotropy does not change its driven flow fields.
+`firehose_threshold = 2.0`, `mirror_threshold = 1.0` policy, and exercise the shared
+turbulence driver. `mhd/passive = true` now fails at construction because its
+thermal energy equation is inconsistent. Runtime regressions check this fence;
+direct unit checks retain coverage of the isothermal passive signal-speed path.
 These are reduced smoke cases, not standard paper-resolution runs. Their
 forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
-qualify reduced mechanics, not paper-scale active/passive statistics or
+qualify reduced mechanics, not paper-scale statistics or
 figure diagnostics.
 
 The paper pgen `.user.hst` output retains volume-integrated mass, kinetic,
@@ -240,17 +276,15 @@ rate, and instantaneous forcing power (written using the compact history
 labels `therm_cgl`, `abs_dp`, `mirror_vol`, `fire_vol`, `hard_vol`, and
 `force_pwr`) in addition to forcing-orientation quantities. Paper inputs
 also enable `record_injected_work`, adding cumulative exact net forcing-source
-work, including the zero-net-momentum projection, as `force_work`. The counter
-is advanced as an explicit-RK companion quantity so earlier stage increments
-receive the same final-state weighting as the evolved conserved variables; the
-analyzer uses it with conserved `tot-E` to report an active-Delta global
-energy residual. These histories support reduced global
+work, including the zero-net-momentum projection, as `force_work`. Each once-per-cycle kick adds its measured energy change to this counter
+before the RK stages; the analyzer uses it with conserved `tot-E` to report
+an active-CGL global energy residual. These histories support reduced global
 summaries such as `C_B2`; `.mhd.hst` supplies operator-face heat-flux-cap
 activity and retained snapshots supply spatial diagnostics.
 
 Paper-standard input definitions and the limiter-frequency scan live under
 `inputs/cgl_lf_paper/`. They encode the standard `192x192x384` domain,
-duration, hard-wall baseline, physical forcing shell, binary snapshot
+duration, stiff finite-rate baseline, physical forcing shell, binary snapshot
 cadence, and analysis window. The nine standard definitions cover all eight
 active/passive, Alfvenic/random beta-10/beta-100 series in MKS24 Figure 2(b)
 plus the active Alfvenic beta-1 case. Two `paper-heat-flux` definitions supply
@@ -264,7 +298,8 @@ cases reuse standard definitions. The `paper-standard`, `paper-nulim`,
 `paper-heat-flux`, `paper-compressive`, and `paper-scale-separation`
 workflows require explicit production authorization;
 the presence of these decks is not evidence that paper-scale runs have been
-executed.
+executed. Passive definitions are retained for provenance, but executable
+workflows omit them and list them in `disabled_cases` until WO2.
 
 For CGL `mhd_w` or `mhd_w_bcc` output, the existing `eint` field retains its
 legacy meaning of `p_parallel`; output now also includes `p_perp`. Paper

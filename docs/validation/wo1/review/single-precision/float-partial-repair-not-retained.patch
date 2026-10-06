@@ -1,0 +1,200 @@
+diff --git a/src/coordinates/cartesian_ks.hpp b/src/coordinates/cartesian_ks.hpp
+index 702b740d9..610f94d03 100644
+--- a/src/coordinates/cartesian_ks.hpp
++++ b/src/coordinates/cartesian_ks.hpp
+@@ -137,7 +137,9 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
+   *betax = 2.*H/(1. + 2.*H)*l_u[0];
+   *betay = 2.*H/(1. + 2.*H)*l_u[1];
+   *betaz = 2.*H/(1. + 2.*H)*l_u[2];
+-  Real const beta_d[3] = {2.*H*l_u[0], 2.*H*l_u[1], 2.*H*l_u[2]};
++  Real const beta_d[3] = {static_cast<Real>(2.*H*l_u[0]),
++                        static_cast<Real>(2.*H*l_u[1]),
++                        static_cast<Real>(2.*H*l_u[2])};
+ 
+   *gxx = 2.*H*l_d[0]*l_d[0] + 1.;
+   *gxy = 2.*H*l_d[0]*l_d[1];
+@@ -169,25 +171,25 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
+   Real const qb = SQR(r) + SQR(a);
+   Real const qc = 3.0*SQR(a * z) - SQR(r)*SQR(r);
+   Real const dH_d[3] = {
+-    SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa,
+-    SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa,
+-    SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r))
++    static_cast<Real>(SQR(H)*x/(pow(r,3)) * ( ( qc ) )/ qa),
++    static_cast<Real>(SQR(H)*y/(pow(r,3)) * ( ( qc ) )/ qa),
++    static_cast<Real>(SQR(H)*z/(pow(r,5)) * ( ( qc * qb ) / qa - 2.0*SQR(a*r)))
+   };
+ 
+   // \partial_i l_k
+   Real const dl_dd[3][3] = {
+     // \partial_x l_k
+-    {x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb ),
+-    x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb ),
++    {static_cast<Real>(x*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + r/( qb )),
++    static_cast<Real>(x*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) - a/( qb )),
+     - x*z/(r*qa)},
+     // \partial_y l_k
+-    {y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb ),
+-    y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb ),
++    {static_cast<Real>(y*r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( SQR(qb) * qa ) + a/( qb )),
++    static_cast<Real>(y*r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( SQR(qb) * qa ) + r/( qb )),
+     - y*z/(r*qa)},
+     // \partial_z l_k
+-    {z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa ),
+-    z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa ),
+-    - SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r},
++    {static_cast<Real>(z/r * ( SQR(a)*x - 2.0*a*r*y - SQR(r)*x )/( (qb) * qa )),
++    static_cast<Real>(z/r * ( SQR(a)*y + 2.0*a*r*x - SQR(r)*y )/( (qb) * qa )),
++    static_cast<Real>(- SQR(z)/(SQR(r)*r) * ( qb )/( qa ) + 1.0/r)},
+   };
+ 
+   Real dg_ddd[3][3][3] = {0.0};
+@@ -216,17 +218,17 @@ void ComputeADMDecomposition(Real x, Real y, Real z, bool minkowski, Real a,
+   // Derivatives of the shift vector
+   Real const dbeta_dd[3][3] = {
+     // \partial_x \beta_i
+-    {2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0],
+-    2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1],
+-    2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2]},
++    {static_cast<Real>(2.*dH_d[0]*l_d[0] + 2.*H*dl_dd[0][0]),
++    static_cast<Real>(2.*dH_d[0]*l_d[1] + 2.*H*dl_dd[0][1]),
++    static_cast<Real>(2.*dH_d[0]*l_d[2] + 2.*H*dl_dd[0][2])},
+     // \partial_y \beta_i
+-    {2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0],
+-    2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1],
+-    2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2]},
++    {static_cast<Real>(2.*dH_d[1]*l_d[0] + 2.*H*dl_dd[1][0]),
++    static_cast<Real>(2.*dH_d[1]*l_d[1] + 2.*H*dl_dd[1][1]),
++    static_cast<Real>(2.*dH_d[1]*l_d[2] + 2.*H*dl_dd[1][2])},
+     // \partial_z \beta_i
+-    {2.*dH_d[2]*l_d[0] + 2.*H*dl_dd[2][0],
+-    2.*dH_d[2]*l_d[1] + 2.*H*dl_dd[2][1],
+-    2.*dH_d[2]*l_d[2] + 2.*H*dl_dd[2][2]},
++    {static_cast<Real>(2.*dH_d[2]*l_d[0] + 2.*H*dl_dd[2][0]),
++    static_cast<Real>(2.*dH_d[2]*l_d[1] + 2.*H*dl_dd[2][1]),
++    static_cast<Real>(2.*dH_d[2]*l_d[2] + 2.*H*dl_dd[2][2])},
+   };
+   /*Real dbeta_dd[3][3];
+   for (int a = 0; a < 3; a++) {
+diff --git a/src/diffusion/hyperviscosity.cpp b/src/diffusion/hyperviscosity.cpp
+index 0b74fb757..911d9a072 100644
+--- a/src/diffusion/hyperviscosity.cpp
++++ b/src/diffusion/hyperviscosity.cpp
+@@ -105,7 +105,7 @@ void HyperViscosity::NewTimeStep() {
+     if (pmy_pack->pmesh->three_d) {
+       inv_dx2_sum += 1.0/SQR(size.h_view(m).dx3);
+     }
+-    dtnew = std::min(dtnew, 1.0/(8.0*nu4*SQR(inv_dx2_sum)));
++    dtnew = std::min(dtnew, static_cast<Real>(1.0/(8.0*nu4*SQR(inv_dx2_sum))));
+   }
+ }
+ 
+diff --git a/src/dyn_grmhd/dyn_grmhd.cpp b/src/dyn_grmhd/dyn_grmhd.cpp
+index d5729846a..8863a4682 100644
+--- a/src/dyn_grmhd/dyn_grmhd.cpp
++++ b/src/dyn_grmhd/dyn_grmhd.cpp
+@@ -548,7 +548,9 @@ void DynGRMHDPS<EOSPolicy, ErrorPolicy>::AddCoordTermsEOS(const DvceArray5D<Real
+                     &g3u[S11], &g3u[S12], &g3u[S13], &g3u[S22], &g3u[S23], &g3u[S33]);
+ 
+     // Calculate the metric derivatives
+-    Real idx[] = {1./size.d_view(m).dx1, 1./size.d_view(m).dx2, 1./size.d_view(m).dx3};
++    Real idx[] = {static_cast<Real>(1./size.d_view(m).dx1),
++                  static_cast<Real>(1./size.d_view(m).dx2),
++                  static_cast<Real>(1./size.d_view(m).dx3)};
+     Real dalpha_d[3] = {0.};
+     for (int a = 0; a < ndim; a++) {
+       dalpha_d[a] = Dx<NGHOST>(a, idx, adm.alpha, m, k, j, i);
+diff --git a/src/eos/primitive-solver/eos_compose.cpp b/src/eos/primitive-solver/eos_compose.cpp
+index 0d01347ee..e98db056e 100644
+--- a/src/eos/primitive-solver/eos_compose.cpp
++++ b/src/eos/primitive-solver/eos_compose.cpp
+@@ -65,7 +65,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     // n[i], n[i+1], yq[j], and yq[j+1], where i and j are the indices providing the
+     // nearest table values at or below a specified i and yq.
+     { // read nb
+-      Real * table_nb = table["nb"];
++      const auto * table_nb = table["nb"];
+ 
+       for (size_t in=0; in<m_nn; ++in) {
+         host_log_nb(in) = log2_(table_nb[in]);
+@@ -77,7 +77,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // read yq
+-      Real * table_yq = table["yq"];
++      const auto * table_yq = table["yq"];
+       for (size_t iy=0; iy<m_ny; ++iy) {
+         host_yq(iy) = table_yq[iy];
+       }
+@@ -87,7 +87,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // read T
+-      Real * table_t = table["t"];
++      const auto * table_t = table["t"];
+ 
+       for (size_t it=0; it<m_nt; ++it) {
+         host_log_t(it) = log2_(table_t[it]);
+@@ -99,7 +99,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read Q1 -> log(P)
+-      Real * table_Q1 = table["Q1"];
++      const auto * table_Q1 = table["Q1"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {
+@@ -112,7 +112,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read Q2 -> S
+-      Real * table_Q2 = table["Q2"];
++      const auto * table_Q2 = table["Q2"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {
+@@ -124,7 +124,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read Q3-> mu_b
+-      Real * table_Q3 = table["Q3"];
++      const auto * table_Q3 = table["Q3"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {
+@@ -136,7 +136,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read Q4-> mu_q
+-      Real * table_Q4 = table["Q4"];
++      const auto * table_Q4 = table["Q4"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {
+@@ -148,7 +148,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read Q5-> mu_le
+-      Real * table_Q5 = table["Q5"];
++      const auto * table_Q5 = table["Q5"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {
+@@ -160,7 +160,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read Q7-> log(e)
+-      Real * table_Q7 = table["Q7"];
++      const auto * table_Q7 = table["Q7"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {
+@@ -173,7 +173,7 @@ void EOSCompOSE<LogPolicy>::ReadTableFromFile(std::string fname) {
+     }
+ 
+     { // Read cs2-> cs
+-      Real * table_cs2 = table["cs2"];
++      const auto * table_cs2 = table["cs2"];
+       for (size_t in=0; in<m_nn; ++in) {
+         for (size_t iy=0; iy<m_ny; ++iy) {
+           for (size_t it=0; it<m_nt; ++it) {

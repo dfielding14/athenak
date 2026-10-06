@@ -1,0 +1,48 @@
+3d4716225 T-A1: validate CGL speeds against independent anisotropic eigenvalues
+f7cd33552 T-A2: apply CGL rates once per cycle and walls at split boundaries
+51fa908d7 T-B1: make repaired CGL pressure floors bitwise idempotent
+5f3a978c7 T-B2: preserve CGL pressure anisotropy when flooring density
+f63182ab0 T-B3: floor both reconstructed CGL pressures and flag nonfinite FOFC states
+6f6c4031e T-B4: transport weak-field CGL anisotropy using the neighboring field
+e15a77fd3 T-B5: reject invalid CGL magnetic-field floors
+7417f22e9 T-B6: verify existing CGL primitive prolongation support
+01d1d8506 T-B7: validate limiter configuration and enforce CGL sigma_max
+5d5020fdd fixup! T-A2: apply CGL rates once per cycle and walls at split boundaries
+60f0b9555 T-C1: configure shared CGL soft thresholds and backup walls
+3dbd74902 T-C2: apply monotone rates and idempotent configured hard walls
+f6cf2b9f8 T-C3: add soft and backup scattering in LF heat-flux suppression
+26605c6e8 T-C4: specify numeric CGL thresholds in paper and stress inputs
+0ffc6a15f T-D1: normalize LF faces by cell magnitudes and use the CT normal field
+539dac214 T-D2: limit transverse LF temperature gradients with van Leer means
+4f347a0c7 T-D3: use the BGK two-nu perpendicular LF coefficient
+8018d998c T-D4: include background collisions in the LF stability timestep
+44d74176a T-D5: bound LF stiffness from adjacent density and magnetic magnitudes
+a365ae461 fixup! T-D5: bound LF stiffness from adjacent density and magnetic magnitudes
+899d52015 T-D6: verify refreshed post-RK LF timestep and MPI stage counts
+0cb5071a1 T-E1: verify LF boundary representation guard and point to WO2
+09ec1dd57 T-E2: fence passive CGL pending its thermal-energy redesign
+b587847b6 T-E3: require units for implemented Spitzer conduction
+f5b17dbb9 T-F1: restore isotropic type-2 turbulence forcing for all fluids
+3fbf65ad9 T-F2: apply turbulence forcing once per cycle before RK for all fluids
+5ef68124e T-F3: preserve thermal energy in single- and two-fluid forcing kicks
+1f3afd80e T-F4: use the z parallel axis for all planar turbulence policies
+c7e072337 T-F5: remove the dead paper forcing selector and verify retained smoke cases
+56b29ab31 fixup! T-D2: limit transverse LF temperature gradients with van Leer means
+e54fd18b1 T-G0: remove five superseded local validation files
+bfa5f759d T-G1: remove duplicate speed algebra and synchronize analysis thresholds
+6fb41fd3b T-G2: require resolved wave evolution and noninteger-period convergence
+86545f294 T-G3: resolve one e-folding in LF decay acceptance tests
+be3b4b037 T-G4: verify limiter stress against an independent per-cell relaxation map
+fb1c6fb7c T-G5: measure oblique LF decay globally across blocks and ranks
+9655659fa T-G6: verify resolved LF decay and conservation across refinement interfaces
+e0fb6bc5f fixup! T-G2: require resolved wave evolution and noninteger-period convergence
+ba920f5fb T-G7: document revised CGL LF method and measured acceptance coverage
+eb8194125 T-P1: defer LF communication optimization after non-bitwise SMR boundary results
+896b593aa T-P2: remove redundant LF flux clearing with byte-identical outputs
+f9015432d T-P3: fuse uniform LF primitive and temperature refresh without changing results
+3f0401f39 T-P4: verify the existing flat LF STS update kernel
+2913226ea T-P5: verify existing conditional parabolic register allocation
+7b0e2ec01 fixup! T-P2: remove redundant LF flux clearing with byte-identical outputs
+3f7ca692a fixup! T-G4: verify limiter stress against an independent per-cell relaxation map
+b3c7d60ed fixup! T-C2: apply monotone rates and idempotent configured hard walls
+112d2e605 T-P6: evaluate only the upwind HLLE logarithm with bitwise verification

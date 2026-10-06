@@ -1,0 +1,242 @@
+--- a/src/eos/ideal_c2p_mhd.hpp
++++ b/src/eos/ideal_c2p_mhd.hpp
+@@ -94,8 +94,8 @@
+ KOKKOS_INLINE_FUNCTION
+ Real CGLConservedAnisotropy(const Real rho, const Real p_parallel,
+                             const Real p_perp, const Real bmag) {
+-  const Real log_isotropic_anisotropy = 2.0*log(rho) - 3.0*log(bmag);
+-  return rho*(log(p_perp) - log(p_parallel) + log_isotropic_anisotropy);
++  // SCRATCH Q prototype: IAN stores rho*log(p_perp/p_parallel).
++  return rho*(log(p_perp) - log(p_parallel));
+ }
+ 
+ //----------------------------------------------------------------------------------------
+@@ -109,13 +109,7 @@
+                                                         const Real bmag,
+                                                         Real &p_parallel,
+                                                         Real &p_perp) {
+-  const Real log_isotropic_anisotropy = 2.0*log(rho) - 3.0*log(bmag);
+-  Real log_p_ratio = anisotropy/rho - log_isotropic_anisotropy;
+-  // Preserve exact round trips for isotropic states without a tolerance or limiter.
+-  if (Kokkos::isfinite(anisotropy) &&
+-      anisotropy == rho*log_isotropic_anisotropy) {
+-    log_p_ratio = 0.0;
+-  }
++  const Real log_p_ratio = anisotropy/rho;
+   // Exponentiate only a nonpositive value and recover the smaller pressure by scaling.
+   if (log_p_ratio > 0.0) {
+     const Real inv_p_ratio = exp(-log_p_ratio);
+@@ -387,7 +381,7 @@
+   if (bmag>bfloor) {
+     // Check the logarithms without materializing either overflowing exponential.
+     const Real log_exp = u.mu/original_density;
+-    const Real log_ratio = log_exp - (2.0*log(original_density) - 3.0*log(bmag));
++    const Real log_ratio = log_exp;
+     const Real log_max = log(std::numeric_limits<Real>::max());
+     if (!(original_density > 0.0) || !Kokkos::isfinite(original_density) ||
+         !Kokkos::isfinite(log_exp) || !(log_exp < log_max) ||
+--- a/src/eos/cgl_physics.hpp
++++ b/src/eos/cgl_physics.hpp
+@@ -410,6 +410,21 @@
+       signed_ratio, cparallel, kSqrtTwoOverPi, pperp);
+ }
+ 
++// SCRATCH prototype: 1D-only physical Q source using centered velocity gradients.
++KOKKOS_INLINE_FUNCTION
++Real LogRatioSource1D(const DvceArray5D<Real> &w,
++                     const DvceArray5D<Real> &b,
++                     const int m, const int k, const int j, const int i,
++                     const Real dx, const Real bfloor) {
++  const Real bx = b(m,IBX,k,j,i), by = b(m,IBY,k,j,i), bz = b(m,IBZ,k,j,i);
++  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
++  if (bsqr <= SQR(bfloor)) return 0.0;
++  const Real dvx = (w(m,IVX,k,j,i+1) - w(m,IVX,k,j,i-1))/(2.0*dx);
++  const Real dvy = (w(m,IVY,k,j,i+1) - w(m,IVY,k,j,i-1))/(2.0*dx);
++  const Real dvz = (w(m,IVZ,k,j,i+1) - w(m,IVZ,k,j,i-1))/(2.0*dx);
++  return w(m,IDN,k,j,i)*(3.0*bx*(bx*dvx+by*dvy+bz*dvz)/bsqr-dvx);
++}
++
+ } // namespace cgl
+ 
+ #endif // EOS_CGL_PHYSICS_HPP_
+--- a/src/mhd/rsolvers/hlle_cgl.hpp
++++ b/src/mhd/rsolvers/hlle_cgl.hpp
+@@ -242,25 +242,9 @@
+ 
+     // Treat A/rho as the advected scalar, flux is mass_flx*A/rho from upwind side.
+     Real fdtmp = 0.5*(fl.d  + fr.d ) + (fl.d  - fr.d )*tmp;
+-    // Evaluate only the selected side, preserving the original rho*log()/rho order.
+-    Real anis_upwind;
+-    if (fdtmp >= 0.0) {
+-      if (bmagl > bfloor) {
+-        anis_upwind = wl_idn*log(wl_ipp/wl_ipr*SQR(wl_idn)/(bmagl*SQR(bmagl)));
+-      } else {
+-        const Real bref = fmax(bmagr, bfloor);
+-        anis_upwind = wl_idn*log(SQR(wl_idn)/(bref*SQR(bref)));
+-      }
+-      anis_upwind /= wl_idn;
+-    } else {
+-      if (bmagr > bfloor) {
+-        anis_upwind = wr_idn*log(wr_ipp/wr_ipr*SQR(wr_idn)/(bmagr*SQR(bmagr)));
+-      } else {
+-        const Real bref = fmax(bmagl, bfloor);
+-        anis_upwind = wr_idn*log(SQR(wr_idn)/(bref*SQR(bref)));
+-      }
+-      anis_upwind /= wr_idn;
+-    }
++    // SCRATCH Q prototype: physical log pressure ratio has no B reference.
++    const Real anis_upwind = (fdtmp >= 0.0) ? log(wl_ipp/wl_ipr)
++                                          : log(wr_ipp/wr_ipr);
+     Real fmutmp = fdtmp*anis_upwind;
+ 
+     flx(m,IDN,k,j,i) = fdtmp;
+--- a/src/mhd/rsolvers/llf_mhd_singlestate.hpp
++++ b/src/mhd/rsolvers/llf_mhd_singlestate.hpp
+@@ -111,11 +111,11 @@
+ 
+   if (bmag > eos.bfloor) {
+     fh = 1.0 + (pperp - ppar)/bsq;
+-    u.mu = w.d*log(pperp/ppar*SQR(w.d)/(bmag*bsq));
++    u.mu = w.d*log(pperp/ppar);
+   } else {
+     ppar = TWO_3RDS*pperp + ONE_3RD*ppar;
+     pperp = ppar;
+-    u.mu = w.d*log(SQR(w.d)/(eos.bfloor*SQR(eos.bfloor)));
++    u.mu = 0.0;
+   }
+ 
+   Real vsq = SQR(w.vx) + SQR(w.vy) + SQR(w.vz);
+@@ -161,13 +161,7 @@
+   flux.my = 0.5*(fl.my + fr.my - a*(ur.my - ul.my));
+   flux.mz = 0.5*(fl.mz + fr.mz - a*(ur.mz - ul.mz));
+   flux.e  = 0.5*(fl.e  + fr.e  - a*(ur.e  - ul.e ));
+-  const MHDPrim1D &upwind = (flux.d >= 0.0) ? wl : wr;
+-  const MHDPrim1D &other = (flux.d >= 0.0) ? wr : wl;
+   Real specific_anis = (flux.d >= 0.0) ? ul.mu/ul.d : ur.mu/ur.d;
+-  if (sqrt(SQR(bxi) + SQR(upwind.by) + SQR(upwind.bz)) <= eos.bfloor) {
+-    const Real bref = fmax(sqrt(SQR(bxi) + SQR(other.by) + SQR(other.bz)), eos.bfloor);
+-    specific_anis = log(SQR(upwind.d)/(bref*SQR(bref)));
+-  }
+   flux.mu = flux.d*specific_anis;
+   flux.by = -0.5*(fl.by + fr.by - a*(ur.by - ul.by));
+   flux.bz =  0.5*(fl.bz + fr.bz - a*(ur.bz - ul.bz));
+--- a/src/mhd/mhd_update.cpp
++++ b/src/mhd/mhd_update.cpp
+@@ -18,6 +18,7 @@
+ #include "mesh/mesh.hpp"
+ #include "driver/driver.hpp"
+ #include "eos/eos.hpp"
++#include "eos/cgl_physics.hpp"
+ #include "mhd.hpp"
+ #include "dyn_grmhd/dyn_grmhd.hpp"
+ 
+@@ -200,6 +201,13 @@
+   auto flx2 = uflx.x2f;
+   auto flx3 = uflx.x3f;
+   auto &mbsize = pmy_pack->pmb->mb_size;
++  const auto q_w = w0;
++  const auto q_b = bcc0;
++  const auto q_eos = peos->eos_data;
++  if (q_eos.is_cgl && (multi_d || has_cgl_lf_split)) {
++    std::cerr << "Q prototype supports only 1D pure CGL" << std::endl;
++    std::exit(EXIT_FAILURE);
++  }
+ 
+   if (diagnose_nonfinite_rk_update) {
+     DiagnoseNonfiniteCGLState(stage, "rk-update", "pre-u0", "none",
+@@ -244,6 +252,10 @@
+ 
+     par_for_inner(member, is, ie, [&](const int i) {
+       u0_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - beta_dt*divf(i);
++      if (q_eos.is_cgl && n == IAN) {
++        u0_(m,n,k,j,i) += beta_dt*cgl::LogRatioSource1D(
++            q_w, q_b, m, k, j, i, mbsize.d_view(m).dx1, q_eos.bfloor);
++      }
+     });
+   });
+ 
+--- a/src/mhd/mhd_fofc.cpp
++++ b/src/mhd/mhd_fofc.cpp
+@@ -13,6 +13,7 @@
+ #include "coordinates/cartesian_ks.hpp"
+ #include "coordinates/cell_locations.hpp"
+ #include "eos/eos.hpp"
++#include "eos/cgl_physics.hpp"
+ #include "mhd/rsolvers/llf_mhd_singlestate.hpp"
+ #include "mhd.hpp"
+ 
+@@ -66,6 +67,8 @@
+     auto &utest_ = utest;
+     auto &bcctest_ = bcctest;
+     auto &b1_ = b1;
++    const auto q_w = w0;
++    const auto q_eos = peos->eos_data;
+ 
+     // Index bounds
+     int il = is-1, iu = ie+1, jl = js, ju = je, kl = ks, ku = ke;
+@@ -89,6 +92,10 @@
+           divf += dtodx3*(flx3(m,n,k+1,j,i) - flx3(m,n,k,j,i));
+         }
+         utest_(m,n,k,j,i) = gam0*u0_(m,n,k,j,i) + gam1*u1_(m,n,k,j,i) - divf;
++        if (q_eos.is_cgl && n == IAN) {
++          utest_(m,n,k,j,i) += beta_dt*cgl::LogRatioSource1D(
++              q_w, bcc0_, m, k, j, i, size.d_view(m).dx1, q_eos.bfloor);
++        }
+       }
+ 
+       // Estimate updated cell-centered fields
+--- a/src/pgen/tests/cgl_fofc.cpp
++++ b/src/pgen/tests/cgl_fofc.cpp
+@@ -499,7 +499,10 @@
+ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
+   const std::string mode = pin->GetOrAddString("problem", "test_mode", "flux_mutation");
+   const bool pressure_step = mode == "pressure_step";
+-  const bool weak_field = mode == "weak_field_transport";
++  const bool affine = mode == "q_affine_compression";
++  const bool weak_field = mode == "weak_field_transport" || affine;
++  const int affine_dir = pin->GetOrAddInteger("problem", "q_affine_direction", 0);
++  const Real affine_rate = pin->GetOrAddReal("problem", "q_affine_rate", -0.2);
+   const Real weak_velocity = weak_field ? pin->GetReal("problem", "weak_field_velocity")
+                                         : 0.0;
+   pgen_final_func = pressure_step ? FinalizePressureStep : FinalizeFOFCMutationTest;
+@@ -525,6 +528,10 @@
+   auto w0 = pmhd->w0;
+   auto bcc0 = pmhd->bcc0;
+   auto b0 = pmhd->b0;
++  const Real affine_xmin = pmy_mesh_->mesh_size.x1min;
++  const Real affine_dx = (pmy_mesh_->mesh_size.x1max-affine_xmin)/indcs.nx1;
++  const Real affine_bx = affine_dir == 0 ? 10.0 : 0.0;
++  const Real affine_by = affine_dir == 1 ? 10.0 : (affine_dir == 2 ? 1.0e-12 : 0.0);
+ 
+   par_for("cgl_fofc_e2e_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+@@ -563,18 +570,27 @@
+       bcc0(m,IBX,k,j,i) = bcc0(m,IBZ,k,j,i) = 0.0;
+       bcc0(m,IBY,k,j,i) = weak_side ? 1.0e-12 : 1.0;
+     }
++    if (affine) {
++      w0(m,IDN,k,j,i) = 1.0;
++      w0(m,IVX,k,j,i) = affine_rate*(affine_xmin+(i-is+0.5)*affine_dx);
++      w0(m,IVY,k,j,i) = w0(m,IVZ,k,j,i) = 0.0;
++      w0(m,IPR,k,j,i) = w0(m,IPP,k,j,i) = 1.0;
++      bcc0(m,IBX,k,j,i) = affine_bx;
++      bcc0(m,IBY,k,j,i) = affine_by;
++      bcc0(m,IBZ,k,j,i) = 0.0;
++    }
+   });
+ 
+   par_for("cgl_fofc_e2e_b1", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie+1,
+   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+-    b0.x1f(m,k,j,i) = weak_field ? 0.0 : (pressure_step ? 2.0 : 0.43);
++    b0.x1f(m,k,j,i) = affine ? affine_bx : (weak_field ? 0.0 : (pressure_step ? 2.0 : 0.43));
+   });
+   par_for("cgl_fofc_e2e_b2", DevExeSpace(), 0, nmb-1, ks, ke, js, je+1, is, ie,
+   KOKKOS_LAMBDA(int m, int k, int j, int i) {
+     b0.x2f(m,k,j,i) = pressure_step ? 0.0 : -0.31;
+     if (weak_field) {
+       const bool weak_side = (i <= (is + ie)/2) == (weak_velocity > 0.0);
+-      b0.x2f(m,k,j,i) = weak_side ? 1.0e-12 : 1.0;
++      b0.x2f(m,k,j,i) = affine ? affine_by : (weak_side ? 1.0e-12 : 1.0);
+     }
+   });
+   par_for("cgl_fofc_e2e_b3", DevExeSpace(), 0, nmb-1, ks, ke+1, js, je, is, ie,
