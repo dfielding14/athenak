@@ -1,0 +1,86 @@
+{
+  "baseline_git": "9a4030b09307bc43865d5e597638f8645a6388f8",
+  "note": "Isolated builds add forwarding overloads for unchanged baseline ABI callers; selected-range numerical bodies are unchanged. Production uses default arguments after a full consumer rebuild. Combined Task0/1/3/6/5 full builds exercise the production API.",
+  "builds": [
+    {
+      "backend": "cpu",
+      "variant": "final_refill",
+      "baseline_build": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/baseline-cpu",
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/cpu/final_refill/athena-cpu-final_refill",
+      "binary_sha256": "447448d1b3b791a5875b37afc238ce99ad9119dd878c5e24f3defa8e37825ef7",
+      "source_hashes": {
+        "src/mhd/mhd_tasks.cpp": "cca4d78d6093eae2898c4f2e707bfc164c9251f0979ffbbbf0086fa3bb2c9c23"
+      }
+    },
+    {
+      "backend": "cpu",
+      "variant": "task3",
+      "baseline_build": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/baseline-cpu",
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/cpu/task3/athena-cpu-task3",
+      "binary_sha256": "05e649a7f0f55759bd1761a766403558b9c4b3d2ed787e7bb4464d69e586348f",
+      "source_hashes": {
+        "src/bvals/bvals.hpp": "f2d3cdf6640211c3bce48e05a5cd40910636618121907b2bb5caf69f95231ba4",
+        "src/bvals/bvals_cc.cpp": "c3abaa5f1b81fc50c576e8a3733efcdaf9d6e505f2688d41b888f118695d1b03",
+        "src/bvals/bvals_tasks.cpp": "6bc99f38ba6e0906f5342738715344704db568bff27cbb6d119034cc517faaa4",
+        "src/bvals/flux_correct_cc.cpp": "5068999166c4b36687b04da0f1f0d281dafb2eac8c3c9199bc1705b023454e06",
+        "src/mhd/mhd_tasks.cpp": "59755768ff6d4e718f158d81f7dd94a21b94d35b7389321596705e3cfbdadd9a"
+      }
+    },
+    {
+      "backend": "cpu",
+      "variant": "task3_trace",
+      "baseline_build": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/baseline-cpu",
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/cpu/task3_trace/athena-cpu-task3_trace",
+      "binary_sha256": "41e10c0e88e46698604c5192e6aa9fbc4bf277dd1e0e12be40c86e2feb3ef614",
+      "source_hashes": {
+        "src/bvals/bvals.hpp": "f2d3cdf6640211c3bce48e05a5cd40910636618121907b2bb5caf69f95231ba4",
+        "src/bvals/bvals_cc.cpp": "c3abaa5f1b81fc50c576e8a3733efcdaf9d6e505f2688d41b888f118695d1b03",
+        "src/bvals/bvals_tasks.cpp": "6bc99f38ba6e0906f5342738715344704db568bff27cbb6d119034cc517faaa4",
+        "src/bvals/flux_correct_cc.cpp": "5068999166c4b36687b04da0f1f0d281dafb2eac8c3c9199bc1705b023454e06",
+        "src/mhd/cgl_lf_p1_trace.hpp": "a5f2f5b951f709833ba542cc959dff5b296f12456389dda16c50946f91022a0b",
+        "src/mhd/mhd_sts.cpp": "2c3b3bd1de50c0bd508b009ba509c29cbeddc95de5a9618869241bd15608bbd8",
+        "src/mhd/mhd_tasks.cpp": "2a65f3e68b79944d402470566aeef3c565cfc0819e4d7285c82192650a4df94a"
+      }
+    },
+    {
+      "backend": "hip",
+      "variant": "final_refill",
+      "baseline_build": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/baseline-hip-nocray",
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/final_refill/athena-hip-final_refill",
+      "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+      "source_hashes": {
+        "src/mhd/mhd_tasks.cpp": "cca4d78d6093eae2898c4f2e707bfc164c9251f0979ffbbbf0086fa3bb2c9c23"
+      }
+    },
+    {
+      "backend": "hip",
+      "variant": "task3",
+      "baseline_build": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/baseline-hip-nocray",
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/task3/athena-hip-task3",
+      "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+      "source_hashes": {
+        "src/bvals/bvals.hpp": "f2d3cdf6640211c3bce48e05a5cd40910636618121907b2bb5caf69f95231ba4",
+        "src/bvals/bvals_cc.cpp": "c3abaa5f1b81fc50c576e8a3733efcdaf9d6e505f2688d41b888f118695d1b03",
+        "src/bvals/bvals_tasks.cpp": "6bc99f38ba6e0906f5342738715344704db568bff27cbb6d119034cc517faaa4",
+        "src/bvals/flux_correct_cc.cpp": "5068999166c4b36687b04da0f1f0d281dafb2eac8c3c9199bc1705b023454e06",
+        "src/mhd/mhd_tasks.cpp": "59755768ff6d4e718f158d81f7dd94a21b94d35b7389321596705e3cfbdadd9a"
+      }
+    },
+    {
+      "backend": "hip",
+      "variant": "task3_trace",
+      "baseline_build": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/build/baseline-hip-nocray",
+      "binary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/task3_trace/athena-hip-task3_trace",
+      "binary_sha256": "8ad325c96f8b843c86936c9156e75f76f0a1dc6d1f768ff465466b539120d47a",
+      "source_hashes": {
+        "src/bvals/bvals.hpp": "f2d3cdf6640211c3bce48e05a5cd40910636618121907b2bb5caf69f95231ba4",
+        "src/bvals/bvals_cc.cpp": "c3abaa5f1b81fc50c576e8a3733efcdaf9d6e505f2688d41b888f118695d1b03",
+        "src/bvals/bvals_tasks.cpp": "6bc99f38ba6e0906f5342738715344704db568bff27cbb6d119034cc517faaa4",
+        "src/bvals/flux_correct_cc.cpp": "5068999166c4b36687b04da0f1f0d281dafb2eac8c3c9199bc1705b023454e06",
+        "src/mhd/cgl_lf_p1_trace.hpp": "a5f2f5b951f709833ba542cc959dff5b296f12456389dda16c50946f91022a0b",
+        "src/mhd/mhd_sts.cpp": "2c3b3bd1de50c0bd508b009ba509c29cbeddc95de5a9618869241bd15608bbd8",
+        "src/mhd/mhd_tasks.cpp": "2a65f3e68b79944d402470566aeef3c565cfc0819e4d7285c82192650a4df94a"
+      }
+    }
+  ]
+}

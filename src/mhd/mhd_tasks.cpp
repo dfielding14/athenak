@@ -302,13 +302,15 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
   TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_init_recv);
-  TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
+  // Shearing remaps all variables from the ordinary exchange's ghost zones.
+  const int nvar = (has_cgl_lf_split && psbox_u == nullptr) ? 2 : nmhd+nscalars;
+  TaskStatus tstat = pbval_u->InitRecv(nvar);
   if (tstat != TaskStatus::complete) {
     TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_u", stage);
     return tstat;
   }
   if (pmy_pack->pmesh->multilevel) {
-    tstat = pbval_u->InitFluxRecv(nmhd+nscalars);
+    tstat = pbval_u->InitFluxRecv(nvar);
     if (tstat != TaskStatus::complete) {
       TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_flux_u", stage);
       return tstat;
@@ -544,7 +546,10 @@ TaskStatus MHD::SendFlux(Driver *pdrive, int stage) {
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel)  {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_flux);
-    tstat = pbval_u->PackAndSendFluxCC(uflx);
+    const bool lf_subset = psbox_u == nullptr &&
+        cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+    tstat = pbval_u->PackAndSendFluxCC(
+        uflx, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
   }
   return tstat;
 }
@@ -559,7 +564,10 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
   // Only execute BoundaryValues function with SMR/SMR
   if (pmy_pack->pmesh->multilevel) {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_flux);
-    tstat = pbval_u->RecvAndUnpackFluxCC(uflx);
+    const bool lf_subset = psbox_u == nullptr &&
+        cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+    tstat = pbval_u->RecvAndUnpackFluxCC(
+        uflx, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
   }
   return tstat;
 }
@@ -796,7 +804,10 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
 
 TaskStatus MHD::SendU(Driver *pdrive, int stage) {
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_u);
-  TaskStatus tstat = pbval_u->PackAndSendCC(u0, coarse_u0);
+  const bool lf_subset = psbox_u == nullptr &&
+      cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+  TaskStatus tstat = pbval_u->PackAndSendCC(
+      u0, coarse_u0, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
   return tstat;
 }
 
@@ -806,7 +817,10 @@ TaskStatus MHD::SendU(Driver *pdrive, int stage) {
 
 TaskStatus MHD::RecvU(Driver *pdrive, int stage) {
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_u);
-  TaskStatus tstat = pbval_u->RecvAndUnpackCC(u0, coarse_u0);
+  const bool lf_subset = psbox_u == nullptr &&
+      cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+  TaskStatus tstat = pbval_u->RecvAndUnpackCC(
+      u0, coarse_u0, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
   return tstat;
 }
 

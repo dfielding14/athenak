@@ -1,0 +1,145 @@
+{
+  "raw_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research",
+  "artifacts": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-cpu/state-comparison-1rank.json",
+      "sha256": "9c51c76ab527e2534d00eff570540bc87597a717d64f9a4fbe3439a9d0368b79",
+      "bytes": 81,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-cpu/flux-comparison-1rank.json",
+      "sha256": "1d735545a0156252e09d541d29039760b9dd6ff8178f469678c7e60e83a60cee",
+      "bytes": 80,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-cpu/state-comparison-4rank.json",
+      "sha256": "180526bd0a4b2cb9d9ee4c75d53cc180317bda720405482c5477322c00a439b4",
+      "bytes": 81,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-cpu/flux-comparison-4rank.json",
+      "sha256": "03bafef06c3bf9b7bdabe274fc72f8eef6116ff1e5f2d405fa9bcb2d63b00648",
+      "bytes": 80,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-cpu/all-output-comparisons.json",
+      "sha256": "4268d361d57e9f3c60c1e7e1f1d60d09a1e4080ff2be5f5b3feaac35f1b2db15",
+      "bytes": 27869,
+      "purpose": "retained raw evidence",
+      "archive": "cpu-output-hashes.json"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-hip/state-comparison-1rank.json",
+      "sha256": "9c51c76ab527e2534d00eff570540bc87597a717d64f9a4fbe3439a9d0368b79",
+      "bytes": 81,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-hip/flux-comparison-1rank.json",
+      "sha256": "1d735545a0156252e09d541d29039760b9dd6ff8178f469678c7e60e83a60cee",
+      "bytes": 80,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-hip/state-comparison-4rank.json",
+      "sha256": "180526bd0a4b2cb9d9ee4c75d53cc180317bda720405482c5477322c00a439b4",
+      "bytes": 81,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-hip/flux-comparison-4rank.json",
+      "sha256": "03bafef06c3bf9b7bdabe274fc72f8eef6116ff1e5f2d405fa9bcb2d63b00648",
+      "bytes": 80,
+      "purpose": "isolated exact trace comparison"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task3-hip/all-output-comparisons.json",
+      "sha256": "588717b2847ff0f34b9198a5f92fa0070da2670e1a8bcd3b14db382405288c0b",
+      "bytes": 27869,
+      "purpose": "retained raw evidence",
+      "archive": "hip-output-hashes.json"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/hip-corrected/skip-bc-trace-comparison-1rank.json",
+      "sha256": "3bc4bbb5caa791d9a39c39641d9f9ffc3013db0b84de84b6f0c762bb8a2b300a",
+      "bytes": 1252218,
+      "purpose": "rejected magnetic-BC negative control"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/hip-corrected/skip-bc-flux-comparison-1rank.json",
+      "sha256": "af34e54539c48937fcc8b9e7963984c8d548e85c9dd29a02ff516c5945364486",
+      "bytes": 38458,
+      "purpose": "rejected magnetic-BC negative control"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/P1_FINDINGS.md",
+      "sha256": "935a7ce8f93c9ecbce98d281451f523180ca087bc731c59f144fe7c2180e3aac",
+      "bytes": 5935,
+      "purpose": "source for negative-control.json"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/results.json",
+      "sha256": "2201ae8afc8fcc103ca71a471195c56e028b2ddfe20b36fb648a225502f658eb",
+      "bytes": 384529,
+      "purpose": "source for timing-summary.json"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/run_optimization_window.py",
+      "sha256": "fc545d8af27f6fef1e5db3406f75d26c9dcd0c1236b693371e3b3234dea556e6",
+      "bytes": 14996,
+      "purpose": "source for timing-summary.json"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/cpu/final_refill/manifest.json",
+      "sha256": "0e8334823c7f290861ef9a4b18ad42e28c2edc77d36689a49d250248ff611f5e",
+      "bytes": 12311,
+      "purpose": "complete original compile/link and object manifest"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/cpu/task3/manifest.json",
+      "sha256": "c4de1a2b53a0043db8a4640539b626e7325b0c914afafeb1c06006739f09b28d",
+      "bytes": 19033,
+      "purpose": "complete original compile/link and object manifest"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/cpu/task3_trace/manifest.json",
+      "sha256": "01c38af7da95e126442390fe04ef77410ac22e42c27048e49e7c36040e155724",
+      "bytes": 21521,
+      "purpose": "complete original compile/link and object manifest"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/final_refill/manifest.json",
+      "sha256": "a555b070de76036a3f88de097354812d3e4bb2bf52be9d7c0ea7e67e1edf2f39",
+      "bytes": 13165,
+      "purpose": "complete original compile/link and object manifest"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/task3/manifest.json",
+      "sha256": "dd99be70d01d1738c3add940bc2f323ee346e02e731f304600efb8ac2dd6dc9a",
+      "bytes": 21018,
+      "purpose": "complete original compile/link and object manifest"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/build/hip/task3_trace/manifest.json",
+      "sha256": "a1ae9ea48f46624d8785dcbd4a0e362dce8be2c1918e480255d2fda6cadcb057",
+      "bytes": 23883,
+      "purpose": "complete original compile/link and object manifest"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/task3.after-refill.patch",
+      "sha256": "accaf5fd08602b4905ccede591f647a4f8f0d5054c5abbac4229d8f249754b56",
+      "bytes": 17431,
+      "purpose": "tested production source/regression patch; applied by the task commit"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/TASK3_REPORT.md",
+      "sha256": "cc4b6df5d044a46070126b62811c450f253f5df773e2e0bafbd1f497503a7367",
+      "bytes": 3476,
+      "purpose": "source of adapted durable report"
+    }
+  ]
+}

@@ -1,0 +1,66 @@
+[
+  {
+    "backend": "cpu",
+    "ranks": 1,
+    "kind": "state",
+    "snapshots_compared": 110,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "cpu",
+    "ranks": 1,
+    "kind": "flux",
+    "snapshots_compared": 12,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "cpu",
+    "ranks": 4,
+    "kind": "state",
+    "snapshots_compared": 440,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "cpu",
+    "ranks": 4,
+    "kind": "flux",
+    "snapshots_compared": 48,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "hip",
+    "ranks": 1,
+    "kind": "state",
+    "snapshots_compared": 110,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "hip",
+    "ranks": 1,
+    "kind": "flux",
+    "snapshots_compared": 12,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "hip",
+    "ranks": 4,
+    "kind": "state",
+    "snapshots_compared": 440,
+    "different_snapshots": 0,
+    "differences": []
+  },
+  {
+    "backend": "hip",
+    "ranks": 4,
+    "kind": "flux",
+    "snapshots_compared": 48,
+    "different_snapshots": 0,
+    "differences": []
+  }
+]

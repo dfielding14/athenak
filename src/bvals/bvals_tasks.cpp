@@ -48,6 +48,7 @@ TaskStatus MeshBoundaryValues::InitRecv(const int nvars) {
           int tag = CreateBvals_MPI_Tag(m, n);
 
           // calculate amount of data to be passed, get pointer to variables
+          // nvars is the active packed count, which may be less than buffer capacity.
           int data_size = nvars;
           if ( nghbr.h_view(m,n).lev < pmy_pack->pmb->mb_lev.h_view(m) ) {
             data_size *= recvbuf[n].icoar_ndat;

@@ -32,6 +32,13 @@ are synchronized, and a failed fresh-CFL or admissibility trial rolls back.
 The [Task2 report](validation/wo2/task2/README.md) records second-order smooth
 agreement, default-off byte identity and measured eligible-workload savings.
 
+Task 3 is adapted: once-per-sweep conversion already existed; compact multilevel
+LF cell and coarse/fine flux messages now carry only IEN/IAN. Required magnetic
+communication, boundary fills and projections remain. With one scalar the
+selected messages shrink by 71.43%, while physical states stay bitwise identical
+on CPU/HIP and one/four ranks. Paired GPU timings show no consistent speedup;
+see the [Task 3 report](validation/wo2/task3/README.md).
+
 The following sections preserve the WO1 implementation record.
 
 

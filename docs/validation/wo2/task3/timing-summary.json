@@ -1,0 +1,1456 @@
+{
+  "slurm_job": "5628672",
+  "reference": "Task0 refill only",
+  "candidate": "Task3 compact CC and coarse/fine flux communication",
+  "definition": "Driver timer starts after setup and initial outputs; includes evolution, in-run/final outputs and final problem diagnostics. Launch-inclusive times are separate.",
+  "protocol": "One warmup per binary then three paired alternating repeats; 12 fixed cycles; unprofiled exclusive application window.",
+  "conclusion": "2/7 message volume with one scalar; no consistent application throughput gain.",
+  "cases": {
+    "smr-safe-full-1rank": {
+      "median_seconds_per_cycle": {
+        "refill": 0.10377483333333333,
+        "compact": 0.10454716666666668
+      },
+      "reference_over_candidate": 0.9926125847504236,
+      "runs": [
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.8345738109201193,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/refill/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.325198,
+          "solver_seconds_per_cycle": 0.11043316666666668,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 3.240339578827843,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/compact/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.26805,
+          "solver_seconds_per_cycle": 0.10567083333333332,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.8786851197946817,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/compact/r0",
+          "cycles": 12,
+          "solver_seconds": 1.265195,
+          "solver_seconds_per_cycle": 0.10543291666666667,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 3.320423325058073,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/refill/r0",
+          "cycles": 12,
+          "solver_seconds": 1.245298,
+          "solver_seconds_per_cycle": 0.10377483333333333,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.7806768289301544,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/refill/r1",
+          "cycles": 12,
+          "solver_seconds": 1.192808,
+          "solver_seconds_per_cycle": 0.09940066666666668,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.606415218906477,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/compact/r1",
+          "cycles": 12,
+          "solver_seconds": 1.254566,
+          "solver_seconds_per_cycle": 0.10454716666666668,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.9290357809513807,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/compact/r2",
+          "cycles": 12,
+          "solver_seconds": 1.192903,
+          "solver_seconds_per_cycle": 0.09940858333333334,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 2
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.86970555386506,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-1rank/refill/r2",
+          "cycles": 12,
+          "solver_seconds": 1.325814,
+          "solver_seconds_per_cycle": 0.1104845,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 2
+        }
+      ],
+      "comparisons": {
+        "warmup": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        },
+        "r0": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        },
+        "r1": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        },
+        "r2": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        }
+      },
+      "raw_history_identity": [
+        {
+          "pair": "warmup",
+          "file": "smr.mhd.hst",
+          "sha256": "98ca707bb641e0e56c0a8bcfbe5f908da60df482440e2af209085a9ffe053fdd",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr.mhd.hst",
+          "sha256": "98ca707bb641e0e56c0a8bcfbe5f908da60df482440e2af209085a9ffe053fdd",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr.mhd.hst",
+          "sha256": "98ca707bb641e0e56c0a8bcfbe5f908da60df482440e2af209085a9ffe053fdd",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr.mhd.hst",
+          "sha256": "98ca707bb641e0e56c0a8bcfbe5f908da60df482440e2af209085a9ffe053fdd",
+          "raw_equal": true
+        }
+      ]
+    },
+    "smr-safe-full-4rank": {
+      "median_seconds_per_cycle": {
+        "refill": 0.09190016666666667,
+        "compact": 0.0889175
+      },
+      "reference_over_candidate": 1.0335442029596724,
+      "runs": [
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.6500392300076783,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/refill/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.139785,
+          "solver_seconds_per_cycle": 0.09498208333333334,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.766452785115689,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/compact/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.148664,
+          "solver_seconds_per_cycle": 0.09572199999999999,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.56655312795192,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/compact/r0",
+          "cycles": 12,
+          "solver_seconds": 1.080919,
+          "solver_seconds_per_cycle": 0.09007658333333333,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.6251832898706198,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/refill/r0",
+          "cycles": 12,
+          "solver_seconds": 1.102802,
+          "solver_seconds_per_cycle": 0.09190016666666667,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.6698289699852467,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/refill/r1",
+          "cycles": 12,
+          "solver_seconds": 1.147982,
+          "solver_seconds_per_cycle": 0.09566516666666668,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.6164794811047614,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/compact/r1",
+          "cycles": 12,
+          "solver_seconds": 1.056272,
+          "solver_seconds_per_cycle": 0.08802266666666668,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.7040868191979825,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/compact/r2",
+          "cycles": 12,
+          "solver_seconds": 1.06701,
+          "solver_seconds_per_cycle": 0.0889175,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 2
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.6560263209976256,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "4057c7029819bbd4ffc92b3699cb59cff82c79199f09c3abfc09e5f09df60627",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr-safe-full-4rank/refill/r2",
+          "cycles": 12,
+          "solver_seconds": 1.081005,
+          "solver_seconds_per_cycle": 0.09008375,
+          "lf_cell_stages": 430080.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 2
+        }
+      ],
+      "comparisons": {
+        "warmup": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        },
+        "r0": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        },
+        "r1": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        },
+        "r2": {
+          "failures": [],
+          "files": 5,
+          "all_equal": true
+        }
+      },
+      "raw_history_identity": [
+        {
+          "pair": "warmup",
+          "file": "smr.mhd.hst",
+          "sha256": "1bc1dd37aa09e040b90f84dee902643a2fe5486437782b460406156567188428",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr.mhd.hst",
+          "sha256": "1bc1dd37aa09e040b90f84dee902643a2fe5486437782b460406156567188428",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr.mhd.hst",
+          "sha256": "1bc1dd37aa09e040b90f84dee902643a2fe5486437782b460406156567188428",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr.mhd.hst",
+          "sha256": "1bc1dd37aa09e040b90f84dee902643a2fe5486437782b460406156567188428",
+          "raw_equal": true
+        }
+      ]
+    },
+    "smr_varied-safe-full-1rank": {
+      "median_seconds_per_cycle": {
+        "refill": 0.09340124999999999,
+        "compact": 0.09414033333333333
+      },
+      "reference_over_candidate": 0.9921491319696482,
+      "runs": [
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.465026058955118,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/refill/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.170438,
+          "solver_seconds_per_cycle": 0.09753650000000001,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4161787522025406,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/compact/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.093684,
+          "solver_seconds_per_cycle": 0.09114033333333334,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.454721584916115,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/compact/r0",
+          "cycles": 12,
+          "solver_seconds": 1.110544,
+          "solver_seconds_per_cycle": 0.09254533333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4631306810770184,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/refill/r0",
+          "cycles": 12,
+          "solver_seconds": 1.127253,
+          "solver_seconds_per_cycle": 0.09393775,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4403300390113145,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/refill/r1",
+          "cycles": 12,
+          "solver_seconds": 1.120815,
+          "solver_seconds_per_cycle": 0.09340124999999999,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4477179888635874,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/compact/r1",
+          "cycles": 12,
+          "solver_seconds": 1.129684,
+          "solver_seconds_per_cycle": 0.09414033333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.465530035085976,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/compact/r2",
+          "cycles": 12,
+          "solver_seconds": 1.144024,
+          "solver_seconds_per_cycle": 0.09533533333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 2
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4058656620327383,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-1rank/refill/r2",
+          "cycles": 12,
+          "solver_seconds": 1.083741,
+          "solver_seconds_per_cycle": 0.09031175000000001,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 2
+        }
+      ],
+      "comparisons": {
+        "warmup": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r0": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r1": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r2": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        }
+      },
+      "raw_history_identity": [
+        {
+          "pair": "warmup",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "7d4279622b2b3436f270319d21ad4d06b6de16cbad968a346add4225bba3dfa7",
+          "raw_equal": true
+        },
+        {
+          "pair": "warmup",
+          "file": "smr_varied.user.hst",
+          "sha256": "9b466ab21ab8c32fcb482364a28a43d1e6b3402d3ac421bb50b146952459092a",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_varied.user.hst",
+          "sha256": "9b466ab21ab8c32fcb482364a28a43d1e6b3402d3ac421bb50b146952459092a",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "7d4279622b2b3436f270319d21ad4d06b6de16cbad968a346add4225bba3dfa7",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_varied.user.hst",
+          "sha256": "9b466ab21ab8c32fcb482364a28a43d1e6b3402d3ac421bb50b146952459092a",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "7d4279622b2b3436f270319d21ad4d06b6de16cbad968a346add4225bba3dfa7",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_varied.user.hst",
+          "sha256": "9b466ab21ab8c32fcb482364a28a43d1e6b3402d3ac421bb50b146952459092a",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "7d4279622b2b3436f270319d21ad4d06b6de16cbad968a346add4225bba3dfa7",
+          "raw_equal": true
+        }
+      ]
+    },
+    "smr_varied-safe-full-4rank": {
+      "median_seconds_per_cycle": {
+        "refill": 0.08729308333333334,
+        "compact": 0.08597241666666666
+      },
+      "reference_over_candidate": 1.0153615161451979,
+      "runs": [
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.88647543406114,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/refill/warmup",
+          "cycles": 12,
+          "solver_seconds": 0.9731919,
+          "solver_seconds_per_cycle": 0.081099325,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.5705888271331787,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/compact/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.041704,
+          "solver_seconds_per_cycle": 0.08680866666666666,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.8082866431213915,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/compact/r0",
+          "cycles": 12,
+          "solver_seconds": 1.031669,
+          "solver_seconds_per_cycle": 0.08597241666666666,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.651121760951355,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/refill/r0",
+          "cycles": 12,
+          "solver_seconds": 1.047517,
+          "solver_seconds_per_cycle": 0.08729308333333334,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.720660940045491,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/refill/r1",
+          "cycles": 12,
+          "solver_seconds": 1.004044,
+          "solver_seconds_per_cycle": 0.08367033333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.5382730609271675,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/compact/r1",
+          "cycles": 12,
+          "solver_seconds": 1.055385,
+          "solver_seconds_per_cycle": 0.08794875,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.5090629779733717,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/compact/r2",
+          "cycles": 12,
+          "solver_seconds": 1.027659,
+          "solver_seconds_per_cycle": 0.08563825000000001,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 2
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.5978050250560045,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "33d6733f3612e68094cbab23d7b4f62b51649c474cb381167b69fa3dfc193b6a",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_varied-safe-full-4rank/refill/r2",
+          "cycles": 12,
+          "solver_seconds": 1.08254,
+          "solver_seconds_per_cycle": 0.09021166666666668,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 2
+        }
+      ],
+      "comparisons": {
+        "warmup": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r0": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r1": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r2": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        }
+      },
+      "raw_history_identity": [
+        {
+          "pair": "warmup",
+          "file": "smr_varied.user.hst",
+          "sha256": "39b1ab967da6b7424428342d3ee2d5355c80b80106b89fb6e53a11608cc7e12c",
+          "raw_equal": true
+        },
+        {
+          "pair": "warmup",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "170242070d754519c1b525d9e2505cc4c39caf19a0b722ce64a004df7fb9b485",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_varied.user.hst",
+          "sha256": "39b1ab967da6b7424428342d3ee2d5355c80b80106b89fb6e53a11608cc7e12c",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "170242070d754519c1b525d9e2505cc4c39caf19a0b722ce64a004df7fb9b485",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_varied.user.hst",
+          "sha256": "39b1ab967da6b7424428342d3ee2d5355c80b80106b89fb6e53a11608cc7e12c",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "170242070d754519c1b525d9e2505cc4c39caf19a0b722ce64a004df7fb9b485",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_varied.mhd.hst",
+          "sha256": "170242070d754519c1b525d9e2505cc4c39caf19a0b722ce64a004df7fb9b485",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_varied.user.hst",
+          "sha256": "39b1ab967da6b7424428342d3ee2d5355c80b80106b89fb6e53a11608cc7e12c",
+          "raw_equal": true
+        }
+      ]
+    },
+    "smr_outflow-safe-full-1rank": {
+      "median_seconds_per_cycle": {
+        "refill": 0.0954145,
+        "compact": 0.09201791666666666
+      },
+      "reference_over_candidate": 1.0369121955416292,
+      "runs": [
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.482613085070625,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/refill/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.132083,
+          "solver_seconds_per_cycle": 0.09434025,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4146316389087588,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/compact/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.126227,
+          "solver_seconds_per_cycle": 0.09385225000000001,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.452688158955425,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/compact/r0",
+          "cycles": 12,
+          "solver_seconds": 1.073458,
+          "solver_seconds_per_cycle": 0.08945483333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.3698383539449424,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/refill/r0",
+          "cycles": 12,
+          "solver_seconds": 1.130875,
+          "solver_seconds_per_cycle": 0.09423958333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.4498759310226887,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/refill/r1",
+          "cycles": 12,
+          "solver_seconds": 1.144974,
+          "solver_seconds_per_cycle": 0.0954145,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.426347522996366,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/compact/r1",
+          "cycles": 12,
+          "solver_seconds": 1.117118,
+          "solver_seconds_per_cycle": 0.09309316666666667,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.461897207191214,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/compact/r2",
+          "cycles": 12,
+          "solver_seconds": 1.104215,
+          "solver_seconds_per_cycle": 0.09201791666666666,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 2
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.572079442208633,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-1rank/refill/r2",
+          "cycles": 12,
+          "solver_seconds": 1.171298,
+          "solver_seconds_per_cycle": 0.09760816666666666,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 2
+        }
+      ],
+      "comparisons": {
+        "warmup": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r0": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r1": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r2": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        }
+      },
+      "raw_history_identity": [
+        {
+          "pair": "warmup",
+          "file": "smr_outflow.user.hst",
+          "sha256": "c374931658520b77f9b916aebde18038caa6853912e799e1f5b8bce687c322fa",
+          "raw_equal": true
+        },
+        {
+          "pair": "warmup",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "17d5ed9ac4f6587c1f5a364224ecb3c65b0254e4430b0a37410525f62ee05446",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "17d5ed9ac4f6587c1f5a364224ecb3c65b0254e4430b0a37410525f62ee05446",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_outflow.user.hst",
+          "sha256": "c374931658520b77f9b916aebde18038caa6853912e799e1f5b8bce687c322fa",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "17d5ed9ac4f6587c1f5a364224ecb3c65b0254e4430b0a37410525f62ee05446",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_outflow.user.hst",
+          "sha256": "c374931658520b77f9b916aebde18038caa6853912e799e1f5b8bce687c322fa",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "17d5ed9ac4f6587c1f5a364224ecb3c65b0254e4430b0a37410525f62ee05446",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_outflow.user.hst",
+          "sha256": "c374931658520b77f9b916aebde18038caa6853912e799e1f5b8bce687c322fa",
+          "raw_equal": true
+        }
+      ]
+    },
+    "smr_outflow-safe-full-4rank": {
+      "median_seconds_per_cycle": {
+        "refill": 0.08841466666666666,
+        "compact": 0.08842716666666667
+      },
+      "reference_over_candidate": 0.9998586407269258,
+      "runs": [
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.578381111845374,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/refill/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.067512,
+          "solver_seconds_per_cycle": 0.08895933333333333,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.5563514481764287,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/compact/warmup",
+          "cycles": 12,
+          "solver_seconds": 1.054875,
+          "solver_seconds_per_cycle": 0.08790625,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": -1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.5262079718522727,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/compact/r0",
+          "cycles": 12,
+          "solver_seconds": 1.061126,
+          "solver_seconds_per_cycle": 0.08842716666666667,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.59733708598651,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/refill/r0",
+          "cycles": 12,
+          "solver_seconds": 1.060976,
+          "solver_seconds_per_cycle": 0.08841466666666666,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 0
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.8845103308558464,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/refill/r1",
+          "cycles": 12,
+          "solver_seconds": 1.049915,
+          "solver_seconds_per_cycle": 0.08749291666666666,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.573920268099755,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/compact/r1",
+          "cycles": 12,
+          "solver_seconds": 1.072754,
+          "solver_seconds_per_cycle": 0.08939616666666667,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 1
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 4.509674745146185,
+          "binary_sha256": "6d209cb7a2d53e313d1bf884a6a68ea6ce133550fdf31a936a3d40ce665e348c",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/compact/r2",
+          "cycles": 12,
+          "solver_seconds": 1.058558,
+          "solver_seconds_per_cycle": 0.08821316666666668,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "compact",
+          "repeat": 2
+        },
+        {
+          "returncode": 0,
+          "launch_inclusive_seconds": 2.595239980146289,
+          "binary_sha256": "19d99c72ea801b3e2b888d05b2d06fe1592d6f8ee7447489541e81ed03a37772",
+          "input_sha256": "219494c47f5cbae4beb3465dec0dbe39a5ad078d31736c58d5474f5c5f3db5d3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task3-time-5628672/smr_outflow-safe-full-4rank/refill/r2",
+          "cycles": 12,
+          "solver_seconds": 1.094594,
+          "solver_seconds_per_cycle": 0.09121616666666667,
+          "lf_cell_stages": 192000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          },
+          "binary": "refill",
+          "repeat": 2
+        }
+      ],
+      "comparisons": {
+        "warmup": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r0": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r1": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        },
+        "r2": {
+          "failures": [],
+          "files": 6,
+          "all_equal": true
+        }
+      },
+      "raw_history_identity": [
+        {
+          "pair": "warmup",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "87ede3483fada753bda936a4319a08875d44effe4ec29906c0179c65624e23e6",
+          "raw_equal": true
+        },
+        {
+          "pair": "warmup",
+          "file": "smr_outflow.user.hst",
+          "sha256": "6ef184f6de5cceacadb66e8fff5b6e1dc6af704f2df87917890147b4adf284be",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "87ede3483fada753bda936a4319a08875d44effe4ec29906c0179c65624e23e6",
+          "raw_equal": true
+        },
+        {
+          "pair": "r0",
+          "file": "smr_outflow.user.hst",
+          "sha256": "6ef184f6de5cceacadb66e8fff5b6e1dc6af704f2df87917890147b4adf284be",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "87ede3483fada753bda936a4319a08875d44effe4ec29906c0179c65624e23e6",
+          "raw_equal": true
+        },
+        {
+          "pair": "r1",
+          "file": "smr_outflow.user.hst",
+          "sha256": "6ef184f6de5cceacadb66e8fff5b6e1dc6af704f2df87917890147b4adf284be",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_outflow.user.hst",
+          "sha256": "6ef184f6de5cceacadb66e8fff5b6e1dc6af704f2df87917890147b4adf284be",
+          "raw_equal": true
+        },
+        {
+          "pair": "r2",
+          "file": "smr_outflow.mhd.hst",
+          "sha256": "87ede3483fada753bda936a4319a08875d44effe4ec29906c0179c65624e23e6",
+          "raw_equal": true
+        }
+      ]
+    }
+  }
+}

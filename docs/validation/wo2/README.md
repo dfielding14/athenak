@@ -13,6 +13,11 @@ unresolved sharp-contact limitation is not treated as a passing test.
 The [Task 1 report](task1/README.md) records the new timestep bound, independent
 proof checks, changed expectations and paired GPU measurements.
 
+The [Task 3 report](task3/README.md) records compact LF cell/flux messages and
+CPU/HIP one/four-rank bitwise state preservation. With one scalar the selected
+message payload shrinks by 71.43%; paired GPU timings show no consistent
+throughput gain. Existing once-per-sweep conversion and primitive refresh remain.
+
 ## Task 0: establish the actual GPU baseline
 
 Triage: **implemented**, including diagnosis of two compiler-contract failures

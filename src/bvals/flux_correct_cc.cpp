@@ -26,11 +26,13 @@
 //! MeshBlocks. Buffer data are then sent (via MPI) or copied directly for periodic or
 //! block boundaries.
 
-TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
+TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx,
+                                                    const int var_offset,
+                                                    const int var_count) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
-  int nvar = flx.x1f.extent_int(1);  // TODO(@user): 2nd idx from L of in arr must be NVAR
+  const int nvar = (var_count < 0) ? flx.x1f.extent_int(1) - var_offset : var_count;
 
   auto &cis = pmy_pack->pmesh->mb_indcs.cis;
   auto &cjs = pmy_pack->pmesh->mb_indcs.cjs;
@@ -51,6 +53,7 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
     const int m = (tmember.league_rank())/(nnghbr*nvar);
     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
+    const int av = v + var_offset;
 
     // Note send buffer flux indices are for the coarse mesh
     int il = sbuf[n].iflux_coar[0].bis;
@@ -85,12 +88,12 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
           int fk = 2*k - cks;
           Real rflx;
           if (one_d) {
-            rflx = flx.x1f(m,v,0,0,fi);
+            rflx = flx.x1f(m,av,0,0,fi);
           } else if (two_d) {
-            rflx = 0.5*(flx.x1f(m,v,0,fj,fi) + flx.x1f(m,v,0,fj+1,fi));
+            rflx = 0.5*(flx.x1f(m,av,0,fj,fi) + flx.x1f(m,av,0,fj+1,fi));
           } else {
-            rflx = 0.25*(flx.x1f(m,v,fk  ,fj,fi) + flx.x1f(m,v,fk  ,fj+1,fi) +
-                         flx.x1f(m,v,fk+1,fj,fi) + flx.x1f(m,v,fk+1,fj+1,fi));
+            rflx = 0.25*(flx.x1f(m,av,fk  ,fj,fi) + flx.x1f(m,av,fk  ,fj+1,fi) +
+                         flx.x1f(m,av,fk+1,fj,fi) + flx.x1f(m,av,fk+1,fj+1,fi));
           }
           // copy directly into recv buffer if MeshBlocks on same rank
           if (nghbr.d_view(m,n).rank == my_rank) {
@@ -113,10 +116,10 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
           int fk = 2*k - cks;
           Real rflx;
           if (two_d) {
-            rflx = 0.5*(flx.x2f(m,v,0,fj,fi) + flx.x2f(m,v,0,fj,fi+1));
+            rflx = 0.5*(flx.x2f(m,av,0,fj,fi) + flx.x2f(m,av,0,fj,fi+1));
           } else {
-            rflx = 0.25*(flx.x2f(m,v,fk  ,fj,fi) + flx.x2f(m,v,fk  ,fj,fi+1) +
-                         flx.x2f(m,v,fk+1,fj,fi) + flx.x2f(m,v,fk+1,fj,fi+1));
+            rflx = 0.25*(flx.x2f(m,av,fk  ,fj,fi) + flx.x2f(m,av,fk  ,fj,fi+1) +
+                         flx.x2f(m,av,fk+1,fj,fi) + flx.x2f(m,av,fk+1,fj,fi+1));
           }
           // copy directly into recv buffer if MeshBlocks on same rank
           if (nghbr.d_view(m,n).rank == my_rank) {
@@ -137,8 +140,8 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
           j += jl;
           int fi = 2*i - cis;
           int fj = 2*j - cjs;
-          Real rflx = 0.25*(flx.x3f(m,v,fk,fj  ,fi) + flx.x3f(m,v,fk,fj  ,fi+1) +
-                            flx.x3f(m,v,fk,fj+1,fi) + flx.x3f(m,v,fk,fj+1,fi+1));
+          Real rflx = 0.25*(flx.x3f(m,av,fk,fj  ,fi) + flx.x3f(m,av,fk,fj  ,fi+1) +
+                            flx.x3f(m,av,fk,fj+1,fi) + flx.x3f(m,av,fk,fj+1,fi+1));
           // copy directly into recv buffer if MeshBlocks on same rank
           if (nghbr.d_view(m,n).rank == my_rank) {
             rbuf[dn].flux(dm, (i-il + ni*(j-jl + nj*v)) ) = rflx;
@@ -196,7 +199,9 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
 //! \fn void RecvBuffers()
 //! \brief Unpack boundary buffers for flux correction of CC variables.
 
-TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
+TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx,
+                                                    const int var_offset,
+                                                    const int var_count) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -238,7 +243,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
 
   //----- STEP 2: buffers have all completed, so unpack
 
-  int nvar = flx.x1f.extent_int(1); // TODO(@user): 2nd idx from L of in arr must be NVAR
+  const int nvar = (var_count < 0) ? flx.x1f.extent_int(1) - var_offset : var_count;
 
   // Outer loop over (# of MeshBlocks)*(# of neighbors)*(# of variables)
   Kokkos::TeamPolicy<> policy(DevExeSpace(), (nmb*nnghbr*nvar), Kokkos::AUTO);
@@ -246,6 +251,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
     const int m = (tmember.league_rank())/(nnghbr*nvar);
     const int n = (tmember.league_rank() - m*(nnghbr*nvar))/nvar;
     const int v = (tmember.league_rank() - m*(nnghbr*nvar) - n*nvar);
+    const int av = v + var_offset;
 
     // Recv buffer flux indices are for the regular mesh
     int il = rbuf[n].iflux_coar[0].bis;
@@ -269,7 +275,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
           int k = idx / nj;
           int j = (idx - k * nj) + jl;
           k += kl;
-          flx.x1f(m,v,k,j,il) = rbuf[n].flux(m,(j-jl + nj*(k-kl + nk*v)));
+          flx.x1f(m,av,k,j,il) = rbuf[n].flux(m,(j-jl + nj*(k-kl + nk*v)));
         });
       // x2faces
       } else if (n<16) {
@@ -277,7 +283,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
           int k = idx / ni;
           int i = (idx - k * ni) + il;
           k += kl;
-          flx.x2f(m,v,k,jl,i) = rbuf[n].flux(m,(i-il + ni*(k-kl + nk*v)));
+          flx.x2f(m,av,k,jl,i) = rbuf[n].flux(m,(i-il + ni*(k-kl + nk*v)));
         });
       // x3faces
       } else if ((n>=24) && (n<32)) {
@@ -285,7 +291,7 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
           int j = idx / ni;
           int i = (idx - j * ni) + il;
           j += jl;
-          flx.x3f(m,v,kl,j,i) = rbuf[n].flux(m,(i-il + ni*(j-jl + nj*v)));
+          flx.x3f(m,av,kl,j,i) = rbuf[n].flux(m,(i-il + ni*(j-jl + nj*v)));
         });
       }
     }  // end if-neighbor-exists block
