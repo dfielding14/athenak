@@ -1,0 +1,151 @@
+{
+  "reader_sha256": "9a7a30739479846b7eded86ff765e7e1a996fec201747a99c031b6e61f6b5860",
+  "records": [
+    {
+      "case": "conserved",
+      "check": "direct double-precision restart integral with permanent test reader",
+      "atol": 5e-12,
+      "rtol": 0.0,
+      "expected_rejected": true,
+      "conservation_delta": {
+        "energy": -4.445033718880609e-08,
+        "mu": -3.0149784668864754e-08
+      },
+      "states": [
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-ledger-hip/old_baseline-conserved/rst/smr_outflow.00000.rst",
+          "sha256": "ed995bd05b35d586b7246890274ecb99bf8325266e46bdc16f2d0adbe7fdba12",
+          "time": 0.0,
+          "cycle": 0,
+          "totals": {
+            "energy": 1.786592497088673,
+            "mu": 1.3585703053928933
+          }
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-ledger-hip/old_baseline-conserved/rst/smr_outflow.00001.rst",
+          "sha256": "5f2391b535d466dcca1c04701261643e827d3d8352538466acc1bb4665f5b2b8",
+          "time": 0.002,
+          "cycle": 4,
+          "totals": {
+            "energy": 1.7865924526383359,
+            "mu": 1.3585702752431086
+          }
+        }
+      ],
+      "command": {
+        "variant": "old_baseline",
+        "mode": "conserved",
+        "command": [
+          "srun",
+          "--exact",
+          "-N",
+          "1",
+          "-n",
+          "1",
+          "--ntasks-per-node",
+          "1",
+          "--threads-per-core=1",
+          "--cpu-bind=threads",
+          "-c",
+          "7",
+          "--gpus-per-task=1",
+          "--gpu-bind=closest",
+          "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/bin/athena-hip-nocray",
+          "-i",
+          "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-smooth-kinematic-hip/smooth_periodic_smr.athinput",
+          "mesh/nx1=32",
+          "mesh/nx2=32",
+          "meshblock/nx1=8",
+          "meshblock/nx2=8",
+          "mesh_refinement/prolong_primitives=false",
+          "time/nlim=-1",
+          "time/tlim=0.002",
+          "mhd/cgl_lf_profile=false",
+          "output2/dcycle=1000000",
+          "output3/dcycle=1000000",
+          "output4/dcycle=1000000",
+          "time/evolution=kinematic",
+          "mhd/rsolver=advect",
+          "problem/vx0=0",
+          "problem/vy0=0",
+          "problem/vz0=0"
+        ],
+        "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-ledger-hip/old_baseline-conserved"
+      }
+    },
+    {
+      "case": "primitive",
+      "check": "direct double-precision restart integral with permanent test reader",
+      "atol": 5e-12,
+      "rtol": 0.0,
+      "expected_rejected": true,
+      "conservation_delta": {
+        "energy": -1.0930872873515796e-08,
+        "mu": 2.8896616210971615e-09
+      },
+      "states": [
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-ledger-hip/old_baseline-primitive/rst/smr_outflow.00000.rst",
+          "sha256": "33b54eee6af1681bbcc39d4e98c8321c9c431e8c9b522fdbade7e51ff70c5951",
+          "time": 0.0,
+          "cycle": 0,
+          "totals": {
+            "energy": 1.786592497088673,
+            "mu": 1.3585703053928933
+          }
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-ledger-hip/old_baseline-primitive/rst/smr_outflow.00001.rst",
+          "sha256": "1b63fa37f9c876935a8c975583784359170f8954f33c4de2bca514a01906ad9b",
+          "time": 0.002,
+          "cycle": 4,
+          "totals": {
+            "energy": 1.7865924861578002,
+            "mu": 1.3585703082825549
+          }
+        }
+      ],
+      "command": {
+        "variant": "old_baseline",
+        "mode": "primitive",
+        "command": [
+          "srun",
+          "--exact",
+          "-N",
+          "1",
+          "-n",
+          "1",
+          "--ntasks-per-node",
+          "1",
+          "--threads-per-core=1",
+          "--cpu-bind=threads",
+          "-c",
+          "7",
+          "--gpus-per-task=1",
+          "--gpu-bind=closest",
+          "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/bin/athena-hip-nocray",
+          "-i",
+          "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-smooth-kinematic-hip/smooth_periodic_smr.athinput",
+          "mesh/nx1=32",
+          "mesh/nx2=32",
+          "meshblock/nx1=8",
+          "meshblock/nx2=8",
+          "mesh_refinement/prolong_primitives=true",
+          "time/nlim=-1",
+          "time/tlim=0.002",
+          "mhd/cgl_lf_profile=false",
+          "output2/dcycle=1000000",
+          "output3/dcycle=1000000",
+          "output4/dcycle=1000000",
+          "time/evolution=kinematic",
+          "mhd/rsolver=advect",
+          "problem/vx0=0",
+          "problem/vy0=0",
+          "problem/vz0=0"
+        ],
+        "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task6-ledger-hip/old_baseline-primitive"
+      }
+    }
+  ]
+}

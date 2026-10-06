@@ -1,0 +1,282 @@
+{
+  "records": [
+    {
+      "case": "n128-conserved",
+      "time": 0.002,
+      "cycles": 56,
+      "conservation_delta": {
+        "energy": 1.5543122344752192e-15,
+        "mu": -2.6645352591003757e-15
+      },
+      "repair_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hwproj": 0.0,
+        "bad_state": 0.0,
+        "amr_cell": 0.0,
+        "amr_nan": 0.0,
+        "amr_rho": 0.0,
+        "amr_U": 0.0,
+        "amr_ppar": 0.0,
+        "amr_pperp": 0.0,
+        "amr_lowB": 0.0,
+        "amr_fh": 0.0,
+        "amr_mirr": 0.0,
+        "amr_dlt": 0.0,
+        "amr_int": 0.0,
+        "amr_slp": 0.0
+      },
+      "frozen": {
+        "rho": true,
+        "scalar": true,
+        "B1": true,
+        "B2": true,
+        "B3": true
+      },
+      "minima": {
+        "rho": 0.8029522013300929,
+        "ppar": 0.9954562045431466,
+        "pperp": 1.0076218749512778
+      },
+      "max_ndiv": 9.489085680556894e-17,
+      "pass": true
+    },
+    {
+      "case": "n128-primitive",
+      "time": 0.002,
+      "cycles": 56,
+      "conservation_delta": {
+        "energy": 1.5543122344752192e-15,
+        "mu": -2.886579864025407e-15
+      },
+      "repair_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hwproj": 0.0,
+        "bad_state": 0.0,
+        "amr_cell": 0.0,
+        "amr_nan": 0.0,
+        "amr_rho": 0.0,
+        "amr_U": 0.0,
+        "amr_ppar": 0.0,
+        "amr_pperp": 0.0,
+        "amr_lowB": 0.0,
+        "amr_fh": 0.0,
+        "amr_mirr": 0.0,
+        "amr_dlt": 0.0,
+        "amr_int": 0.0,
+        "amr_slp": 0.0
+      },
+      "frozen": {
+        "rho": true,
+        "scalar": true,
+        "B1": true,
+        "B2": true,
+        "B3": true
+      },
+      "minima": {
+        "rho": 0.8029522013300929,
+        "ppar": 0.9954562045451651,
+        "pperp": 1.007621874951031
+      },
+      "max_ndiv": 9.489085680556894e-17,
+      "pass": true
+    },
+    {
+      "case": "n32-conserved",
+      "time": 0.002,
+      "cycles": 4,
+      "conservation_delta": {
+        "energy": 0.0,
+        "mu": -4.440892098500626e-16
+      },
+      "repair_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hwproj": 0.0,
+        "bad_state": 0.0,
+        "amr_cell": 0.0,
+        "amr_nan": 0.0,
+        "amr_rho": 0.0,
+        "amr_U": 0.0,
+        "amr_ppar": 0.0,
+        "amr_pperp": 0.0,
+        "amr_lowB": 0.0,
+        "amr_fh": 0.0,
+        "amr_mirr": 0.0,
+        "amr_dlt": 0.0,
+        "amr_int": 0.0,
+        "amr_slp": 0.0
+      },
+      "frozen": {
+        "rho": true,
+        "scalar": true,
+        "B1": true,
+        "B2": true,
+        "B3": true
+      },
+      "minima": {
+        "rho": 0.8035094394978044,
+        "ppar": 0.9935048508646697,
+        "pperp": 1.0075083299386471
+      },
+      "max_ndiv": 9.489085680556894e-17,
+      "pass": true
+    },
+    {
+      "case": "n32-primitive",
+      "time": 0.002,
+      "cycles": 4,
+      "conservation_delta": {
+        "energy": 2.220446049250313e-16,
+        "mu": -2.220446049250313e-16
+      },
+      "repair_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hwproj": 0.0,
+        "bad_state": 0.0,
+        "amr_cell": 0.0,
+        "amr_nan": 0.0,
+        "amr_rho": 0.0,
+        "amr_U": 0.0,
+        "amr_ppar": 0.0,
+        "amr_pperp": 0.0,
+        "amr_lowB": 0.0,
+        "amr_fh": 0.0,
+        "amr_mirr": 0.0,
+        "amr_dlt": 0.0,
+        "amr_int": 0.0,
+        "amr_slp": 0.0
+      },
+      "frozen": {
+        "rho": true,
+        "scalar": true,
+        "B1": true,
+        "B2": true,
+        "B3": true
+      },
+      "minima": {
+        "rho": 0.8035094394978044,
+        "ppar": 0.9952210065047367,
+        "pperp": 1.0075083303568806
+      },
+      "max_ndiv": 9.489085680556894e-17,
+      "pass": true
+    },
+    {
+      "case": "n64-conserved",
+      "time": 0.002,
+      "cycles": 14,
+      "conservation_delta": {
+        "energy": 2.220446049250313e-16,
+        "mu": -8.881784197001252e-16
+      },
+      "repair_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hwproj": 0.0,
+        "bad_state": 0.0,
+        "amr_cell": 0.0,
+        "amr_nan": 0.0,
+        "amr_rho": 0.0,
+        "amr_U": 0.0,
+        "amr_ppar": 0.0,
+        "amr_pperp": 0.0,
+        "amr_lowB": 0.0,
+        "amr_fh": 0.0,
+        "amr_mirr": 0.0,
+        "amr_dlt": 0.0,
+        "amr_int": 0.0,
+        "amr_slp": 0.0
+      },
+      "frozen": {
+        "rho": true,
+        "scalar": true,
+        "B1": true,
+        "B2": true,
+        "B3": true
+      },
+      "minima": {
+        "rho": 0.8029505032853845,
+        "ppar": 0.9953611766537153,
+        "pperp": 1.0075982236337988
+      },
+      "max_ndiv": 9.489085680556894e-17,
+      "pass": true
+    },
+    {
+      "case": "n64-primitive",
+      "time": 0.002,
+      "cycles": 14,
+      "conservation_delta": {
+        "energy": 0.0,
+        "mu": -8.881784197001252e-16
+      },
+      "repair_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0,
+        "lf_mirror": 0.0,
+        "lf_firehs": 0.0,
+        "lf_hwproj": 0.0,
+        "bad_state": 0.0,
+        "amr_cell": 0.0,
+        "amr_nan": 0.0,
+        "amr_rho": 0.0,
+        "amr_U": 0.0,
+        "amr_ppar": 0.0,
+        "amr_pperp": 0.0,
+        "amr_lowB": 0.0,
+        "amr_fh": 0.0,
+        "amr_mirr": 0.0,
+        "amr_dlt": 0.0,
+        "amr_int": 0.0,
+        "amr_slp": 0.0
+      },
+      "frozen": {
+        "rho": true,
+        "scalar": true,
+        "B1": true,
+        "B2": true,
+        "B3": true
+      },
+      "minima": {
+        "rho": 0.8029505032853845,
+        "ppar": 0.995361176719475,
+        "pperp": 1.0075982235294036
+      },
+      "max_ndiv": 9.489085680556894e-17,
+      "pass": true
+    }
+  ],
+  "passed": true,
+  "max_conservation_delta": 2.886579864025407e-15
+}

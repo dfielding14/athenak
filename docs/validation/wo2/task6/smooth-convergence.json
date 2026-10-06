@@ -1,0 +1,785 @@
+{
+  "measure": "primitive versus conserved prolongation at matched physical time; double restart state",
+  "records": [
+    {
+      "resolution": 32,
+      "phase": "initial",
+      "time": 0.0,
+      "cycle_conserved": 0,
+      "cycle_primitive": 0,
+      "fields": {
+        "rho": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "energy": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0018737998649820398,
+          "fine_ghost_mean": 0.000186716615511697
+        },
+        "A": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.011308755399044967,
+          "fine_ghost_mean": 0.0010733795164481186
+        },
+        "mu": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.003885943014048543,
+          "fine_ghost_mean": 0.00037716646132589904
+        },
+        "ppar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.007880339982165863,
+          "fine_ghost_mean": 0.0007933000427285189
+        },
+        "pperp": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0027833023665670975,
+          "fine_ghost_mean": 0.00027851627150648063
+        },
+        "scalar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.00013326906815075423,
+          "fine_ghost_mean": 1.380102149092608e-05
+        },
+        "B1": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B2": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B3": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        }
+      },
+      "conserved_energy_relative_drift": 2.220446049250313e-16,
+      "conserved_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      },
+      "primitive_energy_relative_drift": 2.220446049250313e-16,
+      "primitive_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      }
+    },
+    {
+      "resolution": 32,
+      "phase": "final",
+      "time": 0.002,
+      "cycle_conserved": 4,
+      "cycle_primitive": 4,
+      "fields": {
+        "rho": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "energy": {
+          "active_max": 0.0019799672657307976,
+          "active_volume_l1": 5.267512582403898e-05,
+          "fine_ghost_max": 0.0018026352343536445,
+          "fine_ghost_mean": 0.00024837698529774744
+        },
+        "A": {
+          "active_max": 0.007697748367637258,
+          "active_volume_l1": 0.000186988568019354,
+          "fine_ghost_max": 0.015129437818886204,
+          "fine_ghost_mean": 0.001572870279051542
+        },
+        "mu": {
+          "active_max": 0.002780098597752856,
+          "active_volume_l1": 4.6684066647311384e-05,
+          "fine_ghost_max": 0.004779673952510777,
+          "fine_ghost_mean": 0.0004944334025865484
+        },
+        "ppar": {
+          "active_max": 0.006235053785951239,
+          "active_volume_l1": 0.0001577318432047013,
+          "fine_ghost_max": 0.009790161782463058,
+          "fine_ghost_mean": 0.0011923512263204111
+        },
+        "pperp": {
+          "active_max": 0.002034787948713923,
+          "active_volume_l1": 3.462487090078999e-05,
+          "fine_ghost_max": 0.0036167214886826393,
+          "fine_ghost_mean": 0.0003663917891253842
+        },
+        "scalar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.00013326906815075423,
+          "fine_ghost_mean": 1.380102149092608e-05
+        },
+        "B1": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B2": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B3": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        }
+      },
+      "conserved_energy_relative_drift": 2.220446049250313e-16,
+      "conserved_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      },
+      "primitive_energy_relative_drift": 2.220446049250313e-16,
+      "primitive_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      }
+    },
+    {
+      "resolution": 64,
+      "phase": "initial",
+      "time": 0.0,
+      "cycle_conserved": 0,
+      "cycle_primitive": 0,
+      "fields": {
+        "rho": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "energy": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0004924290331644876,
+          "fine_ghost_mean": 4.838132460883666e-05
+        },
+        "A": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.004305614302302141,
+          "fine_ghost_mean": 0.0002902165410490541
+        },
+        "mu": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0014711635455624261,
+          "fine_ghost_mean": 0.00010183537569096283
+        },
+        "ppar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0029439193316826984,
+          "fine_ghost_mean": 0.00021249394283719096
+        },
+        "pperp": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0010640306469225091,
+          "fine_ghost_mean": 7.534227169197722e-05
+        },
+        "scalar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 3.485466048730457e-05,
+          "fine_ghost_mean": 3.5636606377247406e-06
+        },
+        "B1": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B2": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B3": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        }
+      },
+      "conserved_energy_relative_drift": 2.220446049250313e-16,
+      "conserved_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      },
+      "primitive_energy_relative_drift": 2.220446049250313e-16,
+      "primitive_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      }
+    },
+    {
+      "resolution": 64,
+      "phase": "final",
+      "time": 0.002,
+      "cycle_conserved": 14,
+      "cycle_primitive": 14,
+      "fields": {
+        "rho": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "energy": {
+          "active_max": 0.0013492050725689708,
+          "active_volume_l1": 1.37962865030654e-05,
+          "fine_ghost_max": 0.00098524348900364,
+          "fine_ghost_mean": 6.953230698001699e-05
+        },
+        "A": {
+          "active_max": 0.003108785541292569,
+          "active_volume_l1": 5.1351160492897973e-05,
+          "fine_ghost_max": 0.0030658940591152817,
+          "fine_ghost_mean": 0.0003904027932540713
+        },
+        "mu": {
+          "active_max": 0.0012091920084662533,
+          "active_volume_l1": 1.3290974846510119e-05,
+          "fine_ghost_max": 0.0012091920084662533,
+          "fine_ghost_mean": 0.00012448234393284692
+        },
+        "ppar": {
+          "active_max": 0.002881099147619026,
+          "active_volume_l1": 4.2466570930492224e-05,
+          "fine_ghost_max": 0.0027328252181221258,
+          "fine_ghost_mean": 0.00029650000842958645
+        },
+        "pperp": {
+          "active_max": 0.0008812777572742014,
+          "active_volume_l1": 9.841401860079057e-06,
+          "fine_ghost_max": 0.0008812777572742014,
+          "fine_ghost_mean": 9.216496191152235e-05
+        },
+        "scalar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 3.485466048730457e-05,
+          "fine_ghost_mean": 3.5636606377247406e-06
+        },
+        "B1": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 1.1102230246251565e-16,
+          "fine_ghost_mean": 2.7211348642773444e-19
+        },
+        "B2": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 2.7755575615628914e-17,
+          "fine_ghost_mean": 3.4014185803466805e-20
+        },
+        "B3": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        }
+      },
+      "conserved_energy_relative_drift": 2.220446049250313e-16,
+      "conserved_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      },
+      "primitive_energy_relative_drift": 2.220446049250313e-16,
+      "primitive_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      }
+    },
+    {
+      "resolution": 128,
+      "phase": "initial",
+      "time": 0.0,
+      "cycle_conserved": 0,
+      "cycle_primitive": 0,
+      "fields": {
+        "rho": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "energy": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.00013376258688224674,
+          "fine_ghost_mean": 1.230574439240243e-05
+        },
+        "A": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0009579619025121833,
+          "fine_ghost_mean": 7.502510846251278e-05
+        },
+        "mu": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.00039261947365698546,
+          "fine_ghost_mean": 2.631287683021898e-05
+        },
+        "ppar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.000629176875440729,
+          "fine_ghost_mean": 5.482384850652234e-05
+        },
+        "pperp": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.00029887963474051205,
+          "fine_ghost_mean": 1.9495605950885414e-05
+        },
+        "scalar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 8.87252251696724e-06,
+          "fine_ghost_mean": 8.992618456704445e-07
+        },
+        "B1": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B2": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "B3": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        }
+      },
+      "conserved_energy_relative_drift": 6.661338147750939e-16,
+      "conserved_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      },
+      "primitive_energy_relative_drift": 8.881784197001252e-16,
+      "primitive_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      }
+    },
+    {
+      "resolution": 128,
+      "phase": "final",
+      "time": 0.002,
+      "cycle_conserved": 56,
+      "cycle_primitive": 56,
+      "fields": {
+        "rho": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        },
+        "energy": {
+          "active_max": 0.0008517765619782125,
+          "active_volume_l1": 3.710170344601316e-06,
+          "fine_ghost_max": 0.0006209144630793251,
+          "fine_ghost_mean": 2.415216419958287e-05
+        },
+        "A": {
+          "active_max": 0.0020318822196616626,
+          "active_volume_l1": 1.3270837787513358e-05,
+          "fine_ghost_max": 0.0015317853535865567,
+          "fine_ghost_mean": 0.00010454965960018144
+        },
+        "mu": {
+          "active_max": 0.0005009031635467842,
+          "active_volume_l1": 3.341866941542884e-06,
+          "fine_ghost_max": 0.0004463468035276197,
+          "fine_ghost_mean": 3.055494828365612e-05
+        },
+        "ppar": {
+          "active_max": 0.0017723657829533668,
+          "active_volume_l1": 1.098154091033332e-05,
+          "fine_ghost_max": 0.0013213992481146963,
+          "fine_ghost_mean": 8.237949614715926e-05
+        },
+        "pperp": {
+          "active_max": 0.00038171896066141464,
+          "active_volume_l1": 2.4748395311574972e-06,
+          "fine_ghost_max": 0.0003252186453481798,
+          "fine_ghost_mean": 2.2616667381528403e-05
+        },
+        "scalar": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 8.87252251696724e-06,
+          "fine_ghost_mean": 8.992618456704445e-07
+        },
+        "B1": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 1.1102230246251565e-16,
+          "fine_ghost_mean": 2.8035934965281733e-19
+        },
+        "B2": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 5.551115123125783e-17,
+          "fine_ghost_mean": 1.0513475611980649e-19
+        },
+        "B3": {
+          "active_max": 0.0,
+          "active_volume_l1": 0.0,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": 0.0
+        }
+      },
+      "conserved_energy_relative_drift": 6.661338147750939e-16,
+      "conserved_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      },
+      "primitive_energy_relative_drift": 8.881784197001252e-16,
+      "primitive_bad_lf_counters": {
+        "lf_dfloor": 0.0,
+        "lf_pfloor": 0.0,
+        "lf_nonfin": 0.0,
+        "lf_nonpos": 0.0,
+        "lf_hardbd": 0.0
+      }
+    }
+  ],
+  "orders": [
+    {
+      "phase": "initial",
+      "coarse": 32,
+      "fine": 64,
+      "fields": {
+        "rho": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "energy": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.9279791418178567,
+          "fine_ghost_mean": 1.9483281417988891
+        },
+        "A": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.393149166709164,
+          "fine_ghost_mean": 1.8869586081535876
+        },
+        "mu": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.4013071081783128,
+          "fine_ghost_mean": 1.8889625797660174
+        },
+        "ppar": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.4205197336593698,
+          "fine_ghost_mean": 1.9004449090349136
+        },
+        "pperp": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.387257940757198,
+          "fine_ghost_mean": 1.8862301766520164
+        },
+        "scalar": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.934918488912143,
+          "fine_ghost_mean": 1.9533431901580973
+        },
+        "B1": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "B2": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "B3": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        }
+      }
+    },
+    {
+      "phase": "initial",
+      "coarse": 64,
+      "fine": 128,
+      "fields": {
+        "rho": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "energy": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.8802411707136018,
+          "fine_ghost_mean": 1.975118337546676
+        },
+        "A": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 2.1681789011913293,
+          "fine_ghost_mean": 1.9516843443166423
+        },
+        "mu": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.9057539999208377,
+          "fine_ghost_mean": 1.9523979190908878
+        },
+        "ppar": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 2.226200587174453,
+          "fine_ghost_mean": 1.9545462069943487
+        },
+        "pperp": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.831903202742584,
+          "fine_ghost_mean": 1.9503105371162117
+        },
+        "scalar": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.9739353389495886,
+          "fine_ghost_mean": 1.9865467938983412
+        },
+        "B1": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "B2": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "B3": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        }
+      }
+    },
+    {
+      "phase": "final",
+      "coarse": 32,
+      "fine": 64,
+      "fields": {
+        "rho": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "energy": {
+          "active_max": 0.55336693127134,
+          "active_volume_l1": 1.9328418609754416,
+          "fine_ghost_max": 0.8715552795995027,
+          "fine_ghost_mean": 1.836776137158279
+        },
+        "A": {
+          "active_max": 1.308085415341678,
+          "active_volume_l1": 1.8644812845799255,
+          "fine_ghost_max": 2.3029786295949415,
+          "fine_ghost_mean": 2.0103644105423184
+        },
+        "mu": {
+          "active_max": 1.201092700485642,
+          "active_volume_l1": 1.8124833145013974,
+          "fine_ghost_max": 1.9828688581498213,
+          "fine_ghost_mean": 1.989835080286345
+        },
+        "ppar": {
+          "active_max": 1.1137826963523096,
+          "active_volume_l1": 1.8930744190716753,
+          "fine_ghost_max": 1.8409395074503894,
+          "fine_ghost_mean": 2.0077052166391427
+        },
+        "pperp": {
+          "active_max": 1.207209756546327,
+          "active_volume_l1": 1.8148729518241287,
+          "fine_ghost_max": 2.037013807023698,
+          "fine_ghost_mean": 1.9910968780939706
+        },
+        "scalar": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.934918488912143,
+          "fine_ghost_mean": 1.9533431901580973
+        },
+        "B1": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "B2": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "B3": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        }
+      }
+    },
+    {
+      "phase": "final",
+      "coarse": 64,
+      "fine": 128,
+      "fields": {
+        "rho": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        },
+        "energy": {
+          "active_max": 0.6635627101002597,
+          "active_volume_l1": 1.894722662446679,
+          "fine_ghost_max": 0.6660857732633743,
+          "fine_ghost_mean": 1.5255309866055402
+        },
+        "A": {
+          "active_max": 0.6135343191018274,
+          "active_volume_l1": 1.9521374297332417,
+          "fine_ghost_max": 1.0010936969583937,
+          "fine_ghost_mean": 1.9007750104212957
+        },
+        "mu": {
+          "active_max": 1.271439721012417,
+          "active_volume_l1": 1.9917207272512236,
+          "fine_ghost_max": 1.437806350008205,
+          "fine_ghost_mean": 2.026463186553012
+        },
+        "ppar": {
+          "active_max": 0.7009429292577155,
+          "active_volume_l1": 1.9512471144129047,
+          "fine_ghost_max": 1.0483267641923415,
+          "fine_ghost_mean": 1.8476749383121158
+        },
+        "pperp": {
+          "active_max": 1.2070859435692947,
+          "active_volume_l1": 1.9915288513966238,
+          "fine_ghost_max": 1.4381868211484015,
+          "fine_ghost_mean": 2.0268320291350186
+        },
+        "scalar": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 1.9739353389495886,
+          "fine_ghost_mean": 1.9865467938983412
+        },
+        "B1": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": 0.0,
+          "fine_ghost_mean": -0.043068721891886146
+        },
+        "B2": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": -1.0,
+          "fine_ghost_mean": -1.6280312226130422
+        },
+        "B3": {
+          "active_max": null,
+          "active_volume_l1": null,
+          "fine_ghost_max": null,
+          "fine_ghost_mean": null
+        }
+      }
+    }
+  ]
+}

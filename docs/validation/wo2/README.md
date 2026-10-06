@@ -18,6 +18,12 @@ CPU/HIP one/four-rank bitwise state preservation. With one scalar the selected
 message payload shrinks by 71.43%; paired GPU timings show no consistent
 throughput gain. Existing once-per-sweep conversion and primitive refresh remain.
 
+The [Task 6 report](task6/README.md) records GPU representation checks and
+a separate same-level flux synchronization correction that restores periodic
+energy/magnetic-moment conservation to rounding. Smooth primitive/conserved
+agreement is approximately second order in integral norms; maximum-norm behavior
+is explicitly weaker.
+
 ## Task 0: establish the actual GPU baseline
 
 Triage: **implemented**, including diagnosis of two compiler-contract failures

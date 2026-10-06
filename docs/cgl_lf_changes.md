@@ -39,6 +39,13 @@ selected messages shrink by 71.43%, while physical states stay bitwise identical
 on CPU/HIP and one/four ranks. Paired GPU timings show no consistent speedup;
 see the [Task 3 report](validation/wo2/task3/README.md).
 
+Task 6 is adapted: existing A/mu-aware primitive prolongation is verified on the
+GPU, and a separately demonstrated periodic conservation defect is corrected.
+Independent corner magnetic ghosts can give different LF fluxes on a shared
+same-level face. Synchronizing those E/mu fluxes restores conservation to rounding
+on CPU/HIP and one/four ranks. See the [Task 6 report](validation/wo2/task6/README.md)
+for causal traces, permanent regressions and qualified smooth-convergence results.
+
 The following sections preserve the WO1 implementation record.
 
 

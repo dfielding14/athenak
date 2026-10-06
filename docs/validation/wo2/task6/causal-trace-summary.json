@@ -1,0 +1,1526 @@
+[
+  {
+    "version": "baseline",
+    "case": "trace-conserved",
+    "post_receive": [
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000009-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.3585703053928933,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.023527494183719e-09,
+          "mu": 1.1131340939532e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000030-RecvFlux_end.json",
+        "energy": 1.7865924960651458,
+        "mu": 1.3585703052815796,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 4.950754969879072e-09,
+          "mu": 7.664248419466976e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000051-RecvFlux_end.json",
+        "energy": 1.7865924936732096,
+        "mu": 1.3585703047934383,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 7.1568182357905375e-09,
+          "mu": 1.059826085155334e-09
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000072-RecvFlux_end.json",
+        "energy": 1.7865924879339432,
+        "mu": 1.35857030364077,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 6.658902297258347e-09,
+          "mu": 9.522734490230231e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000093-RecvFlux_end.json",
+        "energy": 1.786592479970805,
+        "mu": 1.3585703021042241,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 4.872987225115469e-09,
+          "mu": 9.296404854876938e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000119-RecvFlux_end.json",
+        "energy": 1.786592471617435,
+        "mu": 1.3585703002371514,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 2.806990024587987e-10,
+          "mu": 1.0639047501397214e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      }
+    ],
+    "max_energy_stage_change": 8.35336999571723e-09,
+    "max_mu_stage_change": 1.867072718653162e-09,
+    "max_active_face_B_change": 0.0,
+    "paired_face_residual": {
+      "same_level": {
+        "energy": 1.0235274941837158e-09,
+        "mu": 1.1131340939509349e-10
+      },
+      "coarse_fine": {
+        "energy": 2.005912985441092e-23,
+        "mu": 1.1994118882018901e-23
+      }
+    },
+    "largest_faces": [
+      {
+        "kind": "same_level",
+        "axis": 1,
+        "plane": 0.25,
+        "transverse_cell": 31,
+        "scale": 1,
+        "gids": [
+          5,
+          8
+        ],
+        "energy": 9.401953621101747e-10,
+        "mu": -3.857355774527599e-12,
+        "pairs": [
+          [
+            {
+              "gid": 5,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -9.307141643874269e-07,
+                -6.44214918986412e-07
+              ]
+            },
+            {
+              "gid": 8,
+              "side": 0,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -9.90886667562478e-07,
+                -6.439680482168423e-07
+              ]
+            }
+          ]
+        ]
+      },
+      {
+        "kind": "same_level",
+        "axis": 2,
+        "plane": 0.5,
+        "transverse_cell": 16,
+        "scale": 1,
+        "gids": [
+          8,
+          15
+        ],
+        "energy": 8.333213207290773e-11,
+        "mu": 1.1517076516947951e-10,
+        "pairs": [
+          [
+            {
+              "gid": 8,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -2.2235797597212526e-07,
+                -2.870519251196602e-07
+              ]
+            },
+            {
+              "gid": 15,
+              "side": 0,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -2.2769123242479136e-07,
+                -2.944228540905069e-07
+              ]
+            }
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "version": "baseline",
+    "case": "trace-primitive",
+    "post_receive": [
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000009-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.3585703053928933,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 2.4223157256190043e-10,
+          "mu": 2.5872820150287327e-11
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000032-RecvFlux_end.json",
+        "energy": 1.7865924968464417,
+        "mu": 1.3585703053670204,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 4.473473997039344e-10,
+          "mu": 2.1474601355240543e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000055-RecvFlux_end.json",
+        "energy": 1.7865924970046732,
+        "mu": 1.3585703052169564,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 7.411472269488433e-10,
+          "mu": 2.7075318343951027e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000078-RecvFlux_end.json",
+        "energy": 1.7865924973836838,
+        "mu": 1.358570304884969,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 8.624797594499674e-10,
+          "mu": 1.9225345850483438e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000101-RecvFlux_end.json",
+        "energy": 1.7865924976699945,
+        "mu": 1.3585703045043735,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.0110674060125243e-09,
+          "mu": 1.2982279125755285e-10
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000129-RecvFlux_end.json",
+        "energy": 1.7865924976444825,
+        "mu": 1.3585703041392887,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 3.3920838188771666e-10,
+          "mu": -2.7884793195752892e-12
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000152-RecvFlux_end.json",
+        "energy": 1.786592497305274,
+        "mu": 1.3585703041420771,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 9.019423379128541e-10,
+          "mu": 4.163680396671949e-11
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000175-RecvFlux_end.json",
+        "energy": 1.7865924972513527,
+        "mu": 1.3585703040934691,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.2760703868718234e-09,
+          "mu": 3.95764563074909e-11
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000198-RecvFlux_end.json",
+        "energy": 1.7865924972454337,
+        "mu": 1.3585703039903125,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.1940771044925176e-09,
+          "mu": 8.66074585874723e-13
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000221-RecvFlux_end.json",
+        "energy": 1.7865924972161789,
+        "mu": 1.3585703038940269,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.203289472366932e-09,
+          "mu": -4.253724775939736e-11
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      }
+    ],
+    "max_energy_stage_change": 3.7901060068179504e-10,
+    "max_mu_stage_change": 3.805955550717499e-10,
+    "max_active_face_B_change": 0.0,
+    "paired_face_residual": {
+      "same_level": {
+        "energy": 2.422315725617647e-10,
+        "mu": 2.5872820150082315e-11
+      },
+      "coarse_fine": {
+        "energy": 1.685380498076794e-23,
+        "mu": 4.37888736770259e-23
+      }
+    },
+    "largest_faces": [
+      {
+        "kind": "same_level",
+        "axis": 1,
+        "plane": 0.25,
+        "transverse_cell": 31,
+        "scale": 1,
+        "gids": [
+          5,
+          8
+        ],
+        "energy": 5.422358660921461e-10,
+        "mu": -7.367664985965213e-11,
+        "pairs": [
+          [
+            {
+              "gid": 5,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -9.724693866023358e-07,
+                -7.018866958719983e-07
+              ]
+            },
+            {
+              "gid": 8,
+              "side": 0,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -1.0071724820322332e-06,
+                -6.971713902809806e-07
+              ]
+            }
+          ]
+        ]
+      },
+      {
+        "kind": "same_level",
+        "axis": 2,
+        "plane": 0.5,
+        "transverse_cell": 16,
+        "scale": 1,
+        "gids": [
+          8,
+          15
+        ],
+        "energy": -3.000042935307833e-10,
+        "mu": 9.954947000974341e-11,
+        "pairs": [
+          [
+            {
+              "gid": 8,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -3.8499550395225976e-07,
+                -2.67483249427283e-07
+              ]
+            },
+            {
+              "gid": 15,
+              "side": 0,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -3.657952291662896e-07,
+                -2.738544155079066e-07
+              ]
+            }
+          ]
+        ]
+      }
+    ]
+  },
+  {
+    "version": "corrected",
+    "case": "2d-conserved-sts-1rank",
+    "post_receive": [
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000005-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.3585703053928933,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.0587911840678754e-22,
+          "mu": 2.448454613156962e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000026-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.0058516248644817e-21,
+          "mu": 7.940933880509066e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000047-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.3585703053928933,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.164670302474663e-21,
+          "mu": 5.293955920339377e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000068-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -9.529120656610879e-22,
+          "mu": -1.5881867761018131e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000089-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -1.3234889800848443e-21,
+          "mu": -6.352747104407253e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000115-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 3.3087224502121107e-22,
+          "mu": 6.617444900424221e-23
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000136-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 5.293955920339377e-22,
+          "mu": -8.205631676526035e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000157-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.1117307432712692e-21,
+          "mu": 1.1117307432712692e-21
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000178-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -4.764560328305439e-22,
+          "mu": -5.823351512373315e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000199-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.1117307432712692e-21,
+          "mu": -1.5881867761018131e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      }
+    ],
+    "max_energy_stage_change": 0,
+    "max_mu_stage_change": 2.220446049250313e-16,
+    "max_active_face_B_change": 0.0,
+    "paired_face_residual": {
+      "same_level": {
+        "energy": 0.0,
+        "mu": 0.0
+      },
+      "coarse_fine": {
+        "energy": 2.005912985441092e-23,
+        "mu": 1.1994118882018901e-23
+      }
+    },
+    "largest_faces": [
+      {
+        "kind": "coarse_fine",
+        "axis": 1,
+        "plane": 0.5,
+        "transverse_cell": 11,
+        "scale": 2,
+        "gids": [
+          7,
+          12
+        ],
+        "energy": -1.3234889800848443e-23,
+        "mu": 0.0,
+        "pairs": [
+          [
+            {
+              "gid": 7,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -3.7889190922272086e-06,
+                -2.642041706949742e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -3.890545126450241e-06,
+                -2.6831681227637113e-06
+              ]
+            }
+          ],
+          [
+            {
+              "gid": 7,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -3.992171160673274e-06,
+                -2.7242945385776805e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -3.890545126450241e-06,
+                -2.6831681227637113e-06
+              ]
+            }
+          ]
+        ]
+      },
+      {
+        "kind": "coarse_fine",
+        "axis": 1,
+        "plane": 0.5,
+        "transverse_cell": 14,
+        "scale": 2,
+        "gids": [
+          9,
+          12
+        ],
+        "energy": -1.3234889800848443e-23,
+        "mu": 0.0,
+        "pairs": [
+          [
+            {
+              "gid": 9,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -4.379113189768941e-06,
+                -2.397370970574522e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -4.181564652468069e-06,
+                -2.676183275126891e-06
+              ]
+            }
+          ],
+          [
+            {
+              "gid": 9,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -3.984016115167197e-06,
+                -2.9549955796792597e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -4.181564652468069e-06,
+                -2.676183275126891e-06
+              ]
+            }
+          ]
+        ]
+      }
+    ],
+    "representation": {
+      "tolerance": 2e-12,
+      "pass": true,
+      "snapshots_checked": 24,
+      "max_normalized_residual": 5.244037289527753e-16
+    }
+  },
+  {
+    "version": "corrected",
+    "case": "2d-primitive-sts-1rank",
+    "post_receive": [
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000005-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.3585703053928933,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 2.779326858178173e-22,
+          "mu": 2.117582368135751e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000028-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 7.411538288475128e-22,
+          "mu": -3.970466940254533e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000051-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.3585703053928933,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -5.293955920339377e-22,
+          "mu": -5.293955920339377e-23
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000074-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 7.411538288475128e-22,
+          "mu": -8.999725064576941e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "pre",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000097-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -5.293955920339377e-22,
+          "mu": -3.705769144237564e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 1,
+        "representation": "mu",
+        "file": "r0-000125-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -2.6469779601696886e-22,
+          "mu": -1.9852334701272664e-23
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 2,
+        "representation": "mu",
+        "file": "r0-000148-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": 1.6940658945086007e-21,
+          "mu": 6.088049308390284e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 3,
+        "representation": "mu",
+        "file": "r0-000171-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -2.8587361969832636e-21,
+          "mu": 1.2176098616780567e-21
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 4,
+        "representation": "mu",
+        "file": "r0-000194-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -1.5881867761018131e-22,
+          "mu": 3.705769144237564e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      },
+      {
+        "point": "RecvFlux_end",
+        "sweep": "post",
+        "stage": 5,
+        "representation": "mu",
+        "file": "r0-000217-RecvFlux_end.json",
+        "energy": 1.7865924970886733,
+        "mu": 1.358570305392893,
+        "active_face_changes": {
+          "1": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "2": {
+            "max_abs": 0.0,
+            "values": 0
+          },
+          "3": {
+            "max_abs": 0.0,
+            "values": 0
+          }
+        },
+        "global_flux_divergence": {
+          "energy": -5.293955920339377e-23,
+          "mu": -3.705769144237564e-22
+        },
+        "energy_change": 0.0,
+        "mu_change": 0.0
+      }
+    ],
+    "max_energy_stage_change": 0,
+    "max_mu_stage_change": 2.220446049250313e-16,
+    "max_active_face_B_change": 0.0,
+    "paired_face_residual": {
+      "same_level": {
+        "energy": 0.0,
+        "mu": 0.0
+      },
+      "coarse_fine": {
+        "energy": 1.685380498076794e-23,
+        "mu": 4.37888736770259e-23
+      }
+    },
+    "largest_faces": [
+      {
+        "kind": "coarse_fine",
+        "axis": 1,
+        "plane": 0.5,
+        "transverse_cell": 13,
+        "scale": 2,
+        "gids": [
+          9,
+          12
+        ],
+        "energy": 1.3234889800848443e-23,
+        "mu": 0.0,
+        "pairs": [
+          [
+            {
+              "gid": 9,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -4.027229916930095e-06,
+                -2.7578428344711454e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -4.013719117935071e-06,
+                -2.7379357540064717e-06
+              ]
+            }
+          ],
+          [
+            {
+              "gid": 9,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -4.000208318940046e-06,
+                -2.718028673541798e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -4.013719117935071e-06,
+                -2.7379357540064717e-06
+              ]
+            }
+          ]
+        ]
+      },
+      {
+        "kind": "coarse_fine",
+        "axis": 1,
+        "plane": 0.5,
+        "transverse_cell": 14,
+        "scale": 2,
+        "gids": [
+          9,
+          12
+        ],
+        "energy": 1.3234889800848443e-23,
+        "mu": -6.617444900424222e-24,
+        "pairs": [
+          [
+            {
+              "gid": 9,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -3.969015278243861e-06,
+                -2.6708943421808933e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -4.072050445516433e-06,
+                -2.7276706269621016e-06
+              ]
+            }
+          ],
+          [
+            {
+              "gid": 9,
+              "side": 1,
+              "level": 3,
+              "scale": 1,
+              "flux": [
+                -4.1750856127890035e-06,
+                -2.7844469117433104e-06
+              ]
+            },
+            {
+              "gid": 12,
+              "side": 0,
+              "level": 2,
+              "scale": 2,
+              "flux": [
+                -4.072050445516433e-06,
+                -2.7276706269621016e-06
+              ]
+            }
+          ]
+        ]
+      }
+    ],
+    "representation": {
+      "tolerance": 2e-12,
+      "pass": true,
+      "snapshots_checked": 24,
+      "max_normalized_residual": 6.293385664684257e-16
+    }
+  }
+]

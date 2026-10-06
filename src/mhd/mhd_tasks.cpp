@@ -310,7 +310,7 @@ TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
     return tstat;
   }
   if (pmy_pack->pmesh->multilevel) {
-    tstat = pbval_u->InitFluxRecv(nvar);
+    tstat = pbval_u->InitFluxRecv(nvar, IEN, has_cgl_lf_split ? 2 : 0);
     if (tstat != TaskStatus::complete) {
       TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_flux_u", stage);
       return tstat;
@@ -549,7 +549,8 @@ TaskStatus MHD::SendFlux(Driver *pdrive, int stage) {
     const bool lf_subset = psbox_u == nullptr &&
         cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
     tstat = pbval_u->PackAndSendFluxCC(
-        uflx, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
+        uflx, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars,
+        IEN, lf_subset ? 2 : 0);
   }
   return tstat;
 }
@@ -567,7 +568,8 @@ TaskStatus MHD::RecvFlux(Driver *pdrive, int stage) {
     const bool lf_subset = psbox_u == nullptr &&
         cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
     tstat = pbval_u->RecvAndUnpackFluxCC(
-        uflx, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars);
+        uflx, lf_subset ? IEN : 0, lf_subset ? 2 : nmhd+nscalars,
+        IEN, lf_subset ? 2 : 0);
   }
   return tstat;
 }
