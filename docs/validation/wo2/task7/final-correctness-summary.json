@@ -1,0 +1,1197 @@
+{
+  "phase": "functional final composition; not a timing measurement",
+  "raw_results": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/results.json",
+  "raw_results_sha256": "52c492bdd064c557e0c2db976577d506194e9a23ca42e693c4e15f71ebfb440a",
+  "raw_metadata_note": "The generic timing template in the raw JSON was unused. This phase ran one traced pair per case, with no warmup/repeated timing experiment.",
+  "accepted_cases": 23,
+  "cases": {
+    "lf1d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 516,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "d725efaa747ab092a078ef1b84972ae3a04b9f440a4e2ca330ae037a66c279be",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf1d-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 5120.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "d725efaa747ab092a078ef1b84972ae3a04b9f440a4e2ca330ae037a66c279be",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf1d-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 5120.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf1d-fast-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 516,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "c30095491fe88b861d76566790b1d49223a05c045b086a60cb23508ed1ab3837",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf1d-fast-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 5120.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "c30095491fe88b861d76566790b1d49223a05c045b086a60cb23508ed1ab3837",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf1d-fast-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 5120.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf2d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 33792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "3b3ce033096131bd856c35f52d5e8324579a64313587a20fdd32537b0e2d8ea0",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "3b3ce033096131bd856c35f52d5e8324579a64313587a20fdd32537b0e2d8ea0",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf2d-fast-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 33792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "55b4c1761067ac6afc5c746d2d9c670d1b508e2c6e7e79428d358e8d00aa06a1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-fast-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "55b4c1761067ac6afc5c746d2d9c670d1b508e2c6e7e79428d358e8d00aa06a1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-fast-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf3d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 417792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "d57df212bd41ae66edf81e8d3a5f23ebc723279835285efe72a7b0a673af5b56",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "d57df212bd41ae66edf81e8d3a5f23ebc723279835285efe72a7b0a673af5b56",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf3d-fast-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 417792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "fb819aa6350ed29bbfc0aa169d76edfdc2887a8779b006b83999675bc2cb3c21",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-fast-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "fb819aa6350ed29bbfc0aa169d76edfdc2887a8779b006b83999675bc2cb3c21",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-fast-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "low_b-safe-full-1rank": {
+      "faces": {
+        "snapshots": 0,
+        "values": 0,
+        "failures": [],
+        "reason": "LF disabled throughout below-field-floor case; zero LF stages"
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "c04d7efc30b83b69e6d9ef349a050d47821eb7b7478e06728a18f74093eda308",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/low_b-safe-full-1rank/unfused",
+          "cycles": 1,
+          "lf_cell_stages": 0.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "c04d7efc30b83b69e6d9ef349a050d47821eb7b7478e06728a18f74093eda308",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/low_b-safe-full-1rank/fused",
+          "cycles": 1,
+          "lf_cell_stages": 0.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "low_b-fast-none-1rank": {
+      "faces": {
+        "snapshots": 0,
+        "values": 0,
+        "failures": [],
+        "reason": "LF disabled throughout below-field-floor case; zero LF stages"
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "e486001d7653c021f3570dbfceb074c22b230ae0a4823201c5a0d38454ef8f74",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/low_b-fast-none-1rank/unfused",
+          "cycles": 1,
+          "lf_cell_stages": 0.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "e486001d7653c021f3570dbfceb074c22b230ae0a4823201c5a0d38454ef8f74",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/low_b-fast-none-1rank/fused",
+          "cycles": 1,
+          "lf_cell_stages": 0.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "smr_varied-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 14400,
+        "failures": []
+      },
+      "file_comparisons": 6,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "3b010c01a73faeff5ba6af19483935335ae14b12790283fb9434613d84524a3c",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/smr_varied-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 64000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "3b010c01a73faeff5ba6af19483935335ae14b12790283fb9434613d84524a3c",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/smr_varied-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 64000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "smr_varied-fast-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 14400,
+        "failures": []
+      },
+      "file_comparisons": 6,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "d3a87d5cb71f65869ed70777c8e308a755e8a0a1415f2d838ee720b0931785be",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/smr_varied-fast-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 64000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "d3a87d5cb71f65869ed70777c8e308a755e8a0a1415f2d838ee720b0931785be",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/smr_varied-fast-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 64000.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf2d-safe-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 33792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "f93656e2026b904534e210669055134d9ec444aad30fea1c0d0f0b4b5555d0d1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-safe-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "f93656e2026b904534e210669055134d9ec444aad30fea1c0d0f0b4b5555d0d1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-safe-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf2d-fast-full-4rank": {
+      "faces": {
+        "snapshots": 8,
+        "values": 33792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "a92ea8b44154570573be261197a99988c7bce082da9dd2fa25ce407f25bacff7",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-fast-full-4rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "a92ea8b44154570573be261197a99988c7bce082da9dd2fa25ce407f25bacff7",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf2d-fast-full-4rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 229376.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf3d-safe-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 417792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "a5967c69399f24b607e3be29e6d2c65803653746095c9a9b75d39ac89940f0bd",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-safe-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "a5967c69399f24b607e3be29e6d2c65803653746095c9a9b75d39ac89940f0bd",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-safe-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "lf3d-fast-full-4rank": {
+      "faces": {
+        "snapshots": 8,
+        "values": 417792,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "309173e774a8e0196fa2e99a808482b1d0b880de153a42cc22e09581192bccdf",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-fast-full-4rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "309173e774a8e0196fa2e99a808482b1d0b880de153a42cc22e09581192bccdf",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/lf3d-fast-full-4rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 1835008.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "cgl_lf_staggered_checkerboard-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 576,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "109e65f05000303ec14b3565b95e72fb2d5baa3708e3ef8c416cef919e931b1e",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/cgl_lf_staggered_checkerboard-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 3584.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "109e65f05000303ec14b3565b95e72fb2d5baa3708e3ef8c416cef919e931b1e",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/cgl_lf_staggered_checkerboard-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 3584.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "cgl_lf_field_reversal_1d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 260,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "abd8920491ef6ddeeaa52e1d255ba4ce038c91af7ff78fa38ad50fcebcb01dd3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/cgl_lf_field_reversal_1d-safe-full-1rank/unfused",
+          "cycles": 20,
+          "lf_cell_stages": 17920.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "abd8920491ef6ddeeaa52e1d255ba4ce038c91af7ff78fa38ad50fcebcb01dd3",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/cgl_lf_field_reversal_1d-safe-full-1rank/fused",
+          "cycles": 20,
+          "lf_cell_stages": 17920.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "cgl_lf_field_reversal_2d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 8512,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "7a9cf11266c7ba909d6f5b5c1e624d5987781fa4030b3d41b34573b50e26cf52",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/cgl_lf_field_reversal_2d-safe-full-1rank/unfused",
+          "cycles": 20,
+          "lf_cell_stages": 286720.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "7a9cf11266c7ba909d6f5b5c1e624d5987781fa4030b3d41b34573b50e26cf52",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/cgl_lf_field_reversal_2d-safe-full-1rank/fused",
+          "cycles": 20,
+          "lf_cell_stages": 286720.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "passive2d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 2304,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "4048b00ce62f0d40647e548035a5bdb6da6e2aab99952e1367d1d7936a058aa1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive2d-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 10240.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "4048b00ce62f0d40647e548035a5bdb6da6e2aab99952e1367d1d7936a058aa1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive2d-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 10240.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "passive2d-fast-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 2304,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "8f32fb4908733f400dcebee5400c4df2c45488ce31a3a15fdc14535854c898d4",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive2d-fast-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 10240.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "8f32fb4908733f400dcebee5400c4df2c45488ce31a3a15fdc14535854c898d4",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive2d-fast-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 10240.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "passive2d-safe-none-4rank": {
+      "faces": {
+        "snapshots": 8,
+        "values": 2304,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "3c3547cf984cc2d496a63db4a90ba184499b8968334ace5420a14ee1d942440c",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive2d-safe-none-4rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 10240.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "3c3547cf984cc2d496a63db4a90ba184499b8968334ace5420a14ee1d942440c",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive2d-safe-none-4rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 10240.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "passive3d-safe-full-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 55296,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "665f4aaf01770b204aee81f31c8f64253464cc01675237df656e9c8d1ab656d1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive3d-safe-full-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 163840.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "665f4aaf01770b204aee81f31c8f64253464cc01675237df656e9c8d1ab656d1",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive3d-safe-full-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 163840.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "passive3d-fast-none-1rank": {
+      "faces": {
+        "snapshots": 2,
+        "values": 55296,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "ab91a2af5a92ebe38c960e76c756e20a13487a73fbf87f31388dd0e79f833bd4",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive3d-fast-none-1rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 163840.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "ab91a2af5a92ebe38c960e76c756e20a13487a73fbf87f31388dd0e79f833bd4",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive3d-fast-none-1rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 163840.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    },
+    "passive3d-safe-none-4rank": {
+      "faces": {
+        "snapshots": 8,
+        "values": 55296,
+        "failures": []
+      },
+      "file_comparisons": 5,
+      "all_state_and_counter_checks_pass": true,
+      "runs": {
+        "unfused": {
+          "returncode": 0,
+          "binary_sha256": "4ef328188eed1f70632aecf6b39c0fac44527f5c8d87a10d164c136ae5daf9b2",
+          "input_sha256": "994d57ce4d27fc6a5e38a4645c506da04de546b320e70bd2b6a66427264d70b7",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive3d-safe-none-4rank/unfused",
+          "cycles": 4,
+          "lf_cell_stages": 163840.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        },
+        "fused": {
+          "returncode": 0,
+          "binary_sha256": "ec6a68d150c235f63b78811e47de0e3dc9d8022f4a9836f26f3b5e71c6d4677e",
+          "input_sha256": "994d57ce4d27fc6a5e38a4645c506da04de546b320e70bd2b6a66427264d70b7",
+          "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/passive3d-safe-none-4rank/fused",
+          "cycles": 4,
+          "lf_cell_stages": 163840.0,
+          "repair_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0,
+            "lf_hardbd": 0.0,
+            "lf_hwproj": 0.0
+          }
+        }
+      }
+    }
+  },
+  "failures": [],
+  "snapshots": 66,
+  "face_values_bitwise": 2018316,
+  "diagnostic_only_differences": [
+    {
+      "case": "lf2d-safe-full-1rank",
+      "file": "rst/lf2d.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        7829,
+        7845
+      ],
+      "left": [
+        2.748934531556459e-10,
+        5.566546862718923e-31
+      ],
+      "right": [
+        2.748934531556459e-10,
+        5.566546862718924e-31
+      ],
+      "different_offsets": [
+        7837
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    },
+    {
+      "case": "smr_varied-safe-full-1rank",
+      "file": "rst/smr_varied.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        8344,
+        8360
+      ],
+      "left": [
+        0.00036814038062750075,
+        0.0001933826079011671
+      ],
+      "right": [
+        0.00036814038062750075,
+        0.0001933826079011672
+      ],
+      "different_offsets": [
+        8352
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    },
+    {
+      "case": "lf2d-fast-full-4rank",
+      "file": "rst/lf2d.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        7818,
+        7834
+      ],
+      "left": [
+        4.2543861481858395e-10,
+        9.216147746319624e-31
+      ],
+      "right": [
+        4.2543861481858406e-10,
+        9.216147746319624e-31
+      ],
+      "different_offsets": [
+        7818
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    },
+    {
+      "case": "lf3d-fast-full-4rank",
+      "file": "rst/lf3d.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        7994,
+        8010
+      ],
+      "left": [
+        1.1482582705597323e-09,
+        5.0253777206391946e-31
+      ],
+      "right": [
+        1.1482582705597319e-09,
+        5.025377720639193e-31
+      ],
+      "different_offsets": [
+        7994,
+        8002
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    },
+    {
+      "case": "cgl_lf_staggered_checkerboard-safe-full-1rank",
+      "file": "rst/cgl_lf_checkerboard.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        7490,
+        7506
+      ],
+      "left": [
+        -1.4492364149195185e-11,
+        -5.119245917418338e-12
+      ],
+      "right": [
+        -1.4492364149195183e-11,
+        -5.119245917418338e-12
+      ],
+      "different_offsets": [
+        7490
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    },
+    {
+      "case": "passive2d-safe-full-1rank",
+      "file": "rst/passive_validation.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        6474,
+        6490
+      ],
+      "left": [
+        0.0032433191293511827,
+        0.004917200997305932
+      ],
+      "right": [
+        0.0032433191293511836,
+        0.004917200997305931
+      ],
+      "different_offsets": [
+        6474,
+        6482
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    },
+    {
+      "case": "passive3d-safe-full-1rank",
+      "file": "rst/passive_validation.00001.rst",
+      "members": [
+        "lf_diag[13]:qpar_work",
+        "lf_diag[14]:qperp_work"
+      ],
+      "range": [
+        6554,
+        6570
+      ],
+      "left": [
+        0.0031943419505479327,
+        0.004772048671911111
+      ],
+      "right": [
+        0.0031943419505479323,
+        0.004772048671911112
+      ],
+      "different_offsets": [
+        6554,
+        6562
+      ],
+      "all_other_normalized_bytes_identical": true,
+      "within_256epsilon_relative": true,
+      "source": "src/outputs/restart.cpp:271-292,342",
+      "normalization_applied": false
+    }
+  ]
+}

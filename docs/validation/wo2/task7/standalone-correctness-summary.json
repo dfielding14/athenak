@@ -1,0 +1,14 @@
+{
+  "accepted_cases": 17,
+  "face_snapshots": 42,
+  "face_values_bitwise": 1845516,
+  "zero_stage_cases": [
+    "low_b-safe-full-1rank",
+    "low_b-fast-none-1rank"
+  ],
+  "source_reports": [
+    "runs/optimization-task7-check-fixed-5628672/results.json",
+    "runs/optimization-task7-reversal-fixed-5628672/results.json"
+  ],
+  "earlier_harness_failures_retained": true
+}

@@ -885,6 +885,414 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   if (!collect_heat_flux_diagnostics) {
     ResetHeatFluxDiagnostics();
   }
+  // Ordinary execution owns each cell's lower x/y/z face, including padded
+  // high caps. Directional guards precede every stencil read. Detailed profiling
+  // retains the original directional kernels and their separate replay buckets.
+  if (!profile_detail_enabled_) {
+    Kokkos::Profiling::pushRegion("cgl_lf_fluxes_fused");
+    auto f1 = f.x1f;
+    auto f2 = f.x2f;
+    auto f3 = f.x3f;
+    const int ni = ie - is + 2;
+    const int nj = multi_d ? je - js + 2 : 1;
+    const int nk = three_d ? ke - ks + 2 : 1;
+    const int nji = nj*ni;
+    const int nkji = nk*nji;
+    const int nmkji = (nmb1 + 1)*nkji;
+    if (collect_heat_flux_diagnostics) {
+      array_sum::GlobalSum qstats_fused;
+      Kokkos::parallel_reduce("cgl_lf_fluxes_fused",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum &qstats) {
+      const int m = idx/nkji;
+      const int k = (idx - m*nkji)/nji + ks;
+      const int j = (idx - m*nkji - (k - ks)*nji)/ni + js;
+      const int i = idx - m*nkji - (k - ks)*nji - (j - js)*ni + is;
+      if (j <= je && k <= ke) {
+        Real tx = (tpar(m,k,j,i) - tpar(m,k,j,i-1))/size.d_view(m).dx1;
+        Real px = (tperp(m,k,j,i) - tperp(m,k,j,i-1))/size.d_view(m).dx1;
+        Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
+        Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
+        if (multi_d) {
+          ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                          tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                          tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+          py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                          tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                          tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+          byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                      bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
+        }
+        if (three_d) {
+          tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                          tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                          tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+          pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                          tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                          tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+          bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                      bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
+        }
+        const Real bx = b.x1f(m,k,j,i);
+        const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
+        const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
+        CGLLFFaceState face;
+        Real eflux = 0.0, muflux = 0.0;
+        Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+        if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
+                                w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
+                                w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
+                                bx, by, bz, 0.5*bmag(m,k,j,i-1) + 0.5*bmag(m,k,j,i),
+                                0, lf_k, local, cpar0, backup, eos, face)) {
+          if (fast_arithmetic) {
+            Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
+            CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                          dt_sweep, rkl_weight, eflux, muflux,
+                          weighted_qpar_flux, weighted_qperp_flux,
+                          qpar_ratio, qperp_ratio);
+            if (OwnsHeatFluxDiagnosticFace(m, 0, i, is, ie, multilevel,
+                                           mblev.d_view(m), nghbr)) {
+              const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
+              AccumulateCGLLFDiagnosticFace(qstats, qpar_ratio, qperp_ratio, area,
+                                            tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                                            tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                                            weighted_qpar_flux, weighted_qperp_flux);
+            }
+          } else {
+            cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+            CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                      dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                      weighted_qperp_flux, qpar_ratio, qperp_ratio);
+            if (OwnsHeatFluxDiagnosticFace(m, 0, i, is, ie, multilevel,
+                                           mblev.d_view(m), nghbr)) {
+              const Real area = size.d_view(m).dx2*size.d_view(m).dx3;
+              AccumulateCGLLFDiagnosticFace(qstats, qpar_ratio, qperp_ratio, area,
+                                            tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                                            tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                                            weighted_qpar_flux, weighted_qperp_flux);
+            }
+          }
+        }
+        f1(m,IEN,k,j,i) = eflux;
+        f1(m,IAN,k,j,i) = muflux;
+      }
+      if (multi_d && i <= ie && k <= ke) {
+        const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                          tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                          tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
+        const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                          tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                          tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
+        const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                               bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx1;
+        const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
+        const Real py = (tperp(m,k,j,i) - tperp(m,k,j-1,i))/size.d_view(m).dx2;
+        const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
+        Real tz = 0.0, pz = 0.0, bzg = 0.0;
+        if (three_d) {
+          tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                          tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                          tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+          pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                          tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                          tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+          bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                      bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
+        }
+        const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
+        const Real by = b.x2f(m,k,j,i);
+        const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
+        CGLLFFaceState face;
+        Real eflux = 0.0, muflux = 0.0;
+        Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+        if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
+                                w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
+                                w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
+                                bx, by, bz, 0.5*bmag(m,k,j-1,i) + 0.5*bmag(m,k,j,i),
+                                1, lf_k, local, cpar0, backup, eos, face)) {
+          if (fast_arithmetic) {
+            Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
+            CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                          dt_sweep, rkl_weight, eflux, muflux,
+                          weighted_qpar_flux, weighted_qperp_flux,
+                          qpar_ratio, qperp_ratio);
+            if (OwnsHeatFluxDiagnosticFace(m, 1, j, js, je, multilevel,
+                                           mblev.d_view(m), nghbr)) {
+              const Real area = size.d_view(m).dx1*size.d_view(m).dx3;
+              AccumulateCGLLFDiagnosticFace(qstats, qpar_ratio, qperp_ratio, area,
+                                            tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                                            tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                                            weighted_qpar_flux, weighted_qperp_flux);
+            }
+          } else {
+            cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+            CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                      dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                      weighted_qperp_flux, qpar_ratio, qperp_ratio);
+            if (OwnsHeatFluxDiagnosticFace(m, 1, j, js, je, multilevel,
+                                           mblev.d_view(m), nghbr)) {
+              const Real area = size.d_view(m).dx1*size.d_view(m).dx3;
+              AccumulateCGLLFDiagnosticFace(qstats, qpar_ratio, qperp_ratio, area,
+                                            tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                                            tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                                            weighted_qpar_flux, weighted_qperp_flux);
+            }
+          }
+        }
+        f2(m,IEN,k,j,i) = eflux;
+        f2(m,IAN,k,j,i) = muflux;
+      }
+      if (three_d && i <= ie && j <= je) {
+        const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                          tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                          tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
+        const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                          tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                          tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
+        const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                               bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx1;
+        const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                          tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                          tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
+        const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                          tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                          tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
+        const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                               bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx2;
+        const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
+        const Real pz = (tperp(m,k,j,i) - tperp(m,k-1,j,i))/size.d_view(m).dx3;
+        const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
+        const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
+        const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
+        const Real bz = b.x3f(m,k,j,i);
+        CGLLFFaceState face;
+        Real eflux = 0.0, muflux = 0.0;
+        Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+        if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
+                                w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
+                                w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
+                                bx, by, bz, 0.5*bmag(m,k-1,j,i) + 0.5*bmag(m,k,j,i),
+                                2, lf_k, local, cpar0, backup, eos, face)) {
+          if (fast_arithmetic) {
+            Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
+            CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                          dt_sweep, rkl_weight, eflux, muflux,
+                          weighted_qpar_flux, weighted_qperp_flux,
+                          qpar_ratio, qperp_ratio);
+            if (OwnsHeatFluxDiagnosticFace(m, 2, k, ks, ke, multilevel,
+                                           mblev.d_view(m), nghbr)) {
+              const Real area = size.d_view(m).dx1*size.d_view(m).dx2;
+              AccumulateCGLLFDiagnosticFace(qstats, qpar_ratio, qperp_ratio, area,
+                                            tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                                            tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                                            weighted_qpar_flux, weighted_qperp_flux);
+            }
+          } else {
+            cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+            CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                      dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                      weighted_qperp_flux, qpar_ratio, qperp_ratio);
+            if (OwnsHeatFluxDiagnosticFace(m, 2, k, ks, ke, multilevel,
+                                           mblev.d_view(m), nghbr)) {
+              const Real area = size.d_view(m).dx1*size.d_view(m).dx2;
+              AccumulateCGLLFDiagnosticFace(qstats, qpar_ratio, qperp_ratio, area,
+                                            tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                                            tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                                            weighted_qpar_flux, weighted_qperp_flux);
+            }
+          }
+        }
+        f3(m,IEN,k,j,i) = eflux;
+        f3(m,IAN,k,j,i) = muflux;
+      }
+      }, Kokkos::Sum<array_sum::GlobalSum>(qstats_fused));
+      AccumulateHeatFluxDiagnostics(qstats_fused);
+    } else {
+      Kokkos::parallel_for("cgl_lf_fluxes_fused",
+          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+      KOKKOS_LAMBDA(const int idx) {
+      const int m = idx/nkji;
+      const int k = (idx - m*nkji)/nji + ks;
+      const int j = (idx - m*nkji - (k - ks)*nji)/ni + js;
+      const int i = idx - m*nkji - (k - ks)*nji - (j - js)*ni + is;
+      if (j <= je && k <= ke) {
+        Real tx = (tpar(m,k,j,i) - tpar(m,k,j,i-1))/size.d_view(m).dx1;
+        Real px = (tperp(m,k,j,i) - tperp(m,k,j,i-1))/size.d_view(m).dx1;
+        Real bxg = (bmag(m,k,j,i) - bmag(m,k,j,i-1))/size.d_view(m).dx1;
+        Real ty = 0.0, py = 0.0, byg = 0.0, tz = 0.0, pz = 0.0, bzg = 0.0;
+        if (multi_d) {
+          ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                          tpar(m,k,j+1,i-1) - tpar(m,k,j,i-1),
+                          tpar(m,k,j,i-1) - tpar(m,k,j-1,i-1))/size.d_view(m).dx2;
+          py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                          tperp(m,k,j+1,i-1) - tperp(m,k,j,i-1),
+                          tperp(m,k,j,i-1) - tperp(m,k,j-1,i-1))/size.d_view(m).dx2;
+          byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                      bmag(m,k,j+1,i-1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx2;
+        }
+        if (three_d) {
+          tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                          tpar(m,k+1,j,i-1) - tpar(m,k,j,i-1),
+                          tpar(m,k,j,i-1) - tpar(m,k-1,j,i-1))/size.d_view(m).dx3;
+          pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                          tperp(m,k+1,j,i-1) - tperp(m,k,j,i-1),
+                          tperp(m,k,j,i-1) - tperp(m,k-1,j,i-1))/size.d_view(m).dx3;
+          bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                      bmag(m,k+1,j,i-1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx3;
+        }
+        const Real bx = b.x1f(m,k,j,i);
+        const Real by = 0.5*bcc(m,IBY,k,j,i-1) + 0.5*bcc(m,IBY,k,j,i);
+        const Real bz = 0.5*bcc(m,IBZ,k,j,i-1) + 0.5*bcc(m,IBZ,k,j,i);
+        CGLLFFaceState face;
+        Real eflux = 0.0, muflux = 0.0;
+        Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+        if (BuildCGLLFFaceState(w(m,IDN,k,j,i-1), w(m,IDN,k,j,i),
+                                w(m,IPR,k,j,i-1), w(m,IPR,k,j,i),
+                                w(m,IPP,k,j,i-1), w(m,IPP,k,j,i),
+                                bx, by, bz, 0.5*bmag(m,k,j,i-1) + 0.5*bmag(m,k,j,i),
+                                0, lf_k, local, cpar0, backup, eos, face)) {
+          if (fast_arithmetic) {
+            Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
+            CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                          dt_sweep, rkl_weight, eflux, muflux,
+                          weighted_qpar_flux, weighted_qperp_flux,
+                          qpar_ratio, qperp_ratio);
+          } else {
+            cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+            CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                      dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                      weighted_qperp_flux, qpar_ratio, qperp_ratio);
+          }
+        }
+        f1(m,IEN,k,j,i) = eflux;
+        f1(m,IAN,k,j,i) = muflux;
+      }
+      if (multi_d && i <= ie && k <= ke) {
+        const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                          tpar(m,k,j-1,i+1) - tpar(m,k,j-1,i),
+                          tpar(m,k,j-1,i) - tpar(m,k,j-1,i-1))/size.d_view(m).dx1;
+        const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                          tperp(m,k,j-1,i+1) - tperp(m,k,j-1,i),
+                          tperp(m,k,j-1,i) - tperp(m,k,j-1,i-1))/size.d_view(m).dx1;
+        const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                               bmag(m,k,j-1,i+1) - bmag(m,k,j-1,i-1))/size.d_view(m).dx1;
+        const Real ty = (tpar(m,k,j,i) - tpar(m,k,j-1,i))/size.d_view(m).dx2;
+        const Real py = (tperp(m,k,j,i) - tperp(m,k,j-1,i))/size.d_view(m).dx2;
+        const Real byg = (bmag(m,k,j,i) - bmag(m,k,j-1,i))/size.d_view(m).dx2;
+        Real tz = 0.0, pz = 0.0, bzg = 0.0;
+        if (three_d) {
+          tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k-1,j,i),
+                          tpar(m,k+1,j-1,i) - tpar(m,k,j-1,i),
+                          tpar(m,k,j-1,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx3;
+          pz = VL4Limiter(tperp(m,k+1,j,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k-1,j,i),
+                          tperp(m,k+1,j-1,i) - tperp(m,k,j-1,i),
+                          tperp(m,k,j-1,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx3;
+          bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+                      bmag(m,k+1,j-1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx3;
+        }
+        const Real bx = 0.5*bcc(m,IBX,k,j-1,i) + 0.5*bcc(m,IBX,k,j,i);
+        const Real by = b.x2f(m,k,j,i);
+        const Real bz = 0.5*bcc(m,IBZ,k,j-1,i) + 0.5*bcc(m,IBZ,k,j,i);
+        CGLLFFaceState face;
+        Real eflux = 0.0, muflux = 0.0;
+        Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+        if (BuildCGLLFFaceState(w(m,IDN,k,j-1,i), w(m,IDN,k,j,i),
+                                w(m,IPR,k,j-1,i), w(m,IPR,k,j,i),
+                                w(m,IPP,k,j-1,i), w(m,IPP,k,j,i),
+                                bx, by, bz, 0.5*bmag(m,k,j-1,i) + 0.5*bmag(m,k,j,i),
+                                1, lf_k, local, cpar0, backup, eos, face)) {
+          if (fast_arithmetic) {
+            Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
+            CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                          dt_sweep, rkl_weight, eflux, muflux,
+                          weighted_qpar_flux, weighted_qperp_flux,
+                          qpar_ratio, qperp_ratio);
+          } else {
+            cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+            CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                      dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                      weighted_qperp_flux, qpar_ratio, qperp_ratio);
+          }
+        }
+        f2(m,IEN,k,j,i) = eflux;
+        f2(m,IAN,k,j,i) = muflux;
+      }
+      if (three_d && i <= ie && j <= je) {
+        const Real tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j,i-1),
+                          tpar(m,k-1,j,i+1) - tpar(m,k-1,j,i),
+                          tpar(m,k-1,j,i) - tpar(m,k-1,j,i-1))/size.d_view(m).dx1;
+        const Real px = VL4Limiter(tperp(m,k,j,i+1) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j,i-1),
+                          tperp(m,k-1,j,i+1) - tperp(m,k-1,j,i),
+                          tperp(m,k-1,j,i) - tperp(m,k-1,j,i-1))/size.d_view(m).dx1;
+        const Real bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+                               bmag(m,k-1,j,i+1) - bmag(m,k-1,j,i-1))/size.d_view(m).dx1;
+        const Real ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
+                          tpar(m,k,j,i) - tpar(m,k,j-1,i),
+                          tpar(m,k-1,j+1,i) - tpar(m,k-1,j,i),
+                          tpar(m,k-1,j,i) - tpar(m,k-1,j-1,i))/size.d_view(m).dx2;
+        const Real py = VL4Limiter(tperp(m,k,j+1,i) - tperp(m,k,j,i),
+                          tperp(m,k,j,i) - tperp(m,k,j-1,i),
+                          tperp(m,k-1,j+1,i) - tperp(m,k-1,j,i),
+                          tperp(m,k-1,j,i) - tperp(m,k-1,j-1,i))/size.d_view(m).dx2;
+        const Real byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+                               bmag(m,k-1,j+1,i) - bmag(m,k-1,j-1,i))/size.d_view(m).dx2;
+        const Real tz = (tpar(m,k,j,i) - tpar(m,k-1,j,i))/size.d_view(m).dx3;
+        const Real pz = (tperp(m,k,j,i) - tperp(m,k-1,j,i))/size.d_view(m).dx3;
+        const Real bzg = (bmag(m,k,j,i) - bmag(m,k-1,j,i))/size.d_view(m).dx3;
+        const Real bx = 0.5*bcc(m,IBX,k-1,j,i) + 0.5*bcc(m,IBX,k,j,i);
+        const Real by = 0.5*bcc(m,IBY,k-1,j,i) + 0.5*bcc(m,IBY,k,j,i);
+        const Real bz = b.x3f(m,k,j,i);
+        CGLLFFaceState face;
+        Real eflux = 0.0, muflux = 0.0;
+        Real qpar_ratio = 0.0, qperp_ratio = 0.0;
+        if (BuildCGLLFFaceState(w(m,IDN,k-1,j,i), w(m,IDN,k,j,i),
+                                w(m,IPR,k-1,j,i), w(m,IPR,k,j,i),
+                                w(m,IPP,k-1,j,i), w(m,IPP,k,j,i),
+                                bx, by, bz, 0.5*bmag(m,k-1,j,i) + 0.5*bmag(m,k,j,i),
+                                2, lf_k, local, cpar0, backup, eos, face)) {
+          if (fast_arithmetic) {
+            Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
+            CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                          dt_sweep, rkl_weight, eflux, muflux,
+                          weighted_qpar_flux, weighted_qperp_flux,
+                          qpar_ratio, qperp_ratio);
+          } else {
+            cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
+            CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+                      dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
+                      weighted_qperp_flux, qpar_ratio, qperp_ratio);
+          }
+        }
+        f3(m,IEN,k,j,i) = eflux;
+        f3(m,IAN,k,j,i) = muflux;
+      }
+      });
+    }
+    Kokkos::Profiling::popRegion();
+    return;
+  }
   auto f1 = f.x1f;
   const int ni1 = ie - is + 2;
   const int nj1 = je - js + 1;

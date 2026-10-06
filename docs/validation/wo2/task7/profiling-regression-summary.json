@@ -1,0 +1,20 @@
+{
+  "change": "Core summary expects heat_flux_total; detailed directional test unchanged.",
+  "tests": {
+    "cpu": {
+      "results": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/task7-final-profile-fixed-cpu-cpu/results.xml",
+      "sha256": "987fca83edaff718054936decab4bb3eefc9361b6a17d4a6c89cf31f5ee957be",
+      "passed": 2,
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-fixed-cpu.log"
+    },
+    "hip": {
+      "results": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/baseline/task7-final-profile-fixed-hip-cpu/results.xml",
+      "sha256": "aba73e54737479082be8cbc13224e1ac252ee57538333c126156276a8d2b7bd1",
+      "passed": 2,
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-fixed-hip.log"
+    }
+  },
+  "source_patch": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-test.patch",
+  "initial_harness_failure": "CPU first attempt requested GPU MPI support without linking GTL. The corrected launcher sets MPICH_GPU_SUPPORT_ENABLED=0 for CPU and 1 for HIP; no solver/test thresholds changed.",
+  "initial_log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-cpu.log"
+}

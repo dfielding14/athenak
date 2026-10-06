@@ -205,7 +205,7 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
         assert "sts_clear_flux" not in output
         for bucket in (
             "heat_flux_precompute",
-            "heat_flux_flux1",
+            "heat_flux_total",
             "sts_update_kernel",
             "primitive_refresh",
             "admissibility",

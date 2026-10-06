@@ -1,0 +1,151 @@
+{
+  "root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2",
+  "artifacts": [
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018/results.json",
+      "bytes": 301441,
+      "sha256": "52c492bdd064c557e0c2db976577d506194e9a23ca42e693c4e15f71ebfb440a"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/checks-5629018.log",
+      "bytes": 2887,
+      "sha256": "2e939d61625c0c54a3ec8b9e005eee463ab1599978043a3704833a948ec10117"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task7-time-5628672/results.json",
+      "bytes": 420275,
+      "sha256": "5c7491ca7ba9b0359a2f6089be09dfdeaae44a42731017673defe221f884ed27"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/TASK7_REPORT.md",
+      "bytes": 4783,
+      "sha256": "a55ab4ebde236039f0e4b196c0fe029087b3f48fc921ee382e288b9028330247"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/extraction-manifest.json",
+      "bytes": 1213,
+      "sha256": "6033105b5dfeca6c7e30488ac9c4a6177022ae5fa9913c5301a10aad15f1451e"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/structure-check.json",
+      "bytes": 3382,
+      "sha256": "448c2d1a6fc2cb692a0f3d789e4d01408ec069b36d420592a4550c7ad654a8da"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/make_fusion_candidate.py",
+      "bytes": 5518,
+      "sha256": "525f0ee9894f87b2053d752b3c6e0ea163ef00e5c43e66eb400dc774ee955b8d"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/check_final_structure.py",
+      "bytes": 3128,
+      "sha256": "4ce6da701129edf496b2515e810f2c57f1c13d52e894dadce00d36fb77ca0047"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/run_final_window.py",
+      "bytes": 15632,
+      "sha256": "214af21e9c0506c22eb8e937b4ff3221e5da3f9a0f99acd96300b28da03ac786"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/run_final_hip.sh",
+      "bytes": 1222,
+      "sha256": "f72dc09cf69f515cf18a2c9ccd4330aa397849e530199e5c29d35cd11433fb65"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task7-research/build_final_candidate.py",
+      "bytes": 5454,
+      "sha256": "a9c9125362bf02c6a69a1d8170be74a535e9d2cf8c971d5d94fa13964129f45a"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/task7-fusion-candidate.patch",
+      "bytes": 24500,
+      "sha256": "afcd873a0670b1ccd9c6cd35950fd48bfec7e996cd99b0a40f4922e5361c4b51"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/extraction-manifest.json",
+      "bytes": 1208,
+      "sha256": "1736076cfbd6b17484cb89e1890b4f449eac46a2b378503a31c934a123612a86"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/structure-check.json",
+      "bytes": 3382,
+      "sha256": "448c2d1a6fc2cb692a0f3d789e4d01408ec069b36d420592a4550c7ad654a8da"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/fused-source-manifest.json",
+      "bytes": 619,
+      "sha256": "a1d967ab0af774b0631686d66509bbf1a8ac3b186731f982b035dc69b9122844"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/standalone-body-comparison.json",
+      "bytes": 781,
+      "sha256": "e53aed41c0b1b197354228c45494398d0445b886896dc428270c6417ee95dacb"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/task7-correctness-summary.json",
+      "bytes": 373,
+      "sha256": "fd2971c1ff453caf7f9817d8a0f71a877456a2e50b2bba75b247e167a97a1dca"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task7-check-fixed-5628672/results.json",
+      "bytes": 204032,
+      "sha256": "6697acbe5dc2fb0435e5f4d1086abf0249fb7d2bb8e8b6b5ba34eb542cc40571"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/p1-research/runs/optimization-task7-reversal-fixed-5628672/results.json",
+      "bytes": 25572,
+      "sha256": "4d7fbf51b9563f76ce43d1084d11d247bb1bbdbeb3238ae00d1841e96de0fcdf"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/build/manifest-final-cpu.json",
+      "bytes": 84586,
+      "sha256": "2d5feb430ff2d18665adc9c1b64bb875c3130dd38ce4df37e74ab3538a74fa0d"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/build/manifest-final-hip.json",
+      "bytes": 87079,
+      "sha256": "d1939d6315b51a04f5d812bbf4f23d017107fe9a8990eec459da7c99e78e94a3"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/build-cpu.log",
+      "bytes": 34465,
+      "sha256": "1127d205af4f8337cc606868182016ad9cbcae5e14e1e5ec449b6dcda65c745c"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/build-hip.log",
+      "bytes": 38255,
+      "sha256": "3ce620ce172c039e9b46c1eff013c56ac13bc0eece5bc9c900013ab8c6c29e52"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-test.patch",
+      "bytes": 399,
+      "sha256": "230a6e5963fd69819027b5757b1d6b445f1efd4d6905b87ebb00882cf6bfc5c8"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-cpu.log",
+      "bytes": 2863,
+      "sha256": "ffc2db3730293ea3dbc3b9a20ae271051f0de8e0b2194a6de0a937ec2426e360"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-fixed-cpu.log",
+      "bytes": 245,
+      "sha256": "aab3f438f7c4754ebe1efd0c923ef7cb1ce1b6fb1bfa60b211e846c1dced0c97"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/profile-fixed-hip.log",
+      "bytes": 246,
+      "sha256": "c1983cf0250c9b687a3c8a418b61c71e6fc51fad0d62470fe830cb709b441cc6"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/run_profile_tests.sh",
+      "bytes": 1895,
+      "sha256": "79ccb7ad6edb69a6931f0ceacb5b52e352e966c9bb0ad345cd21d3c732b98f25"
+    },
+    {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/task7-fusion/run_profile_tests.before-cpu-env-fix.sh",
+      "bytes": 1770,
+      "sha256": "6f1f5b372c3e8c4adc75524e7cb9268164675f732317ecacdaea6b44e86f650a"
+    }
+  ],
+  "note": "Raw inputs, outputs, traces, logs, and failed earlier harness runs remain at their original paths. None were rewritten."
+}
