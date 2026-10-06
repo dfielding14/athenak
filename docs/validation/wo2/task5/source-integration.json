@@ -1,0 +1,47 @@
+{
+  "src/bvals/bvals.hpp": {
+    "source_sha256": "64f58106a1c87f1145cbd91bd035c446591ac5473ce359747042bbb87c88c30d",
+    "tested_source_sha256": "64f58106a1c87f1145cbd91bd035c446591ac5473ce359747042bbb87c88c30d",
+    "relation": "byte-identical"
+  },
+  "src/bvals/physics/hydro_bcs.cpp": {
+    "source_sha256": "c64caf98ebf1b81714b413ed3ed1b7bcdb64ed68ed44df54269fa40ba8ba0200",
+    "tested_source_sha256": "c64caf98ebf1b81714b413ed3ed1b7bcdb64ed68ed44df54269fa40ba8ba0200",
+    "relation": "byte-identical"
+  },
+  "src/eos/cgl_mhd.cpp": {
+    "source_sha256": "7e7c69d6dea5a89962ee8dd2b45e58167d6782bbca920b70ffe448427f126d51",
+    "tested_source_sha256": "7e7c69d6dea5a89962ee8dd2b45e58167d6782bbca920b70ffe448427f126d51",
+    "relation": "byte-identical"
+  },
+  "src/mhd/mhd.cpp": {
+    "source_sha256": "ecf69994247b36babdd34b0f9fcff94955f782128dc2e39b5bbc2da57bb2307b",
+    "tested_source_sha256": "ecf69994247b36babdd34b0f9fcff94955f782128dc2e39b5bbc2da57bb2307b",
+    "relation": "byte-identical"
+  },
+  "src/mhd/mhd_tasks.cpp": {
+    "source_sha256": "6c19de3249bfd39ff9e2ef3ed4c331ce585731b072900e02145408b581a7dc34",
+    "tested_source_sha256": "6c19de3249bfd39ff9e2ef3ed4c331ce585731b072900e02145408b581a7dc34",
+    "relation": "byte-identical"
+  },
+  "src/pgen/pgen.cpp": {
+    "source_sha256": "52c6836380abae38b227dff8d910f8ab389000b1a56262090c07f77b681ed691",
+    "tested_source_sha256": "52c6836380abae38b227dff8d910f8ab389000b1a56262090c07f77b681ed691",
+    "relation": "byte-identical"
+  },
+  "src/pgen/pgen.hpp": {
+    "source_sha256": "6bc9726480eb28b76ee4367820e8534a2cc5985abfb0839d6db533d286327516",
+    "tested_source_sha256": "6bc9726480eb28b76ee4367820e8534a2cc5985abfb0839d6db533d286327516",
+    "relation": "byte-identical"
+  },
+  "src/CMakeLists.txt": {
+    "source_sha256": "0aedfe882480623ab6fbc190651e9d3e23122e0e65c4871a8be86896c0855768",
+    "tested_source_sha256": "0aedfe882480623ab6fbc190651e9d3e23122e0e65c4871a8be86896c0855768",
+    "relation": "byte-identical"
+  },
+  "src/pgen/tests/cgl_lf_boundary.cpp": {
+    "source_sha256": "e4c80cdeb5eebcd1de80ecac4a2a816d75ccb7aad9775faf3a664bd5a01d57a9",
+    "tested_source_sha256": "fcf644d60afe101c9d02857b654f562baaccb6cef9fc53517ea56858032c14d8",
+    "relation": "whitespace-only; quoted-token-preserving comparison passed"
+  }
+}

@@ -122,6 +122,7 @@ add_executable(
         pgen/tests/cpaw.cpp
         pgen/tests/cshock.cpp
         pgen/tests/cgl_fofc.cpp
+        pgen/tests/cgl_lf_boundary.cpp
         pgen/tests/cgl_landau_fluid.cpp
         pgen/tests/cgl_lf_paper.cpp
         pgen/tests/cgl_lf_sbox.cpp

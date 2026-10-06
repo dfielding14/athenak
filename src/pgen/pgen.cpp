@@ -990,6 +990,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     CShock(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_fofc") == 0) {
     CGLFOFC(pin, is_restart);
+  } else if (pgen_fun_name.compare("cgl_lf_boundary") == 0) {
+    CGLLFBoundary(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_landau_fluid") == 0) {
     CGLLandauFluid(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_lf_paper") == 0) {

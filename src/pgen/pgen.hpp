@@ -61,6 +61,7 @@ class ProblemGenerator {
   void BondiAccretion(ParameterInput *pin, const bool restart);
   void CShock(ParameterInput *pin, const bool restart);
   void CGLFOFC(ParameterInput *pin, const bool restart);
+  void CGLLFBoundary(ParameterInput *pin, const bool restart);
   void CGLLandauFluid(ParameterInput *pin, const bool restart);
   void CGLLFPaper(ParameterInput *pin, const bool restart);
   void CGLLFSbox(ParameterInput *pin, const bool restart);

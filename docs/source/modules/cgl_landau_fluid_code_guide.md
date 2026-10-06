@@ -246,8 +246,11 @@ Current restrictions are intentionally conservative:
 
 - CGL is Newtonian MHD only; SR, GR, and dynamical-GR MHD reject it.
 - CGL dynamic runs use `rsolver = hlle`.
-- LF split integration rejects inflow and user boundaries because their `IAN`
-  writes are not magnetic-moment aware; support is deferred to WO2.
+- Active CGL LF fixed inflow converts its stored A using final ghost face B.
+  User callbacks use representation-aware `PrimToCons`, including temporary
+  destination arrays; see [the callback contract](cgl_lf_boundaries.md). The
+  post-prolongation refill may invoke callbacks again, so they must be
+  idempotent ghost fills without active-cell or one-time side effects.
 - Ordinary isotropic conduction is incompatible with `eos = cgl`.
 - CGL LF STS cannot be combined with another MHD STS process in the same run.
 - Explicit LF is a reference mode and cannot be combined with another active

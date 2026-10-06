@@ -1021,9 +1021,17 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
   TraceCGLLFTaskList(pmy_pack, "ApplyPhysicalBCs", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_physical_bcs);
 
-  // physical BCs
-  pbval_u->HydroBCs((pmy_pack), (pbval_u->u_in), u0);
-  pbval_b->BFieldBCs((pmy_pack), (pbval_b->b_in), b0);
+  // Fixed inflow A must be decoded using the already-filled face field. The
+  // ordinary A path retains its existing order; copy BCs are representation-neutral.
+  const bool magnetic_moment =
+      cgl_slot_representation == CGLSlotRepresentation::magnetic_moment;
+  if (magnetic_moment) {
+    pbval_b->BFieldBCs(pmy_pack, pbval_b->b_in, b0);
+    pbval_u->HydroBCs(pmy_pack, pbval_u->u_in, u0, true);
+  } else {
+    pbval_u->HydroBCs(pmy_pack, pbval_u->u_in, u0);
+    pbval_b->BFieldBCs(pmy_pack, pbval_b->b_in, b0);
+  }
 
   // user BCs
   if (pmy_pack->pmesh->pgen->user_bcs) {
@@ -1061,13 +1069,11 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
       pbval_u->ProlongateCC(u0, coarse_u0);
       pbval_b->ProlongateFC(b0, coarse_b0);
     }
-    // Prolongation fills transverse neighbor ghosts used as physical-corner donors.
-    // Refresh the physical ghosts before the next CGL conversion or LF stencil.
-    // The supported built-in BCs preserve the current A or magnetic-moment slot.
+    // Prolongation changes transverse physical-corner donors. Include user BCs
+    // and the current LF representation in the final idempotent ghost fill.
     if (peos->eos_data.is_cgl && pcgl_lf != nullptr &&
         !pmy_pack->pmesh->strictly_periodic) {
-      pbval_u->HydroBCs(pmy_pack, pbval_u->u_in, u0);
-      pbval_b->BFieldBCs(pmy_pack, pbval_b->b_in, b0);
+      ApplyPhysicalBCs(pdrive, stage);
     }
     TraceCGLLFTaskList(pmy_pack, "Prolongate", "end", stage);
   }

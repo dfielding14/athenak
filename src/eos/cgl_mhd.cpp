@@ -447,6 +447,8 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
   const int nscal = pmy_pack->pmhd->nscalars;
   const int nmb = pmy_pack->nmb_thispack;
   const Real bfloor = eos_data.bfloor;
+  const bool magnetic_moment = pmy_pack->pmhd->cgl_slot_representation ==
+          mhd::CGLSlotRepresentation::magnetic_moment;
 
   par_for("mhd_p2c", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -467,6 +469,13 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
     // call p2c function
     HydCons1D u;
     SingleP2C_CGLMHD(w, bfloor, u);
+    // Boundary callbacks, including temporary conserved buffers, use the current
+    // MHD representation. Outside an LF sweep this remains conserved anisotropy.
+    if (magnetic_moment) {
+      const Real bmag = sqrt(SQR(w.bx) + SQR(w.by) + SQR(w.bz));
+      const Real pperp = (bmag > bfloor) ? w.pp : TWO_3RDS*w.pp + ONE_3RD*w.e;
+      u.mu = pperp/fmax(bmag, bfloor);
+    }
 
     //no need to change pressures here if bfloor was hit as they'll be changed elsewhere
 

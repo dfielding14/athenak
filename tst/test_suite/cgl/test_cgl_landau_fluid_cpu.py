@@ -1278,37 +1278,6 @@ def test_cgl_lf_invalid_integrator_is_rejected():
     assert "cgl_heat_flux_integrator" in result.stdout
 
 
-@pytest.mark.parametrize(
-    ("integrator", "boundary_option", "expected"),
-    (
-        ("sts", "mesh/ix1_bc=inflow", "<mesh>/ix1_bc = inflow"),
-        ("explicit", "mesh/ox1_bc=user", "<mesh>/ox1_bc = user"),
-    ),
-)
-def test_cgl_lf_rejects_representation_blind_boundaries(
-    integrator, boundary_option, expected
-):
-    command = [
-        "./athena",
-        "-i",
-        f"{INPUT_ROOT}/cgl_lf_decay.athinput",
-        "mesh/ix1_bc=outflow",
-        "mesh/ox1_bc=outflow",
-        boundary_option,
-        f"mhd/cgl_heat_flux_integrator={integrator}",
-        "time/nlim=0",
-    ]
-    if integrator == "explicit":
-        command.append("time/sts_integrator=none")
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    output = result.stdout + result.stderr
-    assert result.returncode != 0
-    assert expected in output
-    assert "IAN slot temporarily stores magnetic moment" in output
-    assert "do not have a magnetic-moment-aware boundary contract" in output
-    assert "support is deferred to WO2" in output
-
-
 @pytest.mark.parametrize("integrator", ("sts", "explicit"))
 @pytest.mark.parametrize("boundary", ("periodic", "reflect", "outflow", "diode"))
 def test_cgl_lf_allows_representation_preserving_boundaries(integrator, boundary):

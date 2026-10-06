@@ -267,3 +267,12 @@ The [Task2 report](task2/README.md) records CPU/HIP/MPI default/fallback identit
 smooth second-order agreement, synchronization/rollback checks and paired GPU
 timings including snapshot overhead. It does not claim a speedup for the original
 paper turbulence deck, whose limiter physics makes it ineligible.
+
+## Task 5: representation-aware inflow and user boundaries
+
+Triage: **adapted and implemented**. Explicit and STS LF now support active-CGL
+inflow and primitive-based user boundary callbacks, including refined meshes.
+The [Task5 report](task5/README.md) records analytic halo checks, full-precision
+inflow/user agreement, a representation-blind negative control, and all 56
+standalone/combined CPU/HIP regression results, including one/four ranks.
+Passive mode retains its separately documented periodic-only scope.

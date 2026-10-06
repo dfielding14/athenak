@@ -46,6 +46,13 @@ same-level face. Synchronizing those E/mu fluxes restores conservation to roundi
 on CPU/HIP and one/four ranks. See the [Task 6 report](validation/wo2/task6/README.md)
 for causal traces, permanent regressions and qualified smooth-convergence results.
 
+Task5 releases active-CGL LF inflow and user boundaries for explicit/STS and
+refined meshes. Stored inflow is converted using the final ghost magnetic field;
+`PrimToCons` writes the currently active A or magnetic-moment representation for
+all destination arrays. The [boundary contract](source/modules/cgl_lf_boundaries.md)
+requires idempotent user ghost fills. The [validation report](validation/wo2/task5/README.md)
+includes an independent negative control and CPU/GPU/MPI halo/state checks.
+
 The following sections preserve the WO1 implementation record.
 
 

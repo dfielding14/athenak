@@ -13,6 +13,8 @@
 #include "mesh/mesh.hpp"
 #include "hydro/hydro.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
+#include "mhd/mhd.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \!fn void BoundaryValues::HydroBCs()
@@ -21,6 +23,34 @@
 
 void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
                                   DvceArray5D<Real> u0) {
+  HydroBCs(ppack, u_in, u0, false);
+}
+
+void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
+                                  DvceArray5D<Real> u0,
+                                  const bool cgl_magnetic_moment) {
+  // Read the complete fixed state, never u0: different variables are filled by
+  // different threads. Each face converts its own newly written IAN exactly once;
+  // later copy/reflection faces propagate mu through their corner donors.
+  DvceArray4D<Real> b1, b2, b3;
+  Real bfloor = 0.0, pfloor = 0.0;
+  if (cgl_magnetic_moment) {
+    b1 = ppack->pmhd->b0.x1f;
+    b2 = ppack->pmhd->b0.x2f;
+    b3 = ppack->pmhd->b0.x3f;
+    bfloor = ppack->pmhd->peos->eos_data.bfloor;
+    pfloor = ppack->pmhd->peos->eos_data.pfloor;
+  }
+  const auto inflow_value = KOKKOS_LAMBDA(const int m, const int n, const int k,
+                                         const int j, const int i, const int face) {
+    if (!cgl_magnetic_moment || n != IAN) return u_in.d_view(n,face);
+    return CGLConservedAnisotropyToMagneticMoment(
+        u_in.d_view(IDN,face), u_in.d_view(IM1,face), u_in.d_view(IM2,face),
+        u_in.d_view(IM3,face), u_in.d_view(IEN,face), u_in.d_view(IAN,face),
+        0.5*(b1(m,k,j,i) + b1(m,k,j,i+1)),
+        0.5*(b2(m,k,j,i) + b2(m,k,j+1,i)),
+        0.5*(b3(m,k,j,i) + b3(m,k+1,j,i)), bfloor, pfloor);
+  };
   // loop over all MeshBlocks in this MeshBlockPack
   auto &pm = ppack->pmesh;
   auto &indcs = ppack->pmesh->mb_indcs;
@@ -58,7 +88,7 @@ void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
           break;
         case BoundaryFlag::inflow:
           for (int i=0; i<ng; ++i) {
-            u0(m,n,k,j,is-i-1) = u_in.d_view(n,BoundaryFace::inner_x1);
+            u0(m,n,k,j,is-i-1) = inflow_value(m,n,k,j,is-i-1,BoundaryFace::inner_x1);
           }
           break;
         case BoundaryFlag::diode:
@@ -97,7 +127,7 @@ void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
           break;
         case BoundaryFlag::inflow:
           for (int i=0; i<ng; ++i) {
-            u0(m,n,k,j,ie+i+1) = u_in.d_view(n,BoundaryFace::outer_x1);
+            u0(m,n,k,j,ie+i+1) = inflow_value(m,n,k,j,ie+i+1,BoundaryFace::outer_x1);
           }
           break;
         case BoundaryFlag::diode:
@@ -146,7 +176,7 @@ void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
           break;
         case BoundaryFlag::inflow:
           for (int j=0; j<ng; ++j) {
-            u0(m,n,k,js-j-1,i) = u_in.d_view(n,BoundaryFace::inner_x2);
+            u0(m,n,k,js-j-1,i) = inflow_value(m,n,k,js-j-1,i,BoundaryFace::inner_x2);
           }
           break;
         case BoundaryFlag::diode:
@@ -185,7 +215,7 @@ void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
           break;
         case BoundaryFlag::inflow:
           for (int j=0; j<ng; ++j) {
-            u0(m,n,k,je+j+1,i) = u_in.d_view(n,BoundaryFace::outer_x2);
+            u0(m,n,k,je+j+1,i) = inflow_value(m,n,k,je+j+1,i,BoundaryFace::outer_x2);
           }
           break;
         case BoundaryFlag::diode:
@@ -233,7 +263,7 @@ void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
         break;
       case BoundaryFlag::inflow:
         for (int k=0; k<ng; ++k) {
-          u0(m,n,ks-k-1,j,i) = u_in.d_view(n,BoundaryFace::inner_x3);
+          u0(m,n,ks-k-1,j,i) = inflow_value(m,n,ks-k-1,j,i,BoundaryFace::inner_x3);
         }
         break;
       case BoundaryFlag::diode:
@@ -272,7 +302,7 @@ void MeshBoundaryValues::HydroBCs(MeshBlockPack *ppack, DualArray2D<Real> u_in,
         break;
       case BoundaryFlag::inflow:
         for (int k=0; k<ng; ++k) {
-          u0(m,n,ke+k+1,j,i) = u_in.d_view(n,BoundaryFace::outer_x3);
+          u0(m,n,ke+k+1,j,i) = inflow_value(m,n,ke+k+1,j,i,BoundaryFace::outer_x3);
         }
         break;
       case BoundaryFlag::diode:

@@ -1,0 +1,62 @@
+{
+  "classification": "Task5 permanent analytic+inflow/user boundary regressions, standalone and combined0/1/3/6/5",
+  "allocation": 5628672,
+  "test_results": {
+    "permanent-cpu": {
+      "junit": "baseline/task5-permanent-cpu-cpu/results.xml",
+      "sha256": "1f660f9dfd2a83f831705e1b41c28af65ce7b84ec705cc67ee3597157017bec1",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "14",
+      "time": "164.870",
+      "timestamp": "2026-10-06T18:15:39.597725",
+      "hostname": "login10"
+    },
+    "permanent-hip": {
+      "junit": "baseline/task5-permanent-hip-cpu/results.xml",
+      "sha256": "22d62df7804344b2fd5819a460e0e7f41780b5f0d15ed29f1b200dc1cca0ae55",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "14",
+      "time": "176.391",
+      "timestamp": "2026-10-06T18:18:24.877092",
+      "hostname": "login10"
+    },
+    "integrated-cpu": {
+      "junit": "baseline/task5-integrated-cpu-cpu/results.xml",
+      "sha256": "c499c19a0d0ea12c7107212d52f867f8a61490815ceb00e44916145c2dc43cdc",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "14",
+      "time": "167.698",
+      "timestamp": "2026-10-06T18:23:28.203357",
+      "hostname": "login10"
+    },
+    "integrated-hip": {
+      "junit": "baseline/task5-integrated-hip-cpu/results.xml",
+      "sha256": "3f483ac7213f1d4de57931a912d48440b00c3ee1ffb3eb8869ebe2fb15c3e693",
+      "name": "pytest",
+      "errors": "0",
+      "failures": "0",
+      "skipped": "0",
+      "tests": "14",
+      "time": "219.939",
+      "timestamp": "2026-10-06T18:26:16.425632",
+      "hostname": "login10"
+    }
+  },
+  "combined_cpu_binary": {
+    "path": "integration-research/build-cpu/src/athena",
+    "sha256": "ec446b3c50935cfe1d11b2b563d820395cba7ee1af71dcc2186bc80535ba1eee"
+  },
+  "combined_hip_binary": {
+    "path": "integration-research/build-hip/src/athena",
+    "sha256": "f47cea69f5d454dfb9bcc62913140a15bdc993a48c61c7ec82caba9e34167775"
+  }
+}

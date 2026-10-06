@@ -1,0 +1,178 @@
+[
+  {
+    "label": "cpu-prototype-recheck",
+    "method": "sts",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-prototype-recheck/perturbed-sts-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-prototype-recheck/perturbed-sts-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "bdfcd474e396329d0141f2017103020db918307e970bccf0fce1912611e33b5e",
+      "bb1c2ce141008872dd40fc0b87229f32618df167e291319dead87b9dc2839085"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "cpu-prototype-recheck",
+    "method": "explicit",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-prototype-recheck/perturbed-explicit-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-prototype-recheck/perturbed-explicit-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "e3979a2f8bcb8fdc329fb33fa5b385354a59efbbb9f46b94bf7c4c031ef5e576",
+      "96debca5a59b6f78ae9c103dcb21c4a2e1a2e06eef28c4fbc35e950a6d95c041"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "hip-prototype",
+    "method": "sts",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-prototype/perturbed-sts-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-prototype/perturbed-sts-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "6732ab008472ae6b8c94f6d0f4f7fe8960e46e61984627ea7849bc1da4cc4cc4",
+      "39fef57d8d1776f37f5dd8c51b1e164427c3812252c0a105cfef8cacc3eaa3b4"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "hip-prototype",
+    "method": "explicit",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-prototype/perturbed-explicit-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-prototype/perturbed-explicit-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "3db9fda9c34e1a667ec3eedac373668cf8ec9307652f0a0dcd689d3e17f81e3f",
+      "b3fd8cfbc925447b60218ee455a9651e3e995ea0278e55b93d847ac185de1fcb"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "cpu-mpi-prototype",
+    "method": "sts",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-mpi-prototype/perturbed-sts-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-mpi-prototype/perturbed-sts-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "f1d9cc971cbe22b76a9c9d36027dd0d3ce182fa426c380923552809cebc118aa",
+      "13bea9794b60558dff3d2d274a2a696509c643587b4f27d8235faef3892d32cd"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "cpu-mpi-prototype",
+    "method": "explicit",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-mpi-prototype/perturbed-explicit-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/cpu-mpi-prototype/perturbed-explicit-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "456d0d047cd00ed6867a6491805a8c50a2d525ad19eae5ef34aae8e8364ead6e",
+      "00f0899d2f6c6ed1ca9ce70d819b18ff0cb406d69a27e2b074dece6ed7a8e957"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "hip-mpi-prototype",
+    "method": "sts",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-mpi-prototype/perturbed-sts-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-mpi-prototype/perturbed-sts-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "42166f068e105a3628fe2cbac57ef783de5af6d16c6d22a9ef4cbd2925afeb75",
+      "8607aaea532ff36038ec17938351af9f82fe94657c60abc5b5b9cb2b64cd0c88"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  },
+  {
+    "label": "hip-mpi-prototype",
+    "method": "explicit",
+    "files": [
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-mpi-prototype/perturbed-explicit-inflow/rst/boundary.00003.rst",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/task5-research/runs/hip-mpi-prototype/perturbed-explicit-user/rst/boundary.00003.rst"
+    ],
+    "raw_sha256": [
+      "3697faca0a574f0d5ce22b7e4d4f1c9d18cb853b1d1b029d25255cc38e3215ab",
+      "d82f849881105464ea9d6b8573a551e53c4a7573347697d1d97433315f8241dd"
+    ],
+    "max_full_state_difference": 0.0,
+    "active_max_differences_by_slot": [
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0,
+      0.0
+    ]
+  }
+]

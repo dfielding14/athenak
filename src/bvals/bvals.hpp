@@ -138,6 +138,10 @@ class MeshBoundaryValues {
 
   // BCs associated with various physics modules
   static void HydroBCs(MeshBlockPack *pp, DualArray2D<Real> uin, DvceArray5D<Real> u0);
+  // The MHD-only overload writes fixed inflow data in the current LF representation.
+  // Face fields must already contain their physical boundary values.
+  static void HydroBCs(MeshBlockPack *pp, DualArray2D<Real> uin,
+                      DvceArray5D<Real> u0, bool cgl_magnetic_moment);
   static void BFieldBCs(MeshBlockPack *pp, DualArray2D<Real> bin, DvceFaceFld4D<Real> b0);
   static void RadiationBCs(MeshBlockPack *pp,DualArray2D<Real> iin,DvceArray5D<Real> i0);
   static void Z4cBCs(MeshBlockPack *pp, DualArray2D<Real> uin, DvceArray5D<Real> u0,

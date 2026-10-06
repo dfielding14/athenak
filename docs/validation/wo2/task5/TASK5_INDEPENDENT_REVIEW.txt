@@ -1,0 +1,57 @@
+Independent Task 5 static review (2026-10-06)
+============================================
+
+Reviewed the current source overlay, not only the older core patch:
+  src/bvals/physics/hydro_bcs.cpp
+  src/eos/cgl_mhd.cpp
+  src/mhd/mhd_tasks.cpp
+  docs/source/modules/cgl_lf_boundaries.md
+Also inspected the baseline face-field BC and LF task ordering, plus the new
+boundary callback fixture. No application runs were launched during the timing
+pause. Runtime and negative-control acceptance remain owned by the root agent.
+
+No blocking race or active-CGL representation defect was found in this scope.
+
+The fixed-inflow IAN thread reads the complete immutable u_in state and face B,
+not u0 values being written by other variable threads. Thus density, momentum
+and energy do not create a cross-thread read/write dependency during conversion.
+Each directional kernel owns unique array entries within its slab. Directional
+x/y/z kernels use the same ordered execution space, so later corner copies see
+the previous slab. A later inflow face computes its own mu from its own stored A;
+a later copy face copies current mu and never interprets it as A again.
+
+The LF path queues all physical B fills before the hydro fills. Its centered B
+reads include both normal faces and use the correct extra face extents in inactive
+dimensions. Boundary-field and hydro kernels retain the existing corner order.
+No extra global fence is needed for ordered kernels on the same execution space.
+As with the existing physical BCs, mutually incompatible prescribed corner data
+are resolved by face ordering rather than made physically consistent by this fix.
+
+Current CGLMHD::PrimToCons selects the MHD slot representation independently of
+the destination pointer. That is the needed behavior for user callbacks converting
+into a temporary buffer and then copying owned ghosts. Outside LF it still writes
+ordinary active-CGL E/A. During LF it leaves the original energy construction and
+overrides IAN with pperp/max(B,bfloor), using the same weak-field isotropization as
+SingleP2C_CGLMHD. The scalar helper deliberately remains an ordinary E/A encoder,
+which the documentation states explicitly.
+
+The common LF split graph invokes ApplyPhysicalBCs for explicit and RKL2 stages.
+Reapplying physical boundaries after prolongation is confined to CGL with an LF
+module on a nonperiodic refined mesh. This repairs corner donor values before
+primitive refresh/stencil use, and also applies to the ordinary representation
+between LF sweeps. The callback contract therefore must require idempotent ghost
+fills with no active-cell or one-time side effects; the documentation does so.
+The test callback fills face ghosts first, constructs Bcc from those faces, calls
+PrimToCons into a temporary array and copies only owned ghost cells, exercising
+the key destination-independence contract directly.
+
+Artifact issue: task5-core-draft.patch still contains the older cons.data()==u0
+guard and comments saying temporary buffers keep A. The current source and docs
+have already corrected that rule. Do not ship or review that stale patch as the
+final implementation; regenerate it or use the complete current artifact.
+
+Integration boundary: this code is for active CGL. Combining Task4's passive J/A
+mode requires its own fixed-inflow and PrimToCons representation audit, since LF
+temporarily changes the passive energy slot to U as well as IAN to mu. The present
+inflow decoder assumes ordinary total energy and A. The passive prototype must
+reject unsupported boundaries or add its own correct conversion before combining.

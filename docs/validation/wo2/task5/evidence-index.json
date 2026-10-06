@@ -1,0 +1,46 @@
+{
+  "task5-research/inflow-user-full-precision.json": {
+    "bytes": 5671,
+    "sha256": "d065354b7f27c6f4b324d4c7519b02f670493ce994afdc53405867ef81c4b4a8"
+  },
+  "task5-research/runs/representation-blind-negative/results.json": {
+    "bytes": 5497,
+    "sha256": "8431d863b7261eb0a9c2cb3acd2a9c2241d1387736902060632670bd35716340"
+  },
+  "task5-research/TASK5_INDEPENDENT_REVIEW.txt": {
+    "bytes": 3586,
+    "sha256": "8e8fca8d496bd1bec80950707d51e92f81b371e28eeb28ac14ea81e5fda433b7"
+  },
+  "task5-research/build/cpu/manifest.json": {
+    "bytes": 22392,
+    "sha256": "cebf9de7e70e6e41d7e7fa48b1630114bc93e3e3f47b9b715c57494bb4f5115d"
+  },
+  "task5-research/build/hip/manifest.json": {
+    "bytes": 25137,
+    "sha256": "afc1d94937ab3cf44c9f2cb53fa360a88f36e6652047ef4f945a8824a872b77d"
+  },
+  "integration-research/source-manifest.json": {
+    "bytes": 4921,
+    "sha256": "aa4d294da9aa8d5eda5590964d1d761aedf26e86486686e1139022ed9338fd7c"
+  },
+  "task5-research/runs/cpu-prototype/results.json": {
+    "bytes": 6885,
+    "sha256": "b930473c458d0a2e24031c6a5ce8261992d18b7009284665a3d28e522cc01153"
+  },
+  "task5-research/runs/cpu-prototype-recheck/results.json": {
+    "bytes": 9895,
+    "sha256": "0db61e3524daf15ea15990effd39adda0faa7301f35859c76a707733fd5c232b"
+  },
+  "task5-research/runs/hip-prototype/results.json": {
+    "bytes": 16049,
+    "sha256": "b471dbbb49f212b23d9dea4bc1e77cd858e75efb1adbe3a1f59e6f2fb0776e90"
+  },
+  "task5-research/runs/cpu-mpi-prototype/results.json": {
+    "bytes": 20933,
+    "sha256": "f88f397b127b4f0d476f22f9e752d7c4e131125164040e32528ae61f1650e72f"
+  },
+  "task5-research/runs/hip-mpi-prototype/results.json": {
+    "bytes": 21223,
+    "sha256": "c395d16ccc5fc0863b08fa2130056b2f4a2f1d154c8abf03a36648f028a864ca"
+  }
+}

@@ -233,9 +233,10 @@ assumptions, derivation, exceptional arithmetic, and regression cases.
 
 - CGL is not available for SR, GR, or dynamical-GR MHD.
 - `mhd/passive = true` is disabled pending the WO2 thermal-energy redesign.
-- LF split integration rejects inflow and user boundary conditions because
-  they do not have a magnetic-moment-aware `IAN` contract. Periodic, outflow,
-  reflecting, and diode boundaries remain supported.
+- Active CGL LF supports inflow and user boundaries in explicit and STS
+  integration, including refined meshes. User callbacks must follow the
+  [representation-aware boundary contract](cgl_lf_boundaries.md). Periodic,
+  outflow, reflecting and diode boundaries remain supported.
 - CGL dynamic runs use `rsolver = hlle`; LLF and HLLD are rejected.
 - Ordinary `<mhd>/conductivity` is rejected with `eos = cgl`.
 - CGL LF with `cgl_heat_flux_integrator = sts` cannot be combined with

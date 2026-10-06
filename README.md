@@ -20,6 +20,14 @@ AthenaK is targeting challenging problems that require exascale resources, and a
 
 The numerical algorithms implemented in AthenaK are all based on higher-order finite volume methods with a variety of reconstruction algorithms, Riemann solvers, and time integration methods.
 
+## CGL and Landau-fluid extension
+
+This branch includes Newtonian CGL with Landau-fluid heat flux and RKL2 super
+time stepping. See the [module guide](docs/source/modules/cgl_landau_fluid.md)
+and [Frontier validation report](docs/validation/wo2/README.md). Active-CGL LF
+supports inflow and primitive-based user boundaries under the
+[representation-aware callback contract](docs/source/modules/cgl_lf_boundaries.md).
+
 ## Getting Started
 
 The code is designed to be user-friendly with as few external dependencies as possible.
