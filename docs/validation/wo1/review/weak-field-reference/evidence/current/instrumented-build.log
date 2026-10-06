@@ -1,0 +1,23 @@
+[  2%] Built target kokkossimd
+[  2%] Built target AlwaysCheckGit
+[ 11%] Built target kokkoscore
+[ 12%] Built target impl_git_version
+[ 13%] Built target kokkoscontainers
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/bvals/prolong_prims.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/diffusion/cgl_landau_fluid.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/eos/cgl_mhd.cpp.o
+[ 15%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_mhd.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_srmhd.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/eos/ideal_grmhd.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/mesh/mesh_refinement.cpp.o
+[ 16%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_ct.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fluxes.cpp.o
+[ 17%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_fofc.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_tasks.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/mhd/mhd_update.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/cgl_fofc.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/pgen/tests/divb_amr.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/pgen/turb.cpp.o
+[ 18%] Building CXX object src/CMakeFiles/athena.dir/srcterms/turb_driver.cpp.o
+[ 19%] Linking CXX executable athena
+[100%] Built target athena

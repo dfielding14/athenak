@@ -1,0 +1,24 @@
+{
+  "status_report_audit": "passed, zero warnings",
+  "relative_links_checked": 3,
+  "missing_relative_links": [],
+  "final_smooth_tables": 12,
+  "current_summary_storage": "deterministic gzip, mtime=0",
+  "current_summary_decompressed_sha256": "3051d50612acc62f928856c97e6c5cf1162db3d73bb52ea05c6d55cc1f4487c1",
+  "current_summary_matches_full_bundle_original": true,
+  "derived_json_reproduction_equal": {
+    "figures/derived-results.json": true,
+    "energy-budget.json": true
+  },
+  "reproduction_command": [
+    "/Users/dbf75/.uv/envs/interactive/.venv/bin/python3",
+    "/Users/dbf75/.codex/worktrees/bf22/athenak-DF/docs/validation/wo1/review/weak-field-reference/analyze_comparison.py",
+    "--runs-root",
+    "/var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/b4-package-gzip-replay-h4bb7yla/evidence",
+    "--output",
+    "/var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/b4-package-gzip-replay-h4bb7yla/figures"
+  ],
+  "reproduction_stdout": "",
+  "reproduction_stderr": "",
+  "source_bundle_raw_archives_copied": false
+}

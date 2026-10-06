@@ -1,0 +1,1332 @@
+[
+  {
+    "name": "fofc_bf1.0e-10_v-10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-10_v-10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.01026837,
+    "min_ratio": 0.9993503552838069,
+    "max_ratio": 2713578766140.1313,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 2626809192472.0356,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007800943,
+        "min_ratio": 1.0,
+        "max_ratio": 2665677817616.6665,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.00103275,
+        "min_ratio": 0.9999986544453401,
+        "max_ratio": 2627620123210.369,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001278949,
+        "min_ratio": 0.9999981116081509,
+        "max_ratio": 2627763115291.143,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 5936483785535.977
+  },
+  {
+    "name": "fofc_bf1.0e-10_v-10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-10_v-10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 60,
+    "time": 0.012,
+    "min_ratio": 0.9982581504228158,
+    "max_ratio": 2976586776964.382,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 2626809192472.0356,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007800943,
+        "min_ratio": 1.0,
+        "max_ratio": 2665677817616.6665,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.00103275,
+        "min_ratio": 0.9999986544453401,
+        "max_ratio": 2627620123210.369,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001278949,
+        "min_ratio": 0.9999981116081509,
+        "max_ratio": 2627763115291.143,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 5936483785535.977
+  },
+  {
+    "name": "fofc_bf1.0e-10_v10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-10_v10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.01026837,
+    "min_ratio": 0.9993503552838107,
+    "max_ratio": 2713578766140.1885,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 2626809192472.0356,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007800943,
+        "min_ratio": 1.0,
+        "max_ratio": 2665677817616.7046,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.00103275,
+        "min_ratio": 0.9999986544453401,
+        "max_ratio": 2627620123210.362,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001278949,
+        "min_ratio": 0.9999981116081509,
+        "max_ratio": 2627763115291.143,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 5936483785535.941
+  },
+  {
+    "name": "fofc_bf1.0e-10_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-10_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 60,
+    "time": 0.012,
+    "min_ratio": 0.9982581504227751,
+    "max_ratio": 2976586776964.439,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 2626809192472.0356,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007800943,
+        "min_ratio": 1.0,
+        "max_ratio": 2665677817616.7046,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.00103275,
+        "min_ratio": 0.9999986544453401,
+        "max_ratio": 2627620123210.362,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001278949,
+        "min_ratio": 0.9999981116081509,
+        "max_ratio": 2627763115291.143,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 5936483785535.941
+  },
+  {
+    "name": "fofc_bf1.0e-14_v-10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-14_v-10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.01034706,
+    "min_ratio": 0.9990389978011068,
+    "max_ratio": 2713508761794.0317,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2626662284722.6094,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007799944,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2627325395462.6826,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001033827,
+        "min_ratio": 0.9999996867811507,
+        "max_ratio": 2627595830338.317,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001286484,
+        "min_ratio": 0.9999963688243468,
+        "max_ratio": 2627707079939.6016,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 7538972184457.31
+  },
+  {
+    "name": "fofc_bf1.0e-14_v-10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-14_v-10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 60,
+    "time": 0.012,
+    "min_ratio": 0.9853146838553515,
+    "max_ratio": 2870318519099.3853,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2626662284722.6094,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007799944,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2627325395462.6826,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001033827,
+        "min_ratio": 0.9999996867811507,
+        "max_ratio": 2627595830338.317,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001286484,
+        "min_ratio": 0.9999963688243468,
+        "max_ratio": 2627707079939.6016,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 7538972184457.31
+  },
+  {
+    "name": "fofc_bf1.0e-14_v10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-14_v10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.01034706,
+    "min_ratio": 0.9990389978010764,
+    "max_ratio": 2713508761794.017,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2626662284722.5884,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007799944,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2627325395462.64,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001033827,
+        "min_ratio": 0.9999996867811507,
+        "max_ratio": 2627595830338.2456,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001286484,
+        "min_ratio": 0.9999963688243468,
+        "max_ratio": 2627707079939.502,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 7538972184453.327
+  },
+  {
+    "name": "fofc_bf1.0e-14_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/fofc_bf1.0e-14_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 60,
+    "time": 0.012,
+    "min_ratio": 0.9853146838553944,
+    "max_ratio": 2870318519099.4136,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2626662284722.5884,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007799944,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 2627325395462.64,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001033827,
+        "min_ratio": 0.9999996867811507,
+        "max_ratio": 2627595830338.2456,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001286484,
+        "min_ratio": 0.9999963688243468,
+        "max_ratio": 2627707079939.502,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 7538972184453.327
+  },
+  {
+    "name": "nofc_bf1.0e-10_v-10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-10_v-10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.0129153,
+    "min_ratio": 0.9994344478731185,
+    "max_ratio": 2319682900355.196,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 1972152706667.5095,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007852031,
+        "min_ratio": 1.0,
+        "max_ratio": 2064732606142.671,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044372,
+        "min_ratio": 0.9999999999908711,
+        "max_ratio": 2124284562232.929,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001303037,
+        "min_ratio": 0.9999999999965774,
+        "max_ratio": 2165488039822.8894,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2319682900355.196
+  },
+  {
+    "name": "nofc_bf1.0e-10_v-10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-10_v-10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 47,
+    "time": 0.012,
+    "min_ratio": 0.9993091421433571,
+    "max_ratio": 2294561958246.8027,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 1972152706667.5095,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007852031,
+        "min_ratio": 1.0,
+        "max_ratio": 2064732606142.671,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044372,
+        "min_ratio": 0.9999999999908711,
+        "max_ratio": 2124284562232.929,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001303037,
+        "min_ratio": 0.9999999999965774,
+        "max_ratio": 2165488039822.8894,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2303453328344.4766
+  },
+  {
+    "name": "nofc_bf1.0e-10_v10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-10_v10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.0129153,
+    "min_ratio": 0.9994344478731185,
+    "max_ratio": 2319682900355.196,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 1972152706667.5095,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007852031,
+        "min_ratio": 1.0,
+        "max_ratio": 2064732606142.671,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044372,
+        "min_ratio": 0.9999999999908711,
+        "max_ratio": 2124284562232.929,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001303037,
+        "min_ratio": 0.9999999999965774,
+        "max_ratio": 2165488039822.8894,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2319682900355.196
+  },
+  {
+    "name": "nofc_bf1.0e-10_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-10_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 47,
+    "time": 0.012,
+    "min_ratio": 0.9993091421433571,
+    "max_ratio": 2294561958246.8027,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 110980167.37275322,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 1.0,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 1.0,
+        "max_ratio": 110980167.37275322,
+        "min_pressure": 1.6314995083498347e-08,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.000526212,
+        "min_ratio": 1.0,
+        "max_ratio": 1972152706667.5095,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007852031,
+        "min_ratio": 1.0,
+        "max_ratio": 2064732606142.671,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044372,
+        "min_ratio": 0.9999999999908711,
+        "max_ratio": 2124284562232.929,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001303037,
+        "min_ratio": 0.9999999999965774,
+        "max_ratio": 2165488039822.8894,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2303453328344.4766
+  },
+  {
+    "name": "nofc_bf1.0e-14_v-10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-14_v-10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.01291712,
+    "min_ratio": 0.9994537563064956,
+    "max_ratio": 2282667681446.6396,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.9999998329213425,
+        "max_ratio": 1972105551342.9043,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007851173,
+        "min_ratio": 0.9999997508046357,
+        "max_ratio": 2064707503879.6726,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044311,
+        "min_ratio": 0.9999996687293036,
+        "max_ratio": 2124272011387.8892,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001302993,
+        "min_ratio": 0.9999997592272434,
+        "max_ratio": 2165481182172.2175,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2282667681446.6396
+  },
+  {
+    "name": "nofc_bf1.0e-14_v-10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-14_v-10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 47,
+    "time": 0.012,
+    "min_ratio": 0.9992850392386619,
+    "max_ratio": 2282666320647.017,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.9999998329213425,
+        "max_ratio": 1972105551342.9043,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007851173,
+        "min_ratio": 0.9999997508046357,
+        "max_ratio": 2064707503879.6726,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044311,
+        "min_ratio": 0.9999996687293036,
+        "max_ratio": 2124272011387.8892,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001302993,
+        "min_ratio": 0.9999997592272434,
+        "max_ratio": 2165481182172.2175,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2282666320647.017
+  },
+  {
+    "name": "nofc_bf1.0e-14_v10.0_cycles50",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-14_v10.0_cycles50",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 50,
+    "time": 0.01291712,
+    "min_ratio": 0.9994537563064956,
+    "max_ratio": 2282667681446.6396,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.9999998329213425,
+        "max_ratio": 1972105551342.9043,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007851173,
+        "min_ratio": 0.9999997508046357,
+        "max_ratio": 2064707503879.6726,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044311,
+        "min_ratio": 0.9999996687293036,
+        "max_ratio": 2124272011387.8892,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001302993,
+        "min_ratio": 0.9999997592272434,
+        "max_ratio": 2165481182172.2175,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2282667681446.6396
+  },
+  {
+    "name": "nofc_bf1.0e-14_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/nofc_bf1.0e-14_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 47,
+    "time": 0.012,
+    "min_ratio": 0.9992850392386619,
+    "max_ratio": 2282666320647.017,
+    "min_pressure": 1e-12,
+    "first_fail_cycle": 1,
+    "first_fail_time": 0.0002663643,
+    "first_fail_max_ratio": 5523193621.282646,
+    "status": "completed",
+    "min_pressure_all_outputs": 1e-12,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999997,
+        "max_ratio": 1.0,
+        "min_pressure": 1.0,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999999153699144,
+        "max_ratio": 5523193621.282646,
+        "min_pressure": 3.2782498988620214e-10,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005261107,
+        "min_ratio": 0.9999998329213425,
+        "max_ratio": 1972105551342.9043,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007851173,
+        "min_ratio": 0.9999997508046357,
+        "max_ratio": 2064707503879.6726,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001044311,
+        "min_ratio": 0.9999996687293036,
+        "max_ratio": 2124272011387.8892,
+        "min_pressure": 1e-12,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001302993,
+        "min_ratio": 0.9999997592272434,
+        "max_ratio": 2165481182172.2175,
+        "min_pressure": 1e-12,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 2282666320647.017
+  },
+  {
+    "name": "smooth_nx128_bf1.0e-14_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/smooth_nx128_bf1.0e-14_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 46,
+    "time": 0.012,
+    "min_ratio": 0.997325348817338,
+    "max_ratio": 1.3908412561057042,
+    "min_pressure": 1.0000000053111502,
+    "first_fail_cycle": null,
+    "first_fail_time": null,
+    "first_fail_max_ratio": null,
+    "status": "completed",
+    "min_pressure_all_outputs": 1.0000000000168832,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.9999999999999939,
+        "max_ratio": 1.0000000000000069,
+        "min_pressure": 1.0000000000168832,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0002663643,
+        "min_ratio": 0.9999861628090861,
+        "max_ratio": 1.0283609280027,
+        "min_pressure": 1.000000000018196,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0005325463,
+        "min_ratio": 0.9999703365491925,
+        "max_ratio": 1.041430936506803,
+        "min_pressure": 1.0000000000199334,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0007986425,
+        "min_ratio": 0.999954637207812,
+        "max_ratio": 1.0525457024929143,
+        "min_pressure": 1.0000000000221358,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.001064679,
+        "min_ratio": 0.9999405195032246,
+        "max_ratio": 1.0592922627250656,
+        "min_pressure": 1.0000000000248246,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.001330658,
+        "min_ratio": 0.9999186237124424,
+        "max_ratio": 1.070748624984599,
+        "min_pressure": 1.0000000000280282,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 1.3908412561057042
+  },
+  {
+    "name": "smooth_nx256_bf1.0e-14_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/smooth_nx256_bf1.0e-14_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 91,
+    "time": 0.012,
+    "min_ratio": 0.9994614835611134,
+    "max_ratio": 1.0997705978921812,
+    "min_pressure": 1.0000000055321563,
+    "first_fail_cycle": null,
+    "first_fail_time": null,
+    "first_fail_max_ratio": null,
+    "status": "completed",
+    "min_pressure_all_outputs": 1.0000000000153149,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.999999999999993,
+        "max_ratio": 1.0000000000000064,
+        "min_pressure": 1.0000000000153149,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 0.0001331822,
+        "min_ratio": 0.999995615868594,
+        "max_ratio": 1.0069542348724567,
+        "min_pressure": 1.0000000000159004,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0002663416,
+        "min_ratio": 0.9999912141999154,
+        "max_ratio": 1.0095791427444554,
+        "min_pressure": 1.0000000000166416,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0003994919,
+        "min_ratio": 0.9999866785008027,
+        "max_ratio": 1.0119578128875546,
+        "min_pressure": 1.0000000000175338,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.0005326355,
+        "min_ratio": 0.9999823356283033,
+        "max_ratio": 1.0128998504215463,
+        "min_pressure": 1.0000000000185605,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.0006657737,
+        "min_ratio": 0.9999778666978751,
+        "max_ratio": 1.0152441115390745,
+        "min_pressure": 1.0000000000197156,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 1.0997705978921812
+  },
+  {
+    "name": "smooth_nx512_bf1.0e-14_v10.0_time012",
+    "working_directory": "/private/tmp/cgl-b4-compare-20261006/majeski/runs/smooth_nx512_bf1.0e-14_v10.0_time012",
+    "command": [
+      "/private/tmp/cgl-b4-compare-20261006/majeski/build/src/athena",
+      "-i",
+      "input.athinput"
+    ],
+    "ncycle": 181,
+    "time": 0.012,
+    "min_ratio": 0.9998443540164301,
+    "max_ratio": 1.0281812380521838,
+    "min_pressure": 1.000000005585815,
+    "first_fail_cycle": null,
+    "first_fail_time": null,
+    "first_fail_max_ratio": null,
+    "status": "completed",
+    "min_pressure_all_outputs": 1.0000000000145821,
+    "first_five": [
+      {
+        "cycle": 0,
+        "time": 0.0,
+        "min_ratio": 0.9999999999999929,
+        "max_ratio": 1.0000000000000067,
+        "min_pressure": 1.0000000000145821,
+        "finite": true
+      },
+      {
+        "cycle": 1,
+        "time": 6.659109e-05,
+        "min_ratio": 0.9999992124543637,
+        "max_ratio": 1.0017234235977641,
+        "min_pressure": 1.000000000014857,
+        "finite": true
+      },
+      {
+        "cycle": 2,
+        "time": 0.0001331793,
+        "min_ratio": 0.999998429811074,
+        "max_ratio": 1.002307172132916,
+        "min_pressure": 1.0000000000151983,
+        "finite": true
+      },
+      {
+        "cycle": 3,
+        "time": 0.0001997666,
+        "min_ratio": 0.9999976375111865,
+        "max_ratio": 1.0028599914263754,
+        "min_pressure": 1.0000000000156013,
+        "finite": true
+      },
+      {
+        "cycle": 4,
+        "time": 0.000266353,
+        "min_ratio": 0.9999968472196594,
+        "max_ratio": 1.0030103318952623,
+        "min_pressure": 1.0000000000160465,
+        "finite": true
+      },
+      {
+        "cycle": 5,
+        "time": 0.0003329389,
+        "min_ratio": 0.9999960717214458,
+        "max_ratio": 1.0035769774134464,
+        "min_pressure": 1.0000000000165383,
+        "finite": true
+      }
+    ],
+    "max_ratio_all_outputs": 1.0281812380521838
+  }
+]

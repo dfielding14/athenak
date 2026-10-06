@@ -32,6 +32,17 @@ without counting them as LF stages. Timing samples from this concurrent
 validation are not a revised performance claim. Weak-field failure and full
 float-build blocker evidence are retained separately in that directory.
 
+`review/weak-field-transition/` preserves the October 1 B4 stage trace, failed
+bounded-reference experiment, and scratch physical-log-ratio prototype. Its
+[report](review/weak-field-transition/STATUS_UPDATE.md) preserves the historical
+investigation. The October 6 [reference comparison and acceptance decision](review/weak-field/README.md)
+supersedes its pending-redesign status: retain A and accept the shared extreme
+sharp-contact limitation, with the strict expected failure still visible.
+
+`review/weak-field-reference/` contains the October 6 reference comparison and
+compact reproduction evidence. `review/closeout/` records final local B4 checks
+and the successful Linux CPU/MPI/CUDA compile run at production commit `7b3345fd`.
+
 P1 is an unresolved correctness investigation for WO2. Compact exchange and
 skipped magnetic boundary work must be isolated to determine which frozen ghost
 values affect the coarse/fine outflow update. The existing comparison rejects

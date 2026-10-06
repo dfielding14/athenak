@@ -1,0 +1,21 @@
+Independent final audit — /root/reference_pressure — 2026-10-06
+
+Scope: read STATUS_UPDATE.md, derived-results.json, current/Majeski/Squire summaries, reference stage outputs, current verification records, and relevant source. No report or source edits.
+
+Conclusion: the numerical comparison, retained-A recommendation, unresolved B4 acceptance status, and publication-provenance qualifications are supported. No finding changes the scientific conclusion or establishes merge readiness.
+
+Two small report corrections:
+
+1. STATUS_UPDATE.md line 75 says upstream weak cells reset A "identically with either wall choice." The reset rule and occurrence are the same, but the numerical reset magnitudes diverge after cycle 2. For example, cycle 3 stage 1 cell 63: wall-on delta A=-21.913679460565476; wall-off=-21.913598995073954. Source: current/summary.json first_five_changes.c2p_pre_c2p_post. Replace "identically" with "under the same repair rule" or "in both runs."
+
+2. Validation row at line 101 mentions the original/reference runs violating pressure >1e-10, but the default-floor WO1 runs also fail this independent acceptance requirement at cycle 50: minimum pressure=9.234197172630054e-11 with the wall and 9.236667775653122e-11 without. They remain above the numerical floor 1e-12. The report correctly states no numerical pressure-floor activation in those runs; adding this distinction avoids equating floor nonactivation with satisfying the acceptance-pressure threshold.
+
+Verified:
+- Current table correctly distinguishes maximum through 50 from at 50. Original-face peak=2.273000826954315e12, versus final 2.264297224636934e12 (wall off) and 2.2645066155231426e12 (wall on).
+- Majeski first-cycle and cycle-50 values match original per-cell data and immutable-reference summaries. FOFC-on variants are explicitly distinguished from the primary FOFC-off reference.
+- Squire cycle-1 stage-1 maximum ratio=5.3806060587964026e11, stage-2 maximum=5.523193621282649e9. Its P2C changes A and E by exactly zero at both stages in saved data. Effective cutoff is zero.
+- The Squire zero-floor qualification is backed by initialization plus disabled RMS accumulation, not an assumed equivalent floor parameter.
+- Smooth ratios and approximately second-order log-ratio convergence match derived data. The small Majeski/current differences are reported honestly.
+- Current default arithmetic was independently checked earlier: all 52 baseline/instrumented tables were byte-identical. Final verification records cover four neutrality sets and eight all-magnetized face-toggle pairs.
+- Energy residual is below 1e-12. The initially inaccurate "zero" wording was corrected by the root during review to explicit roundoff bounds and backed by energy-budget.json.
+- Acceptance remains failed, no criterion was changed, no turbulence equivalence was claimed, and no exact publication identity was inferred.

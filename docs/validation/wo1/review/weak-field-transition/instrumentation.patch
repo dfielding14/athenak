@@ -1,0 +1,180 @@
+--- /dev/null
++++ b/src/mhd/b4_trace.hpp
+@@ -0,0 +1,40 @@
++#pragma once
++#include <cstdlib>
++#include <cstdio>
++#include <fstream>
++#include <iomanip>
++#include "mesh/mesh.hpp"
++#include "mhd/mhd.hpp"
++inline int b4_cycle = -1;
++inline int b4_stage = -1;
++inline bool B4TraceOn() { return std::getenv("B4_TRACE") != nullptr; }
++inline void B4Snapshot(MeshBlockPack *pack, mhd::MHD *p, const char *phase, int stage) {
++  if (!B4TraceOn() || pack->pmesh->ncycle >= 5) return;
++  Kokkos::fence();
++  auto u=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->u0);
++  auto u1=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->u1);
++  auto w=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->w0);
++  auto bx=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->b0.x1f);
++  auto by=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->b0.x2f);
++  auto bz=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->b0.x3f);
++  auto by1=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->b1.x2f);
++  auto bc=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->bcc0);
++  auto f=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->uflx.x1f);
++  auto e=Kokkos::create_mirror_view_and_copy(Kokkos::HostSpace(),p->e3x1);
++  static std::ofstream out("b4-state.csv");
++  static bool header=false;
++  if (!header) { out << "cycle,stage,phase,cell,dt,rho,mx,E,A,rho1,A1,By1,Bx,By,Bz,Bccy,ppar,pperp,FrhoL,FrhoR,FAL,FAR,FEL,FER,FByL,FByR\n"; header=true; }
++  const auto &d=pack->pmesh->mb_indcs;
++  out << std::setprecision(17);
++  for (int i=d.is;i<=d.ie;++i) {
++    int m=0,k=d.ks,j=d.js;
++    out << pack->pmesh->ncycle << ',' << stage << ',' << phase << ',' << i-d.is << ',' << pack->pmesh->dt;
++    for (int n : {IDN,IM1,IEN,IAN}) out << ',' << u(m,n,k,j,i);
++    out << ',' << u1(m,IDN,k,j,i) << ',' << u1(m,IAN,k,j,i) << ',' << by1(m,k,j,i);
++    out << ',' << .5*(bx(m,k,j,i)+bx(m,k,j,i+1)) << ',' << .5*(by(m,k,j,i)+by(m,k,j+1,i)) << ',' << .5*(bz(m,k,j,i)+bz(m,k+1,j,i));
++    out << ',' << bc(m,IBY,k,j,i) << ',' << w(m,IPR,k,j,i) << ',' << w(m,IPP,k,j,i);
++    for (int n : {IDN,IAN,IEN}) out << ',' << f(m,n,k,j,i) << ',' << f(m,n,k,j,i+1);
++    out << ',' << -e(m,k,j,i) << ',' << -e(m,k,j,i+1) << '\n';
++  }
++  out.flush();
++}
+--- a/src/mhd/mhd_tasks.cpp
++++ b/src/mhd/mhd_tasks.cpp
+@@ -29,6 +29,7 @@
+ #include "shearing_box/shearing_box.hpp"
+ #include "shearing_box/orbital_advection.hpp"
+ #include "mhd/mhd.hpp"
++#include "mhd/b4_trace.hpp"
+ #include "dyn_grmhd/dyn_grmhd.hpp"
+ 
+ namespace {
+@@ -497,6 +498,7 @@
+ //! of conserved variables
+ 
+ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
++  b4_cycle=pmy_pack->pmesh->ncycle; b4_stage=stage;
+   RequireCGLAnisotropyRepresentation("MHD hyperbolic flux evaluation");
+   // select which calculate_flux function to call based on rsolver_method
+   if (rsolver_method == MHD_RSolver::advect) {
+@@ -522,6 +524,7 @@
+   // Terms selected for STS are advanced only in the parabolic half-sweeps.
+   AddSelectedDiffusionFluxes(DiffusionSelection::explicit_only);
+ 
++  B4Snapshot(pmy_pack,this,"flux_pre_fofc",stage);
+   // call FOFC if necessary
+   if (use_fofc) {
+     FOFC(pdrive, stage);
+@@ -531,6 +534,7 @@
+     }
+   }
+ 
++  B4Snapshot(pmy_pack,this,"flux_post_fofc",stage);
+   return TaskStatus::complete;
+ }
+ 
+@@ -1064,7 +1068,9 @@
+   int n1m1 = indcs.nx1 + 2*ng - 1;
+   int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
++  B4Snapshot(pmy_pack,this,"c2p_pre",stage);
+   peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
++  B4Snapshot(pmy_pack,this,"c2p_post",stage);
+   TraceCGLLFTaskList(pmy_pack, "ConToPrim", "end", stage);
+   return TaskStatus::complete;
+ }
+@@ -1085,8 +1091,10 @@
+   int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+   const auto mode = (has_cgl_lf_split && pdrive->sts.enabled)
+       ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
++  B4Snapshot(pmy_pack,this,"coll_pre",stage);
+   peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt, mode,
+                    0, n1m1, 0, n2m1, 0, n3m1);
++  B4Snapshot(pmy_pack,this,"coll_post",stage);
+   // Rates or walls can change fine-cell anisotropy after the last restriction.
+   RestrictU(pdrive, stage);
+   RecomputeTimeStepFromCurrentState(pdrive);
+--- a/src/mhd/mhd_update.cpp
++++ b/src/mhd/mhd_update.cpp
+@@ -19,6 +19,7 @@
+ #include "driver/driver.hpp"
+ #include "eos/eos.hpp"
+ #include "mhd.hpp"
++#include "mhd/b4_trace.hpp"
+ #include "dyn_grmhd/dyn_grmhd.hpp"
+ 
+ namespace mhd {
+@@ -381,6 +382,7 @@
+       std::exit(EXIT_FAILURE);
+     }
+   }
++  B4Snapshot(pmy_pack,this,"rkupdate_post",stage);
+   return TaskStatus::complete;
+ }
+ } // namespace mhd
+--- a/src/mhd/mhd_ct.cpp
++++ b/src/mhd/mhd_ct.cpp
+@@ -12,6 +12,7 @@
+ #include "srcterms/srcterms.hpp"
+ #include "driver/driver.hpp"
+ #include "mhd.hpp"
++#include "mhd/b4_trace.hpp"
+ 
+ namespace mhd {
+ //----------------------------------------------------------------------------------------
+@@ -76,6 +77,7 @@
+     }
+   });
+ 
++  B4Snapshot(pmy_pack,this,"ct_post",stage);
+   return TaskStatus::complete;
+ }
+ } // namespace mhd
+--- a/src/eos/cgl_mhd.cpp
++++ b/src/eos/cgl_mhd.cpp
+@@ -13,6 +13,7 @@
+ 
+ #include "athena.hpp"
+ #include "mhd/mhd.hpp"
++#include "mhd/b4_trace.hpp"
+ #include "eos.hpp"
+ #include "eos/cgl_physics.hpp"
+ #include "eos/ideal_c2p_mhd.hpp"
+@@ -204,7 +205,14 @@
+     // (inline function in ideal_c2p_mhd.hpp file)
+     HydPrim1D w;
+     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
++    const Real b4_old_a=u.mu;
++    const Real b4_old_e=u.e;
+     SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
++    if (B4TraceOn() && b4_cycle < 5 && i>=3 && i<131) {
++      printf("B4EOS %d %d %d %d %.17g %.17g %.17g %.17g %.17g %.17g %.17g %d %d %d %d\n",
++             b4_cycle,b4_stage,only_testfloors,i-3,u.d,u.by,b4_old_a,u.mu,b4_old_e,w.e,w.pp,
++             dfloor_used,efloor_used,tfloor_used,bfloor_used);
++    }
+ 
+     // set FOFC flag and quit loop if this function called only to check floors
+     if (only_testfloors) {
+--- a/src/mhd/rsolvers/hlle_cgl.hpp
++++ b/src/mhd/rsolvers/hlle_cgl.hpp
+@@ -15,6 +15,7 @@
+ #include "mesh/mesh.hpp"
+ #include "eos/eos.hpp"
+ #include "mhd/mhd.hpp"
++#include "mhd/b4_trace.hpp"
+ 
+ namespace mhd {
+ 
+@@ -262,6 +263,10 @@
+       anis_upwind /= wr_idn;
+     }
+     Real fmutmp = fdtmp*anis_upwind;
++    if (B4TraceOn() && b4_cycle < 5 && i>=61 && i<=78) {
++      printf("B4FACE %d %d %d %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g %.17g\n",
++             b4_cycle,b4_stage,i-3,wl_idn,wr_idn,wl_ipr,wl_ipp,wr_ipr,wr_ipp,bmagl,bmagr,fdtmp,fmutmp);
++    }
+ 
+     flx(m,IDN,k,j,i) = fdtmp;
+     flx(m,ivx,k,j,i) = 0.5*(fl.mx + fr.mx) + (fl.mx - fr.mx)*tmp;

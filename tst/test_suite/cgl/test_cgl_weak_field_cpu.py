@@ -12,8 +12,8 @@ ROOT = Path(__file__).resolve().parents[3]
 
 @pytest.mark.xfail(
     strict=True,
-    reason="Known T-B4 multi-cycle weak-field transport failure; blocks WO1 merge "
-           "pending flux design",
+    reason="Accepted T-B4 sharp-contact limitation of A transport; see "
+           "docs/validation/wo1/review/weak-field/README.md",
 )
 @pytest.mark.parametrize("velocity", [10.0, -10.0])
 def test_weak_field_contact_remains_bounded(tmp_path, velocity):

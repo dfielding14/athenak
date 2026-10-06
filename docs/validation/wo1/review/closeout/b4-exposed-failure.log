@@ -1,0 +1,20 @@
+FF                                                                       [100%]
+=================================== FAILURES ===================================
+________________ test_weak_field_contact_remains_bounded[10.0] _________________
+../../test_suite/cgl/test_cgl_weak_field_cpu.py:43: in test_weak_field_contact_remains_bounded
+    assert np.max(ratio) <= 2.0, (path, np.max(ratio))
+E   AssertionError: (PosixPath('/private/var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/pytest-of-dbf75/pytest-138/test_weak_field_contact_remain0/tab/cgl_weak_field_transport.mhd_w.00005.tab'), np.float64(3.0052200316546487))
+E   assert np.float64(3.0052200316546487) <= 2.0
+E    +  where np.float64(3.0052200316546487) = <function max at 0x109333870>(array([1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        , 1.      ...       ,\n       1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        ]))
+E    +    where <function max at 0x109333870> = np.max
+________________ test_weak_field_contact_remains_bounded[-10.0] ________________
+../../test_suite/cgl/test_cgl_weak_field_cpu.py:43: in test_weak_field_contact_remains_bounded
+    assert np.max(ratio) <= 2.0, (path, np.max(ratio))
+E   AssertionError: (PosixPath('/private/var/folders/sg/437fxmt53q9fmmkjc_m7ztzh0000gp/T/pytest-of-dbf75/pytest-138/test_weak_field_contact_remain1/tab/cgl_weak_field_transport.mhd_w.00005.tab'), np.float64(3.0052200316546487))
+E   assert np.float64(3.0052200316546487) <= 2.0
+E    +  where np.float64(3.0052200316546487) = <function max at 0x109333870>(array([1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        , 1.      ...       ,\n       1.        , 1.        , 1.        , 1.        , 1.        ,\n       1.        , 1.        , 1.        ]))
+E    +    where <function max at 0x109333870> = np.max
+=========================== short test summary info ============================
+FAILED ../../test_suite/cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded[10.0]
+FAILED ../../test_suite/cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded[-10.0]
+2 failed in 0.10s

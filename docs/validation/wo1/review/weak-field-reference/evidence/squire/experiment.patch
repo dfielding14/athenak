@@ -1,0 +1,86 @@
+--- /dev/null
++++ b/src/pgen/b4_reference.cpp
+@@ -0,0 +1,56 @@
++#include <cmath>
++#include <fstream>
++#include <iomanip>
++#include <sstream>
++#include "../athena.hpp"
++#include "../athena_arrays.hpp"
++#include "../coordinates/coordinates.hpp"
++#include "../eos/eos.hpp"
++#include "../field/field.hpp"
++#include "../hydro/hydro.hpp"
++#include "../mesh/mesh.hpp"
++#include "../parameter_input.hpp"
++
++static Real configured_floor;
++
++void B4Dump(MeshBlock *pmb, const char *phase, int stage, int cycle, Real time) {
++  if (pmb->gid != 0) return;
++  std::ostringstream name;
++  name << "state_" << std::setfill('0') << std::setw(3) << cycle << "_" << phase << "_" << stage << ".csv";
++  std::ofstream out(name.str());
++  out << std::setprecision(17);
++  out << "cycle,time,stage,i,x,rho,mx,my,mz,E,A,ppar,pperp,Bx,By,Bz,bsqr_rms,eos_B_cutoff,face_B_cutoff\n";
++  const Real floor2 = configured_floor * pmb->pmy_mesh->bsq_rms;
++  const int k=pmb->ks, j=pmb->js;
++  for (int i=pmb->is;i<=pmb->ie;++i) {
++    auto &u=pmb->phydro->u; auto &w=pmb->phydro->w; auto &b=pmb->pfield->bcc;
++    out << cycle << ',' << time << ',' << stage << ',' << i-pmb->is << ',' << pmb->pcoord->x1v(i)
++        << ',' << u(IDN,k,j,i) << ',' << u(IM1,k,j,i) << ',' << u(IM2,k,j,i) << ',' << u(IM3,k,j,i)
++        << ',' << u(IEN,k,j,i) << ',' << u(IMU,k,j,i) << ',' << w(IPR,k,j,i) << ',' << w(IPP,k,j,i)
++        << ',' << b(IB1,k,j,i) << ',' << b(IB2,k,j,i) << ',' << b(IB3,k,j,i)
++        << ',' << pmb->pmy_mesh->bsq_rms << ',' << floor2 << ',' << std::sqrt(floor2) << '\n';
++  }
++}
++
++void MeshBlock::ProblemGenerator(ParameterInput *pin) {
++  const Real velocity=pin->GetReal("problem", "velocity");
++  configured_floor=pin->GetReal("hydro", "bsqr_floor");
++  const Real width=pin->GetOrAddReal("problem", "profile_width",0.0);
++  for (int k=ks;k<=ke;++k) for (int j=js;j<=je;++j) for (int i=is;i<=ie;++i) {
++    const bool weak=(pcoord->x1v(i)<0.5)==(velocity>0.0);
++    const Real by=width>0.0 ? 1.0e-12+(1.-1.0e-12)*0.5*(1.+std::tanh((pcoord->x1v(i)-0.5)/width)) : (weak?1.0e-12:1.0);
++    const Real p=1.5-0.5*by*by;
++    phydro->w(IDN,k,j,i)=1.; phydro->w(IVX,k,j,i)=velocity;
++    phydro->w(IVY,k,j,i)=0.; phydro->w(IVZ,k,j,i)=0.;
++    phydro->w(IPR,k,j,i)=p; phydro->w(IPP,k,j,i)=p;
++    pfield->bcc(IB1,k,j,i)=0.; pfield->bcc(IB2,k,j,i)=by; pfield->bcc(IB3,k,j,i)=0.;
++    pfield->b.x1f(k,j,i)=0.; pfield->b.x1f(k,j,i+1)=0.;
++    pfield->b.x2f(k,j,i)=by; pfield->b.x2f(k,j+1,i)=by;
++    pfield->b.x3f(k,j,i)=0.; pfield->b.x3f(k+1,j,i)=0.;
++  }
++  peos->PrimitiveToConserved(phydro->w,pfield->bcc,phydro->u,pcoord,is,ie,js,je,ks,ke);
++  B4Dump(this,"initial",0,0,0.0);
++}
++void MeshBlock::UserWorkInLoop() {
++  B4Dump(this,"cycle",0,pmy_mesh->ncycle+1,pmy_mesh->time+pmy_mesh->dt);
++}
+--- a/src/task_list/time_integrator.cpp
++++ b/src/task_list/time_integrator.cpp
+@@ -33,6 +33,8 @@
+ 
+ //----------------------------------------------------------------------------------------
+ //  TimeIntegratorTaskList constructor
++
++void B4Dump(MeshBlock *, const char *, int, int, Real);
+ 
+ TimeIntegratorTaskList::TimeIntegratorTaskList(ParameterInput *pin, Mesh *pm) {
+   // First, define each time-integrator by setting weights for each step of the algorithm
+@@ -1163,6 +1165,7 @@
+     }
+     // swap AthenaArray data pointers so that w now contains the updated w_out
+     ph->w.SwapAthenaArray(ph->w1);
++    if (pmb->pmy_mesh->ncycle<5) B4Dump(pmb,"post_c2p",stage,pmb->pmy_mesh->ncycle+1,pmb->pmy_mesh->time);
+     // r1/r_old for GR is currently unused:
+     // ps->r.SwapAthenaArray(ps->r1);
+   } else {
+@@ -1220,6 +1223,7 @@
+     // Update conserved variables again.
+     pmb->peos->PrimitiveToConserved(phydro->w,pfield->bcc, phydro->u, pmb->pcoord,
+                                     il, iu, jl, ju, kl, ku);
++    if (pmb->pmy_mesh->ncycle<5) B4Dump(pmb,"post_p2c",stage,pmb->pmy_mesh->ncycle+1,pmb->pmy_mesh->time);
+   } else {
+     return TaskStatus::fail;
+   }

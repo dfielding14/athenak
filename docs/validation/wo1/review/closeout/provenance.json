@@ -1,0 +1,23 @@
+{
+  "timestamp": "2026-10-06T18:48:05.499774+00:00",
+  "code_commit": "7b3345fd262a1cf826e9476fb40ca20a28a15881",
+  "branch": "c/cgl-lf-wo1",
+  "local_build_command": "cmake --build tst/build -j 2",
+  "python": "/Users/dbf75/.uv/envs/interactive/.venv/bin/python3",
+  "local_test_cwd": "tst/build/src",
+  "local_test_commands": [
+    "python -m pytest ../../test_suite/cgl/test_cgl_weak_field_cpu.py -q -rx",
+    "python -m pytest ../../test_suite/cgl/test_cgl_weak_field_cpu.py --runxfail -q --tb=short"
+  ],
+  "local_results": {
+    "normal_exit_code": 0,
+    "strict_expected_failures": 2,
+    "exposed_exit_code": 1,
+    "exposed_failures": 2,
+    "first_failing_cycle": 5,
+    "maximum_ratio_at_failure": 3.0052200316546487
+  },
+  "local_binary_sha256": "1b2a9bc0234e32fc47dda2c169eab93ef2ff15dfba31394a4aeedbc47b9910ed",
+  "production_source_diff_from_code_commit": "",
+  "scope": "Closure documentation and test reason only; no numerical changes. Original bounds and strict xfail retained."
+}

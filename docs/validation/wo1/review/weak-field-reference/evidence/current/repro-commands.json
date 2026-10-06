@@ -1,0 +1,22 @@
+{
+  "export": [
+    "git",
+    "archive",
+    "7b3345fd262a1cf826e9476fb40ca20a28a15881"
+  ],
+  "configure": [
+    "cmake",
+    "-S",
+    "/tmp/cgl-b4-compare-20261006/current/source",
+    "-B",
+    "/tmp/cgl-b4-compare-20261006/current/build",
+    "-DCMAKE_BUILD_TYPE=Release",
+    "-DAthena_ENABLE_MPI=OFF"
+  ],
+  "build": [
+    "cmake",
+    "--build",
+    "/tmp/cgl-b4-compare-20261006/current/build",
+    "-j2"
+  ]
+}

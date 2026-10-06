@@ -1,0 +1,18 @@
+{
+  "first_differing_cycle": 41,
+  "identical_snapshot_count": 41,
+  "initial_A_bounded": 0,
+  "initial_A_baseline": 69.07755278982138,
+  "results": [
+    {
+      "case": "bounded-reference",
+      "last_max_ratio": 25483977751.37667,
+      "last_min_ratio": 0.9907731750800283
+    },
+    {
+      "case": "baseline50",
+      "last_max_ratio": 24630400339.20109,
+      "last_min_ratio": 0.9907731750446932
+    }
+  ]
+}

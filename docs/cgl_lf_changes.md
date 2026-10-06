@@ -1,9 +1,13 @@
 # WO1 CGL-LF changes and validation
 
-Status: the 41-task implementation is complete, but review follow-up found an
-unresolved multi-cycle weak-field transport failure in T-B4. This is a merge
-blocker, not a passed validation. T-P1 is deferred to WO2 under the required
-bitwise rule; its candidate is not retained.
+Status: the 41-task implementation is complete. On 2026-10-06 the user accepted
+the T-B4 sharp-contact failure as a known limitation shared with the checked
+reference implementations; retain A and the current implementation. This is
+an [accepted limitation](validation/wo1/review/weak-field/README.md), not a passed
+validation, and no longer blocks WO1 by itself. T-P1 is deferred to WO2 under
+the required bitwise rule; its candidate is not retained.
+The [closeout](#wo1-closeout-2026-10-06) records the passing CPU/MPI/CUDA compile
+checks and the limits of that validation.
 Base: `8222de3aa`; branch: `c/cgl-lf-wo1`.
 The work order controls the design; `CGL_LF_STS_review.md` describes pre-merge
 `2aee609` and is used for derivations rather than current bug status.
@@ -172,8 +176,9 @@ $p_\perp/p_\parallel=2$ by cycle 5. By cycle 50 the maximum ratio is about
 $2.46\times10^{10}$, without EOS floors. The supplied weak-field flux change
 therefore does not establish the requested multi-cycle bound. The new
 `cgl_weak_field_transport.athinput` and `test_cgl_weak_field_cpu.py` preserve the
-reproducer. This finding requires a separate design decision; no flux formula
-has been silently substituted to make the test pass.
+reproducer. The 2026-10-06 decision accepts this shared sharp-contact limitation
+and retains A; no flux formula or test bound was changed to make the test pass.
+See the [reference comparison and decision](validation/wo1/review/weak-field/README.md).
 
 ### T-B5: valid CGL magnetic-field floor
 
@@ -1012,12 +1017,12 @@ these executable SHA-256 hashes:
 - The five earlier campaign failures now pass with portable test-local trusted
   Git/Python paths and the correct campaign-input inventory. Production
   authentication was not changed. They were not solely Linux-path failures.
-- Two new B4 grid checks are strict expected failures, explicitly marked as
-  merge blockers. Their bounds were not relaxed. Both velocity directions fail;
+- Two new B4 grid checks remain strict expected failures, accepted as a known
+  limitation on 2026-10-06. Their bounds were not relaxed. Both velocity directions fail;
   donor-cell reconstruction also fails. The isolated pre-B4 headers already give
   pressure ratio $1.11\times10^8$ after one cycle; current headers keep that first
-  ratio at 1 but still reach $2.46\times10^{10}$ by cycle 50. The flux redesign is
-  unresolved and is not represented as completed validation.
+  ratio at 1 but still reach $2.46\times10^{10}$ by cycle 50. No further B4 flux
+  redesign is planned; this remains failed validation with an accepted limitation.
 - A full float build remains blocked. Investigation additionally found table-reader
   `double*`/`Real*` mismatches and geodesic/unit-system narrowing and range issues.
   Trial portability edits were discarded; no unrelated float repair is retained.
@@ -1038,16 +1043,58 @@ these executable SHA-256 hashes:
 - `.github/workflows/cgl-lf.yml` adds GitHub-hosted Linux CPU/MPI checks, explicit
   restored AMR regressions, and a CUDA device-code compile using a pinned toolkit
   container. This Mac has no CUDA/HIP compiler, and the fork has no self-hosted
-  runners. CUDA compilation is to be verified by the PR check; no GPU runtime
+  runners. CUDA compilation subsequently passed at `7b3345fd2`; no GPU runtime
   validation is claimed.
 - The first CUDA 12.6 build found NVCC's extended-lambda access restriction in
   private timestep helpers. Six affected declarations in hydro, MHD and the
   turbulence driver now have public access; their numerical bodies are unchanged.
   The local CPU rebuild is byte-identical to the previously tested binary.
   The initial compiler diagnostic is retained in `validation/wo1/review/cuda/`.
+- The next CUDA build exposed a first-capture restriction in the three
+  directional CGL flux kernels. `7b3345fd2` captures the existing pressure-work
+  Boolean before `if constexpr`, following the surrounding code pattern.
+  CUDA compilation and Linux CPU/MPI validation then passed. The local build,
+  style, 12 fixed serial cases with three repeats, and six dynamic HLLE cases
+  with pressure-work recording on/off preserve the previous results.
 
 Durable provenance, output hashes, rejected P1 patch, inputs and review evidence
 are committed under [`validation/wo1/`](validation/wo1/ARCHIVE.md). The P1 issue is
 recorded as a WO2 correctness investigation. The two root work-order files remain
-untracked and are not included. The PR must remain a draft while the B4 blocker
-and outstanding validation requirements are unresolved.
+untracked and are not included. The accepted B4 limitation no longer requires
+draft status by itself; other outstanding validation requirements still apply.
+
+## WO1 closeout, 2026-10-06
+
+WO1 is complete with the documented B4 acceptance decision and the required
+P1 deferral. All 41 numbered tasks have individual commits and per-task reports
+above. Retain conservative A and the current numerical implementation. The
+extreme sharp-contact test remains a strict expected failure with unchanged
+bounds; it no longer blocks WO1. The reference comparison is archived beside
+the [acceptance note](validation/wo1/review/weak-field/README.md).
+
+The final production code at `7b3345fd262a1cf826e9476fb40ca20a28a15881` passed
+[Linux CI run 36881505251](https://github.com/dfielding14/athenak/actions/runs/36881505251):
+213 CPU checks passed with the two B4 expected failures, all three additional
+AMR checks passed, all seven MPI checks passed, and the complete CUDA 12.6
+application compiled. The closeout changes no production source or input.
+The only test edit updates B4's expected-failure explanation to the accepted
+decision; its assertions and strict marker are unchanged.
+
+The local Release build and changed Python style check pass. Both B4 directions
+were rerun: normal pytest reports two expected failures; `--runxfail` exposes
+the actual cycle-5 ratio failure, 3.0052200316546487 versus the upper bound 2.
+Thus the expected-failure marker is recording the known numerical limitation,
+not masking a setup failure. Logs, CI test XML, CUDA build output and provenance
+are in [`validation/wo1/review/closeout/`](validation/wo1/review/closeout/).
+
+The validation scope is double-precision CPU/MPI execution and CUDA compilation.
+GPU runtime validation was not performed. Full single-precision application
+compilation still encounters pre-existing portability errors outside WO1; the
+changed CGL math and constructor paths have their direct float checks. These
+limitations remain disclosed and do not imply either unsupported target passed.
+No new turbulence-validation claim follows from the B4 comparison. P1's rejected
+non-bitwise change and broader numerical redesigns remain WO2 work.
+
+PR #21 carries the final branch and live checks. The two root work orders remain
+local and untracked; the submodule revision and scientific validation thresholds
+are unchanged.

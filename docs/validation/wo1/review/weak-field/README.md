@@ -1,8 +1,36 @@
-# T-B4 multi-cycle weak-field transport: unresolved merge blocker
+# T-B4 multi-cycle weak-field transport: accepted sharp-contact limitation
+
+**Decision, 2026-10-06:** retain conservative A and the current implementation.
+The user accepts the extreme unresolved sharp-contact failure as a known
+limitation shared with the checked reference implementations. This limitation
+no longer blocks WO1 by itself. The test still fails; its numerical bounds and
+`xfail(strict=True)` remain unchanged. No further B4 redesign is planned.
+
+The 68-run comparison used current `7b3345fd`, Majeski `def0b6c79`, and the
+archived Squire `44a29a70`. Both references fail the sharp contact in cycle 1;
+the current WO1 treatment first fails in cycle 5 with or without the firehose
+wall. The failure also occurs with every cell above the magnetic floor.
+The Squire archive is a development snapshot, not a verified publication
+revision; its disabled RMS accumulation leaves its effective magnetic floor
+at zero, so it supplies an all-magnetized control. These results establish a
+shared qualitative limitation, not that either author's published simulations
+encountered it.
+
+For a smooth interface of fixed width 0.04 at $t=0.012$, current code and both
+references agree closely: maximum $p_\perp/p_\parallel$ falls from about 1.391
+to 1.100 to 1.028 at 128, 256 and 512 cells, with approximately second-order
+log-ratio error convergence. This is not a turbulence-validation claim.
+The [comparison report and compact reproduction evidence](../weak-field-reference/STATUS_UPDATE.md)
+are retained in this archive; the report identifies the separately retained raw outputs.
+
+This decision supersedes the merge-blocker and pending-redesign status in
+earlier reports, including the October 1
+[trace and formulation investigation](../weak-field-transition/STATUS_UPDATE.md).
+The measurements below remain the original failure evidence.
 
 The retained B4 correction prevents the immediate first-cycle contamination but
 fails the requested multi-cycle grid check. Both flow directions fail identically.
-The regression is marked `xfail(strict=True)` with a merge-blocking explanation;
+The regression is marked `xfail(strict=True)` as an accepted limitation;
 its pressure-ratio bounds remain [0.5, 2]. An unexpected pass fails CI until the
 marker is removed after reviewing a fix.
 
@@ -24,8 +52,8 @@ single-cell flux update.
 The current PLM result first exceeds 2 at cycle 5 (3.00522). At its cycle-50
 maximum, $B=4.0462\times10^{-6}>B_{\rm floor}$,
 $p_\parallel=9.2342\times10^{-11}$ and $p_\perp=2.27442$. The donor-cell result
-shows that this is not solely a high-order reconstruction issue. The precise
-flux redesign remains unresolved; no new flux correction is included here.
+shows that this is not solely a high-order reconstruction issue. The
+failure is accepted as documented above; no new flux correction is included here.
 
 `results.json` retains every cycle, both directions, all eight cases, executable
 hashes, and exact commands. `summary.log` and `pre-b4-build.log` retain the
