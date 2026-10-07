@@ -476,8 +476,17 @@ def test_cli_preserves_reserved_projection_counter_without_activity_inference(
     assert "Projection-count limitation" in report
     assert "zero does not demonstrate absence of projections" in report
     assert "including refreshed halo cells" in report
-    # A different or unknown revision must not inherit the audited label.
+    # The EOS-only restart fix leaves the counter implementation unchanged.
     data, _ = analyzer.merge_histories([history])
+    fixed_revision = "71ad25ebce73d33db048defd8f585a7dce0528c2"
+    fixed = analyzer.solver_health(
+        [{"directory": run, "metadata": {"simulation": {"revision": fixed_revision},
+                                          "launch": {"returncode": 0}}}],
+        {}, data, 0.5, 2.0)
+    fixed_counter = fixed["physical_stage_activity"]["lf_hwproj"]
+    assert fixed_counter["instrumentation"] == "reserved_uninstrumented"
+    assert fixed_revision in fixed_counter["audited_simulation_revisions"]
+    # A different or unknown revision must not inherit the audited label.
     unknown = analyzer.solver_health(
         [{"directory": run, "metadata": {"simulation": {"revision": "unknown"},
                                           "launch": {"returncode": 0}}}],

@@ -52,7 +52,7 @@ DEFINITIONS = {
     "precision": "primitive/force snapshots may be float32; strict threshold crossings are descriptive and not tight full-precision admissibility tests",
     "X_rounding_envelope": "half the larger adjacent float32 gap for each stored pressure/B component; bound |delta X| <= [2*(delta p_perp+delta p_parallel)+|X|*delta(B^2)]/[B^2-delta(B^2)], delta(B^2)=sum(2*|Bi|*delta Bi+delta Bi^2); no dynamical-error claim",
     "limiter_history": "mirror_vol/fire_vol are inclusive threshold predicates; with nu_coll=0, both soft limiters enabled and backups disabled, nu_eff/(limiter_nu_coll*volume) measures the strict soft-rate fraction at history sampling; hard_vol counts strict physical firehose violation even with backups off",
-    "LF_counters": "lf_nstage counts cumulative active-cell LF-stage checks; lf_hardbd counts cumulative hard-bound crossings in those unprojected checks, with repeated cells counted repeatedly. nonfin/nonpos also inspect active cells; dfloor/pfloor accumulate EOS refresh events including refreshed halo cells. All persist restart and do not reset at history output. In audited post-WO2 simulation revision 7a37710f6, lf_hwproj is a reserved, uninstrumented field: its retained value does not measure wall projections or their absence. Physical stage crossings are not automatically numerical failure",
+    "LF_counters": "lf_nstage counts cumulative active-cell LF-stage checks; lf_hardbd counts cumulative hard-bound crossings in those unprojected checks, with repeated cells counted repeatedly. nonfin/nonpos also inspect active cells; dfloor/pfloor accumulate EOS refresh events including refreshed halo cells. All persist restart and do not reset at history output. In audited post-WO2 simulation revisions 7a37710f6 and 71ad25ebc, lf_hwproj is a reserved, uninstrumented field: its retained value does not measure wall projections or their absence. Physical stage crossings are not automatically numerical failure",
 }
 
 
@@ -648,10 +648,13 @@ def solver_health(segments, user, mhd, start, end):
     result["physical_stage_activity"]["lf_hardbd"]["meaning"] = (
         "cumulative active-cell hard-bound crossings at unprojected LF stages; repeated cell-stage events, not unique cells or a time-integrated volume fraction")
     revisions = [segment["metadata"].get("simulation", {}).get("revision") for segment in segments]
-    audited = bool(revisions) and all(str(revision).startswith("7a37710f6") for revision in revisions)
+    audited_revisions = ("7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+                         "71ad25ebce73d33db048defd8f585a7dce0528c2")
+    audited = bool(revisions) and all(revision in audited_revisions for revision in revisions)
     result["physical_stage_activity"]["lf_hwproj"].update({
         "instrumentation": "reserved_uninstrumented" if audited else "not_verified_for_retained_revision",
         "audited_simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+        "audited_simulation_revisions": list(audited_revisions),
         "meaning": "post-WO2 audited source initializes and serializes this field but never increments it; retained values are preserved for provenance and do not establish wall-projection activity or its absence"})
     result["LF_counter_lifecycle"] = (
         "audited LF stage/admissibility counters are cumulative and restart-persistent, not reset per history or process; shared-file restart restores the prior global sum on rank0 only, so later MPI history sums preserve it once")
