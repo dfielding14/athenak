@@ -39,7 +39,12 @@ void PassiveDecode(const Real rho, const PassivePair q, const Real bmag,
                     Real &ppar, Real &pperp) {
   const Real logr = log(rho), logb = log(bmag);
   const Real j = q.j/rho;
-  ppar = exp(j + 3.0*logr - 2.0*logb);
+  // Fix the contraction order across wall encoding and canonical grid C2P.
+  // An implicit contraction of (3*logr - 2*logb) before adding j can move an
+  // encoded wall pressure outward by one ULP in a different HIP kernel.
+  const Real log_ppar = Kokkos::fma(static_cast<Real>(-2.0), logb,
+                                  Kokkos::fma(static_cast<Real>(3.0), logr, j));
+  ppar = exp(log_ppar);
   // Preserve exact isotropy even when B is tiny, so roundoff cannot create a
   // spurious fluid-firehose violation at an isotropic low-field state.
   if (q.a == rho*(2.0*logr - 3.0*logb)) {
