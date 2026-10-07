@@ -74,8 +74,8 @@ mkdir -p "$O/reproduction-runtime"
 cd "$O/reproduction-runtime"
 source "$M/../scripts/runtime_cpu.sh"
 export OPENBLAS_NUM_THREADS=1 MKL_NUM_THREADS=1 NUMEXPR_NUM_THREADS=1
-"$PY" "$S/scripts/compare_cgl_lf_physics_benchmark.py" "$M/active-to 14" "$M/passive-to 14" --time-start 0.5 --time-end 2.5 --block-duration 0.5 --output-dir "$O/paired-startup"
-"$PY" "$S/scripts/analyze_cgl_lf_physics_benchmark.py" "$M/active-to 14" --time-start 2 --time-end 6 --block-duration 1 --output-dir "$O/active-interrupted"
+"$PY" "$S/scripts/compare_cgl_lf_physics_benchmark.py" "$M/active-to14" "$M/passive-to14" --time-start 0.5 --time-end 2.5 --block-duration 0.5 --output-dir "$O/paired-startup"
+"$PY" "$S/scripts/analyze_cgl_lf_physics_benchmark.py" "$M/active-to14" --time-start 2 --time-end 6 --block-duration 1 --output-dir "$O/active-interrupted"
 "$PY" "$O/restore_interrupted_history_inventory.py"
 "$PY" "$O/inspect_passive_pressure_tails.py"
 ```
