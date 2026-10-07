@@ -10,6 +10,7 @@ import argparse
 from datetime import datetime, timezone
 import hashlib
 import json
+import math
 import os
 from pathlib import Path
 import re
@@ -45,6 +46,52 @@ def override_input(text, overrides):
     return text
 
 
+def parameters(text):
+    result, section = {}, None
+    for line in text.splitlines():
+        line = line.split("#", 1)[0].strip()
+        if line.startswith("<") and line.endswith(">"):
+            section = line[1:-1]
+        elif section and "=" in line:
+            key, value = line.split("=", 1)
+            result[section+"/"+key.strip()] = value.strip()
+    return result
+
+
+def same_value(a, b):
+    if a is None or b is None:
+        return a == b
+    booleans = {"true": "true", "1": "true", "false": "false", "0": "false"}
+    if a.lower() in ("true", "false") or b.lower() in ("true", "false"):
+        return booleans.get(a.lower(), a) == booleans.get(b.lower(), b)
+    try:
+        return math.isclose(float(a), float(b), rel_tol=1e-14, abs_tol=0)
+    except ValueError:
+        return a == b
+
+
+def restart_input(path, intended, overrides):
+    """Check physical/numerical identity before allowing a checkpoint resume."""
+    with Path(path).open("rb") as stream:
+        raw = stream.read(4*1024*1024)
+    marker = b"<par_end>"
+    if marker not in raw:
+        raise ValueError("Restart has no parameter header within the first 4 MiB")
+    header = raw.split(marker, 1)[0].decode("utf-8")
+    old, wanted = parameters(header), parameters(intended)
+    administrative = {"time/tlim", "time/nlim", "time/ndiag"}
+    mismatches = []
+    for key, value in wanted.items():
+        if key.startswith(("output", "job/")) or key in administrative:
+            continue
+        if not same_value(old.get(key), value):
+            mismatches.append(f"{key}: checkpoint={old.get(key)!r}, requested={value!r}")
+    if mismatches:
+        raise ValueError("Checkpoint configuration does not match this member:\n"+"\n".join(mismatches))
+    # The code reads the restart header plus CLI overrides, not the proposed deck.
+    return override_input(header, overrides)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("run_dir", type=Path)
@@ -68,8 +115,13 @@ def main():
     revision = manifest.get("revision")
     if not revision or manifest.get("binary_sha256") != sha(binary):
         raise ValueError("Build manifest must identify the executable revision and matching SHA256")
-    if not re.search(r"(?m)^PROBLEM:STRING=built_in_pgens$", args.build_cache.read_text()):
+    cache = dict(re.findall(r"(?m)^([A-Za-z0-9_]+):[^=\n]+=(.*)$", args.build_cache.read_text()))
+    if cache.get("PROBLEM") != "built_in_pgens":
         raise ValueError("This benchmark requires a retained PROBLEM=built_in_pgens build")
+    for key, value in (("Kokkos_ENABLE_HIP", "ON"), ("Athena_ENABLE_MPI", "ON"),
+                       ("Athena_SINGLE_PRECISION", "OFF")):
+        if cache.get(key) != value:
+            raise ValueError(f"This GPU launcher requires {key}={value} in the retained build cache")
     if run.exists() and any(run.iterdir()):
         raise ValueError("Use a new empty segment directory; existing data are never overwritten")
     # The numerical source must still match this executable's recorded revision.
@@ -79,10 +131,16 @@ def main():
             "src", "CMakeLists.txt", "cmake", ":(exclude)src/pgen/unit_tests"], text=True)
         if changed:
             raise ValueError("Numerical source differs from the retained executable; build and record it first")
-    run.mkdir(parents=True, exist_ok=True)
     passive = "true" if args.mode == "passive" else "false"
+    for item in args.overrides:
+        key, value = item.split("=", 1)
+        if key in ("mhd/passive", "problem/passive_delta") and not same_value(value, passive):
+            raise ValueError("--set conflicts with the selected --mode: "+item)
     overrides = ["mhd/passive="+passive, "problem/passive_delta="+passive, *args.overrides]
     effective = override_input(args.input.read_text(), overrides)
+    if args.restart:
+        effective = restart_input(args.restart, effective, overrides)
+    run.mkdir(parents=True, exist_ok=True)
     shutil.copy2(args.input, run/"input.athinput")
     (run/"effective.athinput").write_text(effective)
     shutil.copy2(args.build_manifest, run/"binary_manifest.json")
@@ -100,7 +158,9 @@ def main():
             "executable": str(binary), "executable_sha256": sha(binary),
             "input_path": "effective.athinput", "input_sha256": sha(run/"effective.athinput"),
             "canonical_input_path": "input.athinput", "canonical_input_sha256": sha(run/"input.athinput"),
-            "build_backend": "Cray CCE20 HIP gfx90a MPI double; PROBLEM=built_in_pgens",
+            "build_backend": "HIP MPI double; PROBLEM=built_in_pgens; compiler="
+                +cache.get("CMAKE_CXX_COMPILER", "unknown")+"; version="
+                +cache.get("KOKKOS_CXX_COMPILER_VERSION", "unknown"),
             "build_manifest_path": "binary_manifest.json", "build_manifest_sha256": sha(run/"binary_manifest.json"),
             "build_cache_path": "CMakeCache.txt", "build_cache_sha256": sha(run/"CMakeCache.txt")},
         "outputs": {"snapshot_glob": "**/*.mhd_w_bcc.*.bin", "forcing_glob": "**/*.turb_force.*.bin",
