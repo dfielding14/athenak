@@ -8,6 +8,13 @@ establish resolution convergence, active-versus-passive causality, or the
 accuracy of an LF closure coefficient. Agreement with a turbulence figure is
 not a substitute for those tests.
 
+The numerical implementation is unchanged: the active solver retains the
+conservative variable `A=rho*ln[(p_perp/p_parallel)*rho²/|B|³]` in the `IAN`
+slot, including the existing temporary LF conversion to `p_perp/|B|` and back.
+Both strict B4 expected failures remain accepted sharp-contact limitations.
+This turbulence benchmark neither removes those failures nor establishes
+sharp-contact accuracy.
+
 Changing field strength and density drives different parallel and perpendicular
 pressures. Their anisotropic stress then changes the flow that produced them,
 while parallel heat transport and threshold scattering modify the pressures.
