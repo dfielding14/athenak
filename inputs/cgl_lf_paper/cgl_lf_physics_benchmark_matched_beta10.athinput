@@ -1,0 +1,153 @@
+# Matched active/passive CGL-LF turbulence experiment, initially beta = 10.
+# Passive member: mhd/passive=true problem/passive_delta=true.
+# All other physics and numerical settings are shared.
+# Use the standard built-in pgen executable (no -DPROBLEM=cgl_lf_paper).
+# Uniform spacing 1/192; 128 blocks of 48 x 48 x 48 cells.
+# No cooling: forcing can increase the thermal energy and change beta.
+
+<job>
+basename = cgl_lf_matched_beta10
+
+<mesh>
+nghost = 3
+nx1 = 192
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 192
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 384
+x3min = 0.0
+x3max = 2.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 48
+nx2 = 48
+nx3 = 48
+
+<time>
+evolution = dynamic
+integrator = rk2
+sts_integrator = rkl2
+sts_safety = 0.9
+sts_max_dt_ratio = -1.0
+sts_merge_half_sweeps = false
+cfl_number = 0.3
+nlim = -1
+tlim = 14.0
+ndiag = 100
+
+<mhd>
+eos = cgl
+passive = false
+# Isothermal dynamical pressure in passive mode: rho*c_iso^2, beta_initial=10.
+iso_sound_speed = 2.23606797749979
+reconstruct = ppm4
+rsolver = hlle
+# Preserve the built-in/paper default; do not silently enable flux correction.
+fofc = false
+gamma = 1.6666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+nu_coll = 0.0
+# X = 2*(p_perp-p_parallel)/B^2: soft thresholds X = -2 and +1.
+# This is finite-rate threshold relaxation, not limiter_hardwall mode.
+firehose_threshold = 2.0
+mirror_threshold = 1.0
+mirror_limiter = true
+firehose_limiter = true
+limiter_nu_coll = 1.0e10
+limiter_hardwall = false
+# The unconditional physical firehose wall X >= -2 still applies.
+backup_limiters = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = local
+cgl_lf_strict_admissibility = true
+cgl_lf_diagnostics = full
+cgl_lf_arithmetic = safe
+cgl_lf_sts_flux = weighted
+cgl_lf_record_pressure_work = true
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+
+<problem>
+pgen_name = cgl_lf_paper
+paper_mode = turbulence
+passive_delta = false
+user_hist = true
+rho0 = 1.0
+b0 = 1.0
+beta0 = 10.0
+p_parallel0 = 5.0
+p_perp0 = 5.0
+
+<turb_driving>
+turb_flag = 2
+tdriv_start = 0.0
+driving_type = 0
+projection_policy = solenoidal_compressive
+# Amplitude blend, not energy fraction. This gives equal expected solenoidal
+# and compressive innovation power: 2*s^2 = (1-s)^2, s = 1/(1+sqrt(2)).
+sol_fraction = 0.4142135623730951
+normalization = edot
+# Volume-averaged energy injection: volume = 2, so total power = 0.64.
+dedt = 0.32
+tcorr = 2.0
+dt_update = 0.01
+rseed = 271828
+spectrum = power_law
+expo = 2.0
+isotropic_power_spectrum = true
+physical_k_shell = true
+k_shell_unit = 3.141592653589793
+nlow = 1
+nhigh = 3
+# Full signed physical shell pi <= |k| <= 3*pi, unlike legacy +octant bounds.
+# The driver enumerates 38 complex modal entries (19 opposite-wavevector pairs).
+min_kx = -3
+max_kx = 3
+min_ky = -3
+max_ky = 3
+min_kz = -3
+max_kz = 3
+tile_nx = 1
+tile_ny = 1
+tile_nz = 1
+localization = none
+record_injected_work = true
+
+<output1>
+file_type = hst
+data_format = %25.17e
+dt = 0.02
+
+<output2>
+file_type = bin
+variable = mhd_w_bcc
+dt = 0.25
+ghost_zones = false
+single_file_per_rank = false
+
+<output3>
+# Restart payload retains double precision, unlike float32 field snapshots.
+file_type = rst
+dt = 1.0
+single_file_per_rank = false
+
+<output4>
+file_type = bin
+variable = turb_force
+dt = 0.25
+ghost_zones = false
+single_file_per_rank = false
