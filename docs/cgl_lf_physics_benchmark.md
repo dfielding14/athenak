@@ -363,8 +363,9 @@ The acceleration Helmholtz decomposition uses the full physical wavevector.
 Plot the forcing support and a conservative `k_Nyquist/4` guide, corresponding
 to eight cells per wavelength; distinguish the perpendicular cutoff band
 `k_perp>=0.75*k_Nyquist`. The scalar resolved strain ratio additionally selects
-full `|k|<=min(k_Nyquist,x,k_Nyquist,y,k_Nyquist,z)/4` and excludes the first
-perpendicular shell. Perpendicular shells otherwise sum over all parallel
+full `0<|k|<=min(k_Nyquist,x,k_Nyquist,y,k_Nyquist,z)/4`, retaining pure-parallel
+modes in the first perpendicular shell and excluding only the zero mode.
+Perpendicular shells otherwise sum over all parallel
 wavenumbers, so small `k_perp` alone does not guarantee a resolved gradient.
 Centered derivatives attenuate short wavelengths. These marks organize
 interpretation and do not establish convergence or prescribe a fitted slope.
