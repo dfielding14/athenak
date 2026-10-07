@@ -98,7 +98,8 @@ with the developed-turbulence discussion in
 Configure `-DPROBLEM=built_in_pgens` and select `problem/pgen_name=cgl_lf_paper`
 in the input. The implementation is
 [`src/pgen/tests/cgl_lf_paper.cpp`](../src/pgen/tests/cgl_lf_paper.cpp), using
-`paper_mode=turbulence`, lowercase `b0`, and the 22-column user history below.
+`paper_mode=turbulence`, lowercase `b0`, and 22 user diagnostics plus the
+standard time/dt history columns described below.
 The older `-DPROBLEM=cgl_lf_paper` route selects `src/pgen/cgl_lf_paper.cpp`, with
 a different interface and history. It is not this benchmark build.
 
