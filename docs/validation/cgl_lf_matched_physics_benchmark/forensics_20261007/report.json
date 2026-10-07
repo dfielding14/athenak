@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "date": "2026-10-07",
-  "scope": "Numerical forensics only; original matched run incomplete; no cap or explicit mitigation qualified",
+  "scope": "Numerical forensics; cold-state single-interval cap/explicit controls completed; no long-run numerical guard or physical benchmark qualified",
   "classification": {
     "numerical_integrity": "concerning: reproduced finite LF-stage pressure floor in original layout",
     "thermal_layout_sensitivity": "concerning: localized order-unity pressure difference before failure with essentially unchanged flow",
@@ -12,7 +12,7 @@
     "simulation_revision": "ab9b543e7e6a972ebfc026d0c98ea3dfee9cb55b",
     "production_executable_sha256": "958eaa993533b611b05f058c767c6c1f11a751d6094389ba1107a7744abf4cd6",
     "diagnostic_executable_sha256": "cd1c34779acba55ee45f162d8ed7439051ea94adcaf5d930eb0d17bc4754e33a",
-    "analysis_checkout_revision": "79776e2fc9ec0b133b5cde81269b51867c120ff7",
+    "analysis_checkout_revision": "1f80b71280344fc9b116f256cc6572b1cfb47c81",
     "analysis_scripts": {
       "reconstruct_capture.py": {
         "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/reconstruct_capture.py",
@@ -20,7 +20,7 @@
       },
       "bounded_stability_probes.py": {
         "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/bounded_stability_probes.py",
-        "sha256": "a62009578fffc5a27d9c03cbf9e06544a79d631ab2f8d5a632ba21114e983909"
+        "sha256": "47ed9a86b49b7a44eedf78ca209b314f8223d3f9e83339c5540b8647d4c9ac3d"
       },
       "compare_float_snapshots.py": {
         "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/compare_float_snapshots.py",
@@ -32,7 +32,15 @@
       },
       "retain_forensics_report.py": {
         "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/retain_forensics_report.py",
-        "sha256": "56a64b702317a52a7bb5a6f32f1041d1c69a8da690fff112f5978ed52071464b"
+        "sha256": "3709c264eb91f6b7d0cd851dbcaaf1eeb6001a6f10fa74defd737dd0bb91d04f"
+      },
+      "run-cold-probes-node1.py": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/run-cold-probes-node1.py",
+        "sha256": "04391adb0312adc04008f5fc1964f3d1b7e069bc75a56f67108b8d1f4580fc56"
+      },
+      "summarize_cold_probes.py": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/summarize_cold_probes.py",
+        "sha256": "a341eae02684c8b5450b4870f3886daedf7427177c54acc293c57410b2255e0b"
       }
     },
     "simulation_revision_basis": "retained executable/build manifests; not inferred from analysis checkout"
@@ -803,11 +811,13 @@
     "interpretation": "Exactly one cell differs by more than one pressure unit in each component; it is the later failing cell. Flow differences are at float32 quantization scale."
   },
   "mitigation_probes": {
-    "cap4_executed": false,
-    "cap14_executed": false,
-    "explicit_LF_executed": false,
-    "reason": "original negative control passed on the recreated one-node trajectory; no mitigation qualification claimed",
-    "explicit_restart_contract": "Driver::Initialize recomputes MHD/LF and global timestep after numerical overrides; no explicit solver comparison has yet verified a candidate mitigation"
+    "cap4_executed": true,
+    "cap14_executed": true,
+    "explicit_LF_executed": true,
+    "earlier_skipped_sequence": "The initially recreated eight-rank trajectory passed its original control, so that earlier sequence stopped. The later proper64 cold checkpoint reproduced failure on both layouts and enabled the reported controls.",
+    "explicit_restart_contract": "Driver::Initialize recomputes MHD/LF and global timestep after numerical overrides; actual explicit first dt8.968413e-7 versus original3.0848659e-4 confirms the override took effect.",
+    "qualified_scope": "Cap4, explicit and cap14 each traverse one original outer-step duration without strict events. Cap14 local discrepancy is concerning despite global norm agreement. Neither cap is accepted for a full turbulent run.",
+    "physics_and_strict_checks_changed": false
   },
   "topology_one_step": {
     "eight_rank_HIP_control": {
@@ -3709,7 +3719,951 @@
   },
   "remaining_questions": [
     "Identify when and why initially roundoff-sized layout differences amplify into localized thermal depletion.",
-    "Obtain a reproducible failing synchronized state before comparing a numerical guard with explicit integration.",
-    "Complete strict fresh matched runs before interpreting active/passive turbulence statistically."
-  ]
+    "Assess a numerical guard beyond a single already-depleted state; cap4 is locally closer to explicit but materially expensive.",
+    "Do not qualify cap14 merely from successful exit or small whole-box relative norms; cold-cell discrepancy is30\u201332%.",
+    "Evaluate the cost and consistency of a numerical integration repair before extending the matched turbulent runs.",
+    "Complete strict matched runs and adequate time sampling before active/passive physical validation."
+  ],
+  "cold_state_capture": {
+    "classification": "original-decomposition near-failure state captured; strict-admissibility failure reproduced on one-step restart",
+    "job_id": "5631747",
+    "accounting": [
+      {
+        "JobID": "5631747",
+        "State": "COMPLETED",
+        "ExitCode": "0:0",
+        "ElapsedRaw": "342",
+        "NNodes": "8",
+        "Start": "2026-10-07T12:12:16",
+        "End": "2026-10-07T12:17:58"
+      },
+      {
+        "JobID": "5631747.batch",
+        "State": "COMPLETED",
+        "ExitCode": "0:0",
+        "ElapsedRaw": "342",
+        "NNodes": "1",
+        "Start": "2026-10-07T12:12:16",
+        "End": "2026-10-07T12:17:58"
+      },
+      {
+        "JobID": "5631747.extern",
+        "State": "COMPLETED",
+        "ExitCode": "0:0",
+        "ElapsedRaw": "342",
+        "NNodes": "8",
+        "Start": "2026-10-07T12:12:16",
+        "End": "2026-10-07T12:17:58"
+      },
+      {
+        "JobID": "5631747.0",
+        "State": "COMPLETED",
+        "ExitCode": "0:0",
+        "ElapsedRaw": "319",
+        "NNodes": "8",
+        "Start": "2026-10-07T12:12:27",
+        "End": "2026-10-07T12:17:46"
+      },
+      {
+        "JobID": "5631747.1",
+        "State": "CANCELLED",
+        "ExitCode": "0:15",
+        "ElapsedRaw": "3",
+        "NNodes": "8",
+        "Start": "2026-10-07T12:17:53",
+        "End": "2026-10-07T12:17:56"
+      }
+    ],
+    "allocation_elapsed_seconds": 342,
+    "allocated_nodes": 8,
+    "allocation_node_hours": 0.76,
+    "scheduler_success_is_not_physical_validation": true,
+    "legs": {
+      "checkpoint5800": {
+        "returncode": 0,
+        "launch_wall_seconds": 318.18864495399976,
+        "final_restart": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-state64/checkpoint5800/rst/cgl_lf_matched_beta10.00003.rst",
+          "sha256": "004a60b4a94a7f5ac86cbf16cd91cd940af4d741db43aa45838421a8ba3160b5",
+          "cycle": 5800,
+          "time": 2.507714514270586,
+          "dt": 0.0003084865904790016,
+          "nmb": 128,
+          "root_level": 3
+        },
+        "fatal_lines": [],
+        "distinct_host_device_pairs": 64,
+        "one_visible_gpu_per_rank": true
+      },
+      "negative5801": {
+        "returncode": 143,
+        "launch_wall_seconds": 3.485579201999826,
+        "final_restart": null,
+        "fatal_lines": [
+          "### FATAL ERROR in /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-passive-fix-hip/source/src/diffusion/cgl_landau_fluid.cpp at line 2544",
+          "CGL Landau-fluid strict admissibility failed after a split stage: sweep=pre stage=13/15 dfloor=0 pfloor=1 nonfinite=0 nonpositive=0 hard_bound=2254"
+        ],
+        "distinct_host_device_pairs": 64,
+        "one_visible_gpu_per_rank": true
+      }
+    },
+    "original_failed_cell_at_sweep_start": {
+      "gid": 51,
+      "logical": [
+        1,
+        3,
+        2,
+        3
+      ],
+      "index_including_ghosts_ijk": [
+        25,
+        17,
+        18
+      ],
+      "xyz": [
+        0.3671875,
+        0.8255208333333334,
+        0.5807291666666666
+      ],
+      "fields": {
+        "rho": 1.2429604195819763,
+        "mx": -0.15581363191885045,
+        "my": 0.021381409827206842,
+        "mz": -0.07054038549199047,
+        "J": -5.823289230116483,
+        "A": 3.0426272925963125,
+        "Bx": 0.18583036690368945,
+        "By": -0.2068522598455864,
+        "Bz": 0.1881608494143935,
+        "ppar": 0.15728019040287505,
+        "pperp": 0.044554902483743136,
+        "U": 0.12319499768518066,
+        "kinetic": 0.011951707429787989,
+        "magnetic_cell": 0.056362643959565945,
+        "magnetic_face": 0.05668020458572336
+      },
+      "decode": "independent analytic J/A inversion; final-bit C++ fma differences are not reproduced"
+    }
+  },
+  "cold_state_capture_evidence": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-state64/execution-review.json",
+    "sha256": "2388e061d97efea97bd7a1f57711a68b616cb13872e322d7039a4808fa6f4efa"
+  },
+  "cold_state_controls": {
+    "classification": "Bounded numerical controls, not long-run or physical validation",
+    "initial": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-state64/checkpoint5800/rst/cgl_lf_matched_beta10.00003.rst",
+      "sha256": "004a60b4a94a7f5ac86cbf16cd91cd940af4d741db43aa45838421a8ba3160b5",
+      "time": 2.507714514270586,
+      "dt": 0.0003084865904790016,
+      "cycle": 5800,
+      "nmb": 128,
+      "block_cells": [
+        48,
+        48,
+        48
+      ],
+      "nghost": 3,
+      "lf_diagnostics": {
+        "nstage": 2605625376768.0,
+        "dfloor": 0.0,
+        "pfloor": 0.0,
+        "nonfinite": 0.0,
+        "nonpositive": 0.0,
+        "mirror": 192606367019.0,
+        "firehose": 23836451306.0,
+        "hard_bound": 23836364488.0,
+        "qfaces": 7816876130304.0,
+        "qpar_cap": 22558958.0,
+        "qpar_cap10": 2119.0,
+        "qperp_cap": 11864760.0,
+        "qperp_cap10": 2189.0,
+        "qpar_work": 8.01619628184484,
+        "qperp_work": 0.8527388740936673,
+        "pressure_work": -0.0378904860303147,
+        "anisotropic_pressure_work": -0.376430702333533,
+        "hardwall_projection": 0.0
+      }
+    },
+    "initial_failed_cell": {
+      "gid": 51,
+      "logical": [
+        1,
+        3,
+        2,
+        3
+      ],
+      "xyz": [
+        0.3671875,
+        0.8255208333333334,
+        0.5807291666666666
+      ],
+      "fields": {
+        "rho": 1.2429604195819763,
+        "mx": -0.15581363191885045,
+        "my": 0.021381409827206842,
+        "mz": -0.07054038549199047,
+        "J": -5.823289230116483,
+        "A": 3.0426272925963125,
+        "Bx": 0.18583036690368945,
+        "By": -0.2068522598455864,
+        "Bz": 0.1881608494143935,
+        "ppar": 0.15728019040287505,
+        "pperp": 0.044554902483743136,
+        "U": 0.12319499768518066,
+        "kinetic": 0.011951707429787989,
+        "magnetic_cell": 0.056362643959565945,
+        "magnetic_face": 0.05668020458572336
+      }
+    },
+    "endpoint": 2.508023000861065,
+    "duration": 0.0003084865904790016,
+    "allocation": {
+      "job_id": 5631761,
+      "node": "frontier03388",
+      "nodes": 1,
+      "ranks": 8,
+      "gpus": 8,
+      "wall_seconds": 131,
+      "node_hours": 0.03638888888888889
+    },
+    "cases": {
+      "original": {
+        "returncode": 143,
+        "wall_seconds": 5.982065329095349,
+        "first_logged_dt": 0.0003084866,
+        "strict_failure_lines": [
+          "CGL Landau-fluid strict admissibility failed after a split stage: sweep=pre stage=13/15 dfloor=0 pfloor=1 nonfinite=0 nonpositive=0 hard_bound=18709"
+        ],
+        "successful_complete_interval": false,
+        "first_dt_reduced_from_stored_STS_dt": null,
+        "metadata": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/original/metadata.json",
+        "metadata_sha256": "afd583d338d76f346afd2c871fc948aa01669a69c289092a276f4e28602ebed1",
+        "configured_CFL": 0.3,
+        "sts_safety": 0.9,
+        "outer_STS_ratio_cap": -1
+      },
+      "cap4": {
+        "returncode": 0,
+        "wall_seconds": 11.5553188030608,
+        "first_logged_dt": 1.07621e-05,
+        "strict_failure_lines": [],
+        "successful_complete_interval": true,
+        "first_dt_reduced_from_stored_STS_dt": null,
+        "metadata": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/cap4/metadata.json",
+        "metadata_sha256": "aff670701273317543833ee8d96a9744950320e119972018997984288446844d",
+        "configured_CFL": 0.3,
+        "sts_safety": 0.9,
+        "outer_STS_ratio_cap": 4,
+        "final_restart": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/cap4/rst/cgl_lf_matched_beta10.00004.rst",
+          "sha256": "8096f4879493ff32d891f82c6f8aca21eea596ebf36a68e388a304a059caa860",
+          "time": 2.508023000861065,
+          "dt": 6.531014143718039e-06,
+          "cycle": 5825,
+          "nmb": 128,
+          "block_cells": [
+            48,
+            48,
+            48
+          ],
+          "nghost": 3,
+          "lf_diagnostics": {
+            "nstage": 2607748743168.0,
+            "dfloor": 0.0,
+            "pfloor": 0.0,
+            "nonfinite": 0.0,
+            "nonpositive": 0.0,
+            "mirror": 192719695950.0,
+            "firehose": 23857194214.0,
+            "hard_bound": 23857107267.0,
+            "qfaces": 7823246229504.0,
+            "qpar_cap": 22563883.0,
+            "qpar_cap10": 2881.0,
+            "qperp_cap": 11867055.0,
+            "qperp_cap10": 2951.0,
+            "qpar_work": 8.019068046683959,
+            "qperp_work": 0.8530958749547708,
+            "pressure_work": -0.03836144324890266,
+            "anisotropic_pressure_work": -0.37676897628578315,
+            "hardwall_projection": 0.0
+          }
+        },
+        "final_failed_cell": {
+          "rho": 1.242836060348446,
+          "mx": -0.15686420076386123,
+          "my": 0.02248958835674802,
+          "mz": -0.06981223218417171,
+          "J": -3.066705178285288,
+          "A": 4.509009080173183,
+          "Bx": 0.18580767672439735,
+          "By": -0.2068178675358233,
+          "Bz": 0.18817076745184708,
+          "ppar": 1.4443384077690766,
+          "pperp": 1.3316320469838765,
+          "U": 2.053801250868415,
+          "kinetic": 0.01206350048286766,
+          "magnetic_cell": 0.0563531803926003,
+          "magnetic_face": 0.05667106487021633
+        },
+        "field_minima": {
+          "ppar": 1.4443384077690766,
+          "pperp": 1.3316320469838765,
+          "U": 2.053801250868415
+        },
+        "energy_integrals": {
+          "kinetic": {
+            "initial": 0.6852114081933608,
+            "final": 0.6852575374436641,
+            "change": 4.6129250303339475e-05
+          },
+          "magnetic_face": {
+            "initial": 1.8229726483291124,
+            "final": 1.823083319217276,
+            "change": 0.00011067088816352211
+          },
+          "U": {
+            "initial": 17.17029298576584,
+            "final": 17.17078539149206,
+            "change": 0.0004924057262201131
+          }
+        },
+        "timing": {
+          "timed_cycle_start": 5800,
+          "timed_cycle_end": 5824,
+          "timed_cycles": 24,
+          "elapsed_seconds": 6.9176144,
+          "physical_duration_from_summed_dt": 0.00030522111999999995,
+          "node_seconds_per_physical_time": 22664.271725364222,
+          "seconds_per_outer_cycle": 0.2882339333333333,
+          "all_outer_cycles": 25,
+          "all_steps_dt_min": 3.265507e-06,
+          "all_steps_dt_max": 1.353999e-05,
+          "untruncated_dt_min": 1.07621e-05,
+          "untruncated_dt_max": 1.353999e-05,
+          "final_clipped_step_dt": 3.265507e-06,
+          "solver_total_seconds_including_final_output": 9.845408
+        }
+      },
+      "explicit": {
+        "returncode": 0,
+        "wall_seconds": 68.5481841021683,
+        "first_logged_dt": 8.968413e-07,
+        "strict_failure_lines": [],
+        "successful_complete_interval": true,
+        "first_dt_reduced_from_stored_STS_dt": true,
+        "metadata": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/explicit/metadata.json",
+        "metadata_sha256": "b77fba97b342320153731d30180c5c3af8aadc59bc35dc57b8d2cb5e50c85bf6",
+        "configured_CFL": 0.3,
+        "sts_safety": 0.9,
+        "outer_STS_ratio_cap": null,
+        "final_restart": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/explicit/rst/cgl_lf_matched_beta10.00004.rst",
+          "sha256": "b0418d99f322d1749b7bc89bead84f0ca4efe42937917318bcf2acc102e0e95c",
+          "time": 2.508023000861065,
+          "dt": 5.214721783275422e-07,
+          "cycle": 6089,
+          "nmb": 128,
+          "block_cells": [
+            48,
+            48,
+            48
+          ],
+          "nghost": 3,
+          "lf_diagnostics": {
+            "nstage": 2613807415296.0,
+            "dfloor": 0.0,
+            "pfloor": 0.0,
+            "nonfinite": 0.0,
+            "nonpositive": 0.0,
+            "mirror": 193075410699.0,
+            "firehose": 23924515454.0,
+            "hard_bound": 23924424813.0,
+            "qfaces": 7841422245888.0,
+            "qpar_cap": 22575021.0,
+            "qpar_cap10": 5079.0,
+            "qperp_cap": 11873066.0,
+            "qperp_cap10": 5149.0,
+            "qpar_work": 8.019061527777856,
+            "qperp_work": 0.8530927014230405,
+            "pressure_work": -0.03836144001362475,
+            "anisotropic_pressure_work": -0.3767689660042918,
+            "hardwall_projection": 0.0
+          }
+        },
+        "final_failed_cell": {
+          "rho": 1.2428360378602472,
+          "mx": -0.15686420433727147,
+          "my": 0.02248963181763129,
+          "mz": -0.06981212742697745,
+          "J": -3.0477665395986455,
+          "A": 4.510598203570744,
+          "Bx": 0.18580770247180134,
+          "By": -0.20681784125179326,
+          "Bz": 0.1881708425759439,
+          "ppar": 1.4665156383841067,
+          "pperp": 1.3538092506304646,
+          "U": 2.0870670698225178,
+          "kinetic": 0.012063496054219754,
+          "magnetic_cell": 0.056353193876821035,
+          "magnetic_face": 0.05667107884008147
+        },
+        "field_minima": {
+          "ppar": 1.4665156383841067,
+          "pperp": 1.3538092506304646,
+          "U": 2.0870670698225178
+        },
+        "energy_integrals": {
+          "kinetic": {
+            "initial": 0.6852114081933608,
+            "final": 0.6852575552405732,
+            "change": 4.614704721239704e-05
+          },
+          "magnetic_face": {
+            "initial": 1.8229726483291124,
+            "final": 1.8230833088163163,
+            "change": 0.000110660487203873
+          },
+          "U": {
+            "initial": 17.17029298576584,
+            "final": 17.17078535061757,
+            "change": 0.0004923648517305423
+          }
+        },
+        "timing": {
+          "timed_cycle_start": 5800,
+          "timed_cycle_end": 6088,
+          "timed_cycles": 288,
+          "elapsed_seconds": 56.1153355,
+          "physical_duration_from_summed_dt": 0.00030822585469999987,
+          "node_seconds_per_physical_time": 182059.14476129125,
+          "seconds_per_outer_cycle": 0.19484491493055556,
+          "all_outer_cycles": 289,
+          "all_steps_dt_min": 2.607361e-07,
+          "all_steps_dt_max": 1.155659e-06,
+          "untruncated_dt_min": 8.732981e-07,
+          "untruncated_dt_max": 1.155659e-06,
+          "final_clipped_step_dt": 2.607361e-07,
+          "solver_total_seconds_including_final_output": 59.06799
+        }
+      },
+      "cap14": {
+        "returncode": 0,
+        "wall_seconds": 12.147650855826214,
+        "first_logged_dt": 3.766734e-05,
+        "strict_failure_lines": [],
+        "successful_complete_interval": true,
+        "first_dt_reduced_from_stored_STS_dt": null,
+        "metadata": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/cap14/metadata.json",
+        "metadata_sha256": "b46b7392b9ca9957b45d2d6b7cf5ea12bf40275ce6cd232cac842fbc0e6fd060",
+        "configured_CFL": 0.3,
+        "sts_safety": 0.9,
+        "outer_STS_ratio_cap": 14,
+        "final_restart": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/cap14/rst/cgl_lf_matched_beta10.00004.rst",
+          "sha256": "d843d75d0dba0dbb8fa9fc0e663a6ca49b877e0d1e0fec022c698baf6a830fbe",
+          "time": 2.508023000861065,
+          "dt": 1.675182457905322e-05,
+          "cycle": 5808,
+          "nmb": 128,
+          "block_cells": [
+            48,
+            48,
+            48
+          ],
+          "nghost": 3,
+          "lf_diagnostics": {
+            "nstage": 2606871085056.0,
+            "dfloor": 0.0,
+            "pfloor": 0.0,
+            "nonfinite": 0.0,
+            "nonpositive": 0.0,
+            "mirror": 192678987547.0,
+            "firehose": 23849179185.0,
+            "hard_bound": 23849092316.0,
+            "qfaces": 7820613255168.0,
+            "qpar_cap": 22563282.0,
+            "qpar_cap10": 2490.0,
+            "qperp_cap": 11866420.0,
+            "qperp_cap10": 2560.0,
+            "qpar_work": 8.019059968452245,
+            "qperp_work": 0.8530952786353533,
+            "pressure_work": -0.03836147254919265,
+            "anisotropic_pressure_work": -0.37676902255998795,
+            "hardwall_projection": 0.0
+          }
+        },
+        "final_failed_cell": {
+          "rho": 1.242836122958599,
+          "mx": -0.1568641874197938,
+          "my": 0.02248948339192563,
+          "mz": -0.06981251773306232,
+          "J": -3.488646649446673,
+          "A": 4.465743559040377,
+          "Bx": 0.1858076118507763,
+          "By": -0.2068179350153468,
+          "Bz": 0.18817057699617873,
+          "ppar": 1.0285534169907353,
+          "pperp": 0.91584712407796,
+          "U": 1.4301238325733276,
+          "kinetic": 0.012063512331358234,
+          "magnetic_cell": 0.05635314645638789,
+          "magnetic_face": 0.056671029721290754
+        },
+        "field_minima": {
+          "ppar": 1.0285534169907353,
+          "pperp": 0.91584712407796,
+          "U": 1.4301238325733276
+        },
+        "energy_integrals": {
+          "kinetic": {
+            "initial": 0.6852114081933608,
+            "final": 0.6852574916512656,
+            "change": 4.608345790479973e-05
+          },
+          "magnetic_face": {
+            "initial": 1.8229726483291124,
+            "final": 1.8230833455751732,
+            "change": 0.00011069724606072029
+          },
+          "U": {
+            "initial": 17.17029298576584,
+            "final": 17.170785539816052,
+            "change": 0.0004925540502114245
+          }
+        },
+        "timing": {
+          "timed_cycle_start": 5800,
+          "timed_cycle_end": 5807,
+          "timed_cycles": 7,
+          "elapsed_seconds": 3.1507707,
+          "physical_duration_from_summed_dt": 0.00030011069,
+          "node_seconds_per_physical_time": 10498.695331379233,
+          "seconds_per_outer_cycle": 0.45011009999999996,
+          "all_outer_cycles": 8,
+          "all_steps_dt_min": 8.375912e-06,
+          "all_steps_dt_max": 4.744852e-05,
+          "untruncated_dt_min": 3.766734e-05,
+          "untruncated_dt_max": 4.744852e-05,
+          "final_clipped_step_dt": 8.375912e-06,
+          "solver_total_seconds_including_final_output": 6.115842
+        }
+      }
+    },
+    "comparisons": {
+      "cap4_minus_explicit": {
+        "fields": {
+          "rho": {
+            "max_abs": 5.137314220693412e-07,
+            "mean_abs_difference": 1.3457884372283598e-08,
+            "rms_difference": 1.7665780278034254e-08,
+            "relative_L2_to_reference": 1.7530339448433994e-08
+          },
+          "mx": {
+            "max_abs": 7.322813239077353e-06,
+            "mean_abs_difference": 3.4278402925434846e-08,
+            "rms_difference": 4.430209029252057e-08,
+            "relative_L2_to_reference": 9.73714703099499e-08
+          },
+          "my": {
+            "max_abs": 5.810600355898865e-06,
+            "mean_abs_difference": 2.7717615655430114e-08,
+            "rms_difference": 3.9851469827793234e-08,
+            "relative_L2_to_reference": 9.109545888075525e-08
+          },
+          "mz": {
+            "max_abs": 7.899461873739355e-06,
+            "mean_abs_difference": 3.3343672125471426e-08,
+            "rms_difference": 4.5268105413506175e-08,
+            "relative_L2_to_reference": 8.733024651923614e-08
+          },
+          "J": {
+            "max_abs": 0.03380390490195051,
+            "mean_abs_difference": 4.293132465354069e-05,
+            "rms_difference": 0.0001961367282255719,
+            "relative_L2_to_reference": 8.879850542255575e-05
+          },
+          "A": {
+            "max_abs": 0.024057701640728513,
+            "mean_abs_difference": 1.8951326802965303e-05,
+            "rms_difference": 8.193652188806915e-05,
+            "relative_L2_to_reference": 6.904832684888241e-05
+          },
+          "Bx": {
+            "max_abs": 8.609167431983256e-05,
+            "mean_abs_difference": 2.1353913645800226e-08,
+            "rms_difference": 1.2173466109706461e-07,
+            "relative_L2_to_reference": 1.7119326462053826e-07
+          },
+          "By": {
+            "max_abs": 4.961219620678442e-05,
+            "mean_abs_difference": 2.0183111997762224e-08,
+            "rms_difference": 1.095226287613121e-07,
+            "relative_L2_to_reference": 2.413236436148336e-07
+          },
+          "Bz": {
+            "max_abs": 4.643176745777744e-05,
+            "mean_abs_difference": 2.070983433233166e-08,
+            "rms_difference": 1.1134621432503997e-07,
+            "relative_L2_to_reference": 1.0564553968976363e-07
+          },
+          "ppar": {
+            "max_abs": 0.19028786828491118,
+            "mean_abs_difference": 0.00023695780896978234,
+            "rms_difference": 0.0010787678527743956,
+            "relative_L2_to_reference": 0.0001860468631660521
+          },
+          "pperp": {
+            "max_abs": 0.19028786400569864,
+            "mean_abs_difference": 0.00020666581686299516,
+            "rms_difference": 0.0010321565587681153,
+            "relative_L2_to_reference": 0.00017782992299596664
+          },
+          "U": {
+            "max_abs": 0.2854317981481529,
+            "mean_abs_difference": 0.00030428075975118946,
+            "rms_difference": 0.0015405257340593698,
+            "relative_L2_to_reference": 0.00017732401549551104
+          },
+          "kinetic": {
+            "max_abs": 3.98737489754053e-06,
+            "mean_abs_difference": 2.686506287947603e-08,
+            "rms_difference": 4.160794463803067e-08,
+            "relative_L2_to_reference": 8.749161002494843e-08
+          },
+          "magnetic_cell": {
+            "max_abs": 6.227737620756457e-05,
+            "mean_abs_difference": 3.33152038761212e-08,
+            "rms_difference": 1.7858651788467872e-07,
+            "relative_L2_to_reference": 1.7795819809155284e-07
+          },
+          "magnetic_face": {
+            "max_abs": 6.208597349299794e-05,
+            "mean_abs_difference": 3.332059050420669e-08,
+            "rms_difference": 1.7918472425167612e-07,
+            "relative_L2_to_reference": 1.7850246432137614e-07
+          }
+        },
+        "time_difference": 0.0,
+        "pressure_maximum_locations": {
+          "ppar": {
+            "gid": 18,
+            "block_logical": [
+              0,
+              3,
+              0,
+              3
+            ],
+            "interior_index_ijk": [
+              0,
+              28,
+              16
+            ],
+            "global_index_ijk": [
+              0,
+              172,
+              16
+            ],
+            "xyz": [
+              0.0026041666666666665,
+              0.8984375,
+              0.0859375
+            ],
+            "distance_from_block_face": 0,
+            "reference": 7.6604623722086505,
+            "candidate": 7.470174503923739,
+            "signed_difference": -0.19028786828491118,
+            "distance_from_changed_face": 999
+          },
+          "pperp": {
+            "gid": 18,
+            "block_logical": [
+              0,
+              3,
+              0,
+              3
+            ],
+            "interior_index_ijk": [
+              0,
+              28,
+              16
+            ],
+            "global_index_ijk": [
+              0,
+              172,
+              16
+            ],
+            "xyz": [
+              0.0026041666666666665,
+              0.8984375,
+              0.0859375
+            ],
+            "distance_from_block_face": 0,
+            "reference": 8.247217384231448,
+            "candidate": 8.056929520225749,
+            "signed_difference": -0.19028786400569864,
+            "distance_from_changed_face": 999
+          },
+          "U": {
+            "gid": 18,
+            "block_logical": [
+              0,
+              3,
+              0,
+              3
+            ],
+            "interior_index_ijk": [
+              0,
+              28,
+              16
+            ],
+            "global_index_ijk": [
+              0,
+              172,
+              16
+            ],
+            "xyz": [
+              0.0026041666666666665,
+              0.8984375,
+              0.0859375
+            ],
+            "distance_from_block_face": 0,
+            "reference": 12.077448570335772,
+            "candidate": 11.792016772187619,
+            "signed_difference": -0.2854317981481529,
+            "distance_from_changed_face": 999
+          }
+        },
+        "original_cold_cell_difference": {
+          "ppar": {
+            "difference": -0.022177230615030075,
+            "relative_to_explicit": -0.01512239626674984
+          },
+          "pperp": {
+            "difference": -0.02217720364658815,
+            "relative_to_explicit": -0.01638133558051867
+          },
+          "U": {
+            "difference": -0.033265818954102855,
+            "relative_to_explicit": -0.0159390272766518
+          }
+        }
+      },
+      "cap14_minus_explicit": {
+        "fields": {
+          "rho": {
+            "max_abs": 4.6994713773784724e-06,
+            "mean_abs_difference": 5.1175743465599666e-08,
+            "rms_difference": 7.154495087723731e-08,
+            "relative_L2_to_reference": 7.099642670519314e-08
+          },
+          "mx": {
+            "max_abs": 2.8532057653539444e-05,
+            "mean_abs_difference": 1.255861652529043e-07,
+            "rms_difference": 1.6823148314728307e-07,
+            "relative_L2_to_reference": 3.6975562006924245e-07
+          },
+          "my": {
+            "max_abs": 1.6900577417822138e-05,
+            "mean_abs_difference": 1.0331616763471898e-07,
+            "rms_difference": 1.5207127550417291e-07,
+            "relative_L2_to_reference": 3.4761585167363177e-07
+          },
+          "mz": {
+            "max_abs": 3.0776824839123806e-05,
+            "mean_abs_difference": 1.2293350093874797e-07,
+            "rms_difference": 1.7365693575220534e-07,
+            "relative_L2_to_reference": 3.350151916119394e-07
+          },
+          "J": {
+            "max_abs": 0.4408801098480275,
+            "mean_abs_difference": 6.467635864010935e-05,
+            "rms_difference": 0.00026944089858106906,
+            "relative_L2_to_reference": 0.00012198607221689108
+          },
+          "A": {
+            "max_abs": 0.044854644530366805,
+            "mean_abs_difference": 3.9958875814957645e-05,
+            "rms_difference": 0.00014778666149850475,
+            "relative_L2_to_reference": 0.00012454057692360722
+          },
+          "Bx": {
+            "max_abs": 0.0001878174826450696,
+            "mean_abs_difference": 7.710410176014272e-08,
+            "rms_difference": 3.957332281564155e-07,
+            "relative_L2_to_reference": 5.565125218766035e-07
+          },
+          "By": {
+            "max_abs": 0.00011006611862902915,
+            "mean_abs_difference": 7.308262692709614e-08,
+            "rms_difference": 3.6530981136774474e-07,
+            "relative_L2_to_reference": 8.049285862160818e-07
+          },
+          "Bz": {
+            "max_abs": 9.944232224201599e-05,
+            "mean_abs_difference": 7.487714859202098e-08,
+            "rms_difference": 3.7005544487515503e-07,
+            "relative_L2_to_reference": 3.511094420762858e-07
+          },
+          "ppar": {
+            "max_abs": 0.4379622213933714,
+            "mean_abs_difference": 0.0003575614777276096,
+            "rms_difference": 0.0013453219240061897,
+            "relative_L2_to_reference": 0.0002320174106654749
+          },
+          "pperp": {
+            "max_abs": 0.43796212655250466,
+            "mean_abs_difference": 0.0002876009182238261,
+            "rms_difference": 0.0012298352543557514,
+            "relative_L2_to_reference": 0.00021188792215865956
+          },
+          "U": {
+            "max_abs": 0.6569432372491901,
+            "mean_abs_difference": 0.00040917831344111394,
+            "rms_difference": 0.0018141025037394258,
+            "relative_L2_to_reference": 0.00020881438938113713
+          },
+          "kinetic": {
+            "max_abs": 3.0393824139718362e-05,
+            "mean_abs_difference": 9.941539132496601e-08,
+            "rms_difference": 1.6383660228463894e-07,
+            "relative_L2_to_reference": 3.4450940174051e-07
+          },
+          "magnetic_cell": {
+            "max_abs": 0.00021524391435501222,
+            "mean_abs_difference": 1.2029792615031074e-07,
+            "rms_difference": 5.945270481757043e-07,
+            "relative_L2_to_reference": 5.92435327499686e-07
+          },
+          "magnetic_face": {
+            "max_abs": 0.00021417660131417549,
+            "mean_abs_difference": 1.203308176160369e-07,
+            "rms_difference": 5.963807873004815e-07,
+            "relative_L2_to_reference": 5.941100205480413e-07
+          }
+        },
+        "time_difference": 0.0,
+        "pressure_maximum_locations": {
+          "ppar": {
+            "gid": 51,
+            "block_logical": [
+              1,
+              3,
+              2,
+              3
+            ],
+            "interior_index_ijk": [
+              22,
+              14,
+              15
+            ],
+            "global_index_ijk": [
+              70,
+              158,
+              111
+            ],
+            "xyz": [
+              0.3671875,
+              0.8255208333333333,
+              0.5807291666666666
+            ],
+            "distance_from_block_face": 14,
+            "reference": 1.4665156383841067,
+            "candidate": 1.0285534169907353,
+            "signed_difference": -0.4379622213933714,
+            "distance_from_changed_face": 999
+          },
+          "pperp": {
+            "gid": 51,
+            "block_logical": [
+              1,
+              3,
+              2,
+              3
+            ],
+            "interior_index_ijk": [
+              22,
+              14,
+              15
+            ],
+            "global_index_ijk": [
+              70,
+              158,
+              111
+            ],
+            "xyz": [
+              0.3671875,
+              0.8255208333333333,
+              0.5807291666666666
+            ],
+            "distance_from_block_face": 14,
+            "reference": 1.3538092506304646,
+            "candidate": 0.91584712407796,
+            "signed_difference": -0.43796212655250466,
+            "distance_from_changed_face": 999
+          },
+          "U": {
+            "gid": 51,
+            "block_logical": [
+              1,
+              3,
+              2,
+              3
+            ],
+            "interior_index_ijk": [
+              22,
+              14,
+              15
+            ],
+            "global_index_ijk": [
+              70,
+              158,
+              111
+            ],
+            "xyz": [
+              0.3671875,
+              0.8255208333333333,
+              0.5807291666666666
+            ],
+            "distance_from_block_face": 14,
+            "reference": 2.0870670698225178,
+            "candidate": 1.4301238325733276,
+            "signed_difference": -0.6569432372491901,
+            "distance_from_changed_face": 999
+          }
+        },
+        "original_cold_cell_difference": {
+          "ppar": {
+            "difference": -0.4379622213933714,
+            "relative_to_explicit": -0.2986413577395901
+          },
+          "pperp": {
+            "difference": -0.43796212655250466,
+            "relative_to_explicit": -0.3235035706459733
+          },
+          "U": {
+            "difference": -0.6569432372491901,
+            "relative_to_explicit": -0.3147686275865854
+          }
+        }
+      }
+    },
+    "definitions": {
+      "timing": "Rank-zero elapsed-clock difference from first pre-step record to the penultimate record; excludes initialization output and final step/final output. Intermediate ordinary solver tasks/communication included. Last physical step omitted from timing.",
+      "timed_physical_duration": "Sum of printed step dt values for the timed cycles; seven-significant-digit log precision is the measurement limit. Do not subtract six-place printed absolute times.",
+      "energy": "Uniform-volume native-restart integrals: kinetic=rho*v^2/2; thermal=ppar/2+pperp (passive tracer thermal energy); magnetic=native face-square average. Differences compare full coupled integrations, not an isolated LF energy budget.",
+      "error": "Candidate minus explicit, uniform active-cell weights. Explicit is a lower-step comparison, not an established exact solution. No fixed acceptance tolerance imposed."
+    },
+    "numerical_interpretation": "Original strict failure reproducible. Cap4, explicit, cap14 avoid it for exactly one original outer-step duration. Cap4 agrees more closely locally; cap14 has about30% discrepancy at the originally cold cell. Neither is qualified for the full turbulent run.",
+    "source_hypothesis": "LimiterCollisionRate enters LF face collision frequency; at rate1e10 it sharply switches conductivity at soft thresholds. The timestep bound deliberately uses background collisions only, so suppression is not omitted from a claimed positivity proof: no such nonlinear positivity proof exists. The probes retain this operator and thresholds.",
+    "provenance": {
+      "launcher": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/launch-plan.json",
+      "launcher_sha256": "5edace3ce370c49e2dbf460b1d97e75b1ea5be4387c213aaa4270d04f436a9d0",
+      "script_sha256": "a341eae02684c8b5450b4870f3886daedf7427177c54acc293c57410b2255e0b"
+    }
+  },
+  "cold_state_controls_evidence": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/cold-probes-node1/review.json",
+    "sha256": "b63461f77a5c10583c1f3a66455db479a15b7e6ab8c1f82dc14f83bf70e26346"
+  }
 }
