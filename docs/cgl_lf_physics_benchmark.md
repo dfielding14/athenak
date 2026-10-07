@@ -62,6 +62,15 @@ mode bounds `-3..3` give 38 enumerated entries, or 19 opposite-wavevector pairs,
 in this physical shell. This differs from the historical positive-octant
 selection and from unprojected random forcing.
 
+Here `k^-2` uses the driver's one-dimensional isotropic shell-spectrum
+convention: for type-zero power-law forcing it assigns each modal noise
+amplitude `k^[-(expo+2)/2]`. Thus `expo=2` gives modal variance proportional to
+`k^-4`, which combines with the continuum three-dimensional mode density
+`k²` to give shell power proportional to `k^-2`. The sparse discrete shell does
+not sample that continuum exactly. This specifies the actual convention;
+the paper's description of a power distribution does not establish identical
+mode-by-mode weights.
+
 [NormalizeForce](../src/srcterms/turb_driver.cpp) divides both work moments by
 volume before solving its normalization quadratic. Therefore `dedt=0.32`
 corresponds to nominal total-box power `0.64`. Measure actual injection using
