@@ -6,7 +6,19 @@ parameters. It asks whether anisotropic-pressure feedback changes magnetic
 strength fluctuations, pressure-anisotropy occupancy, velocity gradients and
 pressure compensation in this finite-time realization.
 
-**Physical validation status: pending.** The initial passive plumbing run
+**Physical validation status: inconclusive; numerical restart work ongoing.**
+The first 192-grid pair used 48-cubed blocks and eight nodes per member.
+Its passive member failed strict admissibility at `t=2.5077145`, cycle 5800;
+the active member was stopped on request after `t=6.16`. Preserve both as
+failed/interrupted evidence, not a completed stationary comparison.
+An unchanged-settings replay reproduced an interior perpendicular pressure
+of `-0.00875815` at RKL2 pre-sweep stage 13/15. This is a finite stage
+positivity failure, distinct from the earlier contraction issue and the
+accepted B4 sharp-contact limitation. Strict checks remain enabled.
+The short shared interval `[0.5,2.5]` is dominated by startup, and active-only
+`[2,6]` cannot establish the requested late-time active/passive contrast.
+
+The initial passive plumbing run
 exposed a one-ULP pressure-decode contraction difference across GPU kernels.
 The explicit contraction-order fix preserves the strict firehose wall and
 passes its CPU/GPU regression, the failed-checkpoint replay, and fresh active
@@ -29,7 +41,7 @@ Do not override either flag separately or switch modes across a restart.
 | Setting | Shared value |
 | --- | --- |
 | Box and grid | `(1,1,2)`, `192×192×384`, spacing `1/192`, periodic throughout |
-| Blocks and halos | 128 blocks of `48×48×48`; `nghost=3` |
+| Blocks and halos | 8 blocks of `96×96×192`, one per GPU on one eight-GPU node; `nghost=3` |
 | Initial state | `rho=1`, `B=(0,0,1)`, `u=0`, `p_parallel=p_perp=5`, initial beta ten |
 | Numerics | `ppm4`, HLLE, RK2/RKL2, CFL `0.3`, STS safety `0.9`, merged sweeps off, FOFC off |
 | LF | Local coefficients, `lf_k_parallel=2*pi`, safe arithmetic, weighted fluxes, full diagnostics, strict admissibility and pressure-work recording on |
@@ -130,7 +142,7 @@ including `HSA_XNACK=1`, GPU-aware MPICH and `FI_CXI_ATS=0`. Restore the matched
 `TMPDIR`, `MPLCONFIGDIR` and `XDG_CACHE_HOME` above afterward if needed.
 The launcher records the environment; it does not load modules or establish it.
 
-The following commands use one node and eight ranks/GPUs, or 16 blocks per
+The following commands use one node and eight ranks/GPUs, or one block per
 rank. They do not reserve an allocation themselves. Preserve the same rank
 layout for both members and their continuations. Running them sequentially
 avoids sharing their requested GPUs; any performance comparison requires its
@@ -174,6 +186,43 @@ material invariant, not total energy. Passive `force_work` records kinetic
 energy injected by forcing kicks. The active `Delta tot-E - Delta force_work`
 budget is not applicable to an isothermal passive flow; do not manufacture that
 closure from J or from passive thermal pressure.
+
+### Read the performance log
+
+The current driver ports interval throughput from `scaling-tests`, commit
+`46a6f704b563587025d0faa87fdd7a1623458d57`, and also reports wall seconds per
+cycle. A progress line retains `elapsed`, `cycle`, `time`, and `dt`, then adds
+`interval_cycles`, `wall_seconds_per_cycle`, and `zone-cycles/s`.
+Set `time/ndiag=1` for individual cycles; the canonical cadence of 100 gives
+the mean over each reporting interval. Initialization and restart reset the
+baseline; a no-work interval is labeled `performance_interval=warmup`.
+
+With interval wall time \(\Delta t_w\), completed cycles \(\Delta n\), and
+global active-zone updates \(\Delta N_z\), these quantities are
+\(\Delta t_w/\Delta n\) and \(\Delta N_z/\Delta t_w\). The uniform grid has
+14,155,776 active cells, excluding ghosts. Throughput is global, not per GPU,
+and counts complete cycles rather than RK or RKL stages. Divide by the
+retained GPU or node count when comparing resource efficiency. Aggregate
+unequal intervals using total work divided by total wall time.
+
+Timing uses rank zero's elapsed wall clock and adds no fence, barrier, or MPI
+reduction. It includes communication and output between reports. Intervals
+containing snapshots/restarts can be slower; setup before execution is
+excluded. The historical final labels `cpu time used` and
+`zone-cycles/cpu_second` also refer to elapsed wall time, not CPU core seconds.
+Compare physical time advanced per wall hour as well as zone cycles: LF
+stiffness and changing stage counts alter work per cycle. Report scheduler
+allocation node-hours separately, including idle time after a member fails.
+
+The [retained timing check](validation/cgl_lf_matched_physics_benchmark/timing_20261007/report.md)
+measured startup medians of 0.415 s/cycle active and 0.528 s/cycle passive on
+the one-node layout. It also verified restart timing and zero floor/invalid
+pressure counters. These short checks establish memory use and logging, not
+late-time stability or a controlled scaling comparison. The new layout still
+requires its numerical preflight through the previous failure interval.
+When launching concurrent members in a larger allocation, optional
+`--nodelist NODE` pins a launcher to its intended node and is retained in the
+run command and metadata.
 
 ## Resume each member's own lineage
 

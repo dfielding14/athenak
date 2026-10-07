@@ -103,6 +103,7 @@ def main():
     parser.add_argument("--nodes", type=int, default=1)
     parser.add_argument("--ranks-per-node", type=int, default=8)
     parser.add_argument("--job-id", default=os.environ.get("SLURM_JOB_ID"))
+    parser.add_argument("--nodelist", help="Optional Slurm node list within the allocation")
     parser.add_argument("--restart", type=Path)
     parser.add_argument("--wall-time", help="AthenaK clean-checkpoint wall limit HH:MM:SS")
     parser.add_argument("--classification", default="matched scientific experiment")
@@ -149,6 +150,8 @@ def main():
     launch = ["srun", "--jobid", str(args.job_id), "--exact", "-N", str(args.nodes),
         "-n", str(args.nodes*args.ranks_per_node), "--ntasks-per-node", str(args.ranks_per_node),
         "--threads-per-core=1", "--cpu-bind=threads", "-c", "7", "--gpus-per-task=1", "--gpu-bind=closest"]
+    if args.nodelist:
+        launch.extend(["--nodelist", args.nodelist])
     initial = ["-r", str(args.restart.resolve())] if args.restart else ["-i", "input.athinput"]
     wall = ["-t", args.wall_time] if args.wall_time else []
     command = [*launch, str(binary), *initial, *wall, *overrides]
@@ -170,6 +173,7 @@ def main():
         "launch": {"command": command, "shell_command": shlex.join(command), "overrides": overrides,
             "cwd": str(run), "nodes": args.nodes, "ranks": args.nodes*args.ranks_per_node,
             "gpus": args.nodes*args.ranks_per_node, "slurm_job_id": str(args.job_id),
+            "requested_nodelist": args.nodelist,
             "restart": str(args.restart.resolve()) if args.restart else None,
             "restart_sha256": sha(args.restart) if args.restart else None,
             "source_checkout_revision": subprocess.check_output(["git", "-C", str(SOURCE), "rev-parse", "HEAD"], text=True).strip(),

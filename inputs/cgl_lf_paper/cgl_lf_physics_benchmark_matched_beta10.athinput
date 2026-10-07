@@ -2,7 +2,7 @@
 # Passive member: mhd/passive=true problem/passive_delta=true.
 # All other physics and numerical settings are shared.
 # Use the standard built-in pgen executable (no -DPROBLEM=cgl_lf_paper).
-# Uniform spacing 1/192; 128 blocks of 48 x 48 x 48 cells.
+# Uniform spacing 1/192; 8 blocks of 96 x 96 x 192 cells (one per GPU on one node).
 # No cooling: forcing can increase the thermal energy and change beta.
 
 <job>
@@ -27,9 +27,9 @@ ix3_bc = periodic
 ox3_bc = periodic
 
 <meshblock>
-nx1 = 48
-nx2 = 48
-nx3 = 48
+nx1 = 96
+nx2 = 96
+nx3 = 192
 
 <time>
 evolution = dynamic
