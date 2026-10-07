@@ -68,12 +68,15 @@ def main():
     revision = manifest.get("revision")
     if not revision or manifest.get("binary_sha256") != sha(binary):
         raise ValueError("Build manifest must identify the executable revision and matching SHA256")
+    if not re.search(r"(?m)^PROBLEM:STRING=built_in_pgens$", args.build_cache.read_text()):
+        raise ValueError("This benchmark requires a retained PROBLEM=built_in_pgens build")
     if run.exists() and any(run.iterdir()):
         raise ValueError("Use a new empty segment directory; existing data are never overwritten")
     # The numerical source must still match this executable's recorded revision.
+    # Custom unit-test pgens are not compiled into PROBLEM=built_in_pgens.
     for diff in (["diff", revision, "--"], ["diff", "--cached", "--"]):
         changed = subprocess.check_output(["git", "-C", str(SOURCE), *diff,
-            "src", "CMakeLists.txt", "cmake"], text=True)
+            "src", "CMakeLists.txt", "cmake", ":(exclude)src/pgen/unit_tests"], text=True)
         if changed:
             raise ValueError("Numerical source differs from the retained executable; build and record it first")
     run.mkdir(parents=True, exist_ok=True)
