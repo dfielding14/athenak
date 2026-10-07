@@ -658,16 +658,19 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
       return;
     }
     SingleP2C_CGLMHD(w, bfloor, u);
-    const Real kinetic = 0.5*(SQR(cons(m,IM1,k,j,i)) + SQR(cons(m,IM2,k,j,i)) +
-                              SQR(cons(m,IM3,k,j,i)))/w.d;
+    // Match canonical C2P arithmetic: a different contraction in E - kinetic
+    // can move a wall state outside the bound when decoded after a restart.
+    const Real di = 1.0/w.d;
+    const Real kinetic = 0.5*di*(SQR(cons(m,IM1,k,j,i)) + SQR(cons(m,IM2,k,j,i)) +
+                                 SQR(cons(m,IM3,k,j,i)));
     const Real magnetic = 0.5*(SQR(w.bx) + SQR(w.by) + SQR(w.bz));
     const Real eint = cons(m,IEN,k,j,i) - kinetic - magnetic;
-    const Real admissible = CGLWallAdmissibleAnisotropy(w, eint, u.mu, eos, backup);
-    if (admissible != u.mu) {
-      u.mu = admissible;
-      CGLRecoverPressuresFromInternalEnergyAndAnisotropy(
-          w.d, eint, u.mu, fmax(sqrt(2.0*magnetic), bfloor), w.e, w.pp);
-    }
+    u.mu = CGLWallAdmissibleAnisotropy(w, eint, u.mu, eos, backup);
+    // Return the pressures encoded by conserved E and A even when the encoded
+    // A needed no extra representable step toward isotropy.
+    CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+        w.d, cons(m,IM1,k,j,i), cons(m,IM2,k,j,i), cons(m,IM3,k,j,i),
+        cons(m,IEN,k,j,i), u.mu, w.bx, w.by, w.bz, bfloor, w.e, w.pp);
 
     // Correct conserved anisotropy variable
     cons(m,IAN,k,j,i) = u.mu;
