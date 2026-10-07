@@ -324,9 +324,9 @@ def synthetic_run(analyzer, tmp_path):
     return run, header
 
 
-def run_cli(run, output, metadata=None):
-    command = [sys.executable, str(ANALYZER), str(run), "--time-start", "0",
-               "--time-end", "2", "--block-duration", "0.5",
+def run_cli(run, output, metadata=None, start=0, end=2):
+    command = [sys.executable, str(ANALYZER), str(run), "--time-start", str(start),
+               "--time-end", str(end), "--block-duration", "0.5",
                "--output-dir", str(output)]
     if metadata is not None:
         command += ["--metadata", str(metadata)]
@@ -381,6 +381,53 @@ def test_real_binary_reader_rejects_missing_primitive_fields(analyzer, synthetic
     write_binary(path, 0.0, fields, header)
     with pytest.raises(ValueError, match="missing fields"):
         analyzer.read_uniform(path, analyzer.FIELDS)
+
+
+def test_cli_explains_undefined_startup_metrics_without_shrinking_window(synthetic_run):
+    run, header = synthetic_run
+    write_binary(run / "bin" / "synthetic.mhd_w_bcc.00000.bin", 0.0,
+                 uniform_fields((8, 8, 8)), header)
+    zero_force = {name: np.zeros((8, 8, 8))
+                  for name in ("force1", "force2", "force3")}
+    write_binary(run / "bin" / "synthetic.turb_force.00000.bin", 0.0,
+                 zero_force, header)
+    output = run / "analysis-undefined-startup"
+    proc = run_cli(run, output, start=0.5, end=2.0)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    result = json.loads((output / "metrics.json").read_text())
+    assert result["requested_window"] == [0.5, 2.0]
+    assert result["retained_window"] == [0.5, 2.0]
+    assert result["sampling"]["times"] == [0.0, 1.0, 2.0]
+    assert result["scalars"]["thermal_density"]["mean"] == pytest.approx(7.5)
+    assert result["scalars"]["u_parallel_rms"]["mean"] == 0.0
+    reasons = result["unavailable_metric_reasons"]
+    names = ("scalars.pressure_correlation",
+             "scalars.pressure_normalized_residual_variance",
+             "forcing_decomposition.solenoidal_fraction")
+    report = (output / "report.md").read_text()
+    for name in names:
+        assert reasons[name]["available"] is False
+        assert reasons[name]["undefined_sample_times"] == [0.0]
+        assert reasons[name]["undefined_bracketing_times"] == [0.0]
+        assert reasons[name]["requested_window"] == [0.5, 2.0]
+        assert reasons[name]["reason"]
+        assert [row["time"] for row in reasons[name]["valid_samples"]] == [1.0, 2.0]
+        assert name in report
+    for snapshot in result["snapshots"][1:]:
+        assert snapshot["scalars"]["pressure_correlation"] == pytest.approx(-1.0)
+        assert snapshot["scalars"]["pressure_normalized_residual_variance"] < 1.0e-9
+    force = result["forcing_decomposition"]
+    assert force["snapshots"][0]["values"]["solenoidal_fraction"] is None
+    for snapshot in force["snapshots"][1:]:
+        assert snapshot["values"]["solenoidal_fraction"] == pytest.approx(0.5)
+    assert "solenoidal_fraction" not in force["statistics"]
+    # P(t) rises linearly from zero at t=0 to P at t=1, then stays at P.
+    # Its integral on [.5,2] is (3/8+1)*P, so the mean is (11/12)*P.
+    phase = 2 * np.pi * (np.arange(8) + 0.5) / 8
+    stored_wave = np.cos(phase).astype(np.float32).astype(float)
+    later_power = 2 * np.mean(stored_wave**2)
+    assert force["statistics"]["total_acceleration_power"]["mean"] == pytest.approx(
+        (11 / 12) * later_power, rel=1.0e-13)
 
 
 @pytest.mark.parametrize("defect", ["time", "geometry", "model"])

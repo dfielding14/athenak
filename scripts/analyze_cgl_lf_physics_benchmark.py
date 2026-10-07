@@ -180,6 +180,17 @@ def temporal_summary(times, values, block_duration, start=None, end=None):
     return result
 
 
+def unavailable_summary(times, values, start, end, reason):
+    """Explain undefined diagnostics without changing their integration window."""
+    missing = [float(t) for t, value in zip(times, values) if value is None]
+    return {"available": False, "reason": reason + "; required sampling or endpoint-bracketing values are undefined. "
+            "No interpolation across undefined values or narrowing of the averaging window is performed.",
+            "requested_window": [start, end], "undefined_sample_times": missing,
+            "undefined_bracketing_times": [t for t in missing if t < start or t > end],
+            "valid_samples": [{"time": float(t), "value": float(value)}
+                              for t, value in zip(times, values) if value is not None]}
+
+
 def autocorrelation(times, values):
     times, values = np.asarray(times), np.asarray(values)
     if len(times) < 8:
@@ -743,6 +754,17 @@ def main(argv=None):
             pdf_rows[name].append(volume_pdf(values, edges[name], info["cell_volume"]))
     scalars = {name: average([row["scalars"][name] for row in ordered])
                for name in set.intersection(*(set(row["scalars"]) for row in ordered))}
+    unavailable = {}
+    scalar_names = set.union(*(set(row["scalars"]) for row in ordered)) | {
+        "pressure_correlation", "pressure_normalized_residual_variance"}
+    for name in sorted(scalar_names-set(scalars)):
+        cause = ("pressure correlation requires nonzero variance in both pressure fluctuations"
+                 if name == "pressure_correlation" else
+                 "normalized pressure residual requires nonzero summed pressure variance"
+                 if name == "pressure_normalized_residual_variance" else
+                 "scalar diagnostic is undefined in one or more retained snapshots")
+        unavailable["scalars."+name] = unavailable_summary(times,
+            [row["scalars"].get(name) for row in ordered], args.time_start, args.time_end, cause)
     spectra = {}
     for name in ordered[0]["spectra"]:
         rows = [row["spectra"][name] for row in ordered]
@@ -792,8 +814,17 @@ def main(argv=None):
             if all(forces[t]["values"][name] is not None for t in force_times)}
         force_summary["expected_solenoidal_fraction"] = model["expected_solenoidal_power_fraction"]
         statistics = force_summary["statistics"]
+        for name in next(iter(forces.values()))["values"]:
+            if name not in statistics:
+                unavailable["forcing_decomposition."+name] = unavailable_summary(force_times,
+                    [forces[t]["values"][name] for t in force_times], args.time_start, args.time_end,
+                    "solenoidal acceleration-power fraction requires nonzero total nonzero-mode forcing power")
         total = statistics["total_acceleration_power"]["mean"]
         force_summary["ratio_of_time_mean_powers"] = (statistics["solenoidal_acceleration_power"]["mean"]/total if total > 0 else None)
+        if total <= 0:
+            unavailable["forcing_decomposition.ratio_of_time_mean_powers"] = {
+                "available": False, "requested_window": [args.time_start, args.time_end],
+                "reason": "time-mean nonzero-mode forcing power is zero; its solenoidal fraction is undefined"}
     else:
         force_summary["reason"] = "no retained turb_force snapshots; fixed-z history components cannot replace a Helmholtz decomposition"
     block_count = next(iter(scalars.values()))["block_count"]
@@ -829,6 +860,10 @@ def main(argv=None):
         numerator = np.sum(np.asarray(numerator_row["mean"])[mask])
         denominator = np.sum(np.asarray(denominator_row["mean"])[mask])
         ratio[label+"_strain_to_perpendicular_gradient_power"] = float(numerator/denominator) if denominator > 0 else None
+        if denominator <= 0:
+            unavailable["gradient_comparisons."+label+"_strain_to_perpendicular_gradient_power"] = {
+                "available": False, "requested_window": [args.time_start, args.time_end],
+                "reason": "perpendicular-gradient comparator has zero power in the declared "+label+" band"}
     revisions = [segment["metadata"].get("simulation", {}).get("revision") for segment in segments]
     if any(not value for value in revisions):
         reasons.append("simulation revision absent from retained launch provenance")
@@ -862,6 +897,7 @@ def main(argv=None):
         "model": model, "scalars": scalars, "spectra": spectra, "PDFs": pdfs,
         "scale_bands": scales, "gradient_comparisons": ratio, "history": history,
         "forcing_decomposition": force_summary, "empirical_autocorrelation": autocorr,
+        "unavailable_metric_reasons": unavailable,
         "temporal_dependence_cautions": [f"{name}: block duration is less than twice the empirical positive-sequence integral correlation time"
             for name, row in autocorr.items() if row.get("available") and args.block_duration < 2*row["positive_sequence_integral_time"]],
         "numerical_integrity": {"classification": "consistent" if max(parseval_error, pdf_error) < 1e-10 else "concerning",
@@ -1088,6 +1124,15 @@ def write_report(data, output):
         if rec:
             sd = "unavailable" if rec["block_sd"] is None else f"{rec['block_sd']:.6g}"
             lines.append(f"| {name} | {rec['mean']:.6g} | {sd} |")
+        elif "scalars."+name in data["unavailable_metric_reasons"]:
+            lines.append(f"| {name} | unavailable (see reason below) | unavailable |")
+    if data["unavailable_metric_reasons"]:
+        lines += ["", "Unavailable metric summaries (valid instantaneous samples remain retained; the requested window is unchanged):", ""]
+        for name, record in data["unavailable_metric_reasons"].items():
+            times_note = (" Undefined sample times: "+str(record["undefined_sample_times"])+
+                          "; required endpoint-bracketing times: "+str(record["undefined_bracketing_times"])+"."
+                          if "undefined_sample_times" in record else "")
+            lines.append(f"- **{name}**: {record['reason']}{times_note}")
     lines += ["", "Pressure spectra alone cannot establish compensation; use the signed correlation and normalized residual together. "
         "Local S_parallel is not b·grad(u_parallel). The latter includes field-direction curvature; S_parallel-div(u) is the ideal compressible induction proxy. "
         "Parallel velocity is retained explicitly. Compare the resolved and cutoff bands separately. "
@@ -1101,8 +1146,14 @@ def write_report(data, output):
     force = data["forcing_decomposition"]
     if force["available"]:
         fraction = force.get("statistics", {}).get("solenoidal_fraction")
-        lines.append("Realized Helmholtz solenoidal acceleration-power fraction: `"+json.dumps(fraction)+"`. "
-            f"Prescribed isotropic expected fraction: {force['expected_solenoidal_fraction']}. This is not an energy-injection partition.")
+        if fraction is None:
+            reason = data["unavailable_metric_reasons"]["forcing_decomposition.solenoidal_fraction"]["reason"]
+            lines.append("Time-mean instantaneous Helmholtz solenoidal acceleration-power fraction unavailable: "+reason)
+        else:
+            lines.append("Realized Helmholtz solenoidal acceleration-power fraction: `"+json.dumps(fraction)+"`.")
+        lines.append(f"Prescribed isotropic expected fraction: {force['expected_solenoidal_fraction']}. "
+            f"Ratio of time-mean solenoidal to total acceleration powers (a different statistic): {force['ratio_of_time_mean_powers']}. "
+            "Neither statistic is an energy-injection partition.")
     else:
         lines.append("Forcing decomposition unavailable: "+force["reason"]+".")
     lines += ["", "| Temporal diagnostic | Integral correlation time | Caution |", "| --- | ---: | --- |"]
