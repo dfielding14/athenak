@@ -430,6 +430,64 @@ def test_cli_explains_undefined_startup_metrics_without_shrinking_window(synthet
         (11 / 12) * later_power, rel=1.0e-13)
 
 
+def test_cli_preserves_reserved_projection_counter_without_activity_inference(
+        analyzer, synthetic_run):
+    run, _ = synthetic_run
+    revision = "7a37710f6c224e24e7c7f364e7e0b812b3a9494c"
+    path = run / "benchmark_metadata.json"
+    metadata = json.loads(path.read_text())
+    metadata.update(simulation={"revision": revision}, launch={"returncode": 0})
+    path.write_text(json.dumps(metadata))
+    history = run / "synthetic.mhd.hst"
+    lines = history.read_text().splitlines()
+    counters = ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos",
+                "lf_hardbd", "lf_hwproj")
+    lines[1] += " " + " ".join(f"[{index}]={name}"
+                               for index, name in enumerate(counters, 2))
+    # Deliberately synthetic nonzero reserved values must be retained verbatim;
+    # they cannot establish that the audited executable measured projections.
+    for index, (hardbd, reserved) in enumerate(zip((10, 15, 21), (7, 9, 14)), 2):
+        lines[index] += f" 0 0 0 0 {hardbd} {reserved}"
+    history.write_text("\n".join(lines) + "\n")
+    output = run / "analysis-reserved-counter"
+    proc = run_cli(run, output, start=0.5, end=2.0)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    result = json.loads((output / "metrics.json").read_text())
+    health = result["simulation_integrity"]
+    reserved = health["physical_stage_activity"]["lf_hwproj"]
+    assert reserved["available"]
+    assert reserved["full_retained_min"] == 7.0
+    assert reserved["full_retained_max"] == 14.0
+    assert reserved["last"] == 14.0
+    assert reserved["window_increment"] == 6.0
+    assert reserved["instrumentation"] == "reserved_uninstrumented"
+    assert reserved["audited_simulation_revision"] == revision
+    assert "never increments" in reserved["meaning"]
+    assert "absence" in reserved["meaning"]
+    assert health["classification"] == "consistent"
+    assert health["reasons"] == []
+    assert "restart-persistent" in health["LF_counter_lifecycle"]
+    hardbd = health["physical_stage_activity"]["lf_hardbd"]
+    assert hardbd["window_increment"] == 8.5
+    assert "repeated cell-stage events" in hardbd["meaning"]
+    definitions = result["definitions"]["LF_counters"]
+    assert all(word in definitions for word in ("uninstrumented", "halo", "active", "restart"))
+    report = (output / "report.md").read_text()
+    assert "Projection-count limitation" in report
+    assert "zero does not demonstrate absence of projections" in report
+    assert "including refreshed halo cells" in report
+    # A different or unknown revision must not inherit the audited label.
+    data, _ = analyzer.merge_histories([history])
+    unknown = analyzer.solver_health(
+        [{"directory": run, "metadata": {"simulation": {"revision": "unknown"},
+                                          "launch": {"returncode": 0}}}],
+        {}, data, 0.5, 2.0)
+    unknown_counter = unknown["physical_stage_activity"]["lf_hwproj"]
+    assert unknown_counter["instrumentation"] == "not_verified_for_retained_revision"
+    for name in ("full_retained_min", "full_retained_max", "last", "window_increment"):
+        assert unknown_counter[name] == reserved[name]
+
+
 @pytest.mark.parametrize("defect", ["time", "geometry", "model"])
 def test_cli_rejects_unmatched_force_snapshot(synthetic_run, defect):
     run, header = synthetic_run

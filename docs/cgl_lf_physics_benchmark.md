@@ -272,8 +272,12 @@ between outputs.
 
 Check numerical health (`lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`)
 separately from intended physical scattering. `lf_hardbd` counts unprojected
-LF-stage bound crossings, and `lf_hwproj` counts physical wall projections;
-their activity alone is not a numerical failure. Strict mode checks every LF
+LF-stage bound crossings; its activity alone is not a numerical failure.
+`lf_hwproj` is a reserved counter that this post-WO2 implementation does not
+increment. Its stored value cannot measure wall-projection activity, and zero
+does not establish that no physical projections occurred. These LF counters
+are cumulative and serialized across restarts; history output does not reset
+them. Strict mode checks every LF
 stage for floor, nonfinite and nonpositive states, and checks hard bounds after
 the physical wall. Post-operator `hard_vol` should be zero. Report these
 different checkpoints explicitly rather than treating every limiter counter
