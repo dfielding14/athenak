@@ -17,6 +17,9 @@ positivity failure, distinct from the earlier contraction issue and the
 accepted B4 sharp-contact limitation. Strict checks remain enabled.
 The short shared interval `[0.5,2.5]` is dominated by startup, and active-only
 `[2,6]` cannot establish the requested late-time active/passive contrast.
+The [reviewed interrupted-run report](validation/cgl_lf_matched_physics_benchmark/interrupted_20261007/report.md)
+retains the figures, measurements, uncertainty definitions, provenance and
+17.449 allocated node-hour cost. It is separate from any replacement run.
 
 The initial passive plumbing run
 exposed a one-ULP pressure-decode contraction difference across GPU kernels.
