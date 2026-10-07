@@ -1,0 +1,73 @@
+{
+  "dbfplot_version": "0.15.0",
+  "matplotlib_version": "3.10.7",
+  "profile": "paper",
+  "style": "dbfplot default (Dark2)",
+  "figures": {
+    "marginality": {
+      "ok": true,
+      "remaining_findings": [],
+      "figsize_inches": [
+        9.0,
+        7.0
+      ],
+      "dpi": 240.0,
+      "exemptions": {
+        "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+      },
+      "files": [
+        "marginality.pdf",
+        "marginality.png"
+      ]
+    },
+    "pressure_balance": {
+      "ok": true,
+      "remaining_findings": [],
+      "figsize_inches": [
+        12.0,
+        4.2
+      ],
+      "dpi": 240.0,
+      "exemptions": {
+        "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+      },
+      "files": [
+        "pressure_balance.pdf",
+        "pressure_balance.png"
+      ]
+    },
+    "gradients": {
+      "ok": true,
+      "remaining_findings": [],
+      "figsize_inches": [
+        10.0,
+        7.5
+      ],
+      "dpi": 240.0,
+      "exemptions": {
+        "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+      },
+      "files": [
+        "gradients.pdf",
+        "gradients.png"
+      ]
+    },
+    "spectra_energy": {
+      "ok": true,
+      "remaining_findings": [],
+      "figsize_inches": [
+        12.0,
+        7.5
+      ],
+      "dpi": 240.0,
+      "exemptions": {
+        "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+      },
+      "files": [
+        "spectra_energy.pdf",
+        "spectra_energy.png"
+      ]
+    }
+  },
+  "variability": "Pointwise minimum and maximum of 2-unit time averages; not confidence intervals."
+}

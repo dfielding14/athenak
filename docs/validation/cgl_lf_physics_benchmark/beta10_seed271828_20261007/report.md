@@ -1,12 +1,17 @@
 # Reviewed reference: beta ten, seed 271828
 
-Figures have been refreshed from the unchanged retained metrics: logarithmic
-PDF axes, mathematical labels/definitions, and illustrative spectral slopes.
-The pressure panels explicitly show fluctuation power spectra,
-`Corr(delta p_perp, delta(B²/2))`, and normalized total-pressure residual
-variance. [Rendering provenance](figure-rendering.json) records this plotting
-revision separately from the numerical analysis. The scientific findings below
-are unchanged; guide slopes are not fitted measurements.
+Figures have been redrawn with `dbfplot`: compact panels, Dark2 colors,
+inward ticks, and PDF/240-dpi PNG exports. Logarithmic PDFs, mathematical
+labels and illustrative spectral slopes are retained. The pressure panels
+identify fluctuation spectra, thermal–magnetic correlation and normalized
+residual variance. [Strict figure audits](figure-audit.json) and
+[rendering provenance](figure-rendering.json) are separate from the original
+numerical analysis. Measurements and scientific findings below are unchanged.
+
+“Range of 2-unit time averages” means the pointwise minimum and maximum of
+six averaged curves over [6,8], [8,10], [10,12], [12,14], [14,16] and [16,18].
+It measures temporal variability, not a confidence interval; the blocks can
+remain correlated. The solid PDF curve averages the full [6,18] interval.
 
 **Numerical integrity is consistent. Physical evidence is useful but remains
 inconclusive for quantitative paper agreement or a causal magneto-immutability

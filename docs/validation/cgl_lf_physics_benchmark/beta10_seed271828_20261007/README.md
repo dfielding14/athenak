@@ -78,9 +78,14 @@ The original numerical-analysis script SHA256 is
 
 [Publication provenance](provenance.json) pins the original generated
 artifacts. Metrics remain unchanged. The figures were subsequently rendered
-from those retained metrics with logarithmic PDFs, mathematical definitions,
-and illustrative power-law guides; [figure-rendering.json](figure-rendering.json)
-records the separate plotting revision, source hash, command and checks.
+from those retained metrics using `dbfplot`, with logarithmic PDFs,
+mathematical definitions and illustrative power-law guides. The PDF bands
+show the pointwise min–max of six duration-two averaged curves, not confidence
+intervals. [figure-rendering.json](figure-rendering.json) records the separate
+plotting revision, source hash, exact command and prior rendering record;
+[figure-audit.json](figure-audit.json) records the strict export audits.
+All four groups use PDF and 240-dpi PNG; only the multi-panel canvas size is
+exempted from the default single-panel audit profile.
 The published report adds a labeled scientific-review preface and trims
 trailing whitespace.
 [Artifact hashes](artifact-hashes.json) cover the final retained files.

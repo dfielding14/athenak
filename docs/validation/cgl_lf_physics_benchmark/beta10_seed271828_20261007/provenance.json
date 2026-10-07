@@ -99,5 +99,6 @@
     ]
   },
   "original_publication_policy": "metrics.json and figure bytes are unchanged; report receives an explicit scientific-review preface and trailing-whitespace cleanup. Supporting audits retain source hashes and distinguish instantaneous probes from the temporal ensemble.",
-  "figure_rendering": "figure-rendering.json"
+  "figure_rendering": "figure-rendering.json",
+  "figure_audit": "figure-audit.json"
 }
