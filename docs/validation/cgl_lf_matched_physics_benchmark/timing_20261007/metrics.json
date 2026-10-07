@@ -1,0 +1,256 @@
+{
+  "schema_version": 1,
+  "generated_utc": "2026-10-07T15:39:49.441061+00:00",
+  "classification": "plumbing checks passed; physical evidence inconclusive",
+  "branch_audit": {
+    "ref_count": 84,
+    "scope": "retained local and origin refs; no fetch",
+    "selected_commit": "46a6f704b563587025d0faa87fdd7a1623458d57",
+    "port_commit": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+    "launcher_history_discovery_fix": "6fabbc7d0ee92d7fa663dbc92ed55873fc3186b4",
+    "audit": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/audits/branch-performance-logging.md"
+  },
+  "definitions": {
+    "zone_cycles_per_second": "delta(global completed MeshBlock updates) * active cells per MeshBlock / delta(rank-zero wall seconds); excludes ghost zones and does not count RK/STS stages",
+    "wall_seconds_per_cycle": "delta(rank-zero wall seconds)/delta(completed top-level cycles); interval mean when ndiag>1",
+    "timing_scope": "rank-zero wall timer; no new fences/barriers or MPI-maximum claim; includes communication and I/O between reports",
+    "selected_intervals": "Exclude warmup, the first completed-cycle interval, and finalization interval; remaining startup intervals have no scheduled outputs",
+    "rounding_check": "Exact formula must overlap intervals implied by half a last printed decimal unit for each timestamp/rate; this is formatting verification, not a physics tolerance",
+    "limits": "Only 20 startup cycles per member and three restart cycles. Different physical timesteps and LF stage counts can change per-cycle work; these are not mature-turbulence scaling measurements."
+  },
+  "total_launcher_wall_seconds": 45.12859823205508,
+  "runs": {
+    "active": {
+      "classification": "plumbing and startup timing only; no physical validation",
+      "run_directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active",
+      "metadata": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active/benchmark_metadata.json",
+        "sha256": "0fd85e187d88a154b496e0c3b4ca502efd69c369d320d43b7ce9ad632a3bf249"
+      },
+      "solver_log": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active/run.log",
+        "sha256": "c49aae8e2f1ed2e73ee0ef224e3f05aea12e2109efaa7d7f164f4bfe63d0270d"
+      },
+      "simulation_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "binary_sha256": "fb11d6355486dce126be1d4564f99dbcc0e9a13e7227a05f3a2f262ae466d47a",
+      "source_checkout_revision_at_launch": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "launcher_sha256": "a39a4972c0238de94512b284d8940c38e4bcc1b8fb14a394cd0aec2f3de1805e",
+      "run_command": "srun --jobid 5631477 --exact -N 1 -n 8 --ntasks-per-node 8 --threads-per-core=1 --cpu-bind=threads -c 7 --gpus-per-task=1 --gpu-bind=closest /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-timing-hip/athena -i input.athinput -t 00:05:00 mhd/passive=false problem/passive_delta=false meshblock/nx1=96 meshblock/nx2=96 meshblock/nx3=192 time/nlim=20 time/tlim=0.1 time/ndiag=1",
+      "step": "5631477.7",
+      "node": "frontier03053",
+      "nodes": 1,
+      "gpu_devices": 8,
+      "mpi_ranks": 8,
+      "blocks_per_rank": 1,
+      "global_cells": [
+        192,
+        192,
+        384
+      ],
+      "meshblock_cells": [
+        96,
+        96,
+        192
+      ],
+      "initial_cycle": 0,
+      "final_cycle": 20,
+      "initial_time": 0.0,
+      "final_time": 0.007953347,
+      "launcher_wall_seconds": 21.273609173018485,
+      "elapsed_before_warmup_seconds": 2.813004,
+      "final_interval_including_final_output_seconds": 6.295364,
+      "selected_cycle_range": [
+        2,
+        19
+      ],
+      "selected_interval_count": 18,
+      "median_wall_seconds_per_cycle": 0.4153661,
+      "min_wall_seconds_per_cycle": 0.41469,
+      "max_wall_seconds_per_cycle": 0.4168123,
+      "median_global_zone_cycles_per_second": 34080240.0,
+      "warmup_and_cycle_delta_checks": "passed",
+      "rate_and_mean_match_timestamp_differences_within_printing_precision": true,
+      "max_relative_rate_difference_from_rounded_timestamps": 1.1281576508759272e-05,
+      "history_health": [
+        {
+          "file": {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active/cgl_lf_matched_beta10.mhd.hst",
+            "sha256": "3c1e478c2a4e1ef35abc062600086604b03f05be876e046702a4f769191c39ca"
+          },
+          "last_time": 0.007953346899987581,
+          "numerical_counter_maxima": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          },
+          "last_numerical_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          }
+        }
+      ],
+      "fatal_or_oom_log_evidence": [],
+      "returncode": 0
+    },
+    "passive": {
+      "classification": "plumbing and startup timing only; no physical validation",
+      "run_directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-passive",
+      "metadata": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-passive/benchmark_metadata.json",
+        "sha256": "13e1c8a5b888553df00d182b05527335cfacef7c51b1b7fd2fa8ed33fda35c63"
+      },
+      "solver_log": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-passive/run.log",
+        "sha256": "7a7c3c3b6e2f3c6cac08cfd16daff9c4af3333b9b80473fa60082121eeb08c59"
+      },
+      "simulation_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "binary_sha256": "fb11d6355486dce126be1d4564f99dbcc0e9a13e7227a05f3a2f262ae466d47a",
+      "source_checkout_revision_at_launch": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "launcher_sha256": "d4a317b060cd4898c1598053d091d18b421c3d0018a0fcefa133024b540ce5a2",
+      "run_command": "srun --jobid 5631477 --exact -N 1 -n 8 --ntasks-per-node 8 --threads-per-core=1 --cpu-bind=threads -c 7 --gpus-per-task=1 --gpu-bind=closest /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-timing-hip/athena -i input.athinput -t 00:05:00 mhd/passive=true problem/passive_delta=true meshblock/nx1=96 meshblock/nx2=96 meshblock/nx3=192 time/nlim=20 time/tlim=0.1 time/ndiag=1",
+      "step": "5631477.9",
+      "node": "frontier03053",
+      "nodes": 1,
+      "gpu_devices": 8,
+      "mpi_ranks": 8,
+      "blocks_per_rank": 1,
+      "global_cells": [
+        192,
+        192,
+        384
+      ],
+      "meshblock_cells": [
+        96,
+        96,
+        192
+      ],
+      "initial_cycle": 0,
+      "final_cycle": 20,
+      "initial_time": 0.0,
+      "final_time": 0.0122594,
+      "launcher_wall_seconds": 16.21595221804455,
+      "elapsed_before_warmup_seconds": 2.482846,
+      "final_interval_including_final_output_seconds": 2.723286,
+      "selected_cycle_range": [
+        2,
+        19
+      ],
+      "selected_interval_count": 18,
+      "median_wall_seconds_per_cycle": 0.5278932,
+      "min_wall_seconds_per_cycle": 0.5269282,
+      "max_wall_seconds_per_cycle": 0.5290849,
+      "median_global_zone_cycles_per_second": 26815610.0,
+      "warmup_and_cycle_delta_checks": "passed",
+      "rate_and_mean_match_timestamp_differences_within_printing_precision": true,
+      "max_relative_rate_difference_from_rounded_timestamps": 6.684409248336465e-06,
+      "history_health": [
+        {
+          "file": {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-passive/cgl_lf_matched_beta10.mhd.hst",
+            "sha256": "7328329eac86c8301ce5fa001956e5a7b50e55688285da39333c1dca33eda907"
+          },
+          "last_time": 0.012259395387651511,
+          "numerical_counter_maxima": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          },
+          "last_numerical_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          }
+        }
+      ],
+      "fatal_or_oom_log_evidence": [],
+      "returncode": 0
+    },
+    "active_restart": {
+      "classification": "plumbing and startup timing only; no physical validation",
+      "run_directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active-restart",
+      "metadata": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active-restart/benchmark_metadata.json",
+        "sha256": "f846d426429166d0d24e61985086c242df7282d3a6e597e1cfa6e58fea707509"
+      },
+      "solver_log": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active-restart/run.log",
+        "sha256": "2cc3c797f9906f0e22329ab31ece85b9fcf406c243945b0b0330436cb8bc516f"
+      },
+      "simulation_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "binary_sha256": "fb11d6355486dce126be1d4564f99dbcc0e9a13e7227a05f3a2f262ae466d47a",
+      "source_checkout_revision_at_launch": "6fabbc7d0ee92d7fa663dbc92ed55873fc3186b4",
+      "launcher_sha256": "d4a317b060cd4898c1598053d091d18b421c3d0018a0fcefa133024b540ce5a2",
+      "run_command": "srun --jobid 5631477 --exact -N 1 -n 8 --ntasks-per-node 8 --threads-per-core=1 --cpu-bind=threads -c 7 --gpus-per-task=1 --gpu-bind=closest /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-timing-hip/athena -r /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active/rst/cgl_lf_matched_beta10.00001.rst -t 00:05:00 mhd/passive=false problem/passive_delta=false meshblock/nx1=96 meshblock/nx2=96 meshblock/nx3=192 time/nlim=23 time/tlim=0.1 time/ndiag=1",
+      "step": "5631477.11",
+      "node": "frontier03053",
+      "nodes": 1,
+      "gpu_devices": 8,
+      "mpi_ranks": 8,
+      "blocks_per_rank": 1,
+      "global_cells": [
+        192,
+        192,
+        384
+      ],
+      "meshblock_cells": [
+        96,
+        96,
+        192
+      ],
+      "initial_cycle": 20,
+      "final_cycle": 23,
+      "initial_time": 0.007953347,
+      "final_time": 0.009136146,
+      "launcher_wall_seconds": 7.639036840992048,
+      "elapsed_before_warmup_seconds": 1.385795,
+      "final_interval_including_final_output_seconds": 2.739233,
+      "selected_cycle_range": [
+        22,
+        22
+      ],
+      "selected_interval_count": 1,
+      "median_wall_seconds_per_cycle": 0.4393325,
+      "min_wall_seconds_per_cycle": 0.4393325,
+      "max_wall_seconds_per_cycle": 0.4393325,
+      "median_global_zone_cycles_per_second": 32221100.0,
+      "warmup_and_cycle_delta_checks": "passed",
+      "rate_and_mean_match_timestamp_differences_within_printing_precision": true,
+      "max_relative_rate_difference_from_rounded_timestamps": 1.6907253975739778e-06,
+      "history_health": [
+        {
+          "file": {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/large-block-plumbing-active-restart/cgl_lf_matched_beta10.mhd.hst",
+            "sha256": "78c5da3010b351a6be45461c78a16eecfe2727c291e93da7807983e99decb357"
+          },
+          "last_time": 0.009136146285738531,
+          "numerical_counter_maxima": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          },
+          "last_numerical_counters": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          }
+        }
+      ],
+      "fatal_or_oom_log_evidence": [],
+      "returncode": 0
+    }
+  },
+  "analysis_provenance": {
+    "script": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/scripts/review-large-block-plumbing.py",
+      "sha256": "be99c9c6d746ec1d44f12df28254e959a2a510f2fe2c8d7326869e626d92bc0d"
+    },
+    "checkout_revision": "6fabbc7d0ee92d7fa663dbc92ed55873fc3186b4"
+  }
+}
