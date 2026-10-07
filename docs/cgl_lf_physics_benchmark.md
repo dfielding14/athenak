@@ -353,6 +353,24 @@ correlations or ratios remain explicitly unavailable. `metrics.json` retains
 input/output hashes and the analysis, reader and binary-reader script hashes;
 the analysis checkout revision is separate from the simulation revision in the
 launch metadata.
+
+Both PDFs use logarithmic density axes; the `|B|/B0` PDF also uses a logarithmic
+horizontal axis. The stored histogram still represents probability per linear
+interval, not per logarithmic interval; empty bins are masked. Equations on
+the pressure figure identify the spectra of `delta p_parallel`,
+`delta p_perp`, and `delta(B²/2)`, their variance normalization, the signed
+thermal–magnetic pressure correlation, and the normalized residual.
+
+Spectra include arbitrary-amplitude reference power laws between the forcing
+shell and the eight-cell guide. Pressure and energy panels show `k_perp^(-5/3)`
+for comparison with [MKS24 §3.5](https://arxiv.org/html/2405.02418v2#S3.SS5).
+Gradient panels show `k_perp^(1/3)` for a perpendicular derivative of a
+`k_perp^(-5/3)` velocity spectrum and `k_perp^(-1/3)` for a parallel derivative
+under critical balance, `k_parallel proportional to k_perp^(2/3)`. Local-field
+projection and finite-difference derivatives need not obey these illustrative
+scalings. These lines are guides to the eye, not fits or acceptance criteria;
+they do not extend into the numerical cutoff.
+
 The analyzer requires retained `normalization=edot`, `driving_type=0`, and
 `physical_k_shell=true`; it rejects incompatible forcing conventions instead
 of silently assigning the benchmark's units. It does not pin the seed or

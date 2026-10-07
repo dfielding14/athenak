@@ -1029,23 +1029,44 @@ def make_figures(data, output):
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
 
-    plt.rcParams.update({"font.size": 10, "axes.grid": True, "grid.alpha": .2})
+    plt.rcParams.update({"font.size": 11, "axes.grid": True, "grid.alpha": .2})
     times = data["sampling"]["times"]
     snapshots = data["snapshots"]
-    scalars = data["scalars"]
+    time_label = r"$t$ [code units]"
+    labels = {
+        "p_parallel": r"$q=\delta p_\parallel$",
+        "p_perp": r"$q=\delta p_\perp$",
+        "magnetic_pressure": r"$q=\delta p_B,\quad p_B=|\mathbf{B}|^2/2$",
+        "S_parallel": r"$S_\parallel=b_i b_j\partial_j u_i$",
+        "parallel_gradient_u_perp": r"$G_{\perp\parallel}=\mathsf{P}\mathsf{G}\hat{\mathbf{b}}$",
+        "perp_gradient_u_parallel": r"$G_{\parallel\perp}=\hat{\mathbf{b}}\cdot\mathsf{G}\mathsf{P}$",
+        "perp_gradient_u_perp": r"$G_{\perp\perp}=\mathsf{P}\mathsf{G}\mathsf{P}$",
+        "div_u": r"$\nabla\cdot\mathbf{u}$",
+        "induction": r"$I_B=S_\parallel-\nabla\cdot\mathbf{u}$",
+        "b_grad_u_parallel": r"$\hat{\mathbf{b}}\cdot\nabla u_\parallel$",
+        "u_parallel_rms": r"$\langle u_\parallel^2\rangle_V^{1/2}$",
+        "u_perp_rms": r"$\langle|\mathbf{u}_\perp|^2\rangle_V^{1/2}$",
+        "S_parallel_rms": r"$\langle S_\parallel^2\rangle_V^{1/2}$",
+        "induction_rms": r"$\langle I_B^2\rangle_V^{1/2}$",
+        "curvature_plus_discretization_rms": r"$\langle(\hat{\mathbf{b}}\cdot\nabla u_\parallel-S_\parallel)^2\rangle_V^{1/2}$",
+        "Mach_isotropic_proxy": r"$\mathcal{M}=u_{\mathrm{rms}}/c_s$ (isotropic proxy)",
+        "deltaB_rms_over_B0": r"$\delta B_{\mathrm{rms}}/B_0$",
+        "u_parallel_fraction": r"$\langle u_\parallel^2\rangle_V/\langle|\mathbf{u}|^2\rangle_V$",
+    }
 
     def series(ax, key, label=None):
-        ax.plot(times, [row["scalars"].get(key, np.nan) for row in snapshots], label=label or key)
+        ax.plot(times, [row["scalars"].get(key, np.nan) for row in snapshots],
+                label=label or labels.get(key, key))
 
     def spec(ax, key, label=None):
         record = data["spectra"][key]
         k, mean = np.asarray(record["k"]), np.asarray(record["mean"])
         valid = mean > 0
-        ax.loglog(k[valid], mean[valid], label=label or key)
+        ax.loglog(k[valid], mean[valid], label=label or labels.get(key, key))
         if record["block_min"] is not None:
             low, high = np.asarray(record["block_min"]), np.asarray(record["block_max"])
             ax.fill_between(k[valid], np.maximum(low[valid], np.finfo(float).tiny), high[valid], alpha=.12)
-        ax.set_xlabel(r"$k_\perp$ [radians / length]")
+        ax.set_xlabel(r"$k_\perp$ [rad / length]")
         if not getattr(ax, "_benchmark_scale_marked", False):
             ax.axvspan(k[0], data["model"]["forcing_kmax"], color="tab:green", alpha=.07,
                        label="projected forcing support")
@@ -1055,92 +1076,165 @@ def make_figures(data, output):
                        label="perpendicular cutoff band")
             ax._benchmark_scale_marked = True
 
-    def finish(fig, name):
+    def slope_guide(ax, key, exponent, label):
+        """Arbitrary-amplitude eye guide confined to the nominal resolved range."""
+        record = data["spectra"][key]
+        k, power = np.asarray(record["k"]), np.asarray(record["mean"])
+        lo = max(1.4*data["model"]["forcing_kmax"], k[0])
+        hi = min(data["scale_bands"]["resolved_kmax"], k[-1])
+        positive = (k > 0) & (power > 0) & np.isfinite(power)
+        if hi <= lo or np.count_nonzero(positive) < 2:
+            return
+        anchor = np.sqrt(lo*hi)
+        amplitude = 3*np.exp(np.interp(np.log(anchor), np.log(k[positive]),
+                                      np.log(power[positive])))
+        guide_k = np.geomspace(lo, hi, 64)
+        ax.loglog(guide_k, amplitude*(guide_k/anchor)**exponent, color="0.25",
+                  ls="-.", lw=1.5, label=label)
+
+    def finish(fig, name, note=""):
         for ax in fig.axes:
-            handles, _ = ax.get_legend_handles_labels()
+            handles, names = ax.get_legend_handles_labels()
             if handles:
-                ax.legend(fontsize=8)
-        fig.suptitle(f"CGL-LF finite-window benchmark: t={data['retained_window']} | {data['sampling']['complete_blocks']} blocks")
-        fig.tight_layout(rect=(0, 0, 1, .96))
+                scale_labels = {"projected forcing support", "8-cell resolved guide",
+                                "perpendicular cutoff band"}
+                entries = sorted(zip(handles, names), key=lambda item: item[1] in scale_labels)
+                ax.legend(*zip(*entries), fontsize=9)
+        start, end = data["retained_window"]
+        fig.suptitle(rf"CGL-LF: $t\in[{start:g},{end:g}]$; "
+                     f"{data['sampling']['complete_blocks']} time blocks", fontsize=15)
+        if note:
+            fig.text(.5, .012, note, ha="center", va="bottom", fontsize=10)
+        fig.tight_layout(rect=(0, .07 if note else 0, 1, .95), h_pad=2.0, w_pad=2.0)
         for extension in ("png", "pdf"):
             fig.savefig(output/f"{name}.{extension}", dpi=170)
         plt.close(fig)
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(14, 10))
     for ax, key in zip(axes[0], ("B_over_B0", "X")):
         rec = data["PDFs"][key]
         centers = .5*(np.asarray(rec["edges"][:-1])+rec["edges"][1:])
-        ax.plot(centers, rec["mean"], label="time-mean volume PDF")
+        mean = np.asarray(rec["mean"])
+        ax.plot(centers, np.ma.masked_less_equal(mean, 0), label="time-mean volume PDF")
         if rec["block_min"] is not None:
-            ax.fill_between(centers, rec["block_min"], rec["block_max"], alpha=.2, label="block range")
-        ax.set(xlabel=key, ylabel="probability density")
+            low, high = np.asarray(rec["block_min"]), np.asarray(rec["block_max"])
+            ax.fill_between(centers, np.ma.masked_less_equal(low, 0),
+                            np.ma.masked_less_equal(high, 0), alpha=.2, label="block range")
+        ax.set_yscale("log")
+    axes[0, 0].set(xscale="log", xlabel=r"$\mathcal{B}=|\mathbf{B}|/B_0$",
+                   ylabel=r"$P_{\mathcal{B}}(\mathcal{B})$", title="Magnetic-strength PDF")
+    axes[0, 1].set(xlabel=r"$X=2(p_\perp-p_\parallel)/|\mathbf{B}|^2$",
+                   ylabel=r"$P_X(X)$", title="Pressure-anisotropy PDF")
     for label in ("mirror", "firehose"):
-        axes[0, 1].axvline(data["model"][label+"_X"], ls="--", color="black", lw=.8)
-        series(axes[1, 0], label+"_strict", label+" strict exceedance")
+        threshold = data["model"][label+"_X"]
+        axes[0, 1].axvline(threshold, ls="--", color="black", lw=.8,
+                           label=rf"{label}: $X={threshold:g}$")
+        inequality = ">" if label == "mirror" else "<"
+        series(axes[1, 0], label+"_strict", rf"{label}: $X{inequality}{threshold:g}$ (snapshot)")
         series(axes[1, 1], label+"_near", label+" symmetric near band")
-        series(axes[1, 1], label+"_near_interior", label+" near interior")
+        width = data["sampling"]["near_threshold_halfwidth_X"]
+        low, high = ((threshold-width, threshold) if label == "mirror"
+                     else (threshold, threshold+width))
+        series(axes[1, 1], label+"_near_interior", rf"{label} interior: ${low:g}\leq X\leq {high:g}$")
     hist = data["history"]["series"]
     for label, name in (("mirror", "mirror"), ("firehose", "fire")):
         key = name+"_inclusive_history_fraction"
         if key in hist:
-            axes[1, 0].plot(hist["time"], hist[key], alpha=.5, label=label+" inclusive history")
+            inequality = r"\geq" if label == "mirror" else r"\leq"
+            threshold = data["model"][label+"_X"]
+            axes[1, 0].plot(hist["time"], hist[key], alpha=.5,
+                            label=rf"{label}: $X{inequality}{threshold:g}$ (history)")
     for ax in axes[1]:
-        ax.set(xlabel="time", ylabel="volume fraction")
+        ax.set(xlabel=time_label, ylabel=r"Volume fraction $f_V$")
     axes[1, 0].axvspan(*data["requested_window"], color="black", alpha=.08, label="averaging window")
     axes[1, 1].set_xlim(data["requested_window"])
-    axes[1, 1].set_title(f"near halfwidth |X-Xthreshold| ≤ {data['sampling']['near_threshold_halfwidth_X']:g}")
-    finish(fig, "marginality")
+    axes[1, 0].set_title("Threshold exceedance and inclusive history")
+    width = data["sampling"]["near_threshold_halfwidth_X"]
+    axes[1, 1].set_title(rf"Near-threshold residence: $|X-X_{{\mathrm{{th}}}}|\leq {width:g}$")
+    finish(fig, "marginality", r"PDFs: $\int P(q)\,dq=1$; volume weighted; density per linear interval, even on logarithmic axes."
+           "\nZero-density bins are omitted; shading shows time-block ranges. Near residence is distinct from exceedance.")
 
-    fig, axes = plt.subplots(1, 3, figsize=(15, 4.8))
+    fig, axes = plt.subplots(1, 3, figsize=(18, 6.4))
     for key in ("p_parallel", "p_perp", "magnetic_pressure"):
         spec(axes[0], key)
-    axes[0].set_ylabel("pressure variance / dk")
-    series(axes[1], "pressure_correlation", "signed pressure correlation")
+    slope_guide(axes[0], "p_parallel", -5/3, r"$k_\perp^{-5/3}$ guide")
+    axes[0].set_title("Pressure-fluctuation power spectra\n"
+                      r"$\sum_k P_q(k_\perp)\,\Delta k_\perp=\langle q^2\rangle_V$", fontsize=12)
+    axes[0].set_ylabel(r"$P_q(k_\perp)$ [pressure$^2\,\times$ length]")
+    series(axes[1], "pressure_correlation", r"$C_{\perp B}$")
     axes[1].axhline(0, color="black", lw=.7)
-    axes[1].set(xlabel="time", ylabel="correlation", ylim=(-1.05, 1.05))
-    series(axes[2], "pressure_normalized_residual_variance", "normalized residual variance")
-    axes[2].set(xlabel="time", ylabel="R (0 = exact compensation)")
-    finish(fig, "pressure_balance")
+    axes[1].set(xlabel=time_label, ylabel=r"$\mathrm{Corr}(\delta p_\perp,\delta p_B)$",
+                title="Thermal–magnetic pressure correlation", ylim=(-1.05, 1.05))
+    axes[1].text(.05, .06, r"$C_{\perp B}=\frac{\langle\delta p_\perp\,\delta p_B\rangle_V}{\sigma_\perp\,\sigma_B}$",
+                 transform=axes[1].transAxes, fontsize=15)
+    series(axes[2], "pressure_normalized_residual_variance", r"$R$")
+    axes[2].axhline(1, color="0.4", ls="--", lw=1, label=r"$R=1$: uncorrelated")
+    axes[2].axhline(0, color="0.4", ls=":", lw=1, label=r"$R=0$: exact compensation")
+    axes[2].set(xlabel=time_label, ylabel=r"Normalized residual variance $R$",
+                title="Perpendicular total-pressure residual")
+    axes[2].text(.05, .16, r"$R=\frac{\langle(\delta p_\perp+\delta p_B)^2\rangle_V}{\sigma_\perp^2+\sigma_B^2}$",
+                 transform=axes[2].transAxes, fontsize=15)
+    finish(fig, "pressure_balance", r"$\delta p=p-\langle p\rangle_V$, $\sigma_{\perp,B}^2=\langle(\delta p_{\perp,B})^2\rangle_V$, $p_B=|\mathbf{B}|^2/2$. Spectra are time averages; $C_{\perp B}$ and $R$ are spatial statistics at each time."
+           "\nPower-law amplitude is arbitrary; the guide is illustrative, not fitted. Spectral shading shows block ranges.")
 
-    fig, axes = plt.subplots(2, 2, figsize=(12, 8))
+    fig, axes = plt.subplots(2, 2, figsize=(15, 11))
     for key in ("S_parallel", "parallel_gradient_u_perp", "perp_gradient_u_parallel", "perp_gradient_u_perp"):
         spec(axes[0, 0], key)
     for key in ("S_parallel", "div_u", "induction", "b_grad_u_parallel"):
         spec(axes[0, 1], key)
     for ax in axes[0]:
-        ax.set_ylabel("gradient fluctuation power / dk")
+        ax.set_ylabel(r"$P_{\delta G}(k_\perp)$ [gradient$^2\,\times$ length]")
+    slope_guide(axes[0, 0], "perp_gradient_u_perp", 1/3, r"$k_\perp^{1/3}$: perpendicular-derivative guide")
+    slope_guide(axes[0, 1], "S_parallel", -1/3, r"$k_\perp^{-1/3}$: critical-balance guide")
+    axes[0, 0].set_title("Local projections of the velocity gradient\n"
+                         r"$G_{ij}=\partial_j u_i,\quad P_{ij}=\delta_{ij}-b_i b_j$", fontsize=12)
+    axes[0, 1].set_title("Field-strength-changing strain and compression\n"
+                         r"$I_B=S_\parallel-\nabla\cdot\mathbf{u}=(D\ln|\mathbf{B}|/Dt)_{\mathrm{ideal}}$", fontsize=12)
     for key in ("u_parallel_rms", "u_perp_rms"):
         series(axes[1, 0], key)
-    axes[1, 0].set(xlabel="time", ylabel="local-field velocity RMS")
+    axes[1, 0].set(xlabel=time_label, ylabel="Local-field velocity RMS",
+                   title=r"$u_\parallel=\mathbf{u}\cdot\hat{\mathbf{b}},\quad\mathbf{u}_\perp=\mathbf{u}-u_\parallel\hat{\mathbf{b}}$")
     for key in ("S_parallel_rms", "induction_rms", "curvature_plus_discretization_rms"):
         series(axes[1, 1], key)
-    axes[1, 1].set(xlabel="time", ylabel="gradient RMS")
-    finish(fig, "gradients")
+    axes[1, 1].set(xlabel=time_label, ylabel="Gradient RMS", title="Strain, induction proxy, and curvature contribution")
+    finish(fig, "gradients", r"$\hat{\mathbf{b}}=\mathbf{B}/|\mathbf{B}|$; $\hat{\mathbf{b}}\cdot\nabla u_\parallel-S_\parallel=\mathbf{u}\cdot[(\hat{\mathbf{b}}\cdot\nabla)\hat{\mathbf{b}}]$ in the continuum (discrete product-rule residual is retained)."
+           "\nSlope guides are illustrative, not fitted: perpendicular derivatives give "
+           r"$k_\perp^2 E_u\propto k_\perp^{1/3}$; critical balance gives $k_\parallel^2 E_u\propto k_\perp^{-1/3}$ for $E_u\propto k_\perp^{-5/3}$."
+           "\nLocal projections need not follow these slopes. Spectra sum all parallel wavenumbers; the cutoff is not resolved-scale evidence.")
 
-    fig, axes = plt.subplots(2, 3, figsize=(16, 8))
+    fig, axes = plt.subplots(2, 3, figsize=(18, 10.5))
     for key in ("kinetic", "magnetic"):
-        spec(axes[0, 0], key)
-    axes[0, 0].set_ylabel("fluctuation energy density / dk")
+        spec(axes[0, 0], key, r"$E_K(k_\perp)$" if key == "kinetic" else r"$E_B(k_\perp)$")
+    slope_guide(axes[0, 0], "kinetic", -5/3, r"$k_\perp^{-5/3}$ guide")
+    axes[0, 0].set_ylabel(r"$E(k_\perp)$ [energy density $\times$ length]")
+    axes[0, 0].set_title("Kinetic and magnetic fluctuation spectra")
+    energy_labels = {"kinetic": r"$\mathcal{E}_K=\int\rho|\mathbf{u}|^2/2\,dV$",
+        "magnetic": r"$\mathcal{E}_B=\int|\mathbf{B}|^2/2\,dV$",
+        "therm_cgl": r"$U_{\mathrm{th}}=\int(p_\perp+p_\parallel/2)\,dV$",
+        "force_work": r"$W_{\mathrm{inj}}$ (accumulated applied work)"}
     if hist:
         for key in ("kinetic", "magnetic", "therm_cgl", "force_work"):
             if key in hist:
-                axes[0, 1].plot(hist["time"], hist[key], label=key)
+                axes[0, 1].plot(hist["time"], hist[key], label=energy_labels[key])
         for ax in (axes[0, 1],):
             ax.axvspan(*data["requested_window"], alpha=.08, color="black")
-        axes[0, 1].set(xlabel="time", ylabel="domain-integrated energy / accumulated work")
+        axes[0, 1].set(xlabel=time_label, ylabel="Domain-integrated energy / work", title="Energy evolution (no cooling)")
     else:
         axes[0, 1].text(.05, .5, "Missing energy histories", transform=axes[0, 1].transAxes)
     for key in ("Mach_isotropic_proxy", "deltaB_rms_over_B0", "u_parallel_fraction"):
         series(axes[1, 0], key)
-    axes[1, 0].set(xlabel="time", ylabel="dimensionless measured amplitude")
-    series(axes[1, 1], "beta_volume_mean", "volume mean beta")
-    series(axes[1, 1], "beta_ratio_of_means", "ratio-of-means beta")
-    axes[1, 1].set(xlabel="time", ylabel="beta (heating is retained)")
+    axes[1, 0].set(xlabel=time_label, ylabel="Dimensionless amplitude / fraction",
+                   title=r"$c_s^2=\gamma\langle p_{\mathrm{iso}}\rangle_V/\langle\rho\rangle_V$"+"\n"
+                         r"$p_{\mathrm{iso}}=(p_\parallel+2p_\perp)/3$")
+    series(axes[1, 1], "beta_volume_mean", r"$\langle\beta\rangle_V=\langle2p_{\mathrm{iso}}/|\mathbf{B}|^2\rangle_V$")
+    series(axes[1, 1], "beta_ratio_of_means", r"$2\langle p_{\mathrm{iso}}\rangle_V/\langle|\mathbf{B}|^2\rangle_V$")
+    axes[1, 1].set(xlabel=time_label, ylabel=r"Plasma $\beta$", title="Thermal / magnetic pressure ratio")
     comparison = common_energy_history(data["history"])
     if comparison:
-        axes[0, 2].plot(comparison["energy"]["time"], comparison["energy"]["increment"], label="change in conserved E")
-        axes[0, 2].plot(comparison["work"]["time"], comparison["work"]["increment"], ls="--", label="actual accumulated forcing work")
-        axes[0, 2].set(xlabel="time", ylabel=f"energy increment from common t={comparison['interval'][0]:g}")
+        axes[0, 2].plot(comparison["energy"]["time"], comparison["energy"]["increment"], label=r"$\Delta\mathcal{E}_{\mathrm{tot}}$ (conserved)")
+        axes[0, 2].plot(comparison["work"]["time"], comparison["work"]["increment"], ls="--", label=r"$\Delta W_{\mathrm{inj}}$ (actual applied work)")
+        axes[0, 2].set(xlabel=time_label, ylabel=rf"Energy increment from $t_0={comparison['interval'][0]:g}$",
+                       title="Conserved energy and injected work")
         axes[0, 2].axvspan(*data["requested_window"], color="black", alpha=.08)
     else:
         axes[0, 2].text(.05, .5, "Overlapping forcing/energy ledgers unavailable", transform=axes[0, 2].transAxes)
@@ -1148,14 +1242,18 @@ def make_figures(data, output):
     if forcing["available"]:
         rows = sorted(forcing["snapshots"], key=lambda row: row["info"]["time"])
         axes[1, 2].plot([row["info"]["time"] for row in rows],
-            [row["values"]["solenoidal_fraction"] for row in rows], label="realized acceleration solenoidal fraction")
+            [row["values"]["solenoidal_fraction"] for row in rows], label=r"$P_{\mathrm{sol}}/(P_{\mathrm{sol}}+P_{\mathrm{comp}})$")
         expected = forcing["expected_solenoidal_fraction"]
         if expected is not None:
             axes[1, 2].axhline(expected, color="black", ls="--", label="nominal ratio of expected innovation powers")
-        axes[1, 2].set(xlabel="time", ylabel="Helmholtz acceleration-power fraction", ylim=(0, 1))
+        axes[1, 2].set(xlabel=time_label, ylabel="Solenoidal acceleration-power fraction", ylim=(0, 1),
+                       title="Realized Helmholtz forcing mixture")
     else:
         axes[1, 2].text(.05, .5, "Forcing snapshots unavailable", transform=axes[1, 2].transAxes)
-    finish(fig, "spectra_energy")
+    finish(fig, "spectra_energy", r"$\int E_K\,dk_\perp=\langle\rho|\mathbf{u}-\mathbf{u}_\rho|^2/2\rangle_V$, $\mathbf{u}_\rho=\langle\rho\mathbf{u}\rangle_V/\langle\rho\rangle_V$; "
+           r"$\int E_B\,dk_\perp=\langle|\mathbf{B}-\langle\mathbf{B}\rangle_V|^2/2\rangle_V$."
+           "\nPower-law amplitude is arbitrary; the guide is illustrative, not fitted. Shading shows spectral block ranges or the averaging interval."
+           "\nThe forcing fraction measures acceleration power, not an energy-injection partition.")
 
 
 def write_report(data, output):
