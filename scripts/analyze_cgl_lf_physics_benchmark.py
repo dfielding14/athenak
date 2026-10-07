@@ -1152,7 +1152,8 @@ def make_figures(data, output):
     width = data["sampling"]["near_threshold_halfwidth_X"]
     axes[1, 1].set_title(rf"Near-threshold residence: $|X-X_{{\mathrm{{th}}}}|\leq {width:g}$")
     finish(fig, "marginality", r"PDFs: $\int P(q)\,dq=1$; volume weighted; density per linear interval, even on logarithmic axes."
-           "\nZero-density bins are omitted; shading shows time-block ranges. Near residence is distinct from exceedance.")
+           "\nZero-density bins and block-band portions touching zero are masked."
+           "\nShading shows time-block ranges; near residence is distinct from exceedance.")
 
     fig, axes = plt.subplots(1, 3, figsize=(18, 6.4))
     for key in ("p_parallel", "p_perp", "magnetic_pressure"):
@@ -1223,9 +1224,13 @@ def make_figures(data, output):
         axes[0, 1].text(.05, .5, "Missing energy histories", transform=axes[0, 1].transAxes)
     for key in ("Mach_isotropic_proxy", "deltaB_rms_over_B0", "u_parallel_fraction"):
         series(axes[1, 0], key)
+    gamma = data["model"]["gamma_sound"]
+    gamma_label = "5/3" if gamma == 5/3 else f"{gamma:g}"
     axes[1, 0].set(xlabel=time_label, ylabel="Dimensionless amplitude / fraction",
-                   title=r"$c_s^2=\gamma\langle p_{\mathrm{iso}}\rangle_V/\langle\rho\rangle_V$"+"\n"
-                         r"$p_{\mathrm{iso}}=(p_\parallel+2p_\perp)/3$")
+                   title=r"$c_s^2=\gamma\langle p_{\mathrm{iso}}\rangle_V/\langle\rho\rangle_V$"
+                         +rf", $\gamma={gamma_label}$"+"\n"
+                         r"$p_{\mathrm{iso}}=(p_\parallel+2p_\perp)/3$"+"\n"
+                         r"$u_{\mathrm{rms}}^2=\langle|\mathbf{u}-\langle\mathbf{u}\rangle_V|^2\rangle_V$")
     series(axes[1, 1], "beta_volume_mean", r"$\langle\beta\rangle_V=\langle2p_{\mathrm{iso}}/|\mathbf{B}|^2\rangle_V$")
     series(axes[1, 1], "beta_ratio_of_means", r"$2\langle p_{\mathrm{iso}}\rangle_V/\langle|\mathbf{B}|^2\rangle_V$")
     axes[1, 1].set(xlabel=time_label, ylabel=r"Plasma $\beta$", title="Thermal / magnetic pressure ratio")
