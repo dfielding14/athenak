@@ -1,0 +1,3987 @@
+{
+  "schema_version": 1,
+  "classification": "Interrupted/failed startup diagnostic; excluded as a canonical statistical reference",
+  "scientific_review_completed": true,
+  "reviewed_utc": "2026-10-07T15:45:00.516429+00:00",
+  "planned_window_not_obtained": [
+    6,
+    14
+  ],
+  "definitions": {
+    "X": "2*(p_perp-p_parallel)/B^2; AthenaK magnetic pressure is B^2/2",
+    "pressure_input": "primitive binary 'eint' is p_parallel, not thermal energy",
+    "PDF": "sum(cell volume in bin)/(domain volume * bin width); shared edges include every retained cell",
+    "time_average": "trapezoidal integration of snapshot diagnostics over actual retained times, divided by covered duration",
+    "blocks": "contiguous physical-time blocks; linearly interpolated diagnostic endpoints; sample SD/range of block means, not an iid confidence interval",
+    "derivatives": "second-order centered periodic differences on the uniform full 3D mesh",
+    "S_parallel": "b_i b_j partial_j u_i, b=B/|B| (local instantaneous direction)",
+    "projected_gradients": "G_ij=partial_j u_i, P_ij=delta_ij-b_i*b_j; parallel/perpendicular components are b.G.b, P.G.b, b.G.P, P.G.P, projected after differentiating u; no derivatives of b enter these four components",
+    "parallel_velocity": "u_parallel=u dot b; this includes the retained bulk velocity",
+    "parallel_velocity_derivative": "b dot grad(u dot b) = S_parallel + u dot [(b dot grad)b] in the continuum; discretization need not obey the product rule exactly",
+    "induction": "S_parallel-div(u) reconstructs ideal material D ln|B|/Dt; not a measured time derivative or resistive/numerical induction budget",
+    "pressure_balance": "corr(delta p_perp, delta(B^2/2)); R=mean[(delta p_perp+delta(B^2/2))^2]/(var(p_perp)+var(B^2/2)); exact compensation gives corr=-1,R=0",
+    "pressure_balance_by_scale": "Paa/Pbb are shell sums of squared FFT/N of mean-subtracted p_perp and B^2/2, divided by dk; Pab is the signed real cross spectrum. Average these powers in physical time before C=Pab/sqrt(Paa*Pbb), R=(Paa+Pbb+2*Pab)/(Paa+Pbb), separately for the full interval and each block. C is signed correlation, not squared coherence; zero denominators are unavailable. Perpendicular shells sum all k_parallel; full_k_resolved uses the same conservative full-wavevector mask for all three powers",
+    "FFT": "F=fftn(field)/N; shell power=sum_shell |F|^2 / dk; integral over all shells (including k_perp=0) equals the stated real-space mean square",
+    "shells": "k_perp=sqrt(kx^2+ky^2) relative to the initial z guide field; physical radians/length; bins [n*dk,(n+1)*dk), dk=min(2*pi/Lx,2*pi/Ly)",
+    "kinetic_spectrum": "FFT of sqrt(rho/2)*(u-u_bulk), u_bulk=<rho*u>/<rho>; no further mean removal; integral=mean[rho*|u-u_bulk|^2/2]",
+    "magnetic_spectrum": "FFT of (B-<B>)/sqrt(2); integral=mean[|B-<B>|^2/2]",
+    "pressure_spectra": "FFT of each scalar minus its volume mean; unnormalized physical pressure units; integral=variance",
+    "gradient_spectra": "FFT of each reconstructed scalar/vector minus its component means; signed fields are squared only by the power spectrum; spectra do not determine signs",
+    "Mach": "u_rms about volume-mean velocity / sqrt(gamma*<p_iso>/<rho>), p_iso=(p_parallel+2*p_perp)/3; isotropic-pressure proxy, not a CGL characteristic-wave Mach number",
+    "Mach_isothermal": "passive only: u_rms about volume-mean velocity / retained iso_sound_speed; this is the sound speed of the actual isothermal dynamics",
+    "passive_pressure": "passive p_parallel and p_perp remain CGL thermal diagnostics without a momentum force; dynamic_isothermal_pressure=iso_sound_speed^2*rho is the pressure in the passive momentum equation; dynamic_pressure_* compares this pressure with B^2/2",
+    "passive_energy": "cgl-J and cgl-A are material-invariant integrals, not energies; thermal-U=integral(p_perp+p_parallel/2)dV is passive thermal energy; force_work measures the kinetic-energy change of forcing kicks. KE+ME+thermal-U has no active-CGL conserved-energy closure",
+    "beta": "volume mean of 2*p_iso/B^2; also report 2*<p_iso>/<B^2>, which differs in general",
+    "deltaB": "sqrt(<|B-<B>|^2>)/B0; mean field removed separately at each snapshot",
+    "forcing": "actual accumulated applied forcing work is user-history force_work; force_pwr is instantaneous rho*u dot f and is not its exact quadrature",
+    "force_decomposition": "nonzero Fourier acceleration modes: P_compressive=sum |k dot fhat|^2/k^2; P_solenoidal=P_total-P_compressive; this is acceleration power, not injected-energy partition",
+    "nominal_force_mixture": "expected_solenoidal_power_fraction and expected_solenoidal_fraction retain the nominal ratio of expected isotropic innovation powers, 2*s^2/[2*s^2+(1-s)^2]; this is not the expectation of an instantaneous fraction or a target for one finite OU realization",
+    "precision": "primitive/force snapshots may be float32; strict threshold crossings are descriptive and not tight full-precision admissibility tests",
+    "X_rounding_envelope": "half the larger adjacent float32 gap for each stored pressure/B component; bound |delta X| <= [2*(delta p_perp+delta p_parallel)+|X|*delta(B^2)]/[B^2-delta(B^2)], delta(B^2)=sum(2*|Bi|*delta Bi+delta Bi^2); no dynamical-error claim",
+    "limiter_history": "mirror_vol/fire_vol are inclusive threshold predicates; with nu_coll=0, both soft limiters enabled and backups disabled, nu_eff/(limiter_nu_coll*volume) measures the strict soft-rate fraction at history sampling; hard_vol counts strict physical firehose violation even with backups off",
+    "LF_counters": "lf_nstage counts cumulative active-cell LF-stage checks; lf_hardbd counts cumulative hard-bound crossings in those unprojected checks, with repeated cells counted repeatedly. nonfin/nonpos also inspect active cells; dfloor/pfloor accumulate EOS refresh events including refreshed halo cells. All persist restart and do not reset at history output. In audited post-WO2 simulation revisions 7a37710f6 and 71ad25ebc, lf_hwproj is a reserved, uninstrumented field: its retained value does not measure wall projections or their absence. Physical stage crossings are not automatically numerical failure"
+  },
+  "findings": [
+    {
+      "topic": "numerical integrity",
+      "classification": "concerning",
+      "reason": "Passive run ended with a real pressure-floor event in pre-LF RKL stage13/15 before planned averaging; active was stopped on user request. Zero retained counters before the later failure do not validate the failed step."
+    },
+    {
+      "topic": "magnetic strength and flow geometry",
+      "classification": "consistent",
+      "scope": "directional startup comparison only",
+      "reason": "Active magnetic-strength distribution is narrower and resolved S_parallel is reduced, while both retain appreciable parallel velocity. One growing finite-time realization and a failed passive evolution do not validate stationary turbulence."
+    },
+    {
+      "topic": "perpendicular pressure compensation",
+      "classification": "consistent",
+      "scope": "resolved-scale directional evidence in retained intervals",
+      "reason": "Signed cross spectra show C<0 and R<1 beyond forcing scales; active [2,6] C=-.941/R=.059 at k_perp/(2pi)=8.5 despite weak whole-box correlation. Matching pressure powers alone is not the evidence."
+    },
+    {
+      "topic": "cascade and statistical validation",
+      "classification": "inconclusive",
+      "reason": "Early pair is startup dominated. Later active compensated kinetic spectrum has only a short approximately level interval before roll-off; no broad inertial range, stationary sample, convergence or fitted-slope acceptance is established."
+    }
+  ],
+  "products": {
+    "active_startup": {
+      "interval": [
+        0.5,
+        2.5
+      ],
+      "sampling": {
+        "snapshots": 10,
+        "times": [
+          0.250223673604,
+          0.500254027916,
+          0.75014811426,
+          1.00005517217,
+          1.25032274399,
+          1.5002938053,
+          1.75017613948,
+          2.00021493313,
+          2.25005251468,
+          2.50022714192
+        ],
+        "near_threshold_halfwidth_X": 0.05,
+        "bracketing_snapshot_range": [
+          0.250223673604,
+          2.50022714192
+        ],
+        "max_snapshot_gap": 0.25026757182000003,
+        "endpoint_rule": "linearly interpolate diagnostic values/PDF bins/spectral bins at requested endpoints using bracketing snapshots; no field interpolation or extrapolation",
+        "block_duration": 0.5,
+        "complete_blocks": 4,
+        "block_anchor": 0.5,
+        "pdf_edge_policy": "external shared edges; clipping rejected",
+        "instantaneous_output_caveat": "post-operator snapshots may miss transient threshold excursions; inclusive history switches, strict exceedance, and near bands have different meanings"
+      },
+      "model": {
+        "B0": 1.0,
+        "mirror_X": 1.0,
+        "firehose_X": -2.0,
+        "gamma_sound": 1.6666666666666667,
+        "forcing_correlation_time": 2.0,
+        "sol_fraction": 0.4142135623730951,
+        "projection_policy": "solenoidal_compressive",
+        "dedt_per_volume": 0.32,
+        "forcing_kmin": 3.141592653589793,
+        "forcing_kmax": 9.42477796076938,
+        "record_injected_work": true,
+        "nu_coll": 0.0,
+        "limiter_nu_coll": 10000000000.0,
+        "backup_limiters": false,
+        "mirror_limiter": true,
+        "firehose_limiter": true,
+        "passive": false,
+        "iso_sound_speed": 2.23606797749979,
+        "expected_solenoidal_power_fraction": 0.5000000000000001,
+        "nominal_total_forcing_power": 0.64
+      },
+      "scalars": {
+        "B_over_B0_mean": {
+          "mean": 1.1649788286398537,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            1.115978557940093,
+            1.1663910166491376,
+            1.1773060953961132,
+            1.2002396445740715
+          ],
+          "block_count": 4,
+          "block_sd": 0.03558233386410625,
+          "block_min": 1.115978557940093,
+          "block_max": 1.2002396445740715,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.06533543593796363,
+          "fitted_change_over_window": 0.13067087187592727
+        },
+        "deltaB_rms_over_B0": {
+          "mean": 0.6044377870280069,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.49742322959297186,
+            0.6117996763641139,
+            0.6331441004977441,
+            0.6753841416571977
+          ],
+          "block_count": 4,
+          "block_sd": 0.0760783600108187,
+          "block_min": 0.49742322959297186,
+          "block_max": 0.6753841416571977,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.14229659579214352,
+          "fitted_change_over_window": 0.28459319158428703
+        },
+        "Mach_isotropic_proxy": {
+          "mean": 0.17325913257491268,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.09776833135493414,
+            0.1320339223108407,
+            0.20661982897290854,
+            0.25661444766096736
+          ],
+          "block_count": 4,
+          "block_sd": 0.0717853830233007,
+          "block_min": 0.09776833135493414,
+          "block_max": 0.25661444766096736,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.09694620123854779,
+          "fitted_change_over_window": 0.19389240247709558
+        },
+        "beta_volume_mean": {
+          "mean": 7.769405348702078,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            8.229201527751496,
+            7.775811302872736,
+            7.661656588553891,
+            7.410951975630188
+          ],
+          "block_count": 4,
+          "block_sd": 0.34232157323067236,
+          "block_min": 7.410951975630188,
+          "block_max": 8.229201527751496,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.6659516108796949,
+          "fitted_change_over_window": -1.3319032217593898
+        },
+        "beta_ratio_of_means": {
+          "mean": 7.466153376433407,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            8.087833969737403,
+            7.40950619422707,
+            7.306138054508168,
+            7.061135287260982
+          ],
+          "block_count": 4,
+          "block_sd": 0.4394467048271977,
+          "block_min": 7.061135287260982,
+          "block_max": 8.087833969737403,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.8269576938185307,
+          "fitted_change_over_window": -1.6539153876370614
+        },
+        "S_parallel_rms": {
+          "mean": 0.3989474242769653,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.3883837916692488,
+            0.3469210875186485,
+            0.3728768815854303,
+            0.4876079363345336
+          ],
+          "block_count": 4,
+          "block_sd": 0.06153234825385739,
+          "block_min": 0.3469210875186485,
+          "block_max": 0.4876079363345336,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.07749231662760533,
+          "fitted_change_over_window": 0.15498463325521067
+        },
+        "induction_rms": {
+          "mean": 0.3483336810143087,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.310198339056098,
+            0.30972428730278545,
+            0.3561067224782682,
+            0.4173053752200834
+          ],
+          "block_count": 4,
+          "block_sd": 0.05086748917287086,
+          "block_min": 0.30972428730278545,
+          "block_max": 0.4173053752200834,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.06549887295895734,
+          "fitted_change_over_window": 0.1309977459179147
+        },
+        "div_u_rms": {
+          "mean": 0.3760551042346598,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.399262877589328,
+            0.327836252808692,
+            0.40700841343129524,
+            0.3701128731093242
+          ],
+          "block_count": 4,
+          "block_sd": 0.03585654676573781,
+          "block_min": 0.327836252808692,
+          "block_max": 0.40700841343129524,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.026444111051127345,
+          "fitted_change_over_window": 0.05288822210225469
+        },
+        "u_parallel_rms": {
+          "mean": 0.38983528352904934,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.15162947582144373,
+            0.2729932563550591,
+            0.4985808636997837,
+            0.6361375382399108
+          ],
+          "block_count": 4,
+          "block_sd": 0.21823875917756067,
+          "block_min": 0.15162947582144373,
+          "block_max": 0.6361375382399108,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.31303560224340937,
+          "fitted_change_over_window": 0.6260712044868187
+        },
+        "u_perp_rms": {
+          "mean": 0.31096871829752615,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.23663601848696256,
+            0.26992593746900384,
+            0.3381822822586162,
+            0.39913063497552215
+          ],
+          "block_count": 4,
+          "block_sd": 0.07239466309765227,
+          "block_min": 0.23663601848696256,
+          "block_max": 0.39913063497552215,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.09156427883628199,
+          "fitted_change_over_window": 0.18312855767256397
+        },
+        "u_parallel_fraction": {
+          "mean": 0.547203086097088,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.3002718287653762,
+            0.493765424481752,
+            0.6765340843697671,
+            0.7182410067714565
+          ],
+          "block_count": 4,
+          "block_sd": 0.19132094061127977,
+          "block_min": 0.3002718287653762,
+          "block_max": 0.7182410067714565,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.3130220011000915,
+          "fitted_change_over_window": 0.626044002200183
+        },
+        "perp_gradient_u_perp_rms": {
+          "mean": 3.854612112160109,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            1.4228051586563095,
+            2.1697335222924408,
+            3.7029284266872304,
+            8.122981341004456
+          ],
+          "block_count": 4,
+          "block_sd": 2.9996935807894234,
+          "block_min": 1.4228051586563095,
+          "block_max": 8.122981341004456,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 4.37650093145336,
+          "fitted_change_over_window": 8.75300186290672
+        },
+        "pressure_correlation": {
+          "mean": -0.09029533746987795,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.10044564056290338,
+            -0.1359904291037627,
+            -0.13983946203701286,
+            -0.18579709930163957
+          ],
+          "block_count": 4,
+          "block_sd": 0.12915800258136725,
+          "block_min": -0.18579709930163957,
+          "block_max": 0.10044564056290338,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.22908377305344194,
+          "fitted_change_over_window": -0.45816754610688387
+        },
+        "pressure_normalized_residual_variance": {
+          "mean": 0.9310476355813637,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            1.0461643321014849,
+            0.9269741674133429,
+            0.9100426869121666,
+            0.841009355898461
+          ],
+          "block_count": 4,
+          "block_sd": 0.08527709078346454,
+          "block_min": 0.841009355898461,
+          "block_max": 1.0461643321014849,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.1528787438547927,
+          "fitted_change_over_window": -0.3057574877095854
+        },
+        "mirror_near": {
+          "mean": 0.2572855319639396,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.5801385082950268,
+            0.2416506887657453,
+            0.09486712661458911,
+            0.11248580418039728
+          ],
+          "block_count": 4,
+          "block_sd": 0.2249631023153853,
+          "block_min": 0.09486712661458911,
+          "block_max": 0.5801385082950268,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.3997226849377485,
+          "fitted_change_over_window": -0.799445369875497
+        },
+        "firehose_near": {
+          "mean": 0.00014564575031818648,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0,
+            0.0,
+            0.0002703142299795694,
+            0.00031226877129317656
+          ],
+          "block_count": 4,
+          "block_sd": 0.0001690471631541601,
+          "block_min": 0.0,
+          "block_max": 0.00031226877129317656,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.00016218272152710445,
+          "fitted_change_over_window": 0.0003243654430542089
+        },
+        "mirror_strict": {
+          "mean": 0.042012486800900445,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.11061603421066349,
+            0.0255913793026714,
+            0.013513276931593987,
+            0.01832925675867288
+          ],
+          "block_count": 4,
+          "block_sd": 0.046004347030397914,
+          "block_min": 0.013513276931593987,
+          "block_max": 0.11061603421066349,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.0889822376042015,
+          "fitted_change_over_window": -0.177964475208403
+        },
+        "firehose_strict": {
+          "mean": 1.3895734180803866e-05,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0,
+            0.0,
+            2.4351203626991866e-05,
+            3.1231733096223605e-05
+          ],
+          "block_count": 4,
+          "block_sd": 1.6289429666532496e-05,
+          "block_min": 0.0,
+          "block_max": 3.1231733096223605e-05,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 1.551478917073861e-05,
+          "fitted_change_over_window": 3.102957834147722e-05
+        },
+        "mirror_strict_beyond_rounding_envelope": {
+          "mean": 8.828924811857722e-09,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0,
+            0.0,
+            3.5315686195773953e-08,
+            1.3051656934711854e-14
+          ],
+          "block_count": 4,
+          "block_sd": 1.765784092261189e-08,
+          "block_min": 0.0,
+          "block_max": 3.5315686195773953e-08,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 5.3178500919837325e-09,
+          "fitted_change_over_window": 1.0635700183967465e-08
+        },
+        "firehose_strict_beyond_rounding_envelope": {
+          "mean": 0.0,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "block_count": 4,
+          "block_sd": 0.0,
+          "block_min": 0.0,
+          "block_max": 0.0,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.0,
+          "fitted_change_over_window": 0.0
+        },
+        "kinetic_density": {
+          "mean": 0.14482605458792938,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.03999936017743134,
+            0.07528189761092585,
+            0.1834612594019993,
+            0.280561701161361
+          ],
+          "block_count": 4,
+          "block_sd": 0.10915107333783869,
+          "block_min": 0.03999936017743134,
+          "block_max": 0.280561701161361,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.14654717033965725,
+          "fitted_change_over_window": 0.2930943406793145
+        },
+        "magnetic_density": {
+          "mean": 0.6855320116013545,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.6257295476710484,
+            0.687526330580835,
+            0.700537916640517,
+            0.728334251513017
+          ],
+          "block_count": 4,
+          "block_sd": 0.04334943647395107,
+          "block_min": 0.6257295476710484,
+          "block_max": 0.728334251513017,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.07874317960775949,
+          "fitted_change_over_window": 0.15748635921551898
+        },
+        "thermal_density": {
+          "mean": 7.649641933818381,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            7.574271092188444,
+            7.637191771798026,
+            7.676000823977875,
+            7.711104047309177
+          ],
+          "block_count": 4,
+          "block_sd": 0.05861783797768358,
+          "block_min": 7.574271092188444,
+          "block_max": 7.711104047309177,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.09470965003056477,
+          "fitted_change_over_window": 0.18941930006112953
+        }
+      },
+      "magnetic_strength_distribution_width": {
+        "width": 0.11784885244932707,
+        "block_widths": [
+          0.07778787540515217,
+          0.1207669550906262,
+          0.1225813649140521,
+          0.12685936551449617
+        ],
+        "block_sd": 0.022949909170959196,
+        "definition": "Time-volume pooled std(|B|/B0)=sqrt(2*time_mean(magnetic_density)/B0^2-time_mean(mean(|B|/B0))^2), computed from exact field moments rather than histogram centers. Block widths use the same formula within each time block. Includes temporal drift of the mean; distinct from vector deltaB_rms/B0."
+      },
+      "gradient_comparisons": {
+        "resolved_strain_to_perpendicular_gradient_power": 0.006364424605683633,
+        "cutoff_strain_to_perpendicular_gradient_power": 0.0986162988972081
+      },
+      "spectral_samples": [
+        {
+          "k_perp": 15.707963267948966,
+          "k_perp_over_2pi": 2.5,
+          "kinetic_power": 0.002757321118062363,
+          "magnetic_power": 0.0009877084006344986,
+          "compensated_kinetic_relative_to_n2p5": 1.0,
+          "pressure_C_all_parallel": -0.8151804301084427,
+          "pressure_R_all_parallel": 0.20193518772010266,
+          "pressure_C_full_k_resolved": -0.8151805399807129,
+          "pressure_R_full_k_resolved": 0.2019350556900378
+        },
+        {
+          "k_perp": 28.274333882308138,
+          "k_perp_over_2pi": 4.5,
+          "kinetic_power": 0.0003600322604838191,
+          "magnetic_power": 0.00013533082945515045,
+          "compensated_kinetic_relative_to_n2p5": 0.34778291665348715,
+          "pressure_C_all_parallel": -0.9013000546898347,
+          "pressure_R_all_parallel": 0.10266819461520926,
+          "pressure_C_full_k_resolved": -0.9013020285525878,
+          "pressure_R_full_k_resolved": 0.10266602666662425
+        },
+        {
+          "k_perp": 53.40707511102649,
+          "k_perp_over_2pi": 8.5,
+          "kinetic_power": 4.466355013693647e-05,
+          "magnetic_power": 2.4342692044073396e-05,
+          "compensated_kinetic_relative_to_n2p5": 0.1245271614266647,
+          "pressure_C_all_parallel": -0.9638216266013347,
+          "pressure_R_all_parallel": 0.036533699970136835,
+          "pressure_C_full_k_resolved": -0.9638602178675951,
+          "pressure_R_full_k_resolved": 0.03649396690175169
+        },
+        {
+          "k_perp": 103.67255756846318,
+          "k_perp_over_2pi": 16.5,
+          "kinetic_power": 3.281831600214584e-06,
+          "magnetic_power": 2.7941161998344004e-06,
+          "compensated_kinetic_relative_to_n2p5": 0.027639838723178697,
+          "pressure_C_all_parallel": -0.9877779004282825,
+          "pressure_R_all_parallel": 0.012280727927043511,
+          "pressure_C_full_k_resolved": -0.9884976268204404,
+          "pressure_R_full_k_resolved": 0.011551383399699645
+        },
+        {
+          "k_perp": 147.6548547187203,
+          "k_perp_over_2pi": 23.5,
+          "kinetic_power": 7.740177650675674e-07,
+          "magnetic_power": 6.300897269674475e-07,
+          "compensated_kinetic_relative_to_n2p5": 0.011752853902719046,
+          "pressure_C_all_parallel": -0.9883784087745395,
+          "pressure_R_all_parallel": 0.01163390930286859,
+          "pressure_C_full_k_resolved": -0.9888129917973779,
+          "pressure_R_full_k_resolved": 0.011187777801335253
+        }
+      ],
+      "scale_bands": {
+        "k_perp_nyquist_inscribed": 603.1857894892403,
+        "resolved_kmax": 150.79644737231007,
+        "full_k_resolved_max": 150.79644737231007,
+        "cutoff_band_kmin": 452.3893421169302,
+        "definition": "resolved guide <=Nyquist/4 (>=8 cells per axis wavelength); scalar resolved ratios require 0<full |k|<=min(Nyquist_xyz)/4, including pure parallel modes at k_perp=0; plotted perpendicular shells sum all k_parallel, so low-k_perp alone does not guarantee resolved full wavevector; not a convergence claim"
+      },
+      "energy_budget": {
+        "available": true,
+        "applicable": true,
+        "interval": [
+          0.5,
+          2.5
+        ],
+        "requested_interval": [
+          0.5,
+          2.5
+        ],
+        "requested_window_covered": true,
+        "actual_applied_work": 1.2799999999998053,
+        "actual_mean_total_power": 0.6399999999999026,
+        "conserved_total_energy_change": 1.2800000000029108,
+        "residual_E_minus_work": 3.105515844481488e-12,
+        "relative_residual": 2.426184253495645e-12,
+        "sampling": "linear interpolation only if explicit endpoints are between retained history rows"
+      },
+      "forcing_work": {
+        "available": true,
+        "interval": [
+          0.5,
+          2.5
+        ],
+        "requested_interval": [
+          0.5,
+          2.5
+        ],
+        "requested_window_covered": true,
+        "actual_applied_work": 1.2799999999998053,
+        "actual_mean_total_power": 0.6399999999999026,
+        "meaning": "conserved total-energy change of applied forcing kicks",
+        "sampling": "linear interpolation only between retained history rows"
+      },
+      "time_mean_solenoidal_acceleration_fraction": {
+        "mean": 0.6409257704480703,
+        "block_starts": [
+          0.5,
+          1.0,
+          1.5,
+          2.0
+        ],
+        "block_duration": 0.5,
+        "block_means": [
+          0.7446973908952118,
+          0.6084612375484884,
+          0.5480729446161461,
+          0.6624715087324353
+        ],
+        "block_count": 4,
+        "block_sd": 0.08348325422862887,
+        "block_min": 0.5480729446161461,
+        "block_max": 0.7446973908952118,
+        "effective_window": [
+          0.5,
+          2.5
+        ],
+        "linear_slope": -0.11430652445649157,
+        "fitted_change_over_window": -0.22861304891298315
+      },
+      "ratio_of_time_mean_acceleration_powers": 0.6296407607331097,
+      "numerical_integrity": {
+        "classification": "consistent",
+        "max_parseval_relative_error": 7.232281459107487e-15,
+        "max_PDF_integral_error": 1.2390088954816747e-12,
+        "scope": "analysis normalization/finite-field checks, not simulation physics acceptance"
+      },
+      "simulation_integrity": {
+        "classification": "inconclusive",
+        "segments": [
+          {
+            "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14",
+            "returncode": null,
+            "completion_status": "unavailable"
+          }
+        ],
+        "reasons": [
+          "segment completion returncode absent from retained metadata"
+        ],
+        "numerical_counters": {
+          "lf_dfloor": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_pfloor": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_nonfin": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_nonpos": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          }
+        },
+        "physical_stage_activity": {
+          "lf_hardbd": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 2781221788.0,
+            "last": 2781221788.0,
+            "window_increment": 76986557.44563256,
+            "meaning": "cumulative active-cell hard-bound crossings at unprojected LF stages; repeated cell-stage events, not unique cells or a time-integrated volume fraction"
+          },
+          "lf_hwproj": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0,
+            "instrumentation": "not_verified_for_retained_revision",
+            "audited_simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+            "audited_simulation_revisions": [
+              "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+              "71ad25ebce73d33db048defd8f585a7dce0528c2"
+            ],
+            "meaning": "post-WO2 audited source initializes and serializes this field but never increments it; retained values are preserved for provenance and do not establish wall-projection activity or its absence"
+          }
+        },
+        "post_operator_hard_volume": {
+          "available": true,
+          "min_fraction": 0.0,
+          "max_fraction": 0.0,
+          "meaning": "strict hard-bound predicate at retained history times; distinct from unprojected LF stage crossings"
+        },
+        "LF_counter_lifecycle": "audited LF stage/admissibility counters are cumulative and restart-persistent, not reset per history or process; shared-file restart restores the prior global sum on rank0 only, so later MPI history sums preserve it once",
+        "achieved_history_range": [
+          0.0,
+          6.160051519796226
+        ],
+        "requested_window_covered": true,
+        "scope": "completion, coverage and numerical counter evidence; no threshold on physical hard-bound/projection activity or energy residual"
+      },
+      "source_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/active/metrics.json",
+        "sha256": "d51aee535a8a010458e36ecaf74309631dcdda6b9a8899966b2f994c84833618"
+      },
+      "analysis_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "analysis_script": {
+        "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+        "sha256": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+        "bytes": 107580
+      }
+    },
+    "passive_startup": {
+      "interval": [
+        0.5,
+        2.5
+      ],
+      "sampling": {
+        "snapshots": 10,
+        "times": [
+          0.250352492368,
+          0.500358700627,
+          0.750361044258,
+          1.00003120301,
+          1.25033644539,
+          1.50001857778,
+          1.75031270649,
+          2.00017427068,
+          2.25024559955,
+          2.5003003035
+        ],
+        "near_threshold_halfwidth_X": 0.05,
+        "bracketing_snapshot_range": [
+          0.250352492368,
+          2.5003003035
+        ],
+        "max_snapshot_gap": 0.25030524238000007,
+        "endpoint_rule": "linearly interpolate diagnostic values/PDF bins/spectral bins at requested endpoints using bracketing snapshots; no field interpolation or extrapolation",
+        "block_duration": 0.5,
+        "complete_blocks": 4,
+        "block_anchor": 0.5,
+        "pdf_edge_policy": "external shared edges; clipping rejected",
+        "instantaneous_output_caveat": "post-operator snapshots may miss transient threshold excursions; inclusive history switches, strict exceedance, and near bands have different meanings"
+      },
+      "model": {
+        "B0": 1.0,
+        "mirror_X": 1.0,
+        "firehose_X": -2.0,
+        "gamma_sound": 1.6666666666666667,
+        "forcing_correlation_time": 2.0,
+        "sol_fraction": 0.4142135623730951,
+        "projection_policy": "solenoidal_compressive",
+        "dedt_per_volume": 0.32,
+        "forcing_kmin": 3.141592653589793,
+        "forcing_kmax": 9.42477796076938,
+        "record_injected_work": true,
+        "nu_coll": 0.0,
+        "limiter_nu_coll": 10000000000.0,
+        "backup_limiters": false,
+        "mirror_limiter": true,
+        "firehose_limiter": true,
+        "passive": true,
+        "iso_sound_speed": 2.23606797749979,
+        "expected_solenoidal_power_fraction": 0.5000000000000001,
+        "nominal_total_forcing_power": 0.64
+      },
+      "scalars": {
+        "B_over_B0_mean": {
+          "mean": 1.2250493399934468,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            1.155365084513039,
+            1.2212179211604928,
+            1.2455968160121684,
+            1.2780175382880872
+          ],
+          "block_count": 4,
+          "block_sd": 0.05195640490979768,
+          "block_min": 1.155365084513039,
+          "block_max": 1.2780175382880872,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.09952934423899319,
+          "fitted_change_over_window": 0.19905868847798638
+        },
+        "deltaB_rms_over_B0": {
+          "mean": 0.7435406481732919,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.5857853977342686,
+            0.7305059888271179,
+            0.7951784952261779,
+            0.8626927109056027
+          ],
+          "block_count": 4,
+          "block_sd": 0.11820928148411407,
+          "block_min": 0.5857853977342686,
+          "block_max": 0.8626927109056027,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.2215931286044337,
+          "fitted_change_over_window": 0.4431862572088674
+        },
+        "Mach_isotropic_proxy": {
+          "mean": 0.17953178930751662,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.10911527699124156,
+            0.13644062171660126,
+            0.20873768911280954,
+            0.26383356940941405
+          ],
+          "block_count": 4,
+          "block_sd": 0.07017860225387305,
+          "block_min": 0.10911527699124156,
+          "block_max": 0.26383356940941405,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.08760636799732217,
+          "fitted_change_over_window": 0.17521273599464435
+        },
+        "Mach_isothermal": {
+          "mean": 0.2403547160685545,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.14208420664771843,
+            0.17995312952411235,
+            0.2794669871322986,
+            0.3599145409700887
+          ],
+          "block_count": 4,
+          "block_sd": 0.09853893673258585,
+          "block_min": 0.14208420664771843,
+          "block_max": 0.3599145409700887,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.12442178977840075,
+          "fitted_change_over_window": 0.2488435795568015
+        },
+        "beta_volume_mean": {
+          "mean": 8.512123092293656,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            7.954266250126856,
+            7.829282594908237,
+            8.60799806171454,
+            9.65694546242499
+          ],
+          "block_count": 4,
+          "block_sd": 0.8361191442484854,
+          "block_min": 7.829282594908237,
+          "block_max": 9.65694546242499,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.7161906612161889,
+          "fitted_change_over_window": 1.4323813224323778
+        },
+        "beta_ratio_of_means": {
+          "mean": 6.836307313805303,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            7.570650263086762,
+            6.798741147604692,
+            6.578061943628812,
+            6.397775900900947
+          ],
+          "block_count": 4,
+          "block_sd": 0.516291666703969,
+          "block_min": 6.397775900900947,
+          "block_max": 7.570650263086762,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -1.0273155003308514,
+          "fitted_change_over_window": -2.054631000661703
+        },
+        "S_parallel_rms": {
+          "mean": 1.0225913154083608,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.5315696706119383,
+            0.6961213481195373,
+            1.128019517679236,
+            1.7346547252227311
+          ],
+          "block_count": 4,
+          "block_sd": 0.5372256821332744,
+          "block_min": 0.5315696706119383,
+          "block_max": 1.7346547252227311,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.7391710122854609,
+          "fitted_change_over_window": 1.4783420245709218
+        },
+        "induction_rms": {
+          "mean": 0.8935932597877749,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.4396657424969883,
+            0.631770696839996,
+            0.9465841707658686,
+            1.5563524290482469
+          ],
+          "block_count": 4,
+          "block_sd": 0.4887599951262515,
+          "block_min": 0.4396657424969883,
+          "block_max": 1.5563524290482469,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.6633767160856914,
+          "fitted_change_over_window": 1.3267534321713828
+        },
+        "div_u_rms": {
+          "mean": 0.8251697298001387,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.5571494031507468,
+            0.6848411587480389,
+            0.8678273418362608,
+            1.1908610154655082
+          ],
+          "block_count": 4,
+          "block_sd": 0.27512227077367263,
+          "block_min": 0.5571494031507468,
+          "block_max": 1.1908610154655082,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.3891690332961546,
+          "fitted_change_over_window": 0.7783380665923092
+        },
+        "u_parallel_rms": {
+          "mean": 0.404093906155701,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.17396514225956544,
+            0.2759746693110211,
+            0.49519746115946006,
+            0.6712383518927576
+          ],
+          "block_count": 4,
+          "block_sd": 0.22288995748613158,
+          "block_min": 0.17396514225956544,
+          "block_max": 0.6712383518927576,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.2957955142569123,
+          "fitted_change_over_window": 0.5915910285138246
+        },
+        "u_perp_rms": {
+          "mean": 0.3440527179915315,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.2622454339831042,
+            0.291285225009652,
+            0.37890022206374563,
+            0.44377999090962406
+          ],
+          "block_count": 4,
+          "block_sd": 0.08293916954847268,
+          "block_min": 0.2622454339831042,
+          "block_max": 0.44377999090962406,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.09455816021518006,
+          "fitted_change_over_window": 0.1891163204303601
+        },
+        "u_parallel_fraction": {
+          "mean": 0.5250661391635263,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.3114714147705324,
+            0.4712046917937852,
+            0.6210871616702696,
+            0.6965012884195182
+          ],
+          "block_count": 4,
+          "block_sd": 0.1704247722260931,
+          "block_min": 0.3114714147705324,
+          "block_max": 0.6965012884195182,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.25056433597543126,
+          "fitted_change_over_window": 0.5011286719508625
+        },
+        "perp_gradient_u_perp_rms": {
+          "mean": 4.340729339829247,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            1.3269982433191285,
+            2.2349142023564985,
+            4.139537910595774,
+            9.66146700304559
+          ],
+          "block_count": 4,
+          "block_sd": 3.73576229558071,
+          "block_min": 1.3269982433191285,
+          "block_max": 9.66146700304559,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 5.398114982373504,
+          "fitted_change_over_window": 10.796229964747008
+        },
+        "pressure_correlation": {
+          "mean": -0.1334188756400515,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.2673719921237624,
+            -0.023618472194988388,
+            -0.28393287860544497,
+            -0.493496143883535
+          ],
+          "block_count": 4,
+          "block_sd": 0.329140067688477,
+          "block_min": -0.493496143883535,
+          "block_max": 0.2673719921237624,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.5530758990657443,
+          "fitted_change_over_window": -1.1061517981314886
+        },
+        "pressure_normalized_residual_variance": {
+          "mean": 0.8621037567604786,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            1.1514562831839688,
+            0.9562956889097938,
+            0.7843907054962327,
+            0.5562723494519195
+          ],
+          "block_count": 4,
+          "block_sd": 0.25309364055148365,
+          "block_min": 0.5562723494519195,
+          "block_max": 1.1514562831839688,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.41143967702232614,
+          "fitted_change_over_window": -0.8228793540446523
+        },
+        "dynamic_pressure_correlation": {
+          "mean": -0.3796569026652481,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            -0.036603665007932884,
+            -0.24911386937112628,
+            -0.5324454268225656,
+            -0.7004646494593677
+          ],
+          "block_count": 4,
+          "block_sd": 0.2949513806975017,
+          "block_min": -0.7004646494593677,
+          "block_max": -0.036603665007932884,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.43129092120073725,
+          "fitted_change_over_window": -0.8625818424014745
+        },
+        "dynamic_pressure_normalized_residual_variance": {
+          "mean": 0.6617166405794346,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.9780047662776501,
+            0.8031107324217549,
+            0.5482946075141796,
+            0.31745645610415385
+          ],
+          "block_count": 4,
+          "block_sd": 0.2894881113651099,
+          "block_min": 0.31745645610415385,
+          "block_max": 0.9780047662776501,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.41172603638204,
+          "fitted_change_over_window": -0.82345207276408
+        },
+        "mirror_near": {
+          "mean": 0.32104556446512517,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.6262332109362205,
+            0.28540087160709426,
+            0.20184512288921863,
+            0.17070305242796724
+          ],
+          "block_count": 4,
+          "block_sd": 0.20914242347026243,
+          "block_min": 0.17070305242796724,
+          "block_max": 0.6262332109362205,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.275044276721088,
+          "fitted_change_over_window": -0.550088553442176
+        },
+        "firehose_near": {
+          "mean": 0.04971006390355174,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0030493335561484177,
+            0.048714786393621985,
+            0.09070423018749293,
+            0.056371905476943616
+          ],
+          "block_count": 4,
+          "block_sd": 0.036069914223811006,
+          "block_min": 0.0030493335561484177,
+          "block_max": 0.09070423018749293,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.03630598664745171,
+          "fitted_change_over_window": 0.07261197329490342
+        },
+        "mirror_strict": {
+          "mean": 0.04772779004181444,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0751252718178473,
+            0.0335888730783042,
+            0.03949157355724351,
+            0.04270544171386275
+          ],
+          "block_count": 4,
+          "block_sd": 0.01865109670838945,
+          "block_min": 0.0335888730783042,
+          "block_max": 0.0751252718178473,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.039547705822281905,
+          "fitted_change_over_window": -0.07909541164456381
+        },
+        "firehose_strict": {
+          "mean": 0.0075724382015069204,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.00043875532808337875,
+            0.005701601131515047,
+            0.013159015386018828,
+            0.01099038096041043
+          ],
+          "block_count": 4,
+          "block_sd": 0.005694489734901102,
+          "block_min": 0.00043875532808337875,
+          "block_max": 0.013159015386018828,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.006761376910479761,
+          "fitted_change_over_window": 0.013522753820959523
+        },
+        "mirror_strict_beyond_rounding_envelope": {
+          "mean": 3.964972731008269e-08,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            3.635630988190009e-14,
+            0.0,
+            0.0,
+            1.5859887288402088e-07
+          ],
+          "block_count": 4,
+          "block_sd": 7.929943038262731e-08,
+          "block_min": 0.0,
+          "block_max": 1.5859887288402088e-07,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 1.5018754099432977e-07,
+          "fitted_change_over_window": 3.0037508198865955e-07
+        },
+        "firehose_strict_beyond_rounding_envelope": {
+          "mean": 0.0,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "block_count": 4,
+          "block_sd": 0.0,
+          "block_min": 0.0,
+          "block_max": 0.0,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.0,
+          "fitted_change_over_window": 0.0
+        },
+        "kinetic_density": {
+          "mean": 0.16250576574719997,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.050836611202868295,
+            0.08237484335451412,
+            0.19932901630884226,
+            0.31748259212257524
+          ],
+          "block_count": 4,
+          "block_sd": 0.12146979500470775,
+          "block_min": 0.050836611202868295,
+          "block_max": 0.31748259212257524,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.15433112500155424,
+          "fitted_change_over_window": 0.3086622500031085
+        },
+        "magnetic_density": {
+          "mean": 0.7833502858360611,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.6767083425709925,
+            0.76778792885198,
+            0.8163245491226825,
+            0.8725803227985895
+          ],
+          "block_count": 4,
+          "block_sd": 0.08299396073185024,
+          "block_min": 0.6767083425709925,
+          "block_max": 0.8725803227985895,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.1483167603985587,
+          "fitted_change_over_window": 0.2966335207971174
+        },
+        "thermal_density": {
+          "mean": 7.968560298394396,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            7.633638013889555,
+            7.817796708467961,
+            8.052431059876719,
+            8.37037541134335
+          ],
+          "block_count": 4,
+          "block_sd": 0.31801063207134717,
+          "block_min": 7.633638013889555,
+          "block_max": 8.37037541134335,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.4802900753609101,
+          "fitted_change_over_window": 0.9605801507218202
+        }
+      },
+      "magnetic_strength_distribution_width": {
+        "width": 0.25681644467156456,
+        "block_widths": [
+          0.1361918008918431,
+          0.210244254952197,
+          0.28484674859600057,
+          0.3344126454326101
+        ],
+        "block_sd": 0.0867533198314475,
+        "definition": "Time-volume pooled std(|B|/B0)=sqrt(2*time_mean(magnetic_density)/B0^2-time_mean(mean(|B|/B0))^2), computed from exact field moments rather than histogram centers. Block widths use the same formula within each time block. Includes temporal drift of the mean; distinct from vector deltaB_rms/B0."
+      },
+      "gradient_comparisons": {
+        "resolved_strain_to_perpendicular_gradient_power": 0.041955813936948444,
+        "cutoff_strain_to_perpendicular_gradient_power": 0.10530469040473299
+      },
+      "spectral_samples": [
+        {
+          "k_perp": 15.707963267948966,
+          "k_perp_over_2pi": 2.5,
+          "kinetic_power": 0.002950428436230489,
+          "magnetic_power": 0.0024108653850430954,
+          "compensated_kinetic_relative_to_n2p5": 1.0,
+          "pressure_C_all_parallel": -0.6502211256243454,
+          "pressure_R_all_parallel": 0.3657674439118285,
+          "pressure_C_full_k_resolved": -0.6502217763575047,
+          "pressure_R_full_k_resolved": 0.3657666672070134
+        },
+        {
+          "k_perp": 28.274333882308138,
+          "k_perp_over_2pi": 4.5,
+          "kinetic_power": 0.00044384055074066426,
+          "magnetic_power": 0.00040448839732919244,
+          "compensated_kinetic_relative_to_n2p5": 0.40067852682765054,
+          "pressure_C_all_parallel": -0.7575082062764955,
+          "pressure_R_all_parallel": 0.2560503612330887,
+          "pressure_C_full_k_resolved": -0.757514348485422,
+          "pressure_R_full_k_resolved": 0.2560428504437624
+        },
+        {
+          "k_perp": 53.40707511102649,
+          "k_perp_over_2pi": 8.5,
+          "kinetic_power": 7.924648237797351e-05,
+          "magnetic_power": 6.89090107249795e-05,
+          "compensated_kinetic_relative_to_n2p5": 0.2064871849904287,
+          "pressure_C_all_parallel": -0.8357453353075515,
+          "pressure_R_all_parallel": 0.1735290193776146,
+          "pressure_C_full_k_resolved": -0.8357569794865862,
+          "pressure_R_full_k_resolved": 0.1735041784383115
+        },
+        {
+          "k_perp": 103.67255756846318,
+          "k_perp_over_2pi": 16.5,
+          "kinetic_power": 7.146660116794865e-06,
+          "magnetic_power": 6.414462173117858e-06,
+          "compensated_kinetic_relative_to_n2p5": 0.05625026883345055,
+          "pressure_C_all_parallel": -0.9140911117062013,
+          "pressure_R_all_parallel": 0.09513424282992339,
+          "pressure_C_full_k_resolved": -0.9146143926501281,
+          "pressure_R_full_k_resolved": 0.0941622722689948
+        },
+        {
+          "k_perp": 147.6548547187203,
+          "k_perp_over_2pi": 23.5,
+          "kinetic_power": 1.4925438414630018e-06,
+          "magnetic_power": 1.4078133713144042e-06,
+          "compensated_kinetic_relative_to_n2p5": 0.021179795752942102,
+          "pressure_C_all_parallel": -0.9249433595830518,
+          "pressure_R_all_parallel": 0.08783176364545062,
+          "pressure_C_full_k_resolved": -0.8955370500210306,
+          "pressure_R_full_k_resolved": 0.11543055357669343
+        }
+      ],
+      "scale_bands": {
+        "k_perp_nyquist_inscribed": 603.1857894892403,
+        "resolved_kmax": 150.79644737231007,
+        "full_k_resolved_max": 150.79644737231007,
+        "cutoff_band_kmin": 452.3893421169302,
+        "definition": "resolved guide <=Nyquist/4 (>=8 cells per axis wavelength); scalar resolved ratios require 0<full |k|<=min(Nyquist_xyz)/4, including pure parallel modes at k_perp=0; plotted perpendicular shells sum all k_parallel, so low-k_perp alone does not guarantee resolved full wavevector; not a convergence claim"
+      },
+      "energy_budget": {
+        "available": false,
+        "requested_interval": [
+          0.5,
+          2.5
+        ],
+        "requested_window_covered": false,
+        "applicable": false,
+        "reason": "active conserved-total-energy closure does not apply to passive isothermal dynamics; cgl-J is not energy"
+      },
+      "forcing_work": {
+        "available": true,
+        "interval": [
+          0.5,
+          2.5
+        ],
+        "requested_interval": [
+          0.5,
+          2.5
+        ],
+        "requested_window_covered": true,
+        "actual_applied_work": 1.280000000000002,
+        "actual_mean_total_power": 0.640000000000001,
+        "meaning": "kinetic-energy change of applied forcing kicks",
+        "sampling": "linear interpolation only between retained history rows"
+      },
+      "time_mean_solenoidal_acceleration_fraction": {
+        "mean": 0.6409386122189418,
+        "block_starts": [
+          0.5,
+          1.0,
+          1.5,
+          2.0
+        ],
+        "block_duration": 0.5,
+        "block_means": [
+          0.7447564581434698,
+          0.6084002750846276,
+          0.5481023935271863,
+          0.6624953221204835
+        ],
+        "block_count": 4,
+        "block_sd": 0.08350677369458921,
+        "block_min": 0.5481023935271863,
+        "block_max": 0.7447564581434698,
+        "effective_window": [
+          0.5,
+          2.5
+        ],
+        "linear_slope": -0.1142646661896491,
+        "fitted_change_over_window": -0.2285293323792982
+      },
+      "ratio_of_time_mean_acceleration_powers": 0.6165104049388873,
+      "numerical_integrity": {
+        "classification": "consistent",
+        "max_parseval_relative_error": 4.787632998885439e-15,
+        "max_PDF_integral_error": 1.2390088954816747e-12,
+        "scope": "analysis normalization/finite-field checks, not simulation physics acceptance"
+      },
+      "simulation_integrity": {
+        "classification": "concerning",
+        "segments": [
+          {
+            "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14",
+            "returncode": 143,
+            "completion_status": "failed"
+          }
+        ],
+        "reasons": [
+          "nonzero simulation returncode"
+        ],
+        "numerical_counters": {
+          "lf_dfloor": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_pfloor": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_nonfin": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_nonpos": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          }
+        },
+        "physical_stage_activity": {
+          "lf_hardbd": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 23713128197.0,
+            "last": 23713128197.0,
+            "window_increment": 23630118760.35005,
+            "meaning": "cumulative active-cell hard-bound crossings at unprojected LF stages; repeated cell-stage events, not unique cells or a time-integrated volume fraction"
+          },
+          "lf_hwproj": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0,
+            "instrumentation": "not_verified_for_retained_revision",
+            "audited_simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+            "audited_simulation_revisions": [
+              "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+              "71ad25ebce73d33db048defd8f585a7dce0528c2"
+            ],
+            "meaning": "post-WO2 audited source initializes and serializes this field but never increments it; retained values are preserved for provenance and do not establish wall-projection activity or its absence"
+          }
+        },
+        "post_operator_hard_volume": {
+          "available": true,
+          "min_fraction": 0.0,
+          "max_fraction": 0.0,
+          "meaning": "strict hard-bound predicate at retained history times; distinct from unprojected LF stage crossings"
+        },
+        "LF_counter_lifecycle": "audited LF stage/admissibility counters are cumulative and restart-persistent, not reset per history or process; shared-file restart restores the prior global sum on rank0 only, so later MPI history sums preserve it once",
+        "achieved_history_range": [
+          0.0,
+          2.500300303503464
+        ],
+        "requested_window_covered": true,
+        "scope": "completion, coverage and numerical counter evidence; no threshold on physical hard-bound/projection activity or energy residual"
+      },
+      "source_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/passive/metrics.json",
+        "sha256": "38f3e5ab07415d2db0913d1f6cce75e6fb90245798483314638870ba5b648bdb"
+      },
+      "analysis_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "analysis_script": {
+        "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+        "sha256": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+        "bytes": 107580
+      }
+    },
+    "active_later": {
+      "interval": [
+        2.0,
+        6.0
+      ],
+      "sampling": {
+        "snapshots": 18,
+        "times": [
+          1.75017613948,
+          2.00021493313,
+          2.25005251468,
+          2.50022714192,
+          2.75007781475,
+          3.00006925699,
+          3.25004805755,
+          3.50007672416,
+          3.75002162947,
+          4.0002128715,
+          4.25019695619,
+          4.50006820165,
+          4.75005296837,
+          5.00017168453,
+          5.25026792964,
+          5.50008474774,
+          5.75011654993,
+          6.00018773412
+        ],
+        "near_threshold_halfwidth_X": 0.05,
+        "bracketing_snapshot_range": [
+          1.75017613948,
+          6.00018773412
+        ],
+        "max_snapshot_gap": 0.25019124202999965,
+        "endpoint_rule": "linearly interpolate diagnostic values/PDF bins/spectral bins at requested endpoints using bracketing snapshots; no field interpolation or extrapolation",
+        "block_duration": 1.0,
+        "complete_blocks": 4,
+        "block_anchor": 2.0,
+        "pdf_edge_policy": "shared edges spanning all retained snapshots",
+        "instantaneous_output_caveat": "post-operator snapshots may miss transient threshold excursions; inclusive history switches, strict exceedance, and near bands have different meanings"
+      },
+      "model": {
+        "B0": 1.0,
+        "mirror_X": 1.0,
+        "firehose_X": -2.0,
+        "gamma_sound": 1.6666666666666667,
+        "forcing_correlation_time": 2.0,
+        "sol_fraction": 0.4142135623730951,
+        "projection_policy": "solenoidal_compressive",
+        "dedt_per_volume": 0.32,
+        "forcing_kmin": 3.141592653589793,
+        "forcing_kmax": 9.42477796076938,
+        "record_injected_work": true,
+        "nu_coll": 0.0,
+        "limiter_nu_coll": 10000000000.0,
+        "backup_limiters": false,
+        "mirror_limiter": true,
+        "firehose_limiter": true,
+        "passive": false,
+        "iso_sound_speed": 2.23606797749979,
+        "expected_solenoidal_power_fraction": 0.5000000000000001,
+        "nominal_total_forcing_power": 0.64
+      },
+      "scalars": {
+        "B_over_B0_mean": {
+          "mean": 1.2483619593608903,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            1.2101706056654613,
+            1.2017188303595834,
+            1.260293279504872,
+            1.3212651219136444
+          ],
+          "block_count": 4,
+          "block_sd": 0.05504963969210998,
+          "block_min": 1.2017188303595834,
+          "block_max": 1.3212651219136444,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.03663857839520006,
+          "fitted_change_over_window": 0.14655431358080023
+        },
+        "deltaB_rms_over_B0": {
+          "mean": 0.7587745787355188,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.6926173717101973,
+            0.678743734218345,
+            0.7814837701617364,
+            0.8822534388517965
+          ],
+          "block_count": 4,
+          "block_sd": 0.09406460259908465,
+          "block_min": 0.678743734218345,
+          "block_max": 0.8822534388517965,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.06301790901453792,
+          "fitted_change_over_window": 0.2520716360581517
+        },
+        "Mach_isotropic_proxy": {
+          "mean": 0.2684471235139605,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.2710913253539006,
+            0.3111076627555186,
+            0.26452284412289007,
+            0.22706666182353283
+          ],
+          "block_count": 4,
+          "block_sd": 0.034422163355426465,
+          "block_min": 0.22706666182353283,
+          "block_max": 0.3111076627555186,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.010370361293698458,
+          "fitted_change_over_window": -0.04148144517479383
+        },
+        "beta_volume_mean": {
+          "mean": 7.35730610937624,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            7.319218715833069,
+            7.655208251436212,
+            7.375953742221729,
+            7.0788437280139505
+          ],
+          "block_count": 4,
+          "block_sd": 0.2367033078458697,
+          "block_min": 7.0788437280139505,
+          "block_max": 7.655208251436212,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.09498570032812959,
+          "fitted_change_over_window": -0.37994280131251834
+        },
+        "beta_ratio_of_means": {
+          "mean": 6.89960897955623,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            6.979825280366704,
+            7.2683526431868435,
+            6.881731108207524,
+            6.468526886463848
+          ],
+          "block_count": 4,
+          "block_sd": 0.3309370200165552,
+          "block_min": 6.468526886463848,
+          "block_max": 7.2683526431868435,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.17489646115578744,
+          "fitted_change_over_window": -0.6995858446231498
+        },
+        "S_parallel_rms": {
+          "mean": 1.030246522944392,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.6280832257175469,
+            1.2320425710037808,
+            1.2191220405091223,
+            1.0417382545471174
+          ],
+          "block_count": 4,
+          "block_sd": 0.281817307062175,
+          "block_min": 0.6280832257175469,
+          "block_max": 1.2320425710037808,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.1466716396456605,
+          "fitted_change_over_window": 0.586686558582642
+        },
+        "induction_rms": {
+          "mean": 0.939317408406656,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.558756615229784,
+            1.1441741534633922,
+            1.1474883901451323,
+            0.9068504747883154
+          ],
+          "block_count": 4,
+          "block_sd": 0.2775980683861647,
+          "block_min": 0.558756615229784,
+          "block_max": 1.1474883901451323,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.13441080709636827,
+          "fitted_change_over_window": 0.5376432283854731
+        },
+        "div_u_rms": {
+          "mean": 0.8255644762442745,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.5213158768225197,
+            0.9746897035748451,
+            0.9549796275094462,
+            0.8512726970702874
+          ],
+          "block_count": 4,
+          "block_sd": 0.20993232057937158,
+          "block_min": 0.5213158768225197,
+          "block_max": 0.9746897035748451,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.12228652467709548,
+          "fitted_change_over_window": 0.48914609870838194
+        },
+        "u_parallel_rms": {
+          "mean": 0.6160065178305784,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.6612934808070233,
+            0.693421108094115,
+            0.6092935771491763,
+            0.5000179052719987
+          ],
+          "block_count": 4,
+          "block_sd": 0.08473950203841864,
+          "block_min": 0.5000179052719987,
+          "block_max": 0.693421108094115,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.043407687147977915,
+          "fitted_change_over_window": -0.17363074859191166
+        },
+        "u_perp_rms": {
+          "mean": 0.517623713502358,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.44115382000747516,
+            0.6120148864562985,
+            0.5237796554099697,
+            0.4935464921356889
+          ],
+          "block_count": 4,
+          "block_sd": 0.07158898041889063,
+          "block_min": 0.44115382000747516,
+          "block_max": 0.6120148864562985,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.025258148045978347,
+          "fitted_change_over_window": 0.10103259218391339
+        },
+        "u_parallel_fraction": {
+          "mean": 0.5845711301659355,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.693788714531381,
+            0.5622386474938019,
+            0.574862843505036,
+            0.5073943151335232
+          ],
+          "block_count": 4,
+          "block_sd": 0.0784808514338832,
+          "block_min": 0.5073943151335232,
+          "block_max": 0.693788714531381,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.062459664079879906,
+          "fitted_change_over_window": -0.24983865631951963
+        },
+        "perp_gradient_u_perp_rms": {
+          "mean": 15.773158998805052,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            11.277544630919587,
+            17.517247195756568,
+            18.044564683580084,
+            16.253279484963965
+          ],
+          "block_count": 4,
+          "block_sd": 3.089886278896664,
+          "block_min": 11.277544630919587,
+          "block_max": 18.044564683580084,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 2.229358411206046,
+          "fitted_change_over_window": 8.917433644824184
+        },
+        "pressure_correlation": {
+          "mean": -0.25338166910877935,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            -0.2192775173256936,
+            -0.009674331186599487,
+            -0.3942017076406533,
+            -0.3903731202821709
+          ],
+          "block_count": 4,
+          "block_sd": 0.18179961557776508,
+          "block_min": -0.3942017076406533,
+          "block_max": -0.009674331186599487,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.061979667208156584,
+          "fitted_change_over_window": -0.24791866883262634
+        },
+        "pressure_normalized_residual_variance": {
+          "mean": 0.7790173689019972,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.8268800559752484,
+            0.9901910590838118,
+            0.6443265834557228,
+            0.6546717770932065
+          ],
+          "block_count": 4,
+          "block_sd": 0.1637972304662991,
+          "block_min": 0.6443265834557228,
+          "block_max": 0.9901910590838118,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.06011994493878032,
+          "fitted_change_over_window": -0.24047977975512128
+        },
+        "mirror_near": {
+          "mean": 0.04531641577222327,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.09006067904415133,
+            0.017019608125706194,
+            0.036118340193035774,
+            0.0380670357259998
+          ],
+          "block_count": 4,
+          "block_sd": 0.0313045072587885,
+          "block_min": 0.017019608125706194,
+          "block_max": 0.09006067904415133,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.018173175359617457,
+          "fitted_change_over_window": -0.07269270143846983
+        },
+        "firehose_near": {
+          "mean": 0.0021463664171926804,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.0013821444017966332,
+            0.005533526921853995,
+            0.0013702191188120617,
+            0.000299575226308029
+          ],
+          "block_count": 4,
+          "block_sd": 0.00231444261862089,
+          "block_min": 0.000299575226308029,
+          "block_max": 0.005533526921853995,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.0004448070422509383,
+          "fitted_change_over_window": -0.0017792281690037532
+        },
+        "mirror_strict": {
+          "mean": 0.0073250515455719496,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.014122806881314282,
+            0.002955672016803257,
+            0.006201420138393908,
+            0.006020307145776352
+          ],
+          "block_count": 4,
+          "block_sd": 0.004770250187674687,
+          "block_min": 0.002955672016803257,
+          "block_max": 0.014122806881314282,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.0028867985694165767,
+          "fitted_change_over_window": -0.011547194277666307
+        },
+        "firehose_strict": {
+          "mean": 0.0002692199697474784,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.00010868614840611325,
+            0.0006358471994563164,
+            0.000268666263831379,
+            6.368026729610497e-05
+          ],
+          "block_count": 4,
+          "block_sd": 0.0002597649637861626,
+          "block_min": 6.368026729610497e-05,
+          "block_max": 0.0006358471994563164,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -2.2118813344669136e-05,
+          "fitted_change_over_window": -8.847525337867654e-05
+        },
+        "mirror_strict_beyond_rounding_envelope": {
+          "mean": 1.457115865822751e-07,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            6.525828467355927e-15,
+            1.235726441225392e-07,
+            4.061986394763045e-07,
+            5.307505620442832e-08
+          ],
+          "block_count": 4,
+          "block_sd": 1.8088396724755563e-07,
+          "block_min": 6.525828467355927e-15,
+          "block_max": 4.061986394763045e-07,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 3.538826542611304e-08,
+          "fitted_change_over_window": 1.4155306170445216e-07
+        },
+        "firehose_strict_beyond_rounding_envelope": {
+          "mean": 0.0,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.0,
+            0.0,
+            0.0,
+            0.0
+          ],
+          "block_count": 4,
+          "block_sd": 0.0,
+          "block_min": 0.0,
+          "block_max": 0.0,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.0,
+          "fitted_change_over_window": 0.0
+        },
+        "kinetic_density": {
+          "mean": 0.32623428839272417,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.3140055196983219,
+            0.42625165417394295,
+            0.32107258884481044,
+            0.24360739085382152
+          ],
+          "block_count": 4,
+          "block_sd": 0.07529245996052672,
+          "block_min": 0.24360739085382152,
+          "block_max": 0.42625165417394295,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": -0.015070130495489133,
+          "fitted_change_over_window": -0.060280521981956534
+        },
+        "magnetic_density": {
+          "mean": 0.7915170917200015,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            0.7401590804059726,
+            0.730868291600019,
+            0.8057344483941149,
+            0.8893065464798995
+          ],
+          "block_count": 4,
+          "block_sd": 0.07321391710861765,
+          "block_min": 0.730868291600019,
+          "block_max": 0.8893065464798995,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.04855950969772782,
+          "fitted_change_over_window": 0.19423803879091128
+        },
+        "thermal_density": {
+          "mean": 8.162248619891256,
+          "block_starts": [
+            2.0,
+            3.0,
+            4.0,
+            5.0
+          ],
+          "block_duration": 1.0,
+          "block_means": [
+            7.745835399879244,
+            7.962880054237308,
+            8.313192962765784,
+            8.627086062682686
+          ],
+          "block_count": 4,
+          "block_sd": 0.3881605499611314,
+          "block_min": 7.745835399879244,
+          "block_max": 8.627086062682686,
+          "effective_window": [
+            2.0,
+            6.0
+          ],
+          "linear_slope": 0.2865106208083036,
+          "fitted_change_over_window": 1.1460424832332143
+        }
+      },
+      "magnetic_strength_distribution_width": {
+        "width": 0.15692865213415239,
+        "block_widths": [
+          0.1257189961590359,
+          0.13269678202289903,
+          0.1520846685997126,
+          0.18130518628633108
+        ],
+        "block_sd": 0.024876643122457603,
+        "definition": "Time-volume pooled std(|B|/B0)=sqrt(2*time_mean(magnetic_density)/B0^2-time_mean(mean(|B|/B0))^2), computed from exact field moments rather than histogram centers. Block widths use the same formula within each time block. Includes temporal drift of the mean; distinct from vector deltaB_rms/B0."
+      },
+      "gradient_comparisons": {
+        "resolved_strain_to_perpendicular_gradient_power": 0.0025780849220952695,
+        "cutoff_strain_to_perpendicular_gradient_power": 0.08312838489759414
+      },
+      "spectral_samples": [
+        {
+          "k_perp": 15.707963267948966,
+          "k_perp_over_2pi": 2.5,
+          "kinetic_power": 0.006224654853562672,
+          "magnetic_power": 0.003363276758919334,
+          "compensated_kinetic_relative_to_n2p5": 1.0,
+          "pressure_C_all_parallel": -0.6328266075523885,
+          "pressure_R_all_parallel": 0.38281650567360453,
+          "pressure_C_full_k_resolved": -0.6328256799192652,
+          "pressure_R_full_k_resolved": 0.38281752120623275
+        },
+        {
+          "k_perp": 28.274333882308138,
+          "k_perp_over_2pi": 4.5,
+          "kinetic_power": 0.0017229810803984261,
+          "magnetic_power": 0.0010884436014008962,
+          "compensated_kinetic_relative_to_n2p5": 0.7372578547452593,
+          "pressure_C_all_parallel": -0.8240117268491531,
+          "pressure_R_all_parallel": 0.17938067134489652,
+          "pressure_C_full_k_resolved": -0.8240113214294653,
+          "pressure_R_full_k_resolved": 0.17938118651996027
+        },
+        {
+          "k_perp": 53.40707511102649,
+          "k_perp_over_2pi": 8.5,
+          "kinetic_power": 0.0005805085630048593,
+          "magnetic_power": 0.0004773202571168192,
+          "compensated_kinetic_relative_to_n2p5": 0.7169544255456289,
+          "pressure_C_all_parallel": -0.9411473764715297,
+          "pressure_R_all_parallel": 0.05896881380231604,
+          "pressure_C_full_k_resolved": -0.941158343502166,
+          "pressure_R_full_k_resolved": 0.05895784179836346
+        },
+        {
+          "k_perp": 103.67255756846318,
+          "k_perp_over_2pi": 16.5,
+          "kinetic_power": 0.00010662115189222575,
+          "magnetic_power": 0.00010348195068073785,
+          "compensated_kinetic_relative_to_n2p5": 0.3977724074607201,
+          "pressure_C_all_parallel": -0.981695292897575,
+          "pressure_R_all_parallel": 0.018312497550346436,
+          "pressure_C_full_k_resolved": -0.9815788968306943,
+          "pressure_R_full_k_resolved": 0.018429001493542603
+        },
+        {
+          "k_perp": 147.6548547187203,
+          "k_perp_over_2pi": 23.5,
+          "kinetic_power": 3.2104766027562484e-05,
+          "magnetic_power": 3.197223259253991e-05,
+          "compensated_kinetic_relative_to_n2p5": 0.21594044383599376,
+          "pressure_C_all_parallel": -0.9889393456699469,
+          "pressure_R_all_parallel": 0.011062456402015407,
+          "pressure_C_full_k_resolved": -0.9859306078076181,
+          "pressure_R_full_k_resolved": 0.014069553923597277
+        }
+      ],
+      "scale_bands": {
+        "k_perp_nyquist_inscribed": 603.1857894892403,
+        "resolved_kmax": 150.79644737231007,
+        "full_k_resolved_max": 150.79644737231007,
+        "cutoff_band_kmin": 452.3893421169302,
+        "definition": "resolved guide <=Nyquist/4 (>=8 cells per axis wavelength); scalar resolved ratios require 0<full |k|<=min(Nyquist_xyz)/4, including pure parallel modes at k_perp=0; plotted perpendicular shells sum all k_parallel, so low-k_perp alone does not guarantee resolved full wavevector; not a convergence claim"
+      },
+      "energy_budget": {
+        "available": true,
+        "applicable": true,
+        "interval": [
+          2.0,
+          6.0
+        ],
+        "requested_interval": [
+          2.0,
+          6.0
+        ],
+        "requested_window_covered": true,
+        "actual_applied_work": 2.5599999999996808,
+        "actual_mean_total_power": 0.6399999999999202,
+        "conserved_total_energy_change": 2.559999999987184,
+        "residual_E_minus_work": -1.2496670365180762e-11,
+        "relative_residual": 4.881511861399344e-12,
+        "sampling": "linear interpolation only if explicit endpoints are between retained history rows"
+      },
+      "forcing_work": {
+        "available": true,
+        "interval": [
+          2.0,
+          6.0
+        ],
+        "requested_interval": [
+          2.0,
+          6.0
+        ],
+        "requested_window_covered": true,
+        "actual_applied_work": 2.5599999999996808,
+        "actual_mean_total_power": 0.6399999999999202,
+        "meaning": "conserved total-energy change of applied forcing kicks",
+        "sampling": "linear interpolation only between retained history rows"
+      },
+      "time_mean_solenoidal_acceleration_fraction": {
+        "mean": 0.5780092123554391,
+        "block_starts": [
+          2.0,
+          3.0,
+          4.0,
+          5.0
+        ],
+        "block_duration": 1.0,
+        "block_means": [
+          0.5434998045913823,
+          0.38450690948777866,
+          0.6443633982926071,
+          0.7396667370499881
+        ],
+        "block_count": 4,
+        "block_sd": 0.15184429933440233,
+        "block_min": 0.38450690948777866,
+        "block_max": 0.7396667370499881,
+        "effective_window": [
+          2.0,
+          6.0
+        ],
+        "linear_slope": 0.06097789217314391,
+        "fitted_change_over_window": 0.24391156869257563
+      },
+      "ratio_of_time_mean_acceleration_powers": 0.6220590650508624,
+      "numerical_integrity": {
+        "classification": "consistent",
+        "max_parseval_relative_error": 4.532674084598439e-15,
+        "max_PDF_integral_error": 1.2388978731792122e-12,
+        "scope": "analysis normalization/finite-field checks, not simulation physics acceptance"
+      },
+      "simulation_integrity": {
+        "classification": "inconclusive",
+        "segments": [
+          {
+            "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14",
+            "returncode": null,
+            "completion_status": "unavailable"
+          }
+        ],
+        "reasons": [
+          "segment completion returncode absent from retained metadata"
+        ],
+        "numerical_counters": {
+          "lf_dfloor": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_pfloor": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_nonfin": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          },
+          "lf_nonpos": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0
+          }
+        },
+        "physical_stage_activity": {
+          "lf_hardbd": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 2781221788.0,
+            "last": 2781221788.0,
+            "window_increment": 2690822658.6047387,
+            "meaning": "cumulative active-cell hard-bound crossings at unprojected LF stages; repeated cell-stage events, not unique cells or a time-integrated volume fraction"
+          },
+          "lf_hwproj": {
+            "available": true,
+            "full_retained_min": 0.0,
+            "full_retained_max": 0.0,
+            "last": 0.0,
+            "window_increment": 0.0,
+            "instrumentation": "not_verified_for_retained_revision",
+            "audited_simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+            "audited_simulation_revisions": [
+              "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+              "71ad25ebce73d33db048defd8f585a7dce0528c2"
+            ],
+            "meaning": "post-WO2 audited source initializes and serializes this field but never increments it; retained values are preserved for provenance and do not establish wall-projection activity or its absence"
+          }
+        },
+        "post_operator_hard_volume": {
+          "available": true,
+          "min_fraction": 0.0,
+          "max_fraction": 0.0,
+          "meaning": "strict hard-bound predicate at retained history times; distinct from unprojected LF stage crossings"
+        },
+        "LF_counter_lifecycle": "audited LF stage/admissibility counters are cumulative and restart-persistent, not reset per history or process; shared-file restart restores the prior global sum on rank0 only, so later MPI history sums preserve it once",
+        "achieved_history_range": [
+          0.0,
+          6.160051519796226
+        ],
+        "requested_window_covered": true,
+        "scope": "completion, coverage and numerical counter evidence; no threshold on physical hard-bound/projection activity or energy residual"
+      },
+      "source_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-interrupted/metrics.json",
+        "sha256": "cbc83c4d71511b730cb760dbdd40d58e7a36218a667bbc6862cbc483805d16b5"
+      },
+      "analysis_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+      "analysis_script": {
+        "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+        "sha256": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+        "bytes": 107580
+      }
+    }
+  },
+  "paired_contrasts": {
+    "B_strength_width_active_over_passive": 0.4588835913527294,
+    "S_parallel_rms_active_over_passive": 0.39013378880266547,
+    "resolved_strain_ratio_active_over_passive": 0.15169350820480196,
+    "max_abs_saved_instantaneous_forcing_fraction_difference": 1.446620601086579e-11
+  },
+  "spectral_sample_rule": "Sample five predeclared shell centers n_perp=k_perp/(2pi)=2.5,4.5,8.5,16.5,23.5. Compensated values are E_K*k_perp^(5/3), divided by their n_perp=2.5 value. These are shape diagnostics, not a slope fit or acceptance tolerance. Full-|k| filter means 0<|k|<=min(Nyquist_xyz)/4.",
+  "pressure_tail_audit": {
+    "schema_version": 1,
+    "classification": "Retrospective positive-state pressure heterogeneity audit, not a diagnosis of the later negative RKL stage",
+    "scope": "All11 retained passive primitive snapshots, volume-weighted equal-volume cell moments/quantiles; float32 output read into float64. U=p_perp+p_parallel/2. Standard deviations are spatial, not temporal uncertainty.",
+    "quantile_probabilities": [
+      0,
+      0.0001,
+      0.001,
+      0.01,
+      0.05,
+      0.5,
+      0.95,
+      0.99,
+      1
+    ],
+    "created_utc": "2026-10-07T15:14:15.831001+00:00",
+    "wall_seconds": 21.47551762405783,
+    "source_script_sha256": "ebea982eb93ee5b5d827fff117c93563c1a9048ee895185cae387531f091c6ba",
+    "analyzer_script_sha256": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+    "compute_node": "frontier03053",
+    "slurm_job_id": "5631477",
+    "rows": [
+      {
+        "time": 0.0,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00000.bin",
+        "file_sha256": "3eb98c80ec98ae27320bd4445cd0c00578f0beeb67eb9a6459dc995ca38769d3",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 5.0,
+            "mean": 5.0,
+            "std": 0.0,
+            "maximum": 5.0,
+            "quantile_values": [
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              0,
+              0,
+              0
+            ],
+            "minimum_cell_rho": 1.0,
+            "minimum_cell_p_parallel": 5.0,
+            "minimum_cell_p_perp": 5.0
+          },
+          "p_perp": {
+            "minimum": 5.0,
+            "mean": 5.0,
+            "std": 0.0,
+            "maximum": 5.0,
+            "quantile_values": [
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0,
+              5.0
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              0,
+              0,
+              0
+            ],
+            "minimum_cell_rho": 1.0,
+            "minimum_cell_p_parallel": 5.0,
+            "minimum_cell_p_perp": 5.0
+          },
+          "U": {
+            "minimum": 7.5,
+            "mean": 7.5,
+            "std": 0.0,
+            "maximum": 7.5,
+            "quantile_values": [
+              7.5,
+              7.5,
+              7.5,
+              7.5,
+              7.5,
+              7.5,
+              7.5,
+              7.5,
+              7.5
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              0,
+              0,
+              0
+            ],
+            "minimum_cell_rho": 1.0,
+            "minimum_cell_p_parallel": 5.0,
+            "minimum_cell_p_perp": 5.0
+          }
+        }
+      },
+      {
+        "time": 0.25035249236781393,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00001.bin",
+        "file_sha256": "08f2e0b7ee64bec80e2c3404888413fa6aa75d0de0901f62506cdddc5c2720bf",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 3.800164222717285,
+            "mean": 4.968180895170243,
+            "std": 0.6463701781667708,
+            "maximum": 6.411299228668213,
+            "quantile_values": [
+              3.800164222717285,
+              3.8535658675432205,
+              3.8707694470882417,
+              3.9453184008598328,
+              4.056019306182861,
+              4.96660041809082,
+              5.969952702522278,
+              6.210693955421448,
+              6.411299228668213
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              126,
+              60,
+              71
+            ],
+            "minimum_cell_rho": 0.890781581401825,
+            "minimum_cell_p_parallel": 3.800164222717285,
+            "minimum_cell_p_perp": 4.34739351272583
+          },
+          "p_perp": {
+            "minimum": 4.335134506225586,
+            "mean": 5.048563803586182,
+            "std": 0.3662853237580029,
+            "maximum": 5.883619785308838,
+            "quantile_values": [
+              4.335134506225586,
+              4.378587011098862,
+              4.392325294017792,
+              4.431880474090576,
+              4.508154273033142,
+              5.026357173919678,
+              5.639132022857666,
+              5.76783812046051,
+              5.883619785308838
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              125,
+              55,
+              62
+            ],
+            "minimum_cell_rho": 0.8908259272575378,
+            "minimum_cell_p_parallel": 3.800250768661499,
+            "minimum_cell_p_perp": 4.335134506225586
+          },
+          "U": {
+            "minimum": 6.2352598905563354,
+            "mean": 7.532654251171304,
+            "std": 0.6578730128972239,
+            "maximum": 8.799663782119751,
+            "quantile_values": [
+              6.2352598905563354,
+              6.32702216476202,
+              6.348441451787949,
+              6.432054370641708,
+              6.555099189281464,
+              7.50825297832489,
+              8.486739158630371,
+              8.66211712360382,
+              8.799663782119751
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              125,
+              55,
+              62
+            ],
+            "minimum_cell_rho": 0.8908259272575378,
+            "minimum_cell_p_parallel": 3.800250768661499,
+            "minimum_cell_p_perp": 4.335134506225586
+          }
+        }
+      },
+      {
+        "time": 0.5003587006267833,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00002.bin",
+        "file_sha256": "7b5546608b629442947b682083d80422efa4689859c07fc49dd9ecc7ccad3f59",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 4.036188125610352,
+            "mean": 4.727549183448631,
+            "std": 0.2947903136617224,
+            "maximum": 5.549310684204102,
+            "quantile_values": [
+              4.036188125610352,
+              4.167912483215332,
+              4.182828903198242,
+              4.213384985923767,
+              4.291356563568115,
+              4.727747917175293,
+              5.27102530002594,
+              5.429010033607483,
+              5.549310684204102
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              263,
+              53,
+              71
+            ],
+            "minimum_cell_rho": 0.9658441543579102,
+            "minimum_cell_p_parallel": 4.036188125610352,
+            "minimum_cell_p_perp": 4.521518230438232
+          },
+          "p_perp": {
+            "minimum": 4.521518230438232,
+            "mean": 5.198922730925646,
+            "std": 0.26895011742890496,
+            "maximum": 6.115304470062256,
+            "quantile_values": [
+              4.521518230438232,
+              4.580333783626556,
+              4.6076483726501465,
+              4.6901761293411255,
+              4.7883604764938354,
+              5.191968679428101,
+              5.633433938026428,
+              5.878521084785461,
+              6.115304470062256
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              263,
+              53,
+              71
+            ],
+            "minimum_cell_rho": 0.9658441543579102,
+            "minimum_cell_p_parallel": 4.036188125610352,
+            "minimum_cell_p_perp": 4.521518230438232
+          },
+          "U": {
+            "minimum": 6.539612293243408,
+            "mean": 7.562697322649961,
+            "std": 0.37232198772347513,
+            "maximum": 8.82760739326477,
+            "quantile_values": [
+              6.539612293243408,
+              6.811559499502182,
+              6.828808355331421,
+              6.881017684936523,
+              6.979093551635742,
+              7.582205295562744,
+              8.164157927036285,
+              8.492095291614532,
+              8.82760739326477
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              263,
+              53,
+              71
+            ],
+            "minimum_cell_rho": 0.9658441543579102,
+            "minimum_cell_p_parallel": 4.036188125610352,
+            "minimum_cell_p_perp": 4.521518230438232
+          }
+        }
+      },
+      {
+        "time": 0.7503610442578461,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00003.bin",
+        "file_sha256": "5eedb6df1bf44655c196ad831a3813b8a5f36f35a3a5691dc70ab00185d758d6",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 3.4389312267303467,
+            "mean": 4.681989089027225,
+            "std": 0.5547020466165982,
+            "maximum": 6.394830703735352,
+            "quantile_values": [
+              3.4389312267303467,
+              3.497350528240204,
+              3.5261147022247314,
+              3.6442574858665466,
+              3.8064348101615906,
+              4.728762149810791,
+              5.520202159881592,
+              5.906723618507385,
+              6.394830703735352
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              340,
+              87,
+              146
+            ],
+            "minimum_cell_rho": 0.8683780431747437,
+            "minimum_cell_p_parallel": 3.4389312267303467,
+            "minimum_cell_p_perp": 4.423921585083008
+          },
+          "p_perp": {
+            "minimum": 4.410040378570557,
+            "mean": 5.2935155491375685,
+            "std": 0.530471795211183,
+            "maximum": 6.5145673751831055,
+            "quantile_values": [
+              4.410040378570557,
+              4.457881659269333,
+              4.484072208404541,
+              4.520145416259766,
+              4.58308732509613,
+              5.233717441558838,
+              6.203935146331787,
+              6.367954730987549,
+              6.5145673751831055
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              282,
+              164,
+              96
+            ],
+            "minimum_cell_rho": 0.8885887861251831,
+            "minimum_cell_p_parallel": 3.615182399749756,
+            "minimum_cell_p_perp": 4.410040378570557
+          },
+          "U": {
+            "minimum": 6.137074112892151,
+            "mean": 7.634510093651182,
+            "std": 0.785827825720714,
+            "maximum": 9.478028297424316,
+            "quantile_values": [
+              6.137074112892151,
+              6.229186953008175,
+              6.255366572737694,
+              6.35636630654335,
+              6.490302503108978,
+              7.618288278579712,
+              8.924300968647003,
+              9.168537974357605,
+              9.478028297424316
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              340,
+              92,
+              146
+            ],
+            "minimum_cell_rho": 0.8697365522384644,
+            "minimum_cell_p_parallel": 3.4408810138702393,
+            "minimum_cell_p_perp": 4.416633605957031
+          }
+        }
+      },
+      {
+        "time": 1.0000312030102498,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00004.bin",
+        "file_sha256": "9da13ad0322f1908698ffeed7ba2f009b1815243eea4f568631e8c593ebad54e",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 3.240213632583618,
+            "mean": 4.814477412927772,
+            "std": 0.978763293628998,
+            "maximum": 7.906339168548584,
+            "quantile_values": [
+              3.240213632583618,
+              3.2517789721488954,
+              3.2855516493320467,
+              3.4046460390090942,
+              3.5614930987358093,
+              4.650225639343262,
+              6.669616937637329,
+              7.21524977684021,
+              7.906339168548584
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              99,
+              41,
+              153
+            ],
+            "minimum_cell_rho": 0.8215928673744202,
+            "minimum_cell_p_parallel": 3.240213632583618,
+            "minimum_cell_p_perp": 4.163602352142334
+          },
+          "p_perp": {
+            "minimum": 4.068493843078613,
+            "mean": 5.295910341185373,
+            "std": 0.7233904668401815,
+            "maximum": 7.489055633544922,
+            "quantile_values": [
+              4.068493843078613,
+              4.076661533117294,
+              4.10266854763031,
+              4.171427607536316,
+              4.28850257396698,
+              5.2230212688446045,
+              6.5235806703567505,
+              6.959165453910828,
+              7.489055633544922
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              111,
+              130,
+              105
+            ],
+            "minimum_cell_rho": 0.8482780456542969,
+            "minimum_cell_p_parallel": 3.6493008136749268,
+            "minimum_cell_p_perp": 4.068493843078613
+          },
+          "U": {
+            "minimum": 5.70527184009552,
+            "mean": 7.7031490476492595,
+            "std": 1.1881235953730909,
+            "maximum": 11.10747766494751,
+            "quantile_values": [
+              5.70527184009552,
+              5.7741528028249745,
+              5.8039725601673124,
+              5.9162338972091675,
+              6.079215168952942,
+              7.576594710350037,
+              9.756517469882965,
+              10.436912775039673,
+              11.10747766494751
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              123,
+              29,
+              136
+            ],
+            "minimum_cell_rho": 0.8284285664558411,
+            "minimum_cell_p_parallel": 3.2625372409820557,
+            "minimum_cell_p_perp": 4.074003219604492
+          }
+        }
+      },
+      {
+        "time": 1.2503364453904964,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00005.bin",
+        "file_sha256": "336a60d8a5f0964a0be4e8c15fd4d9d5ecfe6afdf24b783853e934942477581c",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 2.5159595012664795,
+            "mean": 5.1847224199967865,
+            "std": 1.5436262723569172,
+            "maximum": 9.020920753479004,
+            "quantile_values": [
+              2.5159595012664795,
+              2.5566668343544006,
+              2.609813338518143,
+              2.7987720370292664,
+              3.013460636138916,
+              5.051855564117432,
+              7.713646173477173,
+              8.355245351791382,
+              9.020920753479004
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              121,
+              19,
+              131
+            ],
+            "minimum_cell_rho": 0.6872103810310364,
+            "minimum_cell_p_parallel": 2.5159595012664795,
+            "minimum_cell_p_perp": 3.3307223320007324
+          },
+          "p_perp": {
+            "minimum": 3.328806161880493,
+            "mean": 5.247925485353992,
+            "std": 1.016289902337462,
+            "maximum": 8.026999473571777,
+            "quantile_values": [
+              3.328806161880493,
+              3.3426750445365907,
+              3.3781804502010346,
+              3.4589595198631287,
+              3.6715803146362305,
+              5.322485685348511,
+              6.8884583711624146,
+              7.322436809539795,
+              8.026999473571777
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              99,
+              142,
+              117
+            ],
+            "minimum_cell_rho": 0.7302713394165039,
+            "minimum_cell_p_parallel": 3.640728712081909,
+            "minimum_cell_p_perp": 3.328806161880493
+          },
+          "U": {
+            "minimum": 4.588702082633972,
+            "mean": 7.840286695352385,
+            "std": 1.7561748041267595,
+            "maximum": 12.485420227050781,
+            "quantile_values": [
+              4.588702082633972,
+              4.649022400379181,
+              4.7148481696844105,
+              4.927945584058762,
+              5.230713367462158,
+              7.8874722719192505,
+              10.664442241191864,
+              11.477048993110657,
+              12.485420227050781
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              121,
+              19,
+              131
+            ],
+            "minimum_cell_rho": 0.6872103810310364,
+            "minimum_cell_p_parallel": 2.5159595012664795,
+            "minimum_cell_p_perp": 3.3307223320007324
+          }
+        }
+      },
+      {
+        "time": 1.5000185777764605,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00006.bin",
+        "file_sha256": "e81df1c82e9fd1ccc36b67b4b37054395e14e5e13b37a6899bb022d6a4be06ed",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 2.8781628608703613,
+            "mean": 5.1149110618154605,
+            "std": 1.001838813643126,
+            "maximum": 7.938413143157959,
+            "quantile_values": [
+              2.8781628608703613,
+              2.8968061393499376,
+              2.958487403392792,
+              3.1539774537086487,
+              3.545281708240509,
+              5.055652141571045,
+              6.6822367906570435,
+              7.232124209403992,
+              7.938413143157959
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              186,
+              7,
+              137
+            ],
+            "minimum_cell_rho": 0.7395073771476746,
+            "minimum_cell_p_parallel": 2.8781628608703613,
+            "minimum_cell_p_perp": 4.086179733276367
+          },
+          "p_perp": {
+            "minimum": 4.065122604370117,
+            "mean": 5.330277917952791,
+            "std": 0.5036203283590056,
+            "maximum": 7.187279224395752,
+            "quantile_values": [
+              4.065122604370117,
+              4.094360425472259,
+              4.142068803310394,
+              4.281289458274841,
+              4.473235130310059,
+              5.339404582977295,
+              6.12576162815094,
+              6.554813504219055,
+              7.187279224395752
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              183,
+              19,
+              130
+            ],
+            "minimum_cell_rho": 0.7399116158485413,
+            "minimum_cell_p_parallel": 2.8838083744049072,
+            "minimum_cell_p_perp": 4.065122604370117
+          },
+          "U": {
+            "minimum": 5.507026791572571,
+            "mean": 7.88773344886052,
+            "std": 0.9371341439218945,
+            "maximum": 11.113245487213135,
+            "quantile_values": [
+              5.507026791572571,
+              5.547151052057743,
+              5.6288007467985155,
+              5.906369775533676,
+              6.309345901012421,
+              7.901814222335815,
+              9.318607449531555,
+              10.085061728954315,
+              11.113245487213135
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              183,
+              19,
+              130
+            ],
+            "minimum_cell_rho": 0.7399116158485413,
+            "minimum_cell_p_parallel": 2.8838083744049072,
+            "minimum_cell_p_perp": 4.065122604370117
+          }
+        }
+      },
+      {
+        "time": 1.75031270648717,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00007.bin",
+        "file_sha256": "23c76ae509867bf7b52c845c495f80fa02061d66d9182f9889c4fc6ed92f42be",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 2.807363510131836,
+            "mean": 5.43985830787994,
+            "std": 1.315197544706369,
+            "maximum": 8.61341381072998,
+            "quantile_values": [
+              2.807363510131836,
+              2.8391273123025895,
+              2.9430914640426638,
+              3.174014925956726,
+              3.491356313228607,
+              5.391342639923096,
+              7.582134366035461,
+              8.041652917861938,
+              8.61341381072998
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              193,
+              34,
+              135
+            ],
+            "minimum_cell_rho": 0.6968135833740234,
+            "minimum_cell_p_parallel": 2.807363510131836,
+            "minimum_cell_p_perp": 3.768036127090454
+          },
+          "p_perp": {
+            "minimum": 3.4677414894104004,
+            "mean": 5.343465976251486,
+            "std": 1.043997194155222,
+            "maximum": 8.26374626159668,
+            "quantile_values": [
+              3.4677414894104004,
+              3.4847907519340513,
+              3.556850129365921,
+              3.718294322490692,
+              3.9480528235435486,
+              5.122483730316162,
+              7.254927277565002,
+              7.79006290435791,
+              8.26374626159668
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              235,
+              72,
+              175
+            ],
+            "minimum_cell_rho": 0.7770436406135559,
+            "minimum_cell_p_parallel": 3.7838926315307617,
+            "minimum_cell_p_perp": 3.4677414894104004
+          },
+          "U": {
+            "minimum": 5.1297420263290405,
+            "mean": 8.063395130191456,
+            "std": 1.617583571424146,
+            "maximum": 12.148788213729858,
+            "quantile_values": [
+              5.1297420263290405,
+              5.17465421885252,
+              5.263728737831116,
+              5.476930767297745,
+              5.802083432674408,
+              7.802061557769775,
+              10.976382374763489,
+              11.522705078125,
+              12.148788213729858
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              194,
+              31,
+              133
+            ],
+            "minimum_cell_rho": 0.6837359070777893,
+            "minimum_cell_p_parallel": 2.8549840450286865,
+            "minimum_cell_p_perp": 3.7022500038146973
+          }
+        }
+      },
+      {
+        "time": 2.0001742706808816,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00008.bin",
+        "file_sha256": "16962584379dba4c53e17b0dbe092239ebd146c065cd573855ab3e8bcfb7381d",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 2.7732086181640625,
+            "mean": 5.454845525408692,
+            "std": 0.8851046755335178,
+            "maximum": 9.207392692565918,
+            "quantile_values": [
+              2.7732086181640625,
+              2.862697983384132,
+              2.9858111798763276,
+              3.3647632002830505,
+              3.883898973464966,
+              5.501928329467773,
+              6.872158169746399,
+              7.541831374168396,
+              9.207392692565918
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              164,
+              137,
+              40
+            ],
+            "minimum_cell_rho": 0.7084800601005554,
+            "minimum_cell_p_parallel": 2.7732086181640625,
+            "minimum_cell_p_perp": 3.9948203563690186
+          },
+          "p_perp": {
+            "minimum": 3.6200404167175293,
+            "mean": 5.4682681794680255,
+            "std": 0.6559432834217797,
+            "maximum": 9.495986938476562,
+            "quantile_values": [
+              3.6200404167175293,
+              3.6997474390268326,
+              3.9578224539756777,
+              4.253250598907471,
+              4.516261100769043,
+              5.41268253326416,
+              6.627315998077393,
+              7.180705308914185,
+              9.495986938476562
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              147,
+              148,
+              31
+            ],
+            "minimum_cell_rho": 0.6795771718025208,
+            "minimum_cell_p_parallel": 3.386904716491699,
+            "minimum_cell_p_perp": 3.6200404167175293
+          },
+          "U": {
+            "minimum": 5.170313358306885,
+            "mean": 8.195690942172371,
+            "std": 0.9640305902679399,
+            "maximum": 14.099683284759521,
+            "quantile_values": [
+              5.170313358306885,
+              5.298264897167683,
+              5.662689623236656,
+              6.173488289117813,
+              6.678049802780151,
+              8.134957790374756,
+              9.834073603153229,
+              10.746768116950989,
+              14.099683284759521
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              155,
+              142,
+              33
+            ],
+            "minimum_cell_rho": 0.6810857653617859,
+            "minimum_cell_p_parallel": 2.973806381225586,
+            "minimum_cell_p_perp": 3.683410167694092
+          }
+        }
+      },
+      {
+        "time": 2.250245599545316,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00009.bin",
+        "file_sha256": "0f1ac8bd4a2f6d10f6b0bed13c55b67c9e9ad68239ec6becdd1b7b6decdb34fe",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 3.031435966491699,
+            "mean": 5.550418335682109,
+            "std": 0.8760831758618144,
+            "maximum": 8.386871337890625,
+            "quantile_values": [
+              3.031435966491699,
+              3.08897950053215,
+              3.2083655655384065,
+              3.614661931991577,
+              4.135847568511963,
+              5.564524173736572,
+              7.0260114669799805,
+              7.4957616329193115,
+              8.386871337890625
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              69,
+              52,
+              147
+            ],
+            "minimum_cell_rho": 0.7484174370765686,
+            "minimum_cell_p_parallel": 3.031435966491699,
+            "minimum_cell_p_perp": 4.343208312988281
+          },
+          "p_perp": {
+            "minimum": 3.6604132652282715,
+            "mean": 5.578488821924768,
+            "std": 0.5778012077801208,
+            "maximum": 7.880458831787109,
+            "quantile_values": [
+              3.6604132652282715,
+              3.8141470700502396,
+              4.110351026058197,
+              4.3669193983078,
+              4.633501887321472,
+              5.5527143478393555,
+              6.593698263168335,
+              6.952738642692566,
+              7.880458831787109
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              151,
+              133,
+              55
+            ],
+            "minimum_cell_rho": 0.6621086001396179,
+            "minimum_cell_p_parallel": 4.538424491882324,
+            "minimum_cell_p_perp": 3.6604132652282715
+          },
+          "U": {
+            "minimum": 5.633159160614014,
+            "mean": 8.353697989765822,
+            "std": 0.8847792532917842,
+            "maximum": 11.583247900009155,
+            "quantile_values": [
+              5.633159160614014,
+              5.761475315093994,
+              5.946494129300118,
+              6.450738042593002,
+              6.954731047153473,
+              8.333925724029541,
+              9.87585562467575,
+              10.467258512973785,
+              11.583247900009155
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              159,
+              129,
+              55
+            ],
+            "minimum_cell_rho": 0.6743087768554688,
+            "minimum_cell_p_parallel": 3.546659469604492,
+            "minimum_cell_p_perp": 3.8598294258117676
+          }
+        }
+      },
+      {
+        "time": 2.500300303503464,
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00010.bin",
+        "file_sha256": "f8661cbf499ac0e27f67803f04022f6f22e35b71c758f51260105368a1150714",
+        "quantiles": [
+          0,
+          0.0001,
+          0.001,
+          0.01,
+          0.05,
+          0.5,
+          0.95,
+          0.99,
+          1
+        ],
+        "pressures": {
+          "p_parallel": {
+            "minimum": 2.5139992237091064,
+            "mean": 5.679487124322316,
+            "std": 1.1451962391189385,
+            "maximum": 9.689306259155273,
+            "quantile_values": [
+              2.5139992237091064,
+              2.5769145625829695,
+              2.830888193845749,
+              3.291033685207367,
+              3.8906677961349487,
+              5.598104238510132,
+              7.639066815376282,
+              8.054370164871216,
+              9.689306259155273
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              250,
+              70,
+              170
+            ],
+            "minimum_cell_rho": 0.6958187818527222,
+            "minimum_cell_p_parallel": 2.5139992237091064,
+            "minimum_cell_p_perp": 4.002971172332764
+          },
+          "p_perp": {
+            "minimum": 3.712932825088501,
+            "mean": 5.739428618576515,
+            "std": 0.8386668769119996,
+            "maximum": 8.40738582611084,
+            "quantile_values": [
+              3.712932825088501,
+              3.7706105172634126,
+              3.8699517250061035,
+              4.078272700309753,
+              4.438542127609253,
+              5.702334880828857,
+              7.196807861328125,
+              7.680240631103516,
+              8.40738582611084
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              311,
+              85,
+              178
+            ],
+            "minimum_cell_rho": 0.7567287087440491,
+            "minimum_cell_p_parallel": 5.149305820465088,
+            "minimum_cell_p_perp": 3.712932825088501
+          },
+          "U": {
+            "minimum": 5.229161500930786,
+            "mean": 8.579172180737672,
+            "std": 1.3292431731750745,
+            "maximum": 13.146077632904053,
+            "quantile_values": [
+              5.229161500930786,
+              5.290848095715046,
+              5.467668208479881,
+              5.930898934602737,
+              6.52015033364296,
+              8.513452768325806,
+              10.889178097248077,
+              11.555908918380737,
+              13.146077632904053
+            ],
+            "nonpositive_count": 0,
+            "minimum_cell_zyx": [
+              278,
+              77,
+              61
+            ],
+            "minimum_cell_rho": 0.6596732139587402,
+            "minimum_cell_p_parallel": 2.8019089698791504,
+            "minimum_cell_p_perp": 3.828207015991211
+          }
+        }
+      }
+    ]
+  },
+  "limitations": [
+    "Neither requested retrospective interval is the canonical [6,14] window.",
+    "Four .5-time startup blocks and four1-time active blocks are descriptive and correlated (forcing tcorr=2); sample SD is not standard error or confidence interval.",
+    "No full-precision state at the original failure was dumped; the retained float32 snapshot at2.5003 remained positive.",
+    "Passive thermal pressure is a diagnostic; actual isothermal momentum pressure is5*rho.",
+    "No spatial-convergence, active/passive ensemble, or LF-coefficient-validation claim.",
+    "Initial96PLM reference has different grid, reconstruction and averaging epoch; this comparison is not a controlled convergence test."
+  ],
+  "same_settings_diagnostic_replay": {
+    "source": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/floor-diagnosis/reconstruction-same-settings.log",
+      "sha256": "8254df43d91a31e6cd4c80df618a1ad8eb5c6482d721ce148c3e047e2d9c9040"
+    },
+    "sweep": "pre",
+    "stage": 13,
+    "nstages": 15,
+    "floor_count": 1,
+    "cells": [
+      {
+        "raw": {
+          "time": 2.507714514270586,
+          "cycle": 5800,
+          "dt": 0.0003084865904790016,
+          "rank": 25,
+          "gid": 51,
+          "local": [
+            1,
+            18,
+            17,
+            25
+          ],
+          "interior": 1,
+          "xyz": [
+            0.3671875,
+            0.8255208333333334,
+            0.5807291666666666
+          ],
+          "passive": 1,
+          "rho": 1.2429604195819763,
+          "U": 0.08260954826842161,
+          "mu": -0.02608564422014277,
+          "Bcached": 0.33574586805965595,
+          "Bfresh": 0.33574586805965595,
+          "B": [
+            0.18583036690368945,
+            -0.2068522598455864,
+            0.1881608494143935
+          ],
+          "pp_raw": 0.18273539106201758,
+          "pt_raw": -0.008758147262587182,
+          "pp_after": 0.18273539106201758,
+          "pt_after": 1e-12,
+          "U_after": 0.0913676955320088,
+          "mu_after": 2.978443206998211e-12,
+          "pfloor": 1e-12
+        },
+        "earlier_pressures": {
+          "start": {
+            "parallel": 0.15728019040287505,
+            "perpendicular": 0.044554902483743136
+          },
+          "prev1": {
+            "parallel": 0.21074705000619326,
+            "perpendicular": 0.015384928909151534
+          },
+          "prev2": {
+            "parallel": 0.2343297561957992,
+            "perpendicular": 0.036508246822591656
+          }
+        },
+        "recomputed_pressure_perp": -0.008758147262587182,
+        "recomputed_pressure_parallel": 0.18273539106201758,
+        "cached_B_minus_fresh": 0.0
+      }
+    ],
+    "caution": "Diagnostic replay evidence supplements the original sparse progress log; this small-data retrospective review does not identify the upstream origin of the cold entry state."
+  }
+}

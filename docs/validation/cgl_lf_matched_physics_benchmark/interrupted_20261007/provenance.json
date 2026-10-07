@@ -1,0 +1,461 @@
+{
+  "schema_version": 1,
+  "numerical_source_revision": "ab9b543e7e6a972ebfc026d0c98ea3dfee9cb55b",
+  "executable_sha256": "958eaa993533b611b05f058c767c6c1f11a751d6094389ba1107a7744abf4cd6",
+  "raw_runs": {
+    "active": {
+      "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14",
+      "metadata_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/benchmark_metadata.json",
+      "metadata_sha256": "2166aed8a979d4912ccb19d11608716fd0e79a67cb6509d7c639e5ee3f4a8a17",
+      "retained_simulation_revision": "ab9b543e7e6a972ebfc026d0c98ea3dfee9cb55b",
+      "retained_executable_sha256": "958eaa993533b611b05f058c767c6c1f11a751d6094389ba1107a7744abf4cd6",
+      "raw_metadata_has_ended_utc": false,
+      "last_history_time": 6.160051519796226,
+      "snapshots": [
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "size_bytes": 509627298
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00001.bin",
+          "time": 0.250223673603537,
+          "cycle": 657,
+          "size_bytes": 509627318
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00002.bin",
+          "time": 0.5002540279164936,
+          "cycle": 1307,
+          "size_bytes": 509627319
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00003.bin",
+          "time": 0.7501481142604803,
+          "cycle": 1938,
+          "size_bytes": 509627319
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00004.bin",
+          "time": 1.0000551721743545,
+          "cycle": 2599,
+          "size_bytes": 509627319
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00005.bin",
+          "time": 1.2503227439929188,
+          "cycle": 3280,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00006.bin",
+          "time": 1.5002938052966144,
+          "cycle": 4017,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00007.bin",
+          "time": 1.7501761394813689,
+          "cycle": 4821,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00008.bin",
+          "time": 2.0002149331334524,
+          "cycle": 5681,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00009.bin",
+          "time": 2.250052514675405,
+          "cycle": 6575,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00010.bin",
+          "time": 2.500227141919865,
+          "cycle": 7433,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00011.bin",
+          "time": 2.7500778147525735,
+          "cycle": 8332,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00012.bin",
+          "time": 3.000069256989115,
+          "cycle": 9281,
+          "size_bytes": 509627451
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00013.bin",
+          "time": 3.2500480575512887,
+          "cycle": 10299,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00014.bin",
+          "time": 3.500076724158579,
+          "cycle": 11359,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00015.bin",
+          "time": 3.7500216294749866,
+          "cycle": 12411,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00016.bin",
+          "time": 4.000212871498801,
+          "cycle": 13484,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00017.bin",
+          "time": 4.250196956191036,
+          "cycle": 14499,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00018.bin",
+          "time": 4.50006820164811,
+          "cycle": 15506,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00019.bin",
+          "time": 4.750052968365542,
+          "cycle": 16500,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00020.bin",
+          "time": 5.000171684529656,
+          "cycle": 17489,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00021.bin",
+          "time": 5.250267929639837,
+          "cycle": 18460,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00022.bin",
+          "time": 5.500084747735036,
+          "cycle": 19368,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00023.bin",
+          "time": 5.750116549931974,
+          "cycle": 20323,
+          "size_bytes": 509627452
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00024.bin",
+          "time": 6.000187734119819,
+          "cycle": 21301,
+          "size_bytes": 509627452
+        }
+      ],
+      "termination": {
+        "classification": "user-requested interruption",
+        "basis": "User instruction to stop and inspect; Slurm cancellation message retained in run.log",
+        "log_tail": [
+          "elapsed=3.860757e+03 cycle=21700 time=6.102478e+00 dt=2.584383e-04",
+          "elapsed=3.879059e+03 cycle=21800 time=6.128320e+00 dt=2.583632e-04",
+          "elapsed=3.897335e+03 cycle=21900 time=6.154129e+00 dt=2.576817e-04",
+          "srun: Job step aborted: Waiting up to 32 seconds for job step to finish.",
+          "[2026-10-07T11:00:02.075] error: *** STEP 5631202.1 ON frontier01416 CANCELLED AT 2026-10-07T11:00:02 DUE to SIGNAL Terminated ***"
+        ]
+      }
+    },
+    "passive": {
+      "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14",
+      "metadata_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/benchmark_metadata.json",
+      "metadata_sha256": "dec783a1d4f00d3c8f9377cc3083c283d922124e20e4bebd9769d72502ab0c49",
+      "retained_simulation_revision": "ab9b543e7e6a972ebfc026d0c98ea3dfee9cb55b",
+      "retained_executable_sha256": "958eaa993533b611b05f058c767c6c1f11a751d6094389ba1107a7744abf4cd6",
+      "raw_metadata_has_ended_utc": true,
+      "last_history_time": 2.500300303503464,
+      "snapshots": [
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00000.bin",
+          "time": 0.0,
+          "cycle": 0,
+          "size_bytes": 509627298
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00001.bin",
+          "time": 0.25035249236781393,
+          "cycle": 460,
+          "size_bytes": 509627399
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00002.bin",
+          "time": 0.5003587006267833,
+          "cycle": 957,
+          "size_bytes": 509627399
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00003.bin",
+          "time": 0.7503610442578461,
+          "cycle": 1458,
+          "size_bytes": 509627400
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00004.bin",
+          "time": 1.0000312030102498,
+          "cycle": 1936,
+          "size_bytes": 509627400
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00005.bin",
+          "time": 1.2503364453904964,
+          "cycle": 2437,
+          "size_bytes": 509627532
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00006.bin",
+          "time": 1.5000185777764605,
+          "cycle": 3001,
+          "size_bytes": 509627532
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00007.bin",
+          "time": 1.75031270648717,
+          "cycle": 3600,
+          "size_bytes": 509627532
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00008.bin",
+          "time": 2.0001742706808816,
+          "cycle": 4260,
+          "size_bytes": 509627532
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00009.bin",
+          "time": 2.250245599545316,
+          "cycle": 4994,
+          "size_bytes": 509627532
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/passive-to14/bin/cgl_lf_matched_beta10.mhd_w_bcc.00010.bin",
+          "time": 2.500300303503464,
+          "cycle": 5776,
+          "size_bytes": 509627532
+        }
+      ],
+      "termination": {
+        "classification": "numerical pressure-floor failure",
+        "basis": "Strict pressure-floor fatal message retained in run.log and floor-diagnosis/evidence.json",
+        "log_tail": [
+          "srun: error: frontier01049: tasks 40-47: Terminated",
+          "srun: error: frontier01172: tasks 48-55: Terminated",
+          "srun: error: frontier00319: tasks 16-23: Terminated",
+          "srun: error: frontier00103: tasks 0-7: Terminated",
+          "srun: Force Terminated StepId=5631202.0"
+        ]
+      }
+    }
+  },
+  "analysis_plan": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/analysis-plan.json",
+    "sha256": "cc3d239438608eb978abf74eb4689c1bc0fbf1b44d5082bd3f5ace7068e16827"
+  },
+  "analysis_sources": {
+    "checkout": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2",
+    "revision": "d8f88be27c2723e6b5d73e0fe75a859a50f9d637",
+    "files": {
+      "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/compare_cgl_lf_physics_benchmark.py": "e6d179637cc73f924279a31cbbfb4848d796661c7169e3deeff6caad648c4f31",
+      "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+      "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_paper.py": "6ef84240662c49f78678078e33a8283e5a594c8277ac06b1e22446ce25ed0b2c"
+    }
+  },
+  "cached_metrics": {
+    "active_startup": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/active/metrics.json",
+      "sha256": "d51aee535a8a010458e36ecaf74309631dcdda6b9a8899966b2f994c84833618"
+    },
+    "passive_startup": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/passive/metrics.json",
+      "sha256": "38f3e5ab07415d2db0913d1f6cce75e6fb90245798483314638870ba5b648bdb"
+    },
+    "active_later": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-interrupted/metrics.json",
+      "sha256": "cbc83c4d71511b730cb760dbdd40d58e7a36218a667bbc6862cbc483805d16b5"
+    }
+  },
+  "paired_metrics": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/metrics.json",
+    "sha256": "d4b0ccee5dd7fbc82d6b9ebeeee99563adf4468ab80e74fb3d2b159a5819725b"
+  },
+  "publication_script": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/publish_review.py",
+    "sha256": "0c4e604e4a7dbfa567e7a378eb17d2d2f432306f2ba4a7404af7c76d66ddd1eb"
+  },
+  "pressure_tail_script": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/inspect_passive_pressure_tails.py",
+    "sha256": "ebea982eb93ee5b5d827fff117c93563c1a9048ee895185cae387531f091c6ba"
+  },
+  "original_raw_metadata_unchanged": true,
+  "history_amendment": "history-inventory-amendment.json",
+  "plot_audits": {
+    "paired": {
+      "pdfs": {
+        "ok": true,
+        "remaining_findings": [],
+        "figsize_inches": [
+          10.0,
+          4.2
+        ],
+        "dpi": 240.0,
+        "exemptions": {
+          "figure.size": "Multiple scientific panels need a larger canvas."
+        },
+        "files": [
+          "pdfs.pdf",
+          "pdfs.png"
+        ]
+      },
+      "occupancy": {
+        "ok": true,
+        "remaining_findings": [],
+        "figsize_inches": [
+          10.0,
+          4.2
+        ],
+        "dpi": 240.0,
+        "exemptions": {
+          "figure.size": "Multiple scientific panels need a larger canvas."
+        },
+        "files": [
+          "occupancy.pdf",
+          "occupancy.png"
+        ]
+      },
+      "spectra": {
+        "ok": true,
+        "remaining_findings": [],
+        "figsize_inches": [
+          13.0,
+          4.3
+        ],
+        "dpi": 240.0,
+        "exemptions": {
+          "figure.size": "Multiple scientific panels need a larger canvas."
+        },
+        "files": [
+          "spectra.pdf",
+          "spectra.png"
+        ]
+      },
+      "pressure_balance_scale": {
+        "ok": true,
+        "remaining_findings": [],
+        "figsize_inches": [
+          10.0,
+          4.2
+        ],
+        "dpi": 240.0,
+        "exemptions": {
+          "figure.size": "Multiple scientific panels need a larger canvas."
+        },
+        "files": [
+          "pressure_balance_scale.pdf",
+          "pressure_balance_scale.png"
+        ]
+      }
+    },
+    "active_later": {
+      "dbfplot_version": "0.15.0",
+      "matplotlib_version": "3.10.7",
+      "profile": "paper",
+      "style": "dbfplot default (Dark2)",
+      "figures": {
+        "marginality": {
+          "ok": true,
+          "remaining_findings": [],
+          "figsize_inches": [
+            9.0,
+            7.0
+          ],
+          "dpi": 240.0,
+          "exemptions": {
+            "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+          },
+          "files": [
+            "marginality.pdf",
+            "marginality.png"
+          ]
+        },
+        "pressure_balance": {
+          "ok": true,
+          "remaining_findings": [],
+          "figsize_inches": [
+            12.0,
+            4.2
+          ],
+          "dpi": 240.0,
+          "exemptions": {
+            "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+          },
+          "files": [
+            "pressure_balance.pdf",
+            "pressure_balance.png"
+          ]
+        },
+        "gradients": {
+          "ok": true,
+          "remaining_findings": [],
+          "figsize_inches": [
+            10.0,
+            7.5
+          ],
+          "dpi": 240.0,
+          "exemptions": {
+            "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+          },
+          "files": [
+            "gradients.pdf",
+            "gradients.png"
+          ]
+        },
+        "spectra_energy": {
+          "ok": true,
+          "remaining_findings": [],
+          "figsize_inches": [
+            12.0,
+            7.5
+          ],
+          "dpi": 240.0,
+          "exemptions": {
+            "figure.size": "Multiple scientific panels require a larger canvas than the 6.5 x 4 inch single-panel profile."
+          },
+          "files": [
+            "spectra_energy.pdf",
+            "spectra_energy.png"
+          ]
+        }
+      },
+      "variability": "Pointwise minimum and maximum of 1-unit time averages; not confidence intervals."
+    },
+    "pressure_tails": {
+      "ok": true,
+      "codes": [],
+      "ignored": {
+        "figure.size": "Three diagnostic panels"
+      },
+      "files": [
+        "passive-pressure-tails.pdf",
+        "passive-pressure-tails.png"
+      ]
+    }
+  },
+  "figure_review": "Reviewed all four paired groups, all four active-only supplements, and pressure-tail figure against actual metric values. Published subset omits duplicate active-only PDF/occupancy panels; full supplements remain in external analysis directories."
+}

@@ -1,0 +1,111 @@
+{
+  "schema_version": 1,
+  "classification": "matched scientific experiment",
+  "member": "active",
+  "simulation": {
+    "revision": "ab9b543e7e6a972ebfc026d0c98ea3dfee9cb55b",
+    "dirty": false,
+    "revision_basis": "Exact executable SHA from retained build manifest; numerical source comparison passed before launch.",
+    "executable": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-passive-fix-hip/athena",
+    "executable_sha256": "958eaa993533b611b05f058c767c6c1f11a751d6094389ba1107a7744abf4cd6",
+    "input_path": "effective.athinput",
+    "input_sha256": "d2a634aaabb3834b4cc6f274349afd0de2acacc4bf3d01731d01f7eaf22a2dc2",
+    "canonical_input_path": "input.athinput",
+    "canonical_input_sha256": "d2a634aaabb3834b4cc6f274349afd0de2acacc4bf3d01731d01f7eaf22a2dc2",
+    "build_backend": "HIP MPI double; PROBLEM=built_in_pgens; compiler=/opt/cray/pe/craype/2.7.35/bin/CC; version=20.0.0",
+    "build_manifest_path": "binary_manifest.json",
+    "build_manifest_sha256": "19228c487c4c90eb9a873873e588f161ae589174615907fb252a960a15a4b298",
+    "build_cache_path": "CMakeCache.txt",
+    "build_cache_sha256": "4f4f8f95560bdb0061c0596d8df3480550c9efb333db2899f30389c8975cb0bc"
+  },
+  "outputs": {
+    "snapshot_glob": "**/*.mhd_w_bcc.*.bin",
+    "forcing_glob": "**/*.turb_force.*.bin",
+    "user_history": [
+      "cgl_lf_matched_beta10.user.hst"
+    ],
+    "mhd_history": [
+      "cgl_lf_matched_beta10.mhd.hst"
+    ]
+  },
+  "launch": {
+    "command": [
+      "srun",
+      "--jobid",
+      "5631202",
+      "--exact",
+      "-N",
+      "8",
+      "-n",
+      "64",
+      "--ntasks-per-node",
+      "8",
+      "--threads-per-core=1",
+      "--cpu-bind=threads",
+      "-c",
+      "7",
+      "--gpus-per-task=1",
+      "--gpu-bind=closest",
+      "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-passive-fix-hip/athena",
+      "-i",
+      "input.athinput",
+      "-t",
+      "01:50:00",
+      "mhd/passive=false",
+      "problem/passive_delta=false"
+    ],
+    "shell_command": "srun --jobid 5631202 --exact -N 8 -n 64 --ntasks-per-node 8 --threads-per-core=1 --cpu-bind=threads -c 7 --gpus-per-task=1 --gpu-bind=closest /lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/build-passive-fix-hip/athena -i input.athinput -t 01:50:00 mhd/passive=false problem/passive_delta=false",
+    "overrides": [
+      "mhd/passive=false",
+      "problem/passive_delta=false"
+    ],
+    "cwd": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14",
+    "nodes": 8,
+    "ranks": 64,
+    "gpus": 64,
+    "slurm_job_id": "5631202",
+    "restart": null,
+    "restart_sha256": null,
+    "source_checkout_revision": "b77a440054007d5509f3c19af8dbf52c06b0cde5",
+    "launcher_sha256": "a39a4972c0238de94512b284d8940c38e4bcc1b8fb14a394cd0aec2f3de1805e",
+    "environment": {
+      "MPICH_GPU_SUPPORT_ENABLED": "1",
+      "LD_LIBRARY_PATH": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0/lib:/opt/cray/pe/mpich/9.0.1/gtl/lib:/opt/cray/pe/libsci/25.09.0/CRAYCLANG/20.0/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce-clang/x86_64/lib:/opt/cray/pe/cce/20.0.0/cce/x86_64/lib:/opt/cray/pe/perftools/25.09.0/lib64:/opt/cray/pe/pmi/6.1.16/lib:/opt/cray/pe/dsmml/0.3.1/dsmml/lib:/opt/cray/pe/python/3.11.7/lib:/opt/rocm-6.4.2/lib/roctracer:/opt/rocm-6.4.2/lib/rocprofiler:/opt/rocm-6.4.2/lib:/opt/cray/pe/papi/7.2.0.2/lib64:/opt/cray/libfabric/2.3.1/lib64",
+      "MPICH_GPU_IPC_CACHE_MAX_SIZE": "1000",
+      "MPICH_OFI_NIC_POLICY": "GPU",
+      "FI_CXI_RX_MATCH_MODE": "software",
+      "LOADEDMODULES": "craype-x86-trento:libfabric/2.3.1:craype-network-ofi:xpmem/1.0.1-1.5_1_gfb6998056825:Core/26.05:tmux/3.6a:hsi/default:lfs-wrapper/0.0.1:DefApps:craype-accel-amd-gfx90a:PrgEnv-cray/8.6.0:cray-dsmml/0.3.1:cray-pmi/6.1.16:craype/2.7.35:perftools-base/25.09.0:cpe/25.09:rocm/6.4.2:cce/20.0.0:cray-libsci/25.09.0:cray-mpich/9.0.1:cray-python/3.11.7",
+      "MPICH_OFI_NUM_CQ_ENTRIES": "131072",
+      "FI_MR_CACHE_MONITOR": "kdreg2",
+      "MPICH_GPU_MANAGED_MEMORY_SUPPORT_ENABLED": "0",
+      "MPICH_MPIIO_HINTS": "*:romio_cb_write=disable",
+      "FI_CXI_ATS": "0",
+      "MPICH_DIR": "/opt/cray/pe/mpich/9.0.1/ofi/crayclang/20.0",
+      "HSA_XNACK": "1",
+      "OMP_NUM_THREADS": "1"
+    },
+    "started_utc": "2026-10-07T13:54:42.756969+00:00"
+  },
+  "planned_analysis": {
+    "initial_window": [
+      6,
+      14
+    ],
+    "block_duration": 2,
+    "procedure": "Use the same interval for both members; inspect four two-unit blocks and extend both to18 if needed. No tuning to a paper slope or desired contrast."
+  },
+  "analysis_inventory_amendment": {
+    "purpose": "Read existing histories omitted from the canceled launcher initial metadata; raw launch metadata is unchanged.",
+    "original_metadata": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/benchmark_metadata.json",
+      "sha256": "2166aed8a979d4912ccb19d11608716fd0e79a67cb6509d7c639e5ee3f4a8a17",
+      "bytes": 4542
+    },
+    "recorded_utc": "2026-10-07T15:30:29.953145+00:00",
+    "fields_changed": [
+      "outputs.user_history",
+      "outputs.mhd_history"
+    ],
+    "termination_note": "User requested stopping the allocation. The original launcher did not finalize and its missing ended_utc/returncode remain missing; no successful completion is claimed."
+  }
+}

@@ -1,0 +1,113 @@
+{
+  "started_utc": "2026-10-07T15:30:29.971009+00:00",
+  "method": "Existing snapshot/PDF/FFT/force products retained exactly; only history discovery, history products, numerical-health evidence, dependent adequacy reasons, provenance and rendered figures/reports refreshed with existing analyzer functions.",
+  "script": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/restore_interrupted_history_inventory.py",
+    "sha256": "95593e9f0758d3ade3af80e7132e1f62a2ff1318b6b47749c1b137f51f1e8bba",
+    "bytes": 7327
+  },
+  "source_metadata": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/active-to14/benchmark_metadata.json",
+    "sha256": "2166aed8a979d4912ccb19d11608716fd0e79a67cb6509d7c639e5ee3f4a8a17",
+    "bytes": 4542
+  },
+  "analysis_metadata": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-analysis-metadata.json",
+    "sha256": "7b8fe095886c9bcc38f03bd1a8d4aae0f2d930e26af5883303153da9d525cc54",
+    "bytes": 5407
+  },
+  "single_run_source": {
+    "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+    "sha256": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+    "bytes": 107580
+  },
+  "comparison_source": {
+    "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/compare_cgl_lf_physics_benchmark.py",
+    "sha256": "e6d179637cc73f924279a31cbbfb4848d796661c7169e3deeff6caad648c4f31",
+    "bytes": 37586
+  },
+  "analysis_revision": "635b42562e5e23fc9966c9faa01c9da62134f2ec",
+  "outputs": [
+    {
+      "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/active",
+      "old_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/active/metrics.json",
+        "sha256": "e1a0f978274f7382b67e98a49ce4ec49179d6a22a3314e843c5807effb492747",
+        "bytes": 1645366
+      },
+      "new_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/active/metrics.json",
+        "sha256": "d51aee535a8a010458e36ecaf74309631dcdda6b9a8899966b2f994c84833618",
+        "bytes": 1920884
+      },
+      "unchanged_products": {
+        "snapshots": {
+          "old_sha256": "4b22024c41bd0ae25058c869fa652a679d54d2bc7b7624569505e6e71a34452b",
+          "new_sha256": "4b22024c41bd0ae25058c869fa652a679d54d2bc7b7624569505e6e71a34452b"
+        },
+        "scalars": {
+          "old_sha256": "0741231d60a0014befacff6207959a79e3c3a0e78571fd1fe1a785542a6c7e7b",
+          "new_sha256": "0741231d60a0014befacff6207959a79e3c3a0e78571fd1fe1a785542a6c7e7b"
+        },
+        "spectra": {
+          "old_sha256": "ac612a4056d05c850b7ba16b82de5b570afd8c923b4df98ea0306ece55ea976d",
+          "new_sha256": "ac612a4056d05c850b7ba16b82de5b570afd8c923b4df98ea0306ece55ea976d"
+        },
+        "PDFs": {
+          "old_sha256": "ed1aacebc72b4e7af80e6ba6b4449d18dd22caa4ed473049d162b35af2bc7cc8",
+          "new_sha256": "ed1aacebc72b4e7af80e6ba6b4449d18dd22caa4ed473049d162b35af2bc7cc8"
+        },
+        "pressure_balance_by_scale": {
+          "old_sha256": "8a5303ea7138e57f96e0de1532a899d40697223f9d34332984eb819392e2b030",
+          "new_sha256": "8a5303ea7138e57f96e0de1532a899d40697223f9d34332984eb819392e2b030"
+        },
+        "forcing_decomposition": {
+          "old_sha256": "a4cb2b28cc64945520258c2cb7c0395b0d1c05ff8b4d93f8f22c82bfa79f61bf",
+          "new_sha256": "a4cb2b28cc64945520258c2cb7c0395b0d1c05ff8b4d93f8f22c82bfa79f61bf"
+        }
+      }
+    },
+    {
+      "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-interrupted",
+      "old_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-interrupted/metrics.json",
+        "sha256": "3b48fa47a41090a43e8a35130754fcb252558f9f3e8f280d132432877f1dace5",
+        "bytes": 1934257
+      },
+      "new_metrics": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-interrupted/metrics.json",
+        "sha256": "cbc83c4d71511b730cb760dbdd40d58e7a36218a667bbc6862cbc483805d16b5",
+        "bytes": 2217133
+      },
+      "unchanged_products": {
+        "snapshots": {
+          "old_sha256": "b70474e31f3819637dcd924c7de912ffa63f6b94fdd8ddc6c0d5373c6769e481",
+          "new_sha256": "b70474e31f3819637dcd924c7de912ffa63f6b94fdd8ddc6c0d5373c6769e481"
+        },
+        "scalars": {
+          "old_sha256": "f53e20a5102a0d2b8d47df7c4a7ad7a906fafc28b164fa39853096fc64f0e509",
+          "new_sha256": "f53e20a5102a0d2b8d47df7c4a7ad7a906fafc28b164fa39853096fc64f0e509"
+        },
+        "spectra": {
+          "old_sha256": "2ca294ddf9e0b8fd1c19abd83fab65d604105bd67f78d5a3c05c77042ca2f213",
+          "new_sha256": "2ca294ddf9e0b8fd1c19abd83fab65d604105bd67f78d5a3c05c77042ca2f213"
+        },
+        "PDFs": {
+          "old_sha256": "4c7607c68472ee8946e2c99be70c9c0afb89dbb585c8ce05beedfed88fb3506f",
+          "new_sha256": "4c7607c68472ee8946e2c99be70c9c0afb89dbb585c8ce05beedfed88fb3506f"
+        },
+        "pressure_balance_by_scale": {
+          "old_sha256": "6050704ec5949afcf40746bd51b4e1acb152d67f185bae26399697d8825d54ed",
+          "new_sha256": "6050704ec5949afcf40746bd51b4e1acb152d67f185bae26399697d8825d54ed"
+        },
+        "forcing_decomposition": {
+          "old_sha256": "69c1307df84b726585ac78a4160a16d4994dafa6a951235524f5dfdcbe66d17f",
+          "new_sha256": "69c1307df84b726585ac78a4160a16d4994dafa6a951235524f5dfdcbe66d17f"
+        }
+      }
+    }
+  ],
+  "ended_utc": "2026-10-07T15:31:06.109530+00:00",
+  "wall_seconds": 36.10113173909485,
+  "raw_metadata_unchanged": true
+}
