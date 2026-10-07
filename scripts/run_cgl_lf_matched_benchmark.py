@@ -163,8 +163,10 @@ def main():
                 +cache.get("KOKKOS_CXX_COMPILER_VERSION", "unknown"),
             "build_manifest_path": "binary_manifest.json", "build_manifest_sha256": sha(run/"binary_manifest.json"),
             "build_cache_path": "CMakeCache.txt", "build_cache_sha256": sha(run/"CMakeCache.txt")},
+        # Discover histories if cancellation prevents the final metadata save.
+        # Finalization below adds exact inventories, which take precedence.
         "outputs": {"snapshot_glob": "**/*.mhd_w_bcc.*.bin", "forcing_glob": "**/*.turb_force.*.bin",
-            "user_history": [], "mhd_history": []},
+            "user_history_glob": "**/*.user.hst", "mhd_history_glob": "**/*.mhd.hst"},
         "launch": {"command": command, "shell_command": shlex.join(command), "overrides": overrides,
             "cwd": str(run), "nodes": args.nodes, "ranks": args.nodes*args.ranks_per_node,
             "gpus": args.nodes*args.ranks_per_node, "slurm_job_id": str(args.job_id),

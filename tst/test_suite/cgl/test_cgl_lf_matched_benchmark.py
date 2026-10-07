@@ -15,6 +15,7 @@ from test_cgl_lf_physics_benchmark import uniform_fields, write_binary
 REPOSITORY = Path(__file__).resolve().parents[3]
 COMPARISON = REPOSITORY / "scripts/compare_cgl_lf_physics_benchmark.py"
 INPUT = REPOSITORY / "inputs/cgl_lf_paper/cgl_lf_physics_benchmark_matched_beta10.athinput"
+LAUNCHER = REPOSITORY / "scripts/run_cgl_lf_matched_benchmark.py"
 
 
 @pytest.fixture(scope="module")
@@ -25,6 +26,86 @@ def comparison():
     sys.modules[name] = module
     spec.loader.exec_module(module)
     return module
+
+
+@pytest.fixture(scope="module")
+def launcher():
+    name = "cgl_lf_matched_launcher_regression"
+    spec = importlib.util.spec_from_file_location(name, LAUNCHER)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[name] = module
+    spec.loader.exec_module(module)
+    return module
+
+
+@pytest.mark.parametrize("interrupted", [True, False])
+def test_launcher_histories_survive_interruption_and_finalize_exactly(
+        launcher, comparison, monkeypatch, tmp_path, interrupted):
+    """Exercise actual launch metadata writes and analyzer discovery without Slurm."""
+    binary = tmp_path / "synthetic-athena"
+    binary.write_text("Synthetic executable fixture; never executed.\n")
+    manifest = tmp_path / "binary-manifest.json"
+    manifest.write_text(json.dumps({"revision": "retained-simulation-revision",
+                                    "binary_sha256": launcher.sha(binary)}))
+    cache = tmp_path / "CMakeCache.txt"
+    cache.write_text("PROBLEM:STRING=built_in_pgens\nKokkos_ENABLE_HIP:BOOL=ON\n"
+                     "Athena_ENABLE_MPI:BOOL=ON\nAthena_SINGLE_PRECISION:BOOL=OFF\n")
+    run = tmp_path / "run"
+    monkeypatch.setattr(sys, "argv", [str(LAUNCHER), str(run), "--mode", "active",
+        "--input", str(INPUT), "--executable", str(binary),
+        "--build-manifest", str(manifest), "--build-cache", str(cache),
+        "--job-id", "synthetic-no-job-submitted"])
+
+    def git_result(command, **kwargs):
+        assert command[:1] == ["git"]
+        if "diff" in command:
+            return ""
+        assert command[-2:] == ["rev-parse", "HEAD"]
+        return "launcher-checkout-revision\n"
+
+    def simulated_slurm(command, *, cwd, stdout, stderr):
+        assert command[0] == "srun" and cwd == run
+        (run / "hst").mkdir()
+        for kind in ("user", "mhd"):
+            (run / "hst" / f"fixture.{kind}.hst").write_text(
+                "# Athena++ history data\n# [1]=time [2]=value\n0 1\n1 2\n")
+        if interrupted:
+            raise KeyboardInterrupt("simulated launcher interruption")
+        return launcher.subprocess.CompletedProcess(command, 0)
+
+    with monkeypatch.context() as launch_tools:
+        launch_tools.setattr(launcher.subprocess, "check_output", git_result)
+        launch_tools.setattr(launcher.subprocess, "run", simulated_slurm)
+        if interrupted:
+            with pytest.raises(KeyboardInterrupt, match="simulated launcher interruption"):
+                launcher.main()
+        else:
+            assert launcher.main() == 0
+    if not interrupted:
+        # A completed segment's exact inventory must not silently grow later.
+        for kind in ("user", "mhd"):
+            (run / "hst" / f"unretained.{kind}.hst").write_text(
+                "# Athena++ history data\n# [1]=time [2]=value\n2 999\n")
+
+    metadata_path = run / "benchmark_metadata.json"
+    metadata = json.loads(metadata_path.read_text())
+    assert metadata["simulation"]["revision"] == "retained-simulation-revision"
+    assert metadata["launch"]["source_checkout_revision"] == "launcher-checkout-revision"
+    assert ("returncode" in metadata["launch"]) == (not interrupted)
+    segments = comparison.single.load_segments(run, metadata, metadata_path)
+    for kind in ("user_history", "mhd_history"):
+        suffix = kind.removesuffix("_history")
+        if interrupted:
+            assert kind not in metadata["outputs"]
+        else:
+            assert metadata["outputs"][kind] == [f"hst/fixture.{suffix}.hst"]
+        paths, boundaries, _ = comparison.single.segment_paths(
+            segments, kind, f"**/*.{suffix}.hst")
+        assert paths == [run / "hst" / f"fixture.{suffix}.hst"]
+        history, provenance = comparison.single.merge_histories(paths, boundaries)
+        assert provenance["available"]
+        np.testing.assert_array_equal(history["time"], [0., 1.])
+        np.testing.assert_array_equal(history["value"], [1., 2.])
 
 
 @pytest.fixture
