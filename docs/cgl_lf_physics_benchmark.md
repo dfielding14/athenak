@@ -6,9 +6,12 @@ energy statistics. It complements the independent wave, decay, conservation
 and restart tests in [WO2 validation](validation/wo2/README.md). One box cannot
 establish resolution convergence, active-versus-passive causality, or the
 accuracy of an LF closure coefficient. Agreement with a turbulence figure is
-not a substitute for those tests.
+not a substitute for those tests. Retain the independent physical LF damping
+checks when changing closure coefficients; turbulent magneto-immutability alone
+does not validate them.
 
-The numerical implementation is unchanged: the active solver retains the
+The active solver retains the conservative-A formulation, with the
+collision-wall roundoff correction documented below. It evolves the
 conservative variable `A=rho*ln[(p_perp/p_parallel)*rho²/|B|³]` in the `IAN`
 slot, including the existing temporary LF conversion to `p_perp/|B|` and back.
 Both strict B4 expected failures remain accepted sharp-contact limitations.
@@ -488,9 +491,11 @@ python3 "$BENCH_SOURCE/scripts/analyze_cgl_lf_physics_benchmark.py" \
 
 The analyzer retains child provenance, trims superseded restart branches even
 when a continuation wrote no outputs, and handles duplicate times. Check its
-retained-time inventory before interpreting
-the expanded interval. An extension to 18 appends its segment to this explicit
-chronological list. Do not retune forcing, lower resolution, reset initial
+retained-time inventory before interpreting the expanded interval. For an
+extension to 18, create a new aggregate directory with all three segments in
+chronological order. Preserve the earlier aggregate manifest unchanged so the
+provenance hashes of its existing analysis remain valid. Do not retune forcing,
+lower resolution, reset initial
 conditions, or select only
 intervals that resemble a figure. If adequate sampling remains unavailable,
 label the affected comparisons inconclusive.
