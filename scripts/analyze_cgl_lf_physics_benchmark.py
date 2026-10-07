@@ -49,6 +49,7 @@ DEFINITIONS = {
     "deltaB": "sqrt(<|B-<B>|^2>)/B0; mean field removed separately at each snapshot",
     "forcing": "actual accumulated applied forcing work is user-history force_work; force_pwr is instantaneous rho*u dot f and is not its exact quadrature",
     "force_decomposition": "nonzero Fourier acceleration modes: P_compressive=sum |k dot fhat|^2/k^2; P_solenoidal=P_total-P_compressive; this is acceleration power, not injected-energy partition",
+    "nominal_force_mixture": "expected_solenoidal_power_fraction and expected_solenoidal_fraction retain the nominal ratio of expected isotropic innovation powers, 2*s^2/[2*s^2+(1-s)^2]; this is not the expectation of an instantaneous fraction or a target for one finite OU realization",
     "precision": "primitive/force snapshots may be float32; strict threshold crossings are descriptive and not tight full-precision admissibility tests",
     "X_rounding_envelope": "half the larger adjacent float32 gap for each stored pressure/B component; bound |delta X| <= [2*(delta p_perp+delta p_parallel)+|X|*delta(B^2)]/[B^2-delta(B^2)], delta(B^2)=sum(2*|Bi|*delta Bi+delta Bi^2); no dynamical-error claim",
     "limiter_history": "mirror_vol/fire_vol are inclusive threshold predicates; with nu_coll=0, both soft limiters enabled and backups disabled, nu_eff/(limiter_nu_coll*volume) measures the strict soft-rate fraction at history sampling; hard_vol counts strict physical firehose violation even with backups off",
@@ -399,14 +400,24 @@ def paths_from_metadata(run, outputs, name, default_glob=None):
 
 def merge_histories(paths, restart_boundaries=None):
     rows, provenance, duplicates, branches = {}, [], [], []
-    for path in paths:
-        boundary = (restart_boundaries or {}).get(str(path))
-        if boundary is not None:
-            discarded = sorted(t for t in rows if t > boundary)
+    boundaries = {}
+    for event in restart_boundaries or []:
+        boundaries.setdefault(event["before_file_index"], []).append(event)
+    # A restart boundary belongs to the lineage, even when that continuation
+    # produced no history file. Process the final boundary after the last file.
+    for index in range(len(paths) + 1):
+        for event in boundaries.get(index, []):
+            boundary = event["restart_time"]
+            boundary_key = float(f"{boundary:.12g}")
+            discarded = sorted(t for t in rows if t > boundary_key)
             branches.append({"restart_time": boundary, "discarded_times": discarded,
-                             "path": str(path), "basis": "retained restart header"})
+                             "segment": event["segment"],
+                             "basis": "retained restart header"})
             for t in discarded:
                 del rows[t]
+        if index == len(paths):
+            break
+        path = paths[index]
         data = paper.parse_history(path)
         provenance.append(retained_file(path))
         for i, time in enumerate(data["time"]):
@@ -425,7 +436,9 @@ def merge_histories(paths, restart_boundaries=None):
                                    "changed_columns": changes})
             rows[key] = row
     if not rows:
-        return {}, {"available": False, "reason": "no retained history files", "files": []}
+        return {}, {"available": False, "reason": "no retained history rows",
+                    "files": provenance, "duplicate_rows": duplicates,
+                    "discarded_restart_branches": branches}
     ordered = [rows[t] for t in sorted(rows)]
     keys = set.intersection(*(set(row) for row in ordered))
     data = {key: np.asarray([row[key] for row in ordered]) for key in keys}
@@ -483,16 +496,19 @@ def load_segments(run, metadata, metadata_path):
 
 
 def segment_paths(segments, kind, pattern, snapshots=False):
-    paths, boundaries, discarded = [], {}, []
+    paths, boundaries, discarded = [], [], []
     for segment in segments:
         current = paths_from_metadata(segment["directory"], segment["metadata"].get("outputs", {}), kind, pattern)
         boundary = segment["restart_time"]
-        if boundary is not None and current:
-            boundaries[str(current[0])] = boundary
+        if boundary is not None:
             if snapshots:
                 stale = [path for path in paths if paper.snapshot_time(path) > boundary+1e-12]
                 discarded += [{"path": str(path), "restart_time": boundary} for path in stale]
                 paths = [path for path in paths if path not in stale]
+            else:
+                boundaries.append({"before_file_index": len(paths),
+                                   "restart_time": boundary,
+                                   "segment": str(segment["directory"])})
         paths.extend(current)
     return paths, boundaries, discarded
 
@@ -529,7 +545,8 @@ def infer_model(header, metadata):
         "mhd": ("mirror_threshold", "firehose_threshold", "gamma", "nu_coll", "limiter_nu_coll",
                 "backup_limiters", "mirror_limiter", "firehose_limiter", "passive"),
         "turb_driving": ("tcorr", "sol_fraction", "projection_policy", "dedt", "nlow", "nhigh",
-                         "k_shell_unit", "record_injected_work")}
+                         "k_shell_unit", "record_injected_work", "normalization",
+                         "driving_type", "physical_k_shell")}
     missing = [f"{section}/{key}" for section, keys in required.items()
                for key in keys if key not in header.get(section, {})]
     if missing:
@@ -540,6 +557,10 @@ def infer_model(header, metadata):
         if value not in ("true", "false"):
             raise ValueError(f"invalid retained boolean {section}/{key}: {value}")
         return value == "true"
+    if (driving["normalization"] != "edot" or int(driving["driving_type"]) != 0
+            or not boolean("turb_driving", "physical_k_shell")):
+        raise ValueError("benchmark analyzer requires turb_driving normalization=edot, "
+                         "driving_type=0, and physical_k_shell=true")
     model = {"B0": abs(float(problem["b0"])), "mirror_X": float(mhd["mirror_threshold"]),
              "firehose_X": -float(mhd["firehose_threshold"]),
              "gamma_sound": float(mhd["gamma"]),
@@ -569,7 +590,9 @@ def infer_model(header, metadata):
 
 
 def history_products(user, mhd, model, start, end, block_duration):
-    result = {"available": bool(user), "series": {}, "window": {}, "energy_budget": {"available": False}}
+    result = {"available": bool(user), "series": {}, "window": {}, "energy_budget": {
+        "available": False, "requested_interval": [start, end],
+        "requested_window_covered": False}}
     if not user:
         result["reason"] = "user history missing; snapshots are not exact energy/source ledgers"
         return result
@@ -602,6 +625,8 @@ def history_products(user, mhd, model, start, end, block_duration):
             energy = np.interp([lo, hi], mhd["time"], mhd["tot-E"])
             dw, de = float(work[1]-work[0]), float(energy[1]-energy[0])
             result["energy_budget"] = {"available": True, "interval": [lo, hi],
+                "requested_interval": [start, end],
+                "requested_window_covered": bool(lo <= start and hi >= end),
                 "actual_applied_work": dw, "actual_mean_total_power": dw/(hi-lo),
                 "conserved_total_energy_change": de, "residual_E_minus_work": de-dw,
                 "relative_residual": abs(de-dw)/max(abs(de), abs(dw), np.finfo(float).tiny),
@@ -616,6 +641,26 @@ def history_products(user, mhd, model, start, end, block_duration):
             lo, hi = max(start, mhd["time"][0]), min(end, mhd["time"][-1])
             result["LF_counter_increments"] = {key: float(np.diff(np.interp([lo, hi], mhd["time"], values))[0])
                 for key, values in mhd.items() if key.startswith("lf_")}
+    return result
+
+
+def common_energy_history(history):
+    """Compare cumulative ledgers on their overlap with one physical baseline."""
+    user = history.get("series", {})
+    energy = history.get("conserved_energy_history", {})
+    if "force_work" not in user or "tot-E" not in energy:
+        return None
+    lo = max(user["time"][0], energy["time"][0])
+    hi = min(user["time"][-1], energy["time"][-1])
+    if hi <= lo:
+        return None
+    result = {"interval": [lo, hi]}
+    for name, record, column in (("work", user, "force_work"),
+                                  ("energy", energy, "tot-E")):
+        times = np.asarray(record["time"])
+        grid = np.r_[lo, times[(times > lo) & (times < hi)], hi]
+        values = np.interp(grid, times, record[column])
+        result[name] = {"time": grid, "increment": values-values[0]}
     return result
 
 
@@ -712,7 +757,7 @@ def main(argv=None):
     paths = bracketing_paths(paths, args.time_start, args.time_end)
     if not paths:
         return unavailable_output(output, metadata_path, metadata, args,
-            "no retained primitive snapshots overlap the explicit averaging interval")
+            "no retained primitive snapshots overlap the explicit averaging interval", segments)
     records, duplicates, limits, reference_header = {}, [], {}, None
     for path in paths:
         fields, lengths, header, info = read_uniform(path, FIELDS)
@@ -848,6 +893,10 @@ def main(argv=None):
         reasons.append("snapshot coverage does not bracket both requested endpoints; no extrapolation performed")
     if not history["energy_budget"]["available"]:
         reasons.append("actual forcing/conserved-energy budget unavailable")
+    elif not history["energy_budget"]["requested_window_covered"]:
+        reasons.append("actual forcing/conserved-energy budget covers only "
+                       +str(history["energy_budget"]["interval"])
+                       +", not the full requested window")
     if not forces:
         reasons.append("realized forcing-mode mixture unmeasured")
     elif set(forces) != set(records):
@@ -906,6 +955,7 @@ def main(argv=None):
             "max_snapshot_gap": float(max(np.diff(times))) if len(times) > 1 else None,
             "endpoint_rule": "linearly interpolate diagnostic values/PDF bins/spectral bins at requested endpoints using bracketing snapshots; no field interpolation or extrapolation",
             "block_duration": args.block_duration, "complete_blocks": block_count,
+            "block_anchor": max(float(times[0]), args.time_start),
             "instantaneous_output_caveat": "post-operator snapshots may miss transient threshold excursions; inclusive history switches, strict exceedance, and near bands have different meanings"},
         "model": model, "scalars": scalars, "spectra": spectra, "PDFs": pdfs,
         "scale_bands": scales, "gradient_comparisons": ratio, "history": history,
@@ -944,16 +994,19 @@ def main(argv=None):
     return 0
 
 
-def unavailable_output(output, metadata_path, metadata, args, reason):
+def unavailable_output(output, metadata_path, metadata, args, reason, segments):
     """Retain a machine-readable missing-data result and shareable placeholders."""
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
     output.mkdir(parents=True, exist_ok=True)
+    revisions = [segment["metadata"].get("simulation", {}).get("revision") for segment in segments]
     result = {"schema_version": 1, "adequacy": {"classification": "inconclusive", "reasons": [reason]},
         "requested_window": [args.time_start, args.time_end], "definitions": DEFINITIONS,
         "provenance": {"metadata": retained_file(metadata_path), "retained_metadata": metadata,
-                       "simulation_revision": metadata.get("simulation", {}).get("revision"),
+                       "simulation_revision": revisions[0] if len(set(revisions)) == 1 else revisions,
+                       "segments": [{key: str(value) if isinstance(value, Path) else value
+                                     for key, value in segment.items()} for segment in segments],
                        "analysis_script": retained_file(Path(__file__))}}
     (output/"metrics.json").write_text(json.dumps(result, indent=2)+"\n")
     lines = ["# CGL-LF single-run physics benchmark", "", "**Inconclusive: missing data.** "+reason+".", ""]
@@ -1083,14 +1136,14 @@ def make_figures(data, output):
     series(axes[1, 1], "beta_volume_mean", "volume mean beta")
     series(axes[1, 1], "beta_ratio_of_means", "ratio-of-means beta")
     axes[1, 1].set(xlabel="time", ylabel="beta (heating is retained)")
-    energy = data["history"].get("conserved_energy_history")
-    if hist and "force_work" in hist and energy:
-        axes[0, 2].plot(energy["time"], np.asarray(energy["tot-E"])-energy["tot-E"][0], label="change in conserved E")
-        axes[0, 2].plot(hist["time"], np.asarray(hist["force_work"])-hist["force_work"][0], ls="--", label="actual accumulated forcing work")
-        axes[0, 2].set(xlabel="time", ylabel="energy increment from first retained history")
+    comparison = common_energy_history(data["history"])
+    if comparison:
+        axes[0, 2].plot(comparison["energy"]["time"], comparison["energy"]["increment"], label="change in conserved E")
+        axes[0, 2].plot(comparison["work"]["time"], comparison["work"]["increment"], ls="--", label="actual accumulated forcing work")
+        axes[0, 2].set(xlabel="time", ylabel=f"energy increment from common t={comparison['interval'][0]:g}")
         axes[0, 2].axvspan(*data["requested_window"], color="black", alpha=.08)
     else:
-        axes[0, 2].text(.05, .5, "Exact forcing/energy ledger unavailable", transform=axes[0, 2].transAxes)
+        axes[0, 2].text(.05, .5, "Overlapping forcing/energy ledgers unavailable", transform=axes[0, 2].transAxes)
     forcing = data["forcing_decomposition"]
     if forcing["available"]:
         rows = sorted(forcing["snapshots"], key=lambda row: row["info"]["time"])
@@ -1098,7 +1151,7 @@ def make_figures(data, output):
             [row["values"]["solenoidal_fraction"] for row in rows], label="realized acceleration solenoidal fraction")
         expected = forcing["expected_solenoidal_fraction"]
         if expected is not None:
-            axes[1, 2].axhline(expected, color="black", ls="--", label="prescribed expected fraction")
+            axes[1, 2].axhline(expected, color="black", ls="--", label="nominal ratio of expected innovation powers")
         axes[1, 2].set(xlabel="time", ylabel="Helmholtz acceleration-power fraction", ylim=(0, 1))
     else:
         axes[1, 2].text(.05, .5, "Forcing snapshots unavailable", transform=axes[1, 2].transAxes)
@@ -1113,7 +1166,8 @@ def write_report(data, output):
         f"{sampling['snapshots']} snapshots and {sampling['complete_blocks']} complete blocks of duration {sampling['block_duration']}.", "",
         "Block bands show temporal variability, not independent-snapshot confidence intervals. No cooling is present: evolving thermal energy/beta are reported rather than assumed stationary.", "",
         f"Bracketing snapshot times span {sampling['bracketing_snapshot_range']}; maximum gap {sampling['max_snapshot_gap']}. "
-        "Diagnostic values (not cell fields) are linearly interpolated to the requested endpoints; blocks are anchored to the requested start. No extrapolation is performed.", ""]
+        "Diagnostic values (not cell fields) are linearly interpolated to covered requested endpoints. "
+        f"Snapshot blocks are anchored at t={sampling['block_anchor']:g}; this equals the requested start only when its coverage is available. No extrapolation is performed.", ""]
     for reason in data["adequacy"]["reasons"]:
         lines.append(f"- {reason}.")
     lines += ["", "| Figure group | PDF |", "| --- | --- |"]
@@ -1168,7 +1222,8 @@ def write_report(data, output):
             lines.append("Time-mean instantaneous Helmholtz solenoidal acceleration-power fraction unavailable: "+reason)
         else:
             lines.append("Realized Helmholtz solenoidal acceleration-power fraction: `"+json.dumps(fraction)+"`.")
-        lines.append(f"Prescribed isotropic expected fraction: {force['expected_solenoidal_fraction']}. "
+        lines.append(f"Nominal ratio of expected isotropic innovation powers: {force['expected_solenoidal_fraction']}. "
+            "This is not the expectation of an instantaneous fraction or a target for this finite OU realization. "
             f"Ratio of time-mean solenoidal to total acceleration powers (a different statistic): {force['ratio_of_time_mean_powers']}. "
             "Neither statistic is an energy-injection partition.")
     else:

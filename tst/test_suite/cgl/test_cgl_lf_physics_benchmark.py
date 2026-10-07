@@ -235,6 +235,25 @@ def test_canonical_model_uses_amplitude_blend_and_rejects_conflicting_metadata(a
             analyzer.infer_model(incomplete, {})
 
 
+def test_model_rejects_unsupported_forcing_conventions_without_pinning_realization(analyzer):
+    path = REPOSITORY / "inputs/cgl_lf_paper/cgl_lf_physics_benchmark_beta10.athinput"
+    header = analyzer.parse_input(path.read_text().splitlines())
+    for key, value in (("normalization", "accel_rms"), ("driving_type", "1"),
+                       ("physical_k_shell", "false")):
+        unsupported = {section: values.copy() for section, values in header.items()}
+        unsupported["turb_driving"][key] = value
+        with pytest.raises(ValueError, match="benchmark analyzer requires"):
+            analyzer.infer_model(unsupported, {})
+        del unsupported["turb_driving"][key]
+        with pytest.raises(ValueError, match="required model fields"):
+            analyzer.infer_model(unsupported, {})
+    # The convention gate is not a benchmark-image or seed/resolution lock.
+    header["turb_driving"]["rseed"] = "314159"
+    header["mesh"]["nx1"] = "192"
+    header["turb_driving"]["dedt"] = "0.16"
+    assert analyzer.infer_model(header, {})["dedt_per_volume"] == 0.16
+
+
 def test_energy_balance_uses_measured_work_with_a_signed_residual(analyzer):
     user = {"time": np.array([0.0, 1.0, 2.0]),
             "volume": np.full(3, 2.0), "force_work": np.array([0.0, 0.3, 1.0])}
@@ -245,6 +264,8 @@ def test_energy_balance_uses_measured_work_with_a_signed_residual(analyzer):
     result = analyzer.history_products(user, mhd, model, 0, 2, 1)
     budget = result["energy_budget"]
     assert budget["available"]
+    assert budget["requested_window_covered"]
+    assert budget["requested_interval"] == [0, 2]
     assert budget["actual_applied_work"] == pytest.approx(1.0)
     assert budget["actual_mean_total_power"] == pytest.approx(0.5)
     assert budget["conserved_total_energy_change"] == pytest.approx(0.8)
@@ -352,10 +373,13 @@ def test_real_binary_reader_and_cli_export_with_unknown_simulation(analyzer, syn
     assert abs(result["history"]["energy_budget"]["residual_E_minus_work"]) < 1.0e-14
     assert result["forcing_decomposition"]["available"]
     assert result["model"]["expected_solenoidal_power_fraction"] == pytest.approx(0.5)
+    assert "ratio of expected isotropic innovation powers" in result["definitions"]["nominal_force_mixture"]
     for name in ("marginality", "pressure_balance", "gradients", "spectra_energy"):
         for suffix in ("png", "pdf"):
             assert (output / f"{name}.{suffix}").stat().st_size > 100
-    assert (output / "report.md").is_file()
+    report = (output / "report.md").read_text()
+    assert "Nominal ratio of expected isotropic innovation powers" in report
+    assert "not the expectation of an instantaneous fraction" in report
     # Missing ledgers/force snapshots remain explicit, even when primitive
     # snapshots and plotting are otherwise usable.
     metadata = {"purpose": "Synthetic missing-data regression",
@@ -371,6 +395,126 @@ def test_real_binary_reader_and_cli_export_with_unknown_simulation(analyzer, syn
     assert absent["forcing_decomposition"]["available"] is False
     assert absent["forcing_decomposition"]["reason"]
     assert absent["adequacy"]["classification"] == "inconclusive"
+
+
+def test_empty_continuation_trims_abandoned_future_in_all_streams(analyzer, synthetic_run):
+    run, _ = synthetic_run
+    # Header-only restart marker for analyzer lineage testing, not a solver
+    # checkpoint. The continuation failed before it wrote any output stream.
+    restart = run / "checkpoint-marker.rst"
+    restart.write_bytes(b"<time>\nrestart_time=1\n<par_end>\n")
+    continuation = run.parent / "empty_continuation"
+    continuation.mkdir()
+    child = {"simulation": {}, "outputs": {}, "launch": {
+        "restart": str(restart), "restart_sha256": analyzer.sha(restart),
+        "returncode": 1}}
+    (continuation / "benchmark_metadata.json").write_text(json.dumps(child))
+    union_path = run.parent / "union.json"
+    union = {"segments": [str(run), str(continuation)]}
+    union_path.write_text(json.dumps(union))
+    segments = analyzer.load_segments(run.parent, union, union_path)
+    for kind, pattern in (("snapshots", "**/*.mhd_w_bcc.*.bin"),
+                          ("force_snapshots", "**/*.turb_force.*.bin")):
+        paths, _, discarded = analyzer.segment_paths(segments, kind, pattern, True)
+        assert [analyzer.paper.snapshot_time(path) for path in paths] == [0.0, 1.0]
+        assert len(discarded) == 1
+        assert analyzer.paper.snapshot_time(Path(discarded[0]["path"])) == 2.0
+    for kind, pattern in (("user_history", "**/*.user.hst"),
+                          ("mhd_history", "**/*.mhd.hst")):
+        paths, boundaries, _ = analyzer.segment_paths(segments, kind, pattern)
+        history, audit = analyzer.merge_histories(paths, boundaries)
+        np.testing.assert_array_equal(history["time"], [0.0, 1.0])
+        assert audit["discarded_restart_branches"][-1]["discarded_times"] == [2.0]
+        assert audit["discarded_restart_branches"][-1]["segment"] == str(continuation)
+    # The requested interval is entirely in the abandoned future. Its missing-
+    # data report must still retain both child manifests and the restart hash.
+    output = run.parent / "analysis-empty-union"
+    proc = run_cli(run.parent, output, union_path, start=1.25, end=2)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    result = json.loads((output / "metrics.json").read_text())
+    assert result["adequacy"]["classification"] == "inconclusive"
+    retained = result["provenance"]["segments"]
+    assert len(retained) == 2
+    assert retained[0]["metadata_file"]["sha256"] == analyzer.sha(run / "benchmark_metadata.json")
+    assert retained[1]["metadata_file"]["sha256"] == analyzer.sha(continuation / "benchmark_metadata.json")
+    assert retained[1]["restart_file"]["sha256"] == analyzer.sha(restart)
+    assert retained[1]["restart_time"] == 1
+    assert retained[1]["metadata"]["launch"]["returncode"] == 1
+
+
+def test_empty_continuation_keeps_rounded_checkpoint_history_row(analyzer, tmp_path):
+    checkpoint_time = 1.234567890126
+    checkpoint_key = float(f"{checkpoint_time:.12g}")
+    assert checkpoint_key > checkpoint_time
+    path = tmp_path / "prior.hst"
+    write_history(path, [checkpoint_time-.1, checkpoint_time, checkpoint_time+.1],
+                  [10., 20., 30.])
+    data, audit = analyzer.merge_histories([path], [{"before_file_index": 1,
+        "restart_time": checkpoint_time, "segment": "empty wall-clock continuation"}])
+    assert data["time"][-1] == checkpoint_time
+    np.testing.assert_array_equal(data["value"], [10., 20.])
+    boundary = audit["discarded_restart_branches"][-1]
+    assert boundary["restart_time"] == checkpoint_time
+    assert boundary["discarded_times"] == [float(f"{checkpoint_time+.1:.12g}")]
+
+
+def test_partial_energy_history_is_measured_but_not_full_window_coverage(
+        analyzer, synthetic_run):
+    run, _ = synthetic_run
+    # Fields, forces and MHD history cover [0,2]; the source ledger only covers
+    # [1,2]. A valid budget on that shorter interval is not full-window support.
+    path = run / "synthetic.user.hst"
+    lines = path.read_text().splitlines()
+    path.write_text("\n".join(line for line in lines
+                              if line.startswith("#") or float(line.split()[0]) >= 1) + "\n")
+    output = run / "analysis-partial-ledger"
+    proc = run_cli(run, output)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    result = json.loads((output / "metrics.json").read_text())
+    budget = result["history"]["energy_budget"]
+    assert budget["available"]
+    assert budget["interval"] == [1.0, 2.0]
+    assert budget["requested_interval"] == [0.0, 2.0]
+    assert budget["requested_window_covered"] is False
+    assert budget["actual_applied_work"] == pytest.approx(0.000575)
+    assert abs(budget["residual_E_minus_work"]) < 1.0e-14
+    assert result["adequacy"]["sampling_prerequisites_satisfied"] is False
+    assert any("budget covers only [1.0, 2.0]" in reason
+               for reason in result["adequacy"]["reasons"])
+    assert "not the full requested window" in (output / "report.md").read_text()
+
+
+def test_energy_plot_uses_common_overlap_baseline(analyzer):
+    # Different cumulative offsets and cadences represent identical power 2.
+    # Subtracting each record's own first sample would spuriously offset them.
+    history = {"series": {"time": [1., 2., 3.], "force_work": [10., 12., 14.]},
+               "conserved_energy_history": {"time": [0., 1.5, 2.5],
+                                            "tot-E": [100., 103., 105.]}}
+    comparison = analyzer.common_energy_history(history)
+    assert comparison["interval"] == [1., 2.5]
+    for record in (comparison["work"], comparison["energy"]):
+        assert record["time"][0] == 1.
+        assert record["time"][-1] == 2.5
+        np.testing.assert_allclose(record["increment"], 2*(record["time"]-1))
+    history["conserved_energy_history"]["time"] = [-3., -2., -1.]
+    assert analyzer.common_energy_history(history) is None
+    assert analyzer.common_energy_history({}) is None
+
+
+def test_partial_snapshot_report_labels_actual_block_anchor(synthetic_run):
+    run, _ = synthetic_run
+    for path in (run / "bin").glob("*.00000.bin"):
+        path.unlink()
+    output = run / "analysis-partial-snapshots"
+    proc = run_cli(run, output)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    result = json.loads((output / "metrics.json").read_text())
+    assert result["requested_window"] == [0., 2.]
+    assert result["retained_window"] == [1., 2.]
+    assert result["sampling"]["block_anchor"] == 1.
+    assert result["scalars"]["Mach_isotropic_proxy"]["block_starts"] == [1., 1.5]
+    assert any("coverage does not bracket" in reason for reason in result["adequacy"]["reasons"])
+    assert "Snapshot blocks are anchored at t=1;" in (output / "report.md").read_text()
 
 
 def test_real_binary_reader_rejects_missing_primitive_fields(analyzer, synthetic_run):

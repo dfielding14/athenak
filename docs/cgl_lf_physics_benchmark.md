@@ -56,8 +56,11 @@ transport. See [the CGL helpers](../src/eos/cgl_physics.hpp).
 
 The driver blends acceleration amplitudes as `s*f_sol+(1-s)*f_comp`.
 Two transverse and one longitudinal degrees of freedom give equal expected
-innovation powers when `2*s²=(1-s)²`. The parameter is not a solenoidal energy
-fraction, and the realized finite-time mixture must be measured. Full signed
+innovation powers when `2*s²=(1-s)²`. The nominal ratio of expected innovation
+powers is `2*s²/[2*s²+(1-s)²]=0.5`. It is not the expectation of the instantaneous
+power fraction or a target for one finite OU realization. The parameter is not
+a solenoidal energy fraction, and the realized finite-time mixture must be
+measured. Full signed
 mode bounds `-3..3` give 38 enumerated entries, or 19 opposite-wavevector pairs,
 in this physical shell. This differs from the historical positive-octant
 selection and from unprojected random forcing.
@@ -340,6 +343,10 @@ correlations or ratios remain explicitly unavailable. `metrics.json` retains
 input/output hashes and the analysis, reader and binary-reader script hashes;
 the analysis checkout revision is separate from the simulation revision in the
 launch metadata.
+The analyzer requires retained `normalization=edot`, `driving_type=0`, and
+`physical_k_shell=true`; it rejects incompatible forcing conventions instead
+of silently assigning the benchmark's units. It does not pin the seed or
+resolution.
 
 **Marginality.** Define `Delta p=p_perp-p_parallel`,
 `p_iso=(p_parallel+2*p_perp)/3`, `beta=2*p_iso/B²` and
@@ -432,6 +439,9 @@ Over synchronized history samples compare `Delta tot-E` to `Delta force_work`
 and report their residual and normalization. Actual total power is
 `Delta force_work/Delta t`, and volumetric power divides this by V. Energy
 bookkeeping alone does not yield a viscous-heating fraction or cascade flux.
+The comparison plot uses a common baseline at the beginning of the histories'
+overlap. A budget on only part of the requested window retains its actual
+interval and is insufficient coverage; disjoint histories give no comparison.
 
 ## Averaging, analysis and interpretation
 
@@ -442,7 +452,9 @@ physical time with trapezoidal integration. Output times can overshoot their
 nominal cadence: use actual stored times and require bracketing samples for
 both requested endpoints. Interpolate diagnostic values, histogram bins and
 spectral bins at those endpoints, never fields or unsupported extrapolations.
-Anchor complete blocks at the requested start time. Check complete output inventories
+With full coverage, anchor complete blocks at the requested start time. If the
+start is missing, the analyzer labels the first covered time as the actual
+block anchor and marks coverage inadequate. Check complete output inventories
 and remove repeated restart-boundary samples with an explicit provenance rule.
 
 ```bash
@@ -473,8 +485,9 @@ python3 "$BENCH_SOURCE/scripts/analyze_cgl_lf_physics_benchmark.py" \
   --output-dir "$BENCH_ROOT/analysis-fixed-6-14"
 ```
 
-The analyzer retains child provenance, trims superseded restart branches and
-handles duplicate times. Check its retained-time inventory before interpreting
+The analyzer retains child provenance, trims superseded restart branches even
+when a continuation wrote no outputs, and handles duplicate times. Check its
+retained-time inventory before interpreting
 the expanded interval. An extension to 18 appends its segment to this explicit
 chronological list. Do not retune forcing, lower resolution, reset initial
 conditions, or select only
