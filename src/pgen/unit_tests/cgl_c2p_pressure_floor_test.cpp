@@ -10,6 +10,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
+#include <fstream>
 #include <iostream>
 #include <limits>
 #include <random>
@@ -515,6 +516,130 @@ void CheckCollisionMap() {
   }
 }
 
+// Exercise the real grid collision operator, then decode in a separate kernel.
+// These doubles are the three cells that failed a strict HIP restart at t=10.
+void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filename) {
+  Require("production wall fixture uses double", !kSinglePrecision);
+  constexpr int ncase = 6;
+  const double cases[ncase][9] = {
+    {1.0580936533619145, 0.4998698938877745, 0.162893050030097,
+     -0.03657178263370929, 11.505868899072333, -0.1425980922790349,
+     0.23714419782252238, 0.03332376975719438, 1.0067785045133788},
+    {1.068962309818397, -0.2853674066747329, 1.1165715708919983,
+     -0.47723398025244956, 12.294172720527772, -0.5135541903454163,
+     0.4807561523963997, -0.5410872057353117, 0.9013372287919911},
+    {1.045423160356516, -0.3245337512214358, 0.894759895491961,
+     -0.4707708062214894, 11.851465659314885, -0.501664065376218,
+     0.7615518523764249, -0.45361804497395064, 0.7156273634530386},
+    // Isotropic interior, exact fluid wall, and a genuinely outside-wall state.
+    {1., 0., 0., 0., 8., 0., 0., 0., 1.},
+    {1., 0., 0., 0., 4., std::log(2.)-std::log(3.), 0., 0., 1.},
+    {1., 0., 0., 0., 3.5, -std::log(4.), 0., 0., 1.}
+  };
+  const int nmb = pack->nmb_thispack;
+  auto *peos = pack->pmhd->peos;
+  const EOS_Data eos = peos->eos_data;
+  Require("active no-backup production wall fixture",
+          eos.is_cgl && !eos.passive && !eos.backup_lim);
+  DvceArray5D<Real> cons("wall_cons", nmb, 6, 1, 1, ncase);
+  DvceArray5D<Real> prim("wall_prim", nmb, 6, 1, 1, ncase);
+  DvceArray5D<Real> decoded("wall_decoded", nmb, 6, 1, 1, ncase);
+  DvceArray5D<Real> bcc("wall_bcc", nmb, 3, 1, 1, ncase);
+  Kokkos::View<int*> hard_bad("wall_bad", nmb*ncase);
+  auto copy_to_host = [](const DvceArray5D<Real> &view) {
+    auto host = Kokkos::create_mirror(view);
+    Kokkos::deep_copy(host, view);
+    return host;
+  };
+  auto initial = Kokkos::create_mirror(cons);
+  auto initial_b = Kokkos::create_mirror(bcc);
+  for (int m=0; m<nmb; ++m) {
+    for (int c=0; c<ncase; ++c) {
+      for (int v=0; v<6; ++v) initial(m,v,0,0,c) = cases[c][v];
+      for (int v=0; v<3; ++v) initial_b(m,v,0,0,c) = cases[c][v+6];
+    }
+  }
+  Kokkos::deep_copy(cons, initial);
+  Kokkos::deep_copy(bcc, initial_b);
+  // The same decoder is launched independently before and after the real operator.
+  auto decode = [&](DvceArray5D<Real> dest) {
+    Kokkos::parallel_for("production_wall_independent_c2p", nmb*ncase,
+    KOKKOS_LAMBDA(const int index) {
+      const int m = index/ncase, c = index%ncase;
+      MHDCons1D u{cons(m,IDN,0,0,c), cons(m,IM1,0,0,c), cons(m,IM2,0,0,c),
+                  cons(m,IM3,0,0,c), cons(m,IEN,0,0,c), cons(m,IAN,0,0,c),
+                  bcc(m,IBX,0,0,c), bcc(m,IBY,0,0,c), bcc(m,IBZ,0,0,c)};
+      HydPrim1D w{};
+      bool df=false, ef=false, tf=false, bf=false;
+      SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
+      if (df || ef || tf || bf) Kokkos::abort("Unexpected wall fixture floor");
+      dest(m,IDN,0,0,c)=w.d; dest(m,IVX,0,0,c)=w.vx;
+      dest(m,IVY,0,0,c)=w.vy; dest(m,IVZ,0,0,c)=w.vz;
+      dest(m,IPR,0,0,c)=w.e; dest(m,IPP,0,0,c)=w.pp;
+      const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+      hard_bad(index) = cgl::HardBoundViolated(w.pp-w.e, bsqr, eos, false);
+    });
+  };
+  decode(prim);
+  peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
+                  0, ncase-1, 0, 0, 0, 0);
+  decode(decoded);
+  auto corrected = copy_to_host(cons);
+  auto cached = copy_to_host(prim);
+  auto fresh = copy_to_host(decoded);
+  auto final_b = copy_to_host(bcc);
+  auto bad = Kokkos::create_mirror_view_and_copy(HostMemSpace(), hard_bad);
+  for (int m=0; m<nmb; ++m) {
+    for (int c=0; c<ncase; ++c) {
+      for (int v=0; v<5; ++v) {
+        Require("wall conserves rho/momentum/total E bitwise",
+                std::memcmp(&corrected(m,v,0,0,c), &initial(m,v,0,0,c),
+                            sizeof(Real)) == 0);
+      }
+      Require("production wall survives independent C2P", bad(m*ncase+c) == 0);
+      for (int v : {IPR, IPP}) {
+        Require("production wall cached pressure is canonical",
+                cached(m,v,0,0,c) == fresh(m,v,0,0,c));
+      }
+    }
+    Require("interior conservative A stays untouched",
+            std::memcmp(&corrected(m,IAN,0,0,3), &initial(m,IAN,0,0,3),
+                        sizeof(Real)) == 0);
+  }
+  Require("wall leaves magnetic field bitwise unchanged",
+          std::memcmp(initial_b.data(), final_b.data(),
+                      final_b.size()*sizeof(Real)) == 0);
+  // Serialize the actual corrected conserved state, restore into the device view,
+  // and check the independent decoder again. No primitive cache is serialized.
+  const std::size_t bytes = corrected.size()*sizeof(Real);
+  {
+    std::ofstream stream(filename, std::ios::binary);
+    stream.write(reinterpret_cast<const char*>(corrected.data()), bytes);
+    Require("write corrected wall state", stream.good());
+  }
+  auto restored = Kokkos::create_mirror(cons);
+  {
+    std::ifstream stream(filename, std::ios::binary);
+    stream.read(reinterpret_cast<char*>(restored.data()), bytes);
+    Require("read corrected wall state", stream.good());
+    Require("wall state has exact serialized length", stream.peek() == EOF);
+  }
+  Require("serialized wall state bitwise identity",
+          std::memcmp(corrected.data(), restored.data(), bytes) == 0);
+  Kokkos::deep_copy(cons, restored);
+  decode(prim);
+  auto restarted = copy_to_host(prim);
+  Require("serialized state independently recovers identical primitives",
+          std::memcmp(fresh.data(), restarted.data(), fresh.size()*sizeof(Real)) == 0);
+  peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
+                  0, ncase-1, 0, 0, 0, 0);
+  auto repeated = copy_to_host(cons);
+  Require("production wall encoded fixed point",
+          std::memcmp(corrected.data(), repeated.data(), bytes) == 0);
+  std::cout << "CGL production wall encoding/restart checks passed: "
+            << ncase << " states per block" << std::endl;
+}
+
 } // namespace
 
 void RunCglC2PPressureFloorChecks() {
@@ -546,4 +671,17 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   (void) pin;
   if (restart) return;
   RunCglC2PPressureFloorChecks();
+  if (!kSinglePrecision) {
+    CheckProductionWallEncoding(pmy_mesh_->pmb_pack, "wall_state.bin");
+  }
+  // Give normal nlim=0 startup a finite uniform state after the tiny fixture.
+  auto *pmhd = pmy_mesh_->pmb_pack->pmhd;
+  Kokkos::deep_copy(pmhd->u0, 0.0);
+  Kokkos::deep_copy(Kokkos::subview(pmhd->u0, Kokkos::ALL, static_cast<int>(IDN),
+      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 1.0);
+  Kokkos::deep_copy(Kokkos::subview(pmhd->u0, Kokkos::ALL, static_cast<int>(IEN),
+      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 8.0);
+  Kokkos::deep_copy(pmhd->b0.x1f, 0.0);
+  Kokkos::deep_copy(pmhd->b0.x2f, 0.0);
+  Kokkos::deep_copy(pmhd->b0.x3f, 1.0);
 }
