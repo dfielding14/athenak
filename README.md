@@ -33,6 +33,10 @@ Its supported scope is uniform periodic HLLE evolution, including LF heat
 flux, collisions, limiters and forcing. Histories expose physical `thermal-U`
 separately from the conserved J/A integrals.
 
+The [CGL-LF turbulence physics benchmark](docs/cgl_lf_physics_benchmark.md)
+provides one reproducible beta-ten box, four diagnostic figure groups, and a
+scientific interpretation guide alongside the independent operator tests.
+
 ## Getting Started
 
 The code is designed to be user-friendly with as few external dependencies as possible.
