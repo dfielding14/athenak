@@ -346,13 +346,20 @@ an exact reconstruction of the limited face stencil.
 
 ## Four diagnostic groups
 
-The analyzer produces `metrics.json`, `report.md`, and four PNG/PDF pairs:
+The analyzer produces `metrics.json`, `report.md`, `figure-audit.json`, and four PNG/PDF pairs:
 `marginality`, `pressure_balance`, `gradients`, and `spectra_energy`. Each result
 must retain definitions, selected times and sampling support. Undefined
 correlations or ratios remain explicitly unavailable. `metrics.json` retains
 input/output hashes and the analysis, reader and binary-reader script hashes;
 the analysis checkout revision is separate from the simulation revision in the
 launch metadata.
+
+Figures use the local `~/dbfplot` package: its default Dark2 cycle, inward ticks,
+Matplotlib's default typography, and no figure or axes titles. Exports retain
+the full canvas as PDF and 240-dpi PNG. Every data-bearing figure passes a strict dbfplot
+audit, recorded in `figure-audit.json`; the sole exemption is `figure.size`,
+because the diagnostic groups require multiple panels on a larger canvas.
+Changing the rendering does not change the retained numerical measurements.
 
 Both PDFs use logarithmic density axes; the `|B|/B0` PDF also uses a logarithmic
 horizontal axis. The stored histogram still represents probability per linear
@@ -485,6 +492,18 @@ start is missing, the analyzer labels the first covered time as the actual
 block anchor and marks coverage inadequate. Check complete output inventories
 and remove repeated restart-boundary samples with an explicit provenance rule.
 
+Install dbfplot into an analysis environment under the benchmark directory,
+using the site's Python 3 environment with NumPy and Matplotlib available:
+
+```bash
+python3 -m venv --system-site-packages "$BENCH_ROOT/plot-env"
+"$BENCH_ROOT/plot-env/bin/python" -m pip install "$HOME/dbfplot"
+source "$BENCH_ROOT/plot-env/bin/activate"
+export MPLBACKEND=Agg
+```
+
+Use this activated environment for the analysis commands below.
+
 ```bash
 python3 "$BENCH_SOURCE/scripts/analyze_cgl_lf_physics_benchmark.py" \
   "$BENCH_ROOT/canonical-fixed" --time-start 6 --time-end 10 --block-duration 2 \
@@ -498,6 +517,14 @@ intervals. At least four complete blocks are desirable; increase block duration
 if correlations persist longer than two. Thermal heating may coexist with
 settled velocity statistics: identify which quantities are approximately
 stationary.
+
+In the PDF and spectrum panels, the shaded **block range** is the pointwise
+minimum and maximum of the time-averaged curves from those blocks. For the
+retained [6,18] reference, these are six contiguous intervals: [6,8], [8,10],
+[10,12], [12,14], [14,16], and [16,18]. Thus each PDF bin has six block-averaged
+density values, whose smallest and largest values bound its band. This shows
+temporal variability; it is neither a confidence interval nor a range over
+individual cells or snapshots, and the blocks need not be independent.
 
 If support is inadequate, extend the **same realization** to 14, retaining the
 original [6,10] report, and analyze [6,14] for four blocks. Extend to 18 if needed.
