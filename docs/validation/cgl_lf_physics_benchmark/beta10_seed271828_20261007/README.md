@@ -73,12 +73,16 @@ are embedded in [metrics.json](metrics.json). Simulation revision is
 `71ad25ebce73d33db048defd8f585a7dce0528c2`; the analysis checkout revision is
 `64d652317bec173d1d33e23906d0e93f21463409`. The corrected executable SHA256 is
 `bd699cf711d0c2a21037690d28e8639b140f0ed96ad19c2d0406636c331527a3`.
-The analysis script SHA256 is
+The original numerical-analysis script SHA256 is
 `a8241542d0d3cc5e4ecc83dd17b4cd7819467f9c2079eb707ebf231a5df812aa`.
 
 [Publication provenance](provenance.json) pins the original generated
-artifacts; metrics and figures are copied without changes. The published
-report adds a labeled scientific-review preface and trims trailing whitespace.
+artifacts. Metrics remain unchanged. The figures were subsequently rendered
+from those retained metrics with logarithmic PDFs, mathematical definitions,
+and illustrative power-law guides; [figure-rendering.json](figure-rendering.json)
+records the separate plotting revision, source hash, command and checks.
+The published report adds a labeled scientific-review preface and trims
+trailing whitespace.
 [Artifact hashes](artifact-hashes.json) cover the final retained files.
 Large simulation binaries/restarts remain outside Git under `BENCH_ROOT`
 (about 9.4 GiB for the three corrected run directories). Original failed

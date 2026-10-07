@@ -1,5 +1,13 @@
 # Reviewed reference: beta ten, seed 271828
 
+Figures have been refreshed from the unchanged retained metrics: logarithmic
+PDF axes, mathematical labels/definitions, and illustrative spectral slopes.
+The pressure panels explicitly show fluctuation power spectra,
+`Corr(delta p_perp, delta(B²/2))`, and normalized total-pressure residual
+variance. [Rendering provenance](figure-rendering.json) records this plotting
+revision separately from the numerical analysis. The scientific findings below
+are unchanged; guide slopes are not fitted measurements.
+
 **Numerical integrity is consistent. Physical evidence is useful but remains
 inconclusive for quantitative paper agreement or a causal magneto-immutability
 claim.** The corrected box completed t=18, including two actual restarts. The

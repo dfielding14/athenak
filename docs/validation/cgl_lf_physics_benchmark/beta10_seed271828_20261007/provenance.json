@@ -61,7 +61,7 @@
     "canonical-fixed-to14",
     "canonical-fixed-to18"
   ],
-  "publication_policy": "metrics.json and figure bytes are unchanged; report receives an explicit scientific-review preface and trailing-whitespace cleanup. Supporting audits retain source hashes and distinguish instantaneous probes from the temporal ensemble.",
+  "publication_policy": "Original numerical metrics remain byte-identical; figures are a separately pinned presentation-only rerender from those metrics. Original generated-artifact hashes below remain the initial-analysis record; figure-rendering.json identifies the current figures.",
   "numerical_checks_original": {
     "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/numerical-correction-and-checks.md",
     "sha256": "98580b453f3557ede46d136f33e123e0a6e1c77fa40560d1a059a3d07e188a07",
@@ -97,5 +97,7 @@
         "published_sha256": "415ab405589a48670c79f25bfd264d29e480214c9c924ea42b30e57c26140abe"
       }
     ]
-  }
+  },
+  "original_publication_policy": "metrics.json and figure bytes are unchanged; report receives an explicit scientific-review preface and trailing-whitespace cleanup. Supporting audits retain source hashes and distinguish instantaneous probes from the temporal ensemble.",
+  "figure_rendering": "figure-rendering.json"
 }

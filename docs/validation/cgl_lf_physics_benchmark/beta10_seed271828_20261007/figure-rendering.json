@@ -1,0 +1,94 @@
+{
+  "created_utc": "2026-10-07T03:34:49.658505+00:00",
+  "purpose": "Presentation-only refresh: example spectral slopes, logarithmic PDF axes, mathematical labels and diagnostic definitions. Numerical measurements and scientific interpretation unchanged.",
+  "plotting_revision": "c5f2ae3366d01a116896808e8021920c3ad1e10c",
+  "plotting_source": {
+    "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+    "sha256": "16310c0ec0a94458a5275cfab86cd464b842d91d673a059a000718e88722a00b"
+  },
+  "measurement_analysis_revision": "64d652317bec173d1d33e23906d0e93f21463409",
+  "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+  "input_metrics": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/metrics.json",
+    "sha256": "9c23afa4d8be3fe10fc6560ec37403e18b36068f6041a2a56469c4982b4aa8a0",
+    "published_metrics_identical": true
+  },
+  "non_plotting_code_AST_unchanged": true,
+  "command": [
+    "python3",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/plot-refresh/render.py",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/plot-refresh/published"
+  ],
+  "render_wrapper": {
+    "sha256": "cde6a3416ca8615c434189cbd7ed92b04774f828243e355d456c20b3ef00702a",
+    "text": "from pathlib import Path\nimport importlib.util,json,sys\ns=Path('/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2')\nb=Path('/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark')\np=s/'scripts/analyze_cgl_lf_physics_benchmark.py'\nspec=importlib.util.spec_from_file_location('benchmark_plot_refresh',p)\nm=importlib.util.module_from_spec(spec);spec.loader.exec_module(m)\ndata=json.loads((b/'analysis-fixed-6-18/metrics.json').read_text())\nout=Path(sys.argv[1]);out.mkdir(parents=True,exist_ok=True)\nm.make_figures(data,out)\nprint('Rendered four PNG/PDF groups from retained metrics:',out)\n"
+  },
+  "render_log": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/plot-refresh/render-published.log",
+    "sha256": "4fa80cf08ba1b7f935446fb4a648681154c07719192f2f64af17ae2d6781301d",
+    "wall_seconds": 19.36,
+    "peak_RSS_KiB": 131740,
+    "returncode": 0
+  },
+  "checks": {
+    "analyzer_tests": 24,
+    "result": "passed",
+    "test_revision": "678bd2de4",
+    "test_log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/plot-refresh/tests-compute.log",
+    "test_log_sha256": "45efeb0499455ee833536b93920a3785bad2c1c8c1c3ba22f19d89a869321625",
+    "test_seconds": 99.16,
+    "allocation_job": "5629803",
+    "allocation_state": "COMPLETED",
+    "allocation_wall_seconds": 126,
+    "GPU_application_steps": 0,
+    "final_caption_changes": "Only gamma/Mach RMS and zero-PDF-band captions followed the full suite; all eight final outputs rendered and visually checked afterward.",
+    "initial_test_invocation": "Earlier login invocation ended with143 before completing; its partial log is retained in plot-refresh/tests.log."
+  },
+  "display_conventions": {
+    "PDF": "Log ordinates; log magnetic-strength abscissa. Original linear-bin probability densities preserved; nonpositive means and band portions are masked, never replaced by fabricated density.",
+    "spectral_guides": "Arbitrary normalization; -5/3 pressure/energy, +1/3 perpendicular-derivative comparison, -1/3 critical-balance parallel-derivative comparison. No fitting or numerical acceptance criterion; stop at the conservative resolved guide.",
+    "pressure_panels": "Power spectra of pressure fluctuations, Corr(delta p_perp,delta p_B), and variance(delta p_perp+delta p_B)/(variance(p_perp)+variance(p_B)); p_B=|B|^2/2."
+  },
+  "figures": {
+    "marginality.png": {
+      "previous_sha256": "2305b72499b57bce0440e92d24672aeebe31b406c3923dbda6b2c30ba14c70b2",
+      "published_sha256": "284a8179388f005aca4d4947886c43277e34a675ed861f1147e506df3093de70",
+      "bytes": 420804
+    },
+    "marginality.pdf": {
+      "previous_sha256": "f3229a13cfb5c8e17f3d7b7b892de65f9915b8c3dd829968ce6992cc72176743",
+      "published_sha256": "ffc129318be0e3fcf36a918dcb19d223602947e08c3dc372a68bd1559c7d337c",
+      "bytes": 54879
+    },
+    "pressure_balance.png": {
+      "previous_sha256": "a25a599674fcc2197e0322ce8708fe058134d50bc80f6a9acb7efa273984b1e4",
+      "published_sha256": "e1f436703a2e333cf58a5d61fa18023bba4df5bc2f3969eebd04648dae83dd62",
+      "bytes": 359676
+    },
+    "pressure_balance.pdf": {
+      "previous_sha256": "ca80566db5e9c00f83c22ddc21072ef0eecb301b74d7897156da5a2720b58c19",
+      "published_sha256": "dd459c7507947122e6bf6a34fed4691315a86f4d8e77bc96133032f4e78c38d6",
+      "bytes": 46062
+    },
+    "gradients.png": {
+      "previous_sha256": "f60cd6116e799ef83b9c257c4412d40dec86ed6bf07a86f81d0099f8bcf5c0d9",
+      "published_sha256": "1ff5d62da39b16ceff8a0d436a6bec6a17ed29fabf60a2a5402c4371f95170d9",
+      "bytes": 548293
+    },
+    "gradients.pdf": {
+      "previous_sha256": "db2ca88bc0df847056aa55e7fece3b59cd9d50a811e1c6df0b6483e33550fa67",
+      "published_sha256": "189d3cf00a4ff17c97dc50c722a44f509d8574b4d76c11feca50af7f73be3b3f",
+      "bytes": 59303
+    },
+    "spectra_energy.png": {
+      "previous_sha256": "0d001be5a5df910fafb4e66abab3f6f18ea91c4c2e879a7bcf1626095bfd88c4",
+      "published_sha256": "c1e4409b2f5f9e0aa0fc11724878cbadd8435a819b17dea751cce6dce5f213f5",
+      "bytes": 538718
+    },
+    "spectra_energy.pdf": {
+      "previous_sha256": "020afcb65179e273d8eaadaf0a21a39a4889d037cd040bad88cc7b902993cb19",
+      "published_sha256": "0f249b62bf358480e65c870cefa81e0ed5dcf226ab32cf37b638688292d00d30",
+      "bytes": 58522
+    }
+  }
+}
