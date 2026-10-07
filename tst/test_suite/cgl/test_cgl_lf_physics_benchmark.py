@@ -146,6 +146,100 @@ def test_pressure_balance_preserves_sign_and_residual(analyzer):
     assert empty["normalized_residual_variance"] is None
 
 
+def test_signed_pressure_cross_spectra_resolve_compensating_bands(analyzer):
+    shape = (32, 32, 32)
+    phase = 2*np.pi*np.arange(32)/32
+    x, z = phase[None, None, :], phase[:, None, None]
+    low = np.broadcast_to(np.cos(x), shape)
+    high = np.broadcast_to(np.cos(6*x), shape)
+    parallel = np.broadcast_to(np.sin(z), shape)
+    a = 7 + low + 2*high + parallel
+    b = 9 - low + 2*high - parallel
+    aa, bb, pair = analyzer.pressure_cross_spectra(a, b, (1, 1, 1))
+    assert aa == analyzer.spectrum([a], (1, 1, 1))
+    assert bb == analyzer.spectrum([b], (1, 1, 1))
+    powers = pair["all_parallel"]
+    ratios = analyzer.pressure_ratios(*(powers[k] for k in ("Paa", "Pbb", "Pab")))
+    assert ratios["C"][[0, 1, 6]] == pytest.approx([-1, -1, 1])
+    assert ratios["R"][[0, 1, 6]] == pytest.approx([0, 0, 2], abs=1e-14)
+    # Distinct signs cancel in neither the shell data nor the integrated covariance.
+    assert np.asarray(powers["Pab"])[[0, 1, 6]]*pair["dk"] == pytest.approx([-.5, -.5, 2])
+    assert pair["spectral_covariance"] == pytest.approx(1)
+    assert pair["real_space_covariance"] == pytest.approx(1)
+    assert pair["covariance_parseval_absolute_error"] < 1e-14
+    resolved = pair["full_k_resolved"]
+    assert resolved["Pab"][0]*pair["dk"] == pytest.approx(-.5)
+    assert sum(resolved["Pab"])*pair["dk"] == pytest.approx(-1)
+    assert resolved["Paa"][6] == 0
+    # Independent real-space shell filtering proves the signed cross-power meaning.
+    kx, ky, _ = analyzer.grids(shape, (1, 1, 1))
+    band = (np.hypot(kx, ky) >= pair["dk"]) & (np.hypot(kx, ky) < 2*pair["dk"])
+    af = np.fft.ifftn(np.fft.fftn(a-a.mean())*band).real
+    bf = np.fft.ifftn(np.fft.fftn(b-b.mean())*band).real
+    assert np.mean(af*bf) == pytest.approx(powers["Pab"][1]*pair["dk"])
+
+
+def test_pressure_shell_ratios_preserve_phase_amplitude_and_zero_denominators(analyzer):
+    # Unequal perfect anticorrelation is not exact pressure compensation.
+    ratios = analyzer.pressure_ratios([1, 1, 1, 0, 1], [1, 4, 1, 0, 0],
+                                     [-1, -2, 0, 0, 0])
+    result = analyzer.json_value(ratios)
+    assert result["C"] == [-1, -1, 0, None, None]
+    assert result["R"] == [0, .2, 1, None, 1]
+    _, _, uniform = analyzer.pressure_cross_spectra(
+        np.ones((4, 4, 4)), np.ones((4, 4, 4))*2, (1, 1, 1))
+    for band in ("all_parallel", "full_k_resolved"):
+        empty = analyzer.json_value(analyzer.pressure_ratios(
+            *(uniform[band][k] for k in ("Paa", "Pbb", "Pab"))))
+        assert all(v is None for values in empty.values() for v in values)
+
+
+def test_pressure_scale_blocks_average_powers_before_ratios(analyzer):
+    times = [0, 1, 3, 4]
+    records = []
+    for pbb, pab in [(1, -1), (1, -1), (9, 3), (9, 3)]:
+        powers = {"Paa": [1, 0], "Pbb": [pbb, 0], "Pab": [pab, 0]}
+        records.append({"dk": 1, "k": [.5, 1.5], "shell_edges": [0, 1, 2],
+                        "all_parallel": powers, "full_k_resolved": powers,
+                        "covariance_parseval_absolute_error": 0})
+    result = analyzer.json_value(analyzer.pressure_balance_by_scale(times, records, 2, 0, 4))
+    for band in ("all_parallel", "full_k_resolved"):
+        row = result[band]
+        assert row["Pbb"]["mean"] == [5, 0]
+        assert row["Pab"]["mean"] == [1, 0]
+        assert row["C"]["mean"][0] == pytest.approx(1/np.sqrt(5))
+        assert row["R"]["mean"][0] == pytest.approx(4/3)
+        assert np.asarray(row["C"]["block_means"], object)[:, 0].astype(float) == pytest.approx(
+            [-.5/np.sqrt(2), 2.5/np.sqrt(8)])
+        assert np.asarray(row["R"]["block_means"], object)[:, 0].astype(float) == pytest.approx([2/3, 14/9])
+        assert row["C"]["mean"][1] is None
+        assert row["C"]["block_min"][1] is None
+        assert row["C"]["valid_block_count"] == [2, 0]
+    short = analyzer.pressure_balance_by_scale(times, records, 8, 0, 4)
+    assert short["all_parallel"]["C"]["block_count"] == 0
+    assert short["all_parallel"]["C"]["valid_block_count"] == [0, 0]
+
+
+def test_shared_pdf_edges_preserve_exact_bins_and_reject_clipping(analyzer, tmp_path):
+    path = tmp_path/"shared-edges.json"
+    edges = {"B_over_B0": [0., .5, 1., 2.], "X": [-3., -2., 0., 1., 2.]}
+    path.write_text(json.dumps({"schema_version": 1, "edges": edges}))
+    actual = analyzer.read_pdf_edges(path, {"B_over_B0": (0, 2), "X": (-3, 2)})
+    for name in edges:
+        np.testing.assert_array_equal(actual[name], edges[name])
+    values = np.array([0., .5, 1., 2.])
+    pdf = analyzer.volume_pdf(values, actual["B_over_B0"], 1)
+    assert np.dot(pdf, np.diff(actual["B_over_B0"])) == 1
+    with pytest.raises(ValueError, match="clip B_over_B0 tails"):
+        analyzer.read_pdf_edges(path, {"B_over_B0": (-1e-15, 2), "X": (-3, 2)})
+    with pytest.raises(ValueError, match="clip X tails"):
+        analyzer.read_pdf_edges(path, {"B_over_B0": (0, 2), "X": (-3, 2+1e-14)})
+    edges["X"] = [-3, 0, 0, 2]
+    path.write_text(json.dumps({"schema_version": 1, "edges": edges}))
+    with pytest.raises(ValueError, match="strictly increasing"):
+        analyzer.read_pdf_edges(path, {"B_over_B0": (0, 2), "X": (-3, 2)})
+
+
 def test_threshold_nearness_is_distinct_from_exceedance(analyzer):
     x = np.array([-2.5, -2.0625, -2.0, -1.9375, 0.0,
                   0.9375, 1.0, 1.0625, 1.5])
@@ -345,15 +439,43 @@ def synthetic_run(analyzer, tmp_path):
     return run, header
 
 
-def run_cli(run, output, metadata=None, start=0, end=2):
+def run_cli(run, output, metadata=None, start=0, end=2, pdf_edges=None):
     command = [sys.executable, str(ANALYZER), str(run), "--time-start", str(start),
                "--time-end", str(end), "--block-duration", "0.5",
                "--output-dir", str(output)]
     if metadata is not None:
         command += ["--metadata", str(metadata)]
+    if pdf_edges is not None:
+        command += ["--pdf-edges", str(pdf_edges)]
     proc = subprocess.run(command, cwd=run, capture_output=True, text=True, timeout=90)
     (run / (output.name + "-stdout.log")).write_text(proc.stdout + proc.stderr)
     return proc
+
+
+def test_cli_shared_pdf_edges_and_signed_pressure_spectra(synthetic_run):
+    run, _ = synthetic_run
+    path = run/"shared-edges.json"
+    edges = {"B_over_B0": [0, .9, 1, 1.1, 2], "X": [-3, -.5, 0, .5, 2]}
+    path.write_text(json.dumps({"schema_version": 1, "edges": edges}))
+    output = run/"analysis-shared-edges"
+    proc = run_cli(run, output, pdf_edges=path)
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    result = json.loads((output/"metrics.json").read_text())
+    assert result["provenance"]["pdf_edges_file"]["sha256"] == hashlib.sha256(path.read_bytes()).hexdigest()
+    for name, bins in edges.items():
+        assert result["PDFs"][name]["edges"] == bins
+        assert np.dot(result["PDFs"][name]["mean"], np.diff(bins)) == pytest.approx(1)
+    balance = result["pressure_balance_by_scale"]
+    assert balance["all_parallel"]["C"]["mean"][1] == pytest.approx(-1, abs=1e-10)
+    assert balance["all_parallel"]["R"]["mean"][1] < 1e-9
+    assert balance["all_parallel"]["C"]["block_count"] == 4
+    assert len(result["snapshots"][0]["pressure_cross_spectra"]["all_parallel"]["Pab"]) == len(balance["k"])
+    edges["B_over_B0"][-1] = 1.02
+    edges["B_over_B0"] = [0, .9, 1, 1.02]
+    path.write_text(json.dumps({"schema_version": 1, "edges": edges}))
+    rejected = run_cli(run, run/"analysis-clipped-edges", pdf_edges=path)
+    assert rejected.returncode != 0
+    assert "PDF edges clip B_over_B0 tails" in rejected.stderr
 
 
 def test_real_binary_reader_and_cli_export_with_unknown_simulation(analyzer, synthetic_run):

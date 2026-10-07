@@ -38,6 +38,7 @@ DEFINITIONS = {
     "parallel_velocity_derivative": "b dot grad(u dot b) = S_parallel + u dot [(b dot grad)b] in the continuum; discretization need not obey the product rule exactly",
     "induction": "S_parallel-div(u) reconstructs ideal material D ln|B|/Dt; not a measured time derivative or resistive/numerical induction budget",
     "pressure_balance": "corr(delta p_perp, delta(B^2/2)); R=mean[(delta p_perp+delta(B^2/2))^2]/(var(p_perp)+var(B^2/2)); exact compensation gives corr=-1,R=0",
+    "pressure_balance_by_scale": "Paa/Pbb are shell sums of squared FFT/N of mean-subtracted p_perp and B^2/2, divided by dk; Pab is the signed real cross spectrum. Average these powers in physical time before C=Pab/sqrt(Paa*Pbb), R=(Paa+Pbb+2*Pab)/(Paa+Pbb), separately for the full interval and each block. C is signed correlation, not squared coherence; zero denominators are unavailable. Perpendicular shells sum all k_parallel; full_k_resolved uses the same conservative full-wavevector mask for all three powers",
     "FFT": "F=fftn(field)/N; shell power=sum_shell |F|^2 / dk; integral over all shells (including k_perp=0) equals the stated real-space mean square",
     "shells": "k_perp=sqrt(kx^2+ky^2) relative to the initial z guide field; physical radians/length; bins [n*dk,(n+1)*dk), dk=min(2*pi/Lx,2*pi/Ly)",
     "kinetic_spectrum": "FFT of sqrt(rho/2)*(u-u_bulk), u_bulk=<rho*u>/<rho>; no further mean removal; integral=mean[rho*|u-u_bulk|^2/2]",
@@ -45,6 +46,9 @@ DEFINITIONS = {
     "pressure_spectra": "FFT of each scalar minus its volume mean; unnormalized physical pressure units; integral=variance",
     "gradient_spectra": "FFT of each reconstructed scalar/vector minus its component means; signed fields are squared only by the power spectrum; spectra do not determine signs",
     "Mach": "u_rms about volume-mean velocity / sqrt(gamma*<p_iso>/<rho>), p_iso=(p_parallel+2*p_perp)/3; isotropic-pressure proxy, not a CGL characteristic-wave Mach number",
+    "Mach_isothermal": "passive only: u_rms about volume-mean velocity / retained iso_sound_speed; this is the sound speed of the actual isothermal dynamics",
+    "passive_pressure": "passive p_parallel and p_perp remain CGL thermal diagnostics without a momentum force; dynamic_isothermal_pressure=iso_sound_speed^2*rho is the pressure in the passive momentum equation; dynamic_pressure_* compares this pressure with B^2/2",
+    "passive_energy": "cgl-J and cgl-A are material-invariant integrals, not energies; thermal-U=integral(p_perp+p_parallel/2)dV is passive thermal energy; force_work measures the kinetic-energy change of forcing kicks. KE+ME+thermal-U has no active-CGL conserved-energy closure",
     "beta": "volume mean of 2*p_iso/B^2; also report 2*<p_iso>/<B^2>, which differs in general",
     "deltaB": "sqrt(<|B-<B>|^2>)/B0; mean field removed separately at each snapshot",
     "forcing": "actual accumulated applied forcing work is user-history force_work; force_pwr is instantaneous rho*u dot f and is not its exact quadrature",
@@ -226,21 +230,35 @@ def volume_pdf(values, edges, cell_volumes):
     return count / (np.sum(volumes) * np.diff(edges))
 
 
+def read_pdf_edges(path, limits):
+    """Load shared true histogram edges and reject truncated distributions."""
+    record = json.loads(Path(path).read_text())
+    if record.get("schema_version") != 1 or set(record.get("edges", {})) != set(limits):
+        raise ValueError("PDF edges require schema_version=1 and exactly B_over_B0/X channels")
+    edges = {}
+    for name, (low, high) in limits.items():
+        values = np.asarray(record["edges"][name], dtype=float)
+        if (values.ndim != 1 or len(values) < 2 or not np.isfinite(values).all()
+                or np.any(np.diff(values) <= 0)):
+            raise ValueError(f"PDF edges for {name} must be finite and strictly increasing")
+        if low < values[0] or high > values[-1]:
+            raise ValueError(f"PDF edges clip {name} tails: retained [{low}, {high}], "
+                             f"edges [{values[0]}, {values[-1]}]")
+        edges[name] = values
+    return edges
+
+
 def grids(shape, lengths):
     return np.meshgrid(*[2 * np.pi * np.fft.fftfreq(n, d=l / n)
         for n, l in zip(shape, lengths[::-1])], indexing="ij")[::-1]
 
 
-def spectrum(fields, lengths, remove_mean=True):
-    shape = fields[0].shape
+def spectrum_from_power(power, lengths, real_power):
+    """Reduce full-grid Fourier power with the common, unaveraged shell rule."""
+    shape = power.shape
     kx, ky, kz = grids(shape, lengths)
     dk = min(2 * np.pi / lengths[0], 2 * np.pi / lengths[1])
     shell = np.floor(np.hypot(kx, ky) / dk + 1e-12).astype(int)
-    power, real_power = np.zeros(shape), 0.0
-    for field in fields:
-        centered = field - np.mean(field) if remove_mean else field
-        real_power += float(np.mean(centered ** 2))
-        power += abs(np.fft.fftn(centered) / centered.size) ** 2
     binned = np.bincount(shell.ravel(), weights=power.ravel())
     k_nyquist = min(np.pi*n/l for n, l in zip(shape, lengths[::-1]))
     k2 = kx*kx+ky*ky+kz*kz
@@ -253,6 +271,93 @@ def spectrum(fields, lengths, remove_mean=True):
             "spectral_integral": float(np.sum(binned)),
             "parseval_relative_error": float(abs(np.sum(binned) - real_power)
                 / max(real_power, np.finfo(float).tiny))}
+
+
+def spectrum(fields, lengths, remove_mean=True):
+    power, real_power = np.zeros(fields[0].shape), 0.0
+    for field in fields:
+        centered = field - np.mean(field) if remove_mean else field
+        real_power += float(np.mean(centered ** 2))
+        power += abs(np.fft.fftn(centered) / centered.size) ** 2
+    return spectrum_from_power(power, lengths, real_power)
+
+
+def pressure_cross_spectra(perp, magnetic, lengths):
+    """Return both standard auto spectra and their signed, phase-sensitive pair."""
+    a, b = perp - np.mean(perp), magnetic - np.mean(magnetic)
+    ahat, bhat = np.fft.fftn(a)/a.size, np.fft.fftn(b)/b.size
+    auto_a = spectrum_from_power(abs(ahat)**2, lengths, float(np.mean(a*a)))
+    auto_b = spectrum_from_power(abs(bhat)**2, lengths, float(np.mean(b*b)))
+    cross = (ahat*np.conj(bhat)).real
+    kx, ky, kz = grids(a.shape, lengths)
+    dk = auto_a["dk"]
+    shell = np.floor(np.hypot(kx, ky)/dk + 1e-12).astype(int)
+    k2 = kx*kx+ky*ky+kz*kz
+    nyquist = min(np.pi*n/l for n, l in zip(a.shape, lengths[::-1]))
+    resolved = (k2 > 0) & (k2 <= (.25*nyquist)**2)
+    cross_sum = np.bincount(shell.ravel(), weights=cross.ravel())
+    covariance = float(np.mean(a*b))
+    pair = {"k": auto_a["k"], "dk": dk,
+        "shell_edges": (np.arange(len(cross_sum)+1)*dk).tolist(),
+        "all_parallel": {"Paa": auto_a["power"], "Pbb": auto_b["power"],
+                         "Pab": (cross_sum/dk).tolist()},
+        "full_k_resolved": {"Paa": auto_a["full_k_resolved_power"],
+            "Pbb": auto_b["full_k_resolved_power"],
+            "Pab": (np.bincount(shell.ravel(), weights=(cross*resolved).ravel(),
+                                minlength=len(cross_sum))/dk).tolist()},
+        "real_space_covariance": covariance,
+        "spectral_covariance": float(np.sum(cross_sum)),
+        "covariance_parseval_absolute_error": float(abs(np.sum(cross_sum)-covariance))}
+    return auto_a, auto_b, pair
+
+
+def pressure_ratios(paa, pbb, pab):
+    """Derive signed ratios; NaN becomes an explicit JSON null on export."""
+    paa, pbb, pab = np.asarray(paa), np.asarray(pbb), np.asarray(pab)
+    total = paa+pbb
+    correlation = np.divide(pab, np.sqrt(paa)*np.sqrt(pbb),
+        out=np.full(paa.shape, np.nan), where=(paa > 0) & (pbb > 0))
+    residual = np.divide(total+2*pab, total,
+        out=np.full(total.shape, np.nan), where=total > 0)
+    return {"C": correlation, "R": residual}
+
+
+def pressure_balance_by_scale(times, records, block_duration, start, end):
+    """Average cross/auto powers first; never average normalized shell ratios."""
+    first = records[0]
+    if any(any(row[key] != first[key] for key in ("k", "dk", "shell_edges"))
+           for row in records):
+        raise ValueError("pressure cross-spectrum shell geometry changed")
+    result = {key: first[key] for key in ("k", "dk", "shell_edges")}
+    result["definition"] = DEFINITIONS["pressure_balance_by_scale"]
+    result["unavailable_rule"] = "C is null unless both auto powers are positive; R is null unless their sum is positive. Block ranges/SD require every complete block to be defined; valid_block_count is retained."
+    result["zero_shell"] = "First perpendicular shell includes pure-parallel nonzero modes; its midpoint is a bin label, not k_perp of those modes."
+    for band in ("all_parallel", "full_k_resolved"):
+        powers = {name: temporal_summary(times, [row[band][name] for row in records],
+            block_duration, start, end) for name in ("Paa", "Pbb", "Pab")}
+        mean_ratios = pressure_ratios(*(powers[name]["mean"] for name in ("Paa", "Pbb", "Pab")))
+        block_ratios = pressure_ratios(*(powers[name]["block_means"] for name in ("Paa", "Pbb", "Pab")))
+        result[band] = powers
+        for name in ("C", "R"):
+            blocks = block_ratios[name]
+            count = powers["Paa"]["block_count"]
+            ratio = {key: powers["Paa"][key] for key in
+                ("block_starts", "block_duration", "block_count", "effective_window")}
+            ratio.update(mean=mean_ratios[name].tolist(), block_means=blocks.tolist(),
+                         block_min=None, block_max=None, block_sd=None,
+                         valid_block_count=(np.isfinite(blocks).sum(axis=0).tolist()
+                             if count else [0]*len(first["k"])))
+            if count >= 2:
+                valid = np.isfinite(blocks).all(axis=0)
+                for key, operation in (("block_min", np.min), ("block_max", np.max),
+                                       ("block_sd", lambda x, axis: np.std(x, axis=axis, ddof=1))):
+                    values = np.full(len(first["k"]), np.nan)
+                    values[valid] = operation(blocks[:, valid], axis=0)
+                    ratio[key] = values.tolist()
+            result[band][name] = ratio
+    result["max_covariance_parseval_absolute_error"] = max(
+        row["covariance_parseval_absolute_error"] for row in records)
+    return result
 
 
 def pressure_balance(perp, magnetic):
@@ -283,7 +388,7 @@ def float32_x_envelope(ppar, perp, magnetic):
                      out=np.full_like(b2, np.inf), where=b2 > db2)
 
 
-def snapshot_products(fields, lengths, model, near_width):
+def snapshot_products(fields, lengths, model, near_width, include_pressure_cross=False):
     rho, ppar, perp = (fields[key] for key in ("dens", "eint", "p_perp"))
     if min(np.min(rho), np.min(ppar), np.min(perp)) <= 0:
         raise ValueError("positive density and both pressures required")
@@ -314,14 +419,19 @@ def snapshot_products(fields, lengths, model, near_width):
     kinetic_fields = [np.sqrt(rho/2)*(v-v0) for v, v0 in zip(u, bulk)]
     magnetic_fields = [(v-np.mean(v))/np.sqrt(2) for v in b]
     spectral_fields = {
-        "p_parallel": [ppar], "p_perp": [perp], "magnetic_pressure": [mag],
+        "p_parallel": [ppar],
         "S_parallel": [strain], "div_u": [div], "induction": [strain-div],
         "b_grad_u_parallel": [along_up], "perp_gradient_u_perp": transverse,
         "parallel_gradient_u_perp": parallel_perp,
         "perp_gradient_u_parallel": perp_parallel,
         "u_parallel": [up], "u_perp": uperp,
     }
+    passive = model.get("passive", False)
+    if passive:
+        dynamic_pressure = model["iso_sound_speed"]**2*rho
+        spectral_fields["dynamic_isothermal_pressure"] = [dynamic_pressure]
     spectra = {name: spectrum(values, lengths) for name, values in spectral_fields.items()}
+    spectra["p_perp"], spectra["magnetic_pressure"], pressure_cross = pressure_cross_spectra(perp, mag, lengths)
     spectra["kinetic"] = spectrum(kinetic_fields, lengths, remove_mean=False)
     spectra["magnetic"] = spectrum(magnetic_fields, lengths, remove_mean=False)
     scalars = {"B_over_B0_mean": float(np.mean(np.sqrt(b2)/model["B0"])),
@@ -347,6 +457,12 @@ def snapshot_products(fields, lengths, model, near_width):
     for name, value in pressure_balance(perp, mag).items():
         if value is not None:
             scalars[f"pressure_{name}"] = float(value)
+    if passive:
+        scalars["Mach_isothermal"] = float(
+            np.sqrt(sum(np.mean((v-np.mean(v))**2) for v in u))/model["iso_sound_speed"])
+        for name, value in pressure_balance(dynamic_pressure, mag).items():
+            if value is not None:
+                scalars[f"dynamic_pressure_{name}"] = float(value)
     rounding = float32_x_envelope(ppar, perp, b)
     scalars["X_float32_rounding_envelope_max"] = float(np.max(rounding))
     for label, threshold in (("mirror", model["mirror_X"]), ("firehose", model["firehose_X"])):
@@ -360,7 +476,8 @@ def snapshot_products(fields, lengths, model, near_width):
         beyond = x-rounding > threshold if label == "mirror" else x+rounding < threshold
         scalars[label+"_strict_beyond_rounding_envelope"] = float(np.mean(beyond))
         scalars[label+"_rounding_ambiguous"] = float(np.mean(abs(x-threshold) <= rounding))
-    return scalars, spectra, {"B_over_B0": np.sqrt(b2)/model["B0"], "X": x}
+    result = (scalars, spectra, {"B_over_B0": np.sqrt(b2)/model["B0"], "X": x})
+    return (*result, pressure_cross) if include_pressure_cross else result
 
 
 def force_products(fields, lengths):
@@ -577,6 +694,12 @@ def infer_model(header, metadata):
              "mirror_limiter": boolean("mhd", "mirror_limiter"),
              "firehose_limiter": boolean("mhd", "firehose_limiter"),
              "passive": boolean("mhd", "passive")}
+    if model["passive"] or "iso_sound_speed" in mhd:
+        if "iso_sound_speed" not in mhd:
+            raise ValueError("passive model requires retained mhd/iso_sound_speed")
+        model["iso_sound_speed"] = float(mhd["iso_sound_speed"])
+        if not np.isfinite(model["iso_sound_speed"]) or model["iso_sound_speed"] <= 0:
+            raise ValueError("retained iso_sound_speed must be finite and positive")
     if model["B0"] <= 0 or model["gamma_sound"] <= 0:
         raise ValueError("positive retained B0 and gamma required")
     for key, supplied in metadata.get("model", {}).items():
@@ -589,15 +712,52 @@ def infer_model(header, metadata):
     return model
 
 
+def comparable_model_sections(header):
+    """Normalize only the version marker inserted by the first passive restart."""
+    sections = {key: dict(header.get(key, {})) for key in ("mhd", "problem", "turb_driving")}
+    if sections["mhd"].get("passive", "false").lower() == "true":
+        encoding = sections["mhd"].pop("passive_restart_encoding", None)
+        if encoding not in (None, "1"):
+            raise ValueError("unsupported retained passive_restart_encoding: "+str(encoding))
+    return sections
+
+
 def history_products(user, mhd, model, start, end, block_duration):
     result = {"available": bool(user), "series": {}, "window": {}, "energy_budget": {
         "available": False, "requested_interval": [start, end],
+        "requested_window_covered": False}, "forcing_work": {
+        "available": False, "requested_interval": [start, end],
         "requested_window_covered": False}}
+    passive = model.get("passive", False)
+    result["semantics"] = {
+        "mode": "passive isothermal MHD with diagnostic CGL pressures" if passive else "active CGL",
+        "forcing_work": "kinetic-energy change of applied forcing kicks" if passive else "conserved total-energy change of applied forcing kicks",
+        "thermal_energy": "integral(p_perp+p_parallel/2)dV; passive thermodynamics is independent of the isothermal flow energy" if passive else "integral(p_perp+p_parallel/2)dV",
+        "pressure_work": "diagnostic thermal stress, not applied to momentum" if passive else "mechanical contraction of the applied CGL pressure traction",
+    }
+    if passive:
+        result["energy_budget"].update(applicable=False,
+            reason="active conserved-total-energy closure does not apply to passive isothermal dynamics; cgl-J is not energy")
+    else:
+        result["energy_budget"]["applicable"] = True
     if not user:
         result["reason"] = "user history missing; snapshots are not exact energy/source ledgers"
         return result
     t = user["time"]
     series = {name: value for name, value in user.items()}
+    if "force_work" in user and model.get("record_injected_work", False):
+        lo, hi = max(start, t[0]), min(end, t[-1])
+        if hi > lo:
+            work = np.interp([lo, hi], t, user["force_work"])
+            dw = float(work[1]-work[0])
+            result["forcing_work"] = {"available": True, "interval": [lo, hi],
+                "requested_interval": [start, end],
+                "requested_window_covered": bool(lo <= start and hi >= end),
+                "actual_applied_work": dw, "actual_mean_total_power": dw/(hi-lo),
+                "meaning": result["semantics"]["forcing_work"],
+                "sampling": "linear interpolation only between retained history rows"}
+    if not result["forcing_work"]["available"]:
+        result["forcing_work"]["reason"] = "need enabled measured force_work and an overlapping history interval"
     if "volume" in user:
         volume = user["volume"]
         for label in ("mirror", "fire", "hard"):
@@ -615,7 +775,10 @@ def history_products(user, mhd, model, start, end, block_duration):
             if name in series:
                 result["window"][name] = temporal_summary(t, series[name], block_duration, start, end)
                 result["window"][name]["autocorrelation"] = autocorrelation(t[selected], series[name][selected])
-    if "tot-E" in mhd:
+    if passive and "thermal-U" in mhd:
+        result["thermal_energy_history"] = {"time": mhd["time"].tolist(),
+                                           "thermal-U": mhd["thermal-U"].tolist()}
+    if not passive and "tot-E" in mhd:
         result["conserved_energy_history"] = {"time": mhd["time"].tolist(), "tot-E": mhd["tot-E"].tolist()}
     if ("force_work" in user and "tot-E" in mhd and model["record_injected_work"]
             and model.get("passive") is False):
@@ -624,14 +787,14 @@ def history_products(user, mhd, model, start, end, block_duration):
             work = np.interp([lo, hi], t, user["force_work"])
             energy = np.interp([lo, hi], mhd["time"], mhd["tot-E"])
             dw, de = float(work[1]-work[0]), float(energy[1]-energy[0])
-            result["energy_budget"] = {"available": True, "interval": [lo, hi],
+            result["energy_budget"] = {"available": True, "applicable": True, "interval": [lo, hi],
                 "requested_interval": [start, end],
                 "requested_window_covered": bool(lo <= start and hi >= end),
                 "actual_applied_work": dw, "actual_mean_total_power": dw/(hi-lo),
                 "conserved_total_energy_change": de, "residual_E_minus_work": de-dw,
                 "relative_residual": abs(de-dw)/max(abs(de), abs(dw), np.finfo(float).tiny),
                 "sampling": "linear interpolation only if explicit endpoints are between retained history rows"}
-    if not result["energy_budget"]["available"]:
+    if not passive and not result["energy_budget"]["available"]:
         result["energy_budget"]["reason"] = "need active CGL, enabled measured force_work, conserved tot-E, and overlapping interval"
     result["series"] = {name: value.tolist() for name, value in series.items()}
     if mhd:
@@ -642,6 +805,18 @@ def history_products(user, mhd, model, start, end, block_duration):
             result["LF_counter_increments"] = {key: float(np.diff(np.interp([lo, hi], mhd["time"], values))[0])
                 for key, values in mhd.items() if key.startswith("lf_")}
     return result
+
+
+def energy_coverage_reasons(history, model):
+    """Require the measured ledger appropriate to the actual dynamics."""
+    passive = model.get("passive", False)
+    ledger = history["forcing_work" if passive else "energy_budget"]
+    label = "actual applied forcing-work ledger" if passive else "actual forcing/conserved-energy budget"
+    if not ledger["available"]:
+        return [label+" unavailable"]
+    if not ledger["requested_window_covered"]:
+        return [label+" covers only "+str(ledger["interval"])+", not the full requested window"]
+    return []
 
 
 def common_energy_history(history):
@@ -743,6 +918,8 @@ def main(argv=None):
     parser.add_argument("--block-duration", default=2., type=float)
     parser.add_argument("--near-width", default=.05, type=float)
     parser.add_argument("--pdf-bins", default=128, type=int)
+    parser.add_argument("--pdf-edges", type=Path,
+                        help="shared schema-v1 B_over_B0/X histogram edges; reject clipped tails")
     parser.add_argument("--metadata", type=Path)
     parser.add_argument("--output-dir", type=Path)
     args = parser.parse_args(argv)
@@ -761,14 +938,16 @@ def main(argv=None):
     records, duplicates, limits, reference_header = {}, [], {}, None
     for path in paths:
         fields, lengths, header, info = read_uniform(path, FIELDS)
+        comparable = comparable_model_sections(header)
         if reference_header is None:
             reference_header = header
+            reference_model_sections = comparable
             model = infer_model(header, metadata)
             model["nominal_total_forcing_power"] = model["dedt_per_volume"]*float(np.prod(lengths))
             for segment in segments:
                 if segment["input"] is not None:
                     crosscheck_input(header, segment["input"])
-        elif any(header.get(key) != reference_header.get(key) for key in ("mhd", "problem", "turb_driving")):
+        elif comparable != reference_model_sections:
             raise ValueError("model parameters changed across retained snapshots")
         digest = hashlib.sha256()
         for name in FIELDS:
@@ -780,12 +959,14 @@ def main(argv=None):
                 raise ValueError(f"conflicting physical states at duplicate time {key}")
             duplicates.append({"time": key, "omitted": str(path), "kept": str(records[key]["path"])})
             continue
-        scalars, spectra, distributions = snapshot_products(fields, lengths, model, args.near_width)
+        scalars, spectra, distributions, cross = snapshot_products(
+            fields, lengths, model, args.near_width, include_pressure_cross=True)
         for name, value in distributions.items():
             low, high = float(np.min(value)), float(np.max(value))
             old = limits.get(name, (low, high))
             limits[name] = min(low, old[0]), max(high, old[1])
-        records[key] = {"path": path, "info": info, "scalars": scalars, "spectra": spectra}
+        records[key] = {"path": path, "info": info, "scalars": scalars,
+                        "spectra": spectra, "pressure_cross": cross}
         print(f"analyzed t={key:g}: {path.name}", flush=True)
     ordered = [records[key] for key in sorted(records)]
     times = np.asarray(sorted(records))
@@ -795,9 +976,12 @@ def main(argv=None):
            or row["info"]["lengths_xyz"] != ordered[0]["info"]["lengths_xyz"] for row in ordered):
         raise ValueError("grid geometry changed across snapshots")
     edges = {}
-    for name, (low, high) in limits.items():
-        pad = max((high-low)*1e-8, 1e-12*max(1, abs(low), abs(high)))
-        edges[name] = np.linspace(low-pad, high+pad, args.pdf_bins+1)
+    if args.pdf_edges:
+        edges = read_pdf_edges(args.pdf_edges, limits)
+    else:
+        for name, (low, high) in limits.items():
+            pad = max((high-low)*1e-8, 1e-12*max(1, abs(low), abs(high)))
+            edges[name] = np.linspace(low-pad, high+pad, args.pdf_bins+1)
     pdf_rows = {name: [] for name in edges}
     # A second streaming pass gives every PDF identical edges without retaining
     # all cell arrays from every snapshot in memory or clipping physical tails.
@@ -833,6 +1017,9 @@ def main(argv=None):
             "full_k_resolved": average([row["full_k_resolved_power"] for row in rows])}
     pdfs = {name: {**average(rows), "edges": edges[name].tolist()}
             for name, rows in pdf_rows.items()}
+    pressure_scales = pressure_balance_by_scale(times,
+        [row["pressure_cross"] for row in ordered], args.block_duration,
+        args.time_start, args.time_end)
     user_paths, user_boundaries, _ = segment_paths(segments, "user_history", "**/*.user.hst")
     mhd_paths, mhd_boundaries, _ = segment_paths(segments, "mhd_history", "**/*.mhd.hst")
     user, user_info = merge_histories(user_paths, user_boundaries)
@@ -852,8 +1039,8 @@ def main(argv=None):
         reference = records[key]["info"]
         if info["shape_zyx"] != reference["shape_zyx"] or force_lengths != reference["lengths_xyz"]:
             raise ValueError("forcing and primitive snapshot geometry differ")
-        if any(force_header.get(section) != reference_header.get(section)
-               for section in ("mesh", "mhd", "problem", "turb_driving")):
+        if (force_header.get("mesh") != reference_header.get("mesh")
+                or comparable_model_sections(force_header) != reference_model_sections):
             raise ValueError("forcing and primitive snapshot physical input headers differ")
         digest = hashlib.sha256()
         for name in FORCE_FIELDS:
@@ -891,12 +1078,7 @@ def main(argv=None):
         reasons.append(f"only {block_count} complete time blocks; at least four requested for descriptive variability")
     if times[0] > args.time_start+1e-12 or times[-1] < args.time_end-1e-12:
         reasons.append("snapshot coverage does not bracket both requested endpoints; no extrapolation performed")
-    if not history["energy_budget"]["available"]:
-        reasons.append("actual forcing/conserved-energy budget unavailable")
-    elif not history["energy_budget"]["requested_window_covered"]:
-        reasons.append("actual forcing/conserved-energy budget covers only "
-                       +str(history["energy_budget"]["interval"])
-                       +", not the full requested window")
+    reasons.extend(energy_coverage_reasons(history, model))
     if not forces:
         reasons.append("realized forcing-mode mixture unmeasured")
     elif set(forces) != set(records):
@@ -945,8 +1127,10 @@ def main(argv=None):
     findings = {
         "marginality": {"classification": "inconclusive", "reason": "report near-band residence and strict/rounding-robust crossings separately; snapshot precision and projection cadence do not establish full-time admissibility"},
         "pressure_balance": {"classification": pressure_direction, "reason": "negative covariance and R<1 indicate compensation relative to uncorrelated fields; extent and variability require review, with no paper amplitude tolerance", "correlation": pressure_corr, "residual": pressure_residual},
-        "gradients": {"classification": "inconclusive", "reason": "resolved/cutoff tensor ratios and parallel velocity are measured; one active box cannot establish suppression caused by anisotropy feedback", **ratio},
+        "gradients": {"classification": "inconclusive", "reason": "resolved/cutoff tensor ratios and parallel velocity are measured; one run cannot establish suppression caused by anisotropy feedback", **ratio},
         "spectra_energy": {"classification": "inconclusive", "reason": "Parseval and measured forcing ledger available as stated; thermal drift and cascade extent require finite-window review, without a target slope"}}
+    if model.get("passive", False):
+        findings["pressure_balance"]["reason"] += "; passive CGL thermal compensation is diagnostic, while dynamic_pressure_* measures the actual isothermal pressure"
     result = {"schema_version": 1, "definitions": DEFINITIONS,
         "requested_window": [args.time_start, args.time_end],
         "retained_window": [max(float(times[0]), args.time_start), min(float(times[-1]), args.time_end)],
@@ -956,8 +1140,10 @@ def main(argv=None):
             "endpoint_rule": "linearly interpolate diagnostic values/PDF bins/spectral bins at requested endpoints using bracketing snapshots; no field interpolation or extrapolation",
             "block_duration": args.block_duration, "complete_blocks": block_count,
             "block_anchor": max(float(times[0]), args.time_start),
+            "pdf_edge_policy": "external shared edges; clipping rejected" if args.pdf_edges else "shared edges spanning all retained snapshots",
             "instantaneous_output_caveat": "post-operator snapshots may miss transient threshold excursions; inclusive history switches, strict exceedance, and near bands have different meanings"},
         "model": model, "scalars": scalars, "spectra": spectra, "PDFs": pdfs,
+        "pressure_balance_by_scale": pressure_scales,
         "scale_bands": scales, "gradient_comparisons": ratio, "history": history,
         "forcing_decomposition": force_summary, "empirical_autocorrelation": autocorr,
         "unavailable_metric_reasons": unavailable,
@@ -971,16 +1157,19 @@ def main(argv=None):
         "adequacy": {"classification": classification, "reasons": reasons,
             "sampling_prerequisites_satisfied": not reasons,
             "scope": "descriptive single-box finite-window comparison; no causal active/passive, asymptotic convergence, or LF-coefficient claim",
-            "heating": "no cooling: secular thermal-energy/beta drift is expected and must be reported, not mistaken for a stationary thermal ensemble",
+            "heating": ("passive CGL thermal energy/beta may drift independently of the isothermal dynamics; no conserved KE+ME+U closure applies" if model.get("passive", False) else "no cooling: secular thermal-energy/beta drift is expected and must be reported, not mistaken for a stationary thermal ensemble"),
             "classification_rule": "overall scientific classification remains inconclusive pending joint scientific review; sampling prerequisites, numerical analysis checks and group directional findings are separate"},
-        "snapshots": [{"info": row["info"], "scalars": row["scalars"]} for row in ordered],
+        "snapshots": [{"info": row["info"], "scalars": row["scalars"],
+                       "pressure_cross_spectra": row["pressure_cross"]} for row in ordered],
         "provenance": {"metadata": retained_file(metadata_path), "retained_metadata": metadata,
             "simulation_revision": revisions[0] if len(set(revisions)) == 1 else revisions,
             "analysis_revision": revision,
             "analysis_script": retained_file(Path(__file__)), "reader_script": retained_file(Path(paper.__file__)),
             "binary_reader_script": retained_file(Path(paper.bin_convert.__file__)),
+            "pdf_edges_file": retained_file(args.pdf_edges) if args.pdf_edges else None,
             "software": {"python": sys.version, "numpy": np.__version__, "matplotlib": version("matplotlib")},
             "embedded_input": reference_header, "duplicate_snapshots": duplicates,
+            "model_header_normalization": "passive_restart_encoding may be absent before the first restart writes version 1; all physical mhd/problem/turb_driving parameters must still match",
             "discarded_snapshot_branches": discarded_snapshots, "discarded_forcing_branches": discarded_forcing,
             "segments": [{key: str(value) if isinstance(value, Path) else value for key, value in segment.items()} for segment in segments],
             "user_history": user_info, "mhd_history": mhd_info,
@@ -1040,6 +1229,7 @@ def make_figures(data, output):
         times = data["sampling"]["times"]
         snapshots = data["snapshots"]
         hist = data["history"]["series"]
+        passive = data["model"].get("passive", False)
         start, end = data["retained_window"]
         duration = data["sampling"]["block_duration"]
         time_label = r"$t$ [code units]"
@@ -1051,6 +1241,7 @@ def make_figures(data, output):
             "p_parallel": r"$\delta p_\parallel$",
             "p_perp": r"$\delta p_\perp$",
             "magnetic_pressure": r"$\delta p_B,\quad p_B=B^2/2$",
+            "dynamic_isothermal_pressure": r"$\delta p_{\rm dyn}=c_{s,\rm iso}^2\delta\rho$",
             "S_parallel": r"$S_\parallel=b_i b_j\partial_j u_i$",
             "parallel_gradient_u_perp": r"$\mathsf{P}\mathsf{G}\hat{\mathbf{b}}$",
             "perp_gradient_u_parallel": r"$\hat{\mathbf{b}}\cdot\mathsf{G}\mathsf{P}$",
@@ -1063,7 +1254,8 @@ def make_figures(data, output):
             "S_parallel_rms": r"$\langle S_\parallel^2\rangle_V^{1/2}$",
             "induction_rms": r"$\langle I_B^2\rangle_V^{1/2}$",
             "curvature_plus_discretization_rms": r"$\langle(\hat{\mathbf{b}}\cdot\nabla u_\parallel-S_\parallel)^2\rangle_V^{1/2}$",
-            "Mach_isotropic_proxy": r"$\mathcal{M}=u_{\rm rms}/c_s$",
+            "Mach_isotropic_proxy": r"$\mathcal{M}_{\rm th}=u_{\rm rms}/c_{\rm th}$",
+            "Mach_isothermal": r"$\mathcal{M}_{\rm iso}=u_{\rm rms}/c_{s,\rm iso}$",
             "deltaB_rms_over_B0": r"$\delta B_{\rm rms}/B_0$",
             "u_parallel_fraction": r"$\langle u_\parallel^2\rangle_V/\langle|\mathbf{u}|^2\rangle_V$",
         }
@@ -1190,17 +1382,26 @@ def make_figures(data, output):
 
         fig, axes = dbfplot.subplots(1, 3, figsize=(12, 4.2))
         for index, key in enumerate(("p_parallel", "p_perp", "magnetic_pressure")):
-            spec(axes[0], key, index)
+            label = labels[key]+(" (passive thermal)" if passive and key != "magnetic_pressure" else "")
+            spec(axes[0], key, index, label=label)
+        if passive:
+            spec(axes[0], "dynamic_isothermal_pressure", 3)
         slope_guide(axes[0], "p_parallel", -5/3, r"$k_\perp^{-5/3}$")
         axes[0].set_ylabel("Pressure-fluctuation spectrum\n"+r"$P_{\delta p}(k_\perp)$ [pressure$^2\times$ length]")
         context(axes[0], r"$\sum P_{\delta p}\,\Delta k_\perp=\langle(\delta p)^2\rangle_V$", y=.43)
         legend(axes[0], loc="lower left")
-        series(axes[1], "pressure_correlation")
+        series(axes[1], "pressure_correlation", "Passive CGL thermal pressure" if passive else None)
+        if passive:
+            series(axes[1], "dynamic_pressure_correlation", "Dynamic isothermal pressure", index=1)
+            legend(axes[1], loc="center left")
         axes[1].axhline(0, color="0.6", ls=":")
         axes[1].set(xlabel=time_label, ylabel=r"$\mathrm{Corr}(\delta p_\perp,\delta p_B)$", ylim=(-1.05, 1.05))
         context(axes[1], r"$C_{\perp B}=\frac{\langle\delta p_\perp\,\delta p_B\rangle_V}{\sigma_\perp\,\sigma_B}$")
         context(axes[1], r"$C=-1$: perfect anticorrelation", y=.13)
-        series(axes[2], "pressure_normalized_residual_variance")
+        series(axes[2], "pressure_normalized_residual_variance", "Passive CGL thermal pressure" if passive else None)
+        if passive:
+            series(axes[2], "dynamic_pressure_normalized_residual_variance", "Dynamic isothermal pressure", index=1)
+            legend(axes[2], loc="center left")
         axes[2].axhline(1, color="0.6", ls="--")
         axes[2].axhline(0, color="0.6", ls=":")
         axes[2].set(xlabel=time_label, ylabel="Normalized total-pressure\n"+r"residual variance $R$", ylim=(-.06, 1.65))
@@ -1213,7 +1414,8 @@ def make_figures(data, output):
         finish(fig, "pressure_balance",
                r"$\delta p=p-\langle p\rangle_V$, $\sigma^2=\langle(\delta p)^2\rangle_V$, $p_B=B^2/2$. "
                +rf"Spectra: $t\in[{start:g},{end:g}]$; bands: range of {duration:g}-unit means; slopes: eye guides."
-               +"\n"+scale_note, footer_height=.16)
+               +"\n"+("Passive CGL pressure is diagnostic; only isothermal pressure acts on momentum. " if passive else "")
+               +scale_note, footer_height=.16)
 
         fig, axes = dbfplot.subplots(2, 2, figsize=(10, 7.5))
         for index, key in enumerate(("S_parallel", "parallel_gradient_u_perp", "perp_gradient_u_parallel", "perp_gradient_u_perp")):
@@ -1248,7 +1450,7 @@ def make_figures(data, output):
         axes[0, 0].set_ylabel("Fluctuation energy spectrum\n"+r"$E(k_\perp)$ [energy density $\times$ length]")
         legend(axes[0, 0], loc="lower left")
         energy_labels = {"kinetic": r"$\mathcal{E}_K$", "magnetic": r"$\mathcal{E}_B$",
-                         "therm_cgl": r"$U_{\rm th}$", "force_work": r"$W_{\rm inj}$"}
+                         "therm_cgl": r"$U_{\rm th}$"+(" (passive)" if passive else ""), "force_work": r"$W_{\rm inj}$"}
         for index, key in enumerate(energy_labels):
             if key in hist:
                 axes[0, 1].plot(hist["time"], hist[key], label=energy_labels[key],
@@ -1270,13 +1472,22 @@ def make_figures(data, output):
             axes[0, 2].axvspan(*data["requested_window"], color="0.5", alpha=.1)
             context(axes[0, 2], rf"Common baseline: $t_0={comparison['interval'][0]:g}$")
             legend(axes[0, 2], loc="lower right")
+        elif passive and "force_work" in hist:
+            work = np.asarray(hist["force_work"])
+            axes[0, 2].plot(hist["time"], work-work[0], color=colors[1],
+                           label=r"$\Delta W_{\rm inj}$ (kinetic kicks)")
+            axes[0, 2].axvspan(*data["requested_window"], color="0.5", alpha=.1)
+            context(axes[0, 2], "Isothermal dynamics:\nno active total-energy closure")
+            legend(axes[0, 2], loc="lower right")
         else:
             context(axes[0, 2], "No overlapping energy/work ledgers")
         for index, key in enumerate(("Mach_isotropic_proxy", "deltaB_rms_over_B0", "u_parallel_fraction")):
             series(axes[1, 0], key, index=index)
+        if passive:
+            series(axes[1, 0], "Mach_isothermal", index=3)
         axes[1, 0].set(xlabel=time_label, ylabel="Fluctuation amplitude / fraction")
         legend(axes[1, 0], loc="upper left")
-        axes[1, 0].margins(y=.3)
+        axes[1, 0].margins(y=.6 if passive else .3)
         series(axes[1, 1], "beta_volume_mean", r"$\langle 2p_{\rm iso}/B^2\rangle_V$")
         series(axes[1, 1], "beta_ratio_of_means", r"$2\langle p_{\rm iso}\rangle_V/\langle B^2\rangle_V$", index=1)
         axes[1, 1].set(xlabel=time_label, ylabel=r"Plasma $\beta$")
@@ -1299,7 +1510,8 @@ def make_figures(data, output):
         gamma = data["model"]["gamma_sound"]
         gamma_label = "5/3" if gamma == 5/3 else f"{gamma:g}"
         finish(fig, "spectra_energy",
-               rf"$c_s^2=\gamma\langle p_{{\rm iso}}\rangle_V/\langle\rho\rangle_V$, $\gamma={gamma_label}$. "
+               rf"$c_{{\rm th}}^2=\gamma\langle p_{{\rm iso}}\rangle_V/\langle\rho\rangle_V$, $\gamma={gamma_label}$ (thermal proxy). "
+               +(rf"Dynamic $c_{{s,\rm iso}}={data['model']['iso_sound_speed']:g}$. " if passive else "")
                +rf"Spectra: $t\in[{start:g},{end:g}]$; bands: range of {duration:g}-unit means; slope: eye guide."
                +"\n"+scale_note)
         (output/"figure-audit.json").write_text(json.dumps({
@@ -1315,11 +1527,13 @@ def make_figures(data, output):
 
 def write_report(data, output):
     sampling = data["sampling"]
-    lines = ["# CGL-LF single-run physics benchmark", "",
+    passive = data["model"].get("passive", False)
+    lines = ["# CGL-LF single-run physics benchmark supplement", "",
+        "Mode: **"+("passive CGL thermodynamics on isothermal MHD" if passive else "active CGL-LF")+"**.", "",
         f"**{data['adequacy']['classification'].capitalize()}** for a finite-window descriptive comparison.", "",
         f"Requested interval {data['requested_window']}; retained interval {data['retained_window']}; "
         f"{sampling['snapshots']} snapshots and {sampling['complete_blocks']} complete blocks of duration {sampling['block_duration']}.", "",
-        "Block bands show temporal variability, not independent-snapshot confidence intervals. No cooling is present: evolving thermal energy/beta are reported rather than assumed stationary.", "",
+        "Block bands show temporal variability, not independent-snapshot confidence intervals. "+data["adequacy"]["heating"]+".", "",
         f"Bracketing snapshot times span {sampling['bracketing_snapshot_range']}; maximum gap {sampling['max_snapshot_gap']}. "
         "Diagnostic values (not cell fields) are linearly interpolated to covered requested endpoints. "
         f"Snapshot blocks are anchored at t={sampling['block_anchor']:g}; this equals the requested start only when its coverage is available. No extrapolation is performed.", ""]
@@ -1343,9 +1557,11 @@ def write_report(data, output):
         "All are instrumented cumulative counts, preserved across restart and history output.", "",
         "Post-operator hard-bound history: `"+json.dumps(data["simulation_integrity"]["post_operator_hard_volume"])+"`.", ""]
     lines += ["", "| Measurement | Time mean | Block SD |", "| --- | ---: | ---: |"]
-    for name in ("Mach_isotropic_proxy", "deltaB_rms_over_B0", "beta_volume_mean", "u_parallel_fraction",
+    for name in ("Mach_isotropic_proxy", "Mach_isothermal", "deltaB_rms_over_B0", "beta_volume_mean", "u_parallel_fraction",
                  "mirror_strict", "firehose_strict", "mirror_near", "firehose_near",
-                 "pressure_correlation", "pressure_normalized_residual_variance", "S_parallel_rms", "induction_rms"):
+                 "pressure_correlation", "pressure_normalized_residual_variance",
+                 "dynamic_pressure_correlation", "dynamic_pressure_normalized_residual_variance",
+                 "S_parallel_rms", "induction_rms"):
         rec = data["scalars"].get(name)
         if rec:
             sd = "unavailable" if rec["block_sd"] is None else f"{rec['block_sd']:.6g}"
@@ -1367,6 +1583,22 @@ def write_report(data, output):
         "Green shading marks the projection of the physical forcing shell onto k_perp, including zero; no universal spectral slope is prescribed.", "",
         "Gradient band measurements: `"+json.dumps(data["gradient_comparisons"])+"`.", "",
         "Actual applied forcing energy budget: `"+json.dumps(data["history"]["energy_budget"])+"`.", ""]
+    lines += ["Measured applied forcing-work ledger: `"+json.dumps(data["history"].get("forcing_work", {}))+"`.", ""]
+    if passive:
+        lines += ["The passive momentum equation uses p_dyn=c_s,iso² rho, with retained "
+            f"c_s,iso={data['model']['iso_sound_speed']:.17g}. The evolving p_parallel and p_perp "
+            "spectra and their pressure-compensation statistics are CGL thermal diagnostics. "
+            "The additional dynamic_isothermal_pressure spectrum and dynamic_pressure_* statistics "
+            "measure the actual pressure entering the momentum equation. Mach_isothermal uses the "
+            "fixed dynamical sound speed; Mach_isotropic_proxy is retained as a common thermal-pressure proxy.", "",
+            "Conserved cgl-J and cgl-A are invariant integrals, not energies. Physical passive "
+            "thermal energy is thermal-U=integral(p_perp+p_parallel/2)dV. Applied force_work is the "
+            "measured kinetic-energy increment of forcing kicks; adding kinetic, magnetic, and "
+            "passive thermal energies does not create an active-CGL conservation law. "
+            "lf_cpwrk and lf_cawrk contract the diagnostic thermal stress with velocity and do not "
+            "represent forces applied to passive momentum; their sign is mechanical, so the corresponding "
+            "thermal work has the opposite sign. lf_qprwrk and lf_qpewrk are signed heat-flux/temperature-jump "
+            "contractions, not additions to a total-energy ledger.", ""]
     lines.append(f"Retained dedt={data['model']['dedt_per_volume']} is nominal power per domain volume; "
         f"nominal total power={data['model']['nominal_total_forcing_power']}. The measured accumulated work remains authoritative.")
     force = data["forcing_decomposition"]

@@ -1,0 +1,343 @@
+# Matched active/passive CGL–Landau-fluid turbulence benchmark
+
+This experiment compares active CGL with a passive CGL control on the same
+`192×192×384` periodic grid, using PPM (`ppm4`) and the same retained forcing
+parameters. It asks whether anisotropic-pressure feedback changes magnetic
+strength fluctuations, pressure-anisotropy occupancy, velocity gradients and
+pressure compensation in this finite-time realization.
+
+**Physical validation status: pending.** The initial passive plumbing run
+exposed a one-ULP pressure-decode contraction difference across GPU kernels.
+The explicit contraction-order fix preserves the strict firehose wall and
+passes its CPU/GPU regression, the failed-checkpoint replay, and fresh active
+and passive 3D plumbing through `t=0.5`. The unpatched GPU negative control
+fails the independent wall roundtrip. These are numerical checks, not a
+completed turbulent comparison. Keep the failing preflight and its provenance.
+
+The existing [96-grid PLM experiment](cgl_lf_physics_benchmark.md) and its
+retained reports remain a frozen reference. Changing both resolution and
+reconstruction means the new pair is **not a resolution-convergence test** of
+that reference. Neither experiment independently validates LF coefficients.
+
+## Models and matched parameters
+
+Use the single [matched input](../inputs/cgl_lf_paper/cgl_lf_physics_benchmark_matched_beta10.athinput).
+The [launcher](../scripts/run_cgl_lf_matched_benchmark.py) selects the member by
+setting both `mhd/passive` and `problem/passive_delta` to the same boolean.
+Do not override either flag separately or switch modes across a restart.
+
+| Setting | Shared value |
+| --- | --- |
+| Box and grid | `(1,1,2)`, `192×192×384`, spacing `1/192`, periodic throughout |
+| Blocks and halos | 128 blocks of `48×48×48`; `nghost=3` |
+| Initial state | `rho=1`, `B=(0,0,1)`, `u=0`, `p_parallel=p_perp=5`, initial beta ten |
+| Numerics | `ppm4`, HLLE, RK2/RKL2, CFL `0.3`, STS safety `0.9`, merged sweeps off, FOFC off |
+| LF | Local coefficients, `lf_k_parallel=2*pi`, safe arithmetic, weighted fluxes, full diagnostics, strict admissibility and pressure-work recording on |
+| Collisions and limiters | `nu_coll=0`, soft thresholds `X=-2,+1`, finite rate `1e10`, `limiter_hardwall=false`, backups off |
+| Sound-speed parameter | Explicit `iso_sound_speed=sqrt(5)` in both inputs |
+| Forcing | OU, seed `271828`, `tcorr=2`, `dt_update=0.01`, continuous driving |
+| Modes and mixture | Type zero, physical shell `pi<=|k|<=3*pi`, full signed bounds `-3..3`, power-law `expo=2`, solenoidal/compressive amplitude blend `1/(1+sqrt(2))` |
+| Injection | `normalization=edot`, `dedt=0.32` per volume per time; nominal total-box power `0.64` |
+| Initial target | `tlim=14`, no cycle cap; common analysis interval `[6,14]` |
+
+The physical firehose wall `p_perp-p_parallel>=-B²` remains active even with
+backups off. Strict checks and thresholds must not be relaxed to complete a
+run. Both strict B4 expected failures remain separate sharp-contact limitations.
+
+In the **active** member the CGL pressure tensor acts on momentum; total energy
+and conservative anisotropy A are evolved. In the **passive** member the flow
+is isothermal MHD with dynamical pressure `p_dyn=c_iso²*rho=5*rho`.
+The separately evolved CGL thermal pressures use J/A material invariants,
+including LF transport, collisions and limiters, but do not act on momentum.
+See the [passive model contract](source/modules/cgl_passive.md).
+The active member retains the same `iso_sound_speed` input for explicit
+matching; this parameter does not replace its CGL characteristic speeds.
+
+This is a comparison of the two complete dynamical models, including their
+different thermal feedback. Equal input parameters do not imply identical
+adaptive timesteps, realized density, Mach number or evolving thermal beta.
+There is no thermal thermostat for the CGL pressures; initial beta ten is not
+a fixed-beta ensemble.
+
+The seed and fixed OU update interval match the modal stochastic construction.
+They do **not** make the applied acceleration identical in the two flows:
+normalization to `dedt` depends on density, velocity and the actual timestep.
+Retain each member's forcing snapshots and accumulated `force_work`, and measure
+the realized Helmholtz mixture. The blend gives equal expected innovation
+powers, not an exact instantaneous half-and-half partition. The
+[original guide](cgl_lf_physics_benchmark.md#setup-units-and-references) explains
+the modal spectrum, normalization and differences from the published forcing.
+
+## Build and retain the executable
+
+Use `-DPROBLEM=built_in_pgens` with the input's
+`problem/pgen_name=cgl_lf_paper`. The relevant implementation is
+[`src/pgen/tests/cgl_lf_paper.cpp`](../src/pgen/tests/cgl_lf_paper.cpp).
+The older `-DPROBLEM=cgl_lf_paper` custom generator has a different interface
+and history and is not this experiment.
+
+Use the complete [Frontier compiler/runtime contract](validation/wo2/README.md#task-0-establish-the-actual-gpu-baseline)
+and the [fresh-build procedure](cgl_lf_physics_benchmark.md#build-the-correct-problem-generator),
+with the build directory under the new matched artifact root:
+
+```bash
+export BENCH_SOURCE=/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2
+export BENCH_ROOT=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark
+export PAIR_ROOT="$BENCH_ROOT/matched"
+mkdir -p "$PAIR_ROOT/tmp" "$PAIR_ROOT/cache" "$PAIR_ROOT/mpl-cache"
+cd "$PAIR_ROOT"
+export TMPDIR="$PAIR_ROOT/tmp" XDG_CACHE_HOME="$PAIR_ROOT/cache"
+export MPLCONFIGDIR="$PAIR_ROOT/mpl-cache" PYTHONDONTWRITEBYTECODE=1
+```
+
+After loading the modules and clearing the inherited compiler include overrides
+as described in that procedure, the fresh configuration is:
+
+```bash
+cmake -S "$BENCH_SOURCE" -B "$PAIR_ROOT/build-hip" \
+  -DPROBLEM=built_in_pgens -DCMAKE_BUILD_TYPE=Release \
+  -DAthena_SINGLE_PRECISION=OFF -DAthena_ENABLE_MPI=ON \
+  -DKokkos_ENABLE_HIP=ON -DKokkos_ARCH_ZEN3=ON -DKokkos_ARCH_VEGA90A=ON \
+  -DCMAKE_CXX_COMPILER=CC -DCMAKE_CXX_FLAGS="-fno-cray -mno-daz-ftz" \
+  -DCMAKE_EXE_LINKER_FLAGS="-no-pie"
+cmake --build "$PAIR_ROOT/build-hip" --parallel 8
+```
+
+Retain the exact committed numerical revision, source status, Kokkos revision,
+commands, build logs, cache, compiler/modules and executable SHA256 in a build
+manifest. The launcher requires at least `revision` and `binary_sha256`, checks
+the executable against them, and checks that the current numerical source
+matches the recorded revision. An audited replacement-object build must also
+retain its unchanged-input verification and original cache. A CMake cache alone
+does not identify such an executable. Use the same accepted executable and
+build provenance for both members, including every continuation.
+
+Set these paths to the accepted build; a diagnostic or failed-preflight binary
+is not an accepted pair:
+
+```bash
+export PAIR_BINARY=/absolute/path/to/accepted/athena
+export PAIR_BUILD_MANIFEST=/absolute/path/to/accepted/build-manifest.json
+export PAIR_BUILD_CACHE=/absolute/path/to/accepted/CMakeCache.txt
+```
+
+## Launch one member per new directory
+
+Obtain an appropriate GPU allocation and preserve its scheduler record. Load
+the modules and exports from the
+[self-contained runtime block](cgl_lf_physics_benchmark.md#run-resume-and-retain-provenance),
+including `HSA_XNACK=1`, GPU-aware MPICH and `FI_CXI_ATS=0`. Restore the matched
+`TMPDIR`, `MPLCONFIGDIR` and `XDG_CACHE_HOME` above afterward if needed.
+The launcher records the environment; it does not load modules or establish it.
+
+The following commands use one node and eight ranks/GPUs, or 16 blocks per
+rank. They do not reserve an allocation themselves. Preserve the same rank
+layout for both members and their continuations. Running them sequentially
+avoids sharing their requested GPUs; any performance comparison requires its
+own controlled timing protocol.
+
+```bash
+python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
+  "$PAIR_ROOT/active-to14" --mode active \
+  --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
+  --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
+  --job-id "$SLURM_JOB_ID"
+
+python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
+  "$PAIR_ROOT/passive-to14" --mode passive \
+  --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
+  --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
+  --job-id "$SLURM_JOB_ID"
+```
+
+Use new segment names if either directory contains previous data. Add
+`--wall-time HH:MM:SS` when a clean wall-clock checkpoint is needed before an
+allocation ends; choose a value shorter than the remaining allocation time.
+This does not change the physical target. A zero exit code following a
+wall-clock stop does not establish that `t=14` was reached: inspect the final
+log and checkpoint time. Do not analyze missing endpoint coverage as a full
+window.
+
+Each launch retains canonical/effective input, copied launcher, command,
+executable/cache/manifest hashes, mode, resource layout, optional restart hash,
+environment, completion status and output inventory. Keep the raw files:
+
+| Output | Cadence and meaning |
+| --- | --- |
+| `*.user.hst`, `*.mhd.hst` | `0.02`; full printed precision, physical integrals, forcing work and LF health counters |
+| `bin/*.mhd_w_bcc.*.bin` | `0.25`; float32 primitives and cell-centered B, no ghosts; `eint` denotes parallel pressure |
+| `bin/*.turb_force.*.bin` | `0.25`; acceleration components for actual Helmholtz decomposition |
+| `rst/*.rst` | `1.0` plus termination outputs; double state and restart-persistent forcing/counters |
+
+Passive `thermal-U` is physical thermal energy, whereas `cgl-J` is a conserved
+material invariant, not total energy. Passive `force_work` records kinetic
+energy injected by forcing kicks. The active `Delta tot-E - Delta force_work`
+budget is not applicable to an isothermal passive flow; do not manufacture that
+closure from J or from passive thermal pressure.
+
+## Resume each member's own lineage
+
+Select a complete checkpoint from that member with the same mesh, PPM/halo,
+physics and forcing configuration. Verify its header and time; do not use the
+old 96/PLM reference or a reduced-grid plumbing checkpoint. The checkpoint is
+authoritative for its state and serialized parameters: specifying the new
+canonical input cannot convert an incompatible checkpoint into this experiment.
+The launcher rejects conflicting mode overrides and compares the checkpoint's
+retained physical/numerical settings against the intended member before launch.
+On resume, `effective.athinput` records the checkpoint header plus explicit
+command-line overrides, including serialized defaults and the passive encoding.
+Preserve its forcing RNG and counters and use a new directory.
+
+For an interrupted run, retain target 14; for a planned extension set target
+18. This active example extends a completed first segment:
+
+```bash
+python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
+  "$PAIR_ROOT/active-to18" --mode active \
+  --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
+  --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
+  --job-id "$SLURM_JOB_ID" \
+  --restart "$PAIR_ROOT/active-to14/rst/ACTUAL_CHECKPOINT.rst" \
+  --set time/tlim=18 --set time/nlim=-1
+```
+
+Repeat for passive using its own checkpoint and `--mode passive`. Replace the
+checkpoint placeholder with the actual completed file; its numeric filename
+is an output counter, not sufficient evidence of physical time. If additional
+interrupted segments were required, retain every segment in lineage order.
+
+Create a separate aggregate directory for each member without modifying child
+metadata. For example:
+
+```bash
+mkdir "$PAIR_ROOT/active-union18" "$PAIR_ROOT/passive-union18"
+printf '%s\n' '{"schema_version":1,"segments":["../active-to14","../active-to18"]}' \
+  > "$PAIR_ROOT/active-union18/benchmark_metadata.json"
+printf '%s\n' '{"schema_version":1,"segments":["../passive-to14","../passive-to18"]}' \
+  > "$PAIR_ROOT/passive-union18/benchmark_metadata.json"
+```
+
+Keep earlier aggregate manifests and analyses unchanged. Restart branching,
+duplicate times and actual endpoint coverage are audited by the analyzer.
+
+## Compare the same interval and bins
+
+The predeclared first comparison is **[6,14]**, four contiguous two-unit blocks.
+The blocks describe variability; they are not assumed independent. Examine
+achieved Mach/beta, forcing mixture, energy, occupancy trends and correlation
+times. If support remains inadequate, extend **both** members to 18 and analyze
+[6,18], preserving [6,14]. Do not move the start time or select a favorable
+interval to match a figure.
+
+Install the local dbfplot package into an analysis environment under the
+artifact root, as in the
+[analysis environment instructions](cgl_lf_physics_benchmark.md#averaging-analysis-and-interpretation).
+Use that environment for the comparison:
+
+```bash
+python3 "$BENCH_SOURCE/scripts/compare_cgl_lf_physics_benchmark.py" \
+  "$PAIR_ROOT/active-to14" "$PAIR_ROOT/passive-to14" \
+  --time-start 6 --time-end 14 --block-duration 2 --near-width 0.05 \
+  --output-dir "$PAIR_ROOT/comparison-6-14"
+```
+
+For an extension, substitute the two union directories, end 18 and a new output
+directory. The comparison reads the retained data; it never launches simulations.
+It checks shared effective mesh, numerical, closure and forcing parameters,
+allowing the explicit mode/encoding differences and listed output/stop controls.
+Both members must cover the same requested interval. A parameter match alone
+does not certify solver health or statistical convergence.
+
+The comparison scans both primitive streams, including endpoint-bracketing
+snapshots, to choose common **true histogram edges**. It passes those edges to
+the single-run analyzer through `--pdf-edges`; clipped tails are rejected rather
+than silently renormalized. B-strength PDFs use a **linear x-axis** and a
+logarithmic density axis. Solid/dashed curves distinguish active/passive;
+quantities retain consistent colors and physical normalization in dbfplot.
+
+Main outputs are `report.md`, `metrics.json`, `shared_pdf_edges.json`,
+`figure-audit.json` and PNG/PDF pairs `pdfs`, `occupancy`, `spectra`, and
+`pressure_balance_scale`. The `active/` and `passive/` subdirectories retain
+their individual metrics, reports and supplementary figures. Shared bins,
+source/input/output hashes, matching exceptions, signed contrasts and block
+support remain machine-readable.
+
+## What the scale-dependent pressure comparison measures
+
+Set `a=p_perp-<p_perp>` and `b=p_B-<p_B>`, where `p_B=B²/2`. For each physical
+perpendicular shell compute:
+
+```text
+Paa = sum_shell |FFT(a)/N|² / dk
+Pbb = sum_shell |FFT(b)/N|² / dk
+Pab = sum_shell Re[(FFT(a)/N) * conjugate(FFT(b)/N)] / dk
+C = Pab / sqrt(Paa*Pbb)
+R = (Paa + Pbb + 2*Pab) / (Paa+Pbb)
+```
+
+Average Paa, Pbb and signed Pab in physical time **before** forming C and R,
+separately for the full interval and each complete block. Thus C is signed
+shell correlation, not squared coherence or a mean of snapshot ratios. Exact
+equal-amplitude compensation gives C=-1,R=0. C=-1 with R>0 reveals an amplitude
+mismatch. Zero denominators are unavailable, not assigned an artificial value.
+
+Both members use common `dk=2*pi`, shell sums divided by dk, and midpoint
+coordinates. Retain the first perpendicular shell in metrics and Parseval
+sums, but omit it from logarithmic-wavenumber plots: it contains pure-parallel
+modes, despite its positive bin midpoint. Main perpendicular spectra and C/R
+curves sum all parallel wavenumbers. The dotted transverse eight-cell scale
+and gray region above 0.75 times the transverse Nyquist wavenumber are plotting
+guides, not measured boundaries of an inertial range. A separate counterpart
+retained in metrics restricts
+full `0<|k|<=min(Nyquist_xyz)/4`; use the same mask on all three powers.
+Temporal block ranges are descriptive spread, not confidence intervals.
+
+This C/R comparison uses physical **thermal** p_perp in both members.
+In passive dynamics that pressure does not push the fluid. The separately
+labeled `c_iso²*rho` spectrum and dynamic-pressure balance diagnose its actual
+isothermal momentum pressure. Likewise report the passive isothermal Mach
+number separately from the common CGL thermal-pressure sound-speed proxy.
+With volume averages, their definitions are
+
+```text
+u_rms² = <|u-<u>|²>, p_iso=(p_parallel+2*p_perp)/3
+M_proxy = u_rms / sqrt[(5/3)*<p_iso>/<rho>]
+M_iso = u_rms / c_iso                    (passive dynamics only)
+```
+
+The thermal proxy is not a CGL characteristic-wave Mach number. Neither
+definition is silently retuned to a target Mach number as the thermal state
+drifts.
+
+The velocity-gradient spectra differentiate u before projecting the tensor
+onto the local magnetic direction. They are not spectra of the magnitudes of
+derivatives of a previously projected velocity. Centered differences attenuate
+short wavelengths, perpendicular shells near the square-grid corner have
+incomplete annuli, and a short spectrum is not a reliable inertial-range fit.
+The normalization audit found correct shell sums, component powers and
+Parseval identities; it did not establish that all measured steepening was
+physical or quantify reconstruction error.
+Specifically, with `G_ij=partial_j u_i` and `P=I-b*b`, the four spectra use
+`b.G.b`, `P.G.b`, `b.G.P` and `P.G.P`, summing vector or tensor component
+powers. This follows the local-gradient convention of Squire Eq. 24. MKS24
+Figure 6b uses line styles to compare forcing types; our line styles instead
+identify active/passive dynamics. The positive one-third gradient and
+negative five-thirds energy/pressure slopes are illustrative guides, not
+universal targets or fitted acceptance criteria.
+
+## Interpretation and retained limits
+
+[Squire et al. (2023)](https://arxiv.org/html/2303.00468v2) motivate active/passive
+comparisons of magnetic-strength fluctuations, anisotropy and flow gradients.
+[Majeski, Kunz & Squire (2024)](https://arxiv.org/html/2405.02418v2) provide
+pressure-balance, gradient and spectral comparisons. These are scientific
+reference points, not pixel targets or numerical acceptance bands. In
+particular, the forcing geometry and the intentional total-box injection of
+0.64 here differ from the stated 0.32 total-box normalization in MKS24.
+
+Evaluate the diagnostic groups together, including achieved regime, numerical
+health, sampling and model differences. Label a comparison consistent,
+concerning or inconclusive with its reason; do not declare a closure valid,
+an asymptotic slope converged, or a solver defective from visual agreement or
+disagreement alone. Passing the repaired passive preflight does not establish
+any of these physical conclusions.
