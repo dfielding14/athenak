@@ -1,0 +1,101 @@
+{
+  "created_utc": "2026-10-07T03:08:27.047928+00:00",
+  "source_base_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+  "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+  "analysis_revision": "64d652317bec173d1d33e23906d0e93f21463409",
+  "original_analysis_artifacts": {
+    "metrics.json": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/metrics.json",
+      "sha256": "9c23afa4d8be3fe10fc6560ec37403e18b36068f6041a2a56469c4982b4aa8a0",
+      "bytes": 1704904
+    },
+    "report.md": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/report.md",
+      "sha256": "626c7e980a7f32a8a9682b99df79f1b507a6a545b148330094fe42c49302bbb0",
+      "bytes": 14931
+    },
+    "marginality.png": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/marginality.png",
+      "sha256": "2305b72499b57bce0440e92d24672aeebe31b406c3923dbda6b2c30ba14c70b2",
+      "bytes": 317289
+    },
+    "marginality.pdf": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/marginality.pdf",
+      "sha256": "f3229a13cfb5c8e17f3d7b7b892de65f9915b8c3dd829968ce6992cc72176743",
+      "bytes": 35048
+    },
+    "pressure_balance.png": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/pressure_balance.png",
+      "sha256": "a25a599674fcc2197e0322ce8708fe058134d50bc80f6a9acb7efa273984b1e4",
+      "bytes": 243680
+    },
+    "pressure_balance.pdf": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/pressure_balance.pdf",
+      "sha256": "ca80566db5e9c00f83c22ddc21072ef0eecb301b74d7897156da5a2720b58c19",
+      "bytes": 31389
+    },
+    "gradients.png": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/gradients.png",
+      "sha256": "f60cd6116e799ef83b9c257c4412d40dec86ed6bf07a86f81d0099f8bcf5c0d9",
+      "bytes": 407530
+    },
+    "gradients.pdf": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/gradients.pdf",
+      "sha256": "db2ca88bc0df847056aa55e7fece3b59cd9d50a811e1c6df0b6483e33550fa67",
+      "bytes": 43687
+    },
+    "spectra_energy.png": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/spectra_energy.png",
+      "sha256": "0d001be5a5df910fafb4e66abab3f6f18ea91c4c2e879a7bcf1626095bfd88c4",
+      "bytes": 407050
+    },
+    "spectra_energy.pdf": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-18/spectra_energy.pdf",
+      "sha256": "020afcb65179e273d8eaadaf0a21a39a4889d037cd040bad88cc7b902993cb19",
+      "bytes": 37913
+    }
+  },
+  "large_data_root": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark",
+  "segments": [
+    "canonical-fixed",
+    "canonical-fixed-to14",
+    "canonical-fixed-to18"
+  ],
+  "publication_policy": "metrics.json and figure bytes are unchanged; report receives an explicit scientific-review preface and trailing-whitespace cleanup. Supporting audits retain source hashes and distinguish instantaneous probes from the temporal ensemble.",
+  "numerical_checks_original": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/numerical-correction-and-checks.md",
+    "sha256": "98580b453f3557ede46d136f33e123e0a6e1c77fa40560d1a059a3d07e188a07",
+    "publication_edits": "absolute raw-evidence links and explicit completed t18 update"
+  },
+  "supporting_audits": {
+    "pressure-episode": {
+      "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/pressure-episode",
+      "manifest_sha256": "48cfdd801e9eb371020f24ed828083ad97095e8ff3dad0f5fa623bcca6e344dd"
+    },
+    "mirror-tail": {
+      "source": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/mirror-tail-t14p25",
+      "manifest_sha256": "c59b812f630258da025253b6fe50cb6a390cd96cab99098336d54e50ce16621b"
+    }
+  },
+  "scientific_review_original": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/scientific-review-fixed-6-18.md",
+    "sha256": "f34d14564d35f20b73835fc5421056c623b9e1d01bcc56f1b83bd3dbacfce396",
+    "publication_edits": "relative links adjusted to archive; primary-reference links added"
+  },
+  "published_utc": "2026-10-07T03:12:38.918254+00:00",
+  "log_formatting_cleanup": {
+    "description": "Trim trailing whitespace in copied log text only. Original scratch logs and source audit manifests remain unchanged; their hashes identify the raw versions.",
+    "files": [
+      {
+        "file": "mirror-tail/run.log",
+        "original_sha256": "c2ba2608f8a42dae95eef4901e04e70e6ea96409139ca8b484425779a0af8ec6",
+        "published_sha256": "e317433a5f37acddcfbe11b5841ffdc4e276f34ae72894565af8bf40c35f2d7f"
+      },
+      {
+        "file": "mirror-tail/run-initial-module-shadow.log",
+        "original_sha256": "92db5cd47a0a082c571f0c26c62dbdd74bd5cba25ae8df5834eeb05d4546803e",
+        "published_sha256": "415ab405589a48670c79f25bfd264d29e480214c9c924ea42b30e57c26140abe"
+      }
+    ]
+  }
+}

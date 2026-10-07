@@ -30,6 +30,11 @@ Extend its sampling interval without retuning its physical parameters. This is
 a finite-time, initially beta-ten experiment with no cooling; its thermal state
 is not held at beta ten.
 
+The first [reviewed reference](validation/cgl_lf_physics_benchmark/beta10_seed271828_20261007/README.md)
+retains four PNG/PDF figure groups, measurements, checks and interpretation for
+the corrected realization through t=18, averaged over [6,18]. It is a
+descriptive statistical baseline, not a physical-validation pass criterion.
+
 ## Setup, units and references
 
 The code absorbs the electromagnetic factor into B: magnetic pressure is
@@ -513,3 +518,29 @@ and forcing-to-dissipation scale separation; then implementation with an
 independent small test. A single `96×96×192` run need not offer a long inertial
 range. State what each diagnostic establishes instead of assigning tight
 acceptance bands to paper images.
+
+## Reproduce the retained reference analysis
+
+The first run needed both predeclared extensions: [6,10] supplied only two
+blocks, and [6,14] ended during a compressive forcing episode. [6,18] includes
+the episode and its subsequent evolution. Keep the earlier two-segment
+aggregate unchanged and create the final aggregate as follows:
+
+```bash
+mkdir "$BENCH_ROOT/analysis-run-fixed-to18"
+cat > "$BENCH_ROOT/analysis-run-fixed-to18/benchmark_metadata.json" <<'JSON'
+{"schema_version": 1, "segments": ["../canonical-fixed", "../canonical-fixed-to14", "../canonical-fixed-to18"]}
+JSON
+python3 "$BENCH_SOURCE/scripts/analyze_cgl_lf_physics_benchmark.py" \
+  "$BENCH_ROOT/analysis-run-fixed-to18" \
+  --time-start 6 --time-end 18 --block-duration 2 \
+  --output-dir "$BENCH_ROOT/analysis-fixed-6-18-reproduced"
+```
+
+Use the existing aggregate directly when reproducing the retained data;
+the `mkdir`/manifest creation is for a newly launched reproduction. The
+[reviewed report](validation/cgl_lf_physics_benchmark/beta10_seed271828_20261007/report.md)
+records sampling limitations, the signed pressure-band investigation and the
+distinction between numerical integrity and physical interpretation. Compare
+future runs using the same definitions and reported variability; do not use
+this single realization to invent tight automatic tolerances.

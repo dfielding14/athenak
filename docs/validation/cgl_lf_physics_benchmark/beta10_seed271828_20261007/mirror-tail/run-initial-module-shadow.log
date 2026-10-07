@@ -1,0 +1,161 @@
+Unloading the cpe module is insufficient to restore the system defaults.
+Please run 'source
+/opt/cray/pe/cpe/24.07/restore_lmod_system_defaults.[csh|sh]'.
+Running "module reset". Resetting modules to system default. The following $MODULEPATH directories have been removed: /opt/cray/pe/lmod/modulefiles/mpi/amd/4.0/ofi/1.0/cray-mpich/8.0
+-------------------------------------------------------------------------------
+There are messages associated with the following module(s):
+-------------------------------------------------------------------------------
+
+Core/26.05:
+   On September 15, 2026, the default Core module was upgraded from
+   Core/25.03 to Core/26.05. For more information on Core/26.05 including
+   package version changes please see: https://docs.olcf.ornl.gov/software/software-news.html#frontier-core-module-may-11-2026
+
+-------------------------------------------------------------------------------
+
+
+Activating Modules:
+  1) darshan-runtime/3.4.4-mpi
+
+Due to MODULEPATH changes, the following have been reloaded:
+  1) cray-mpich/8.1.30
+
+The following have been reloaded with a version change:
+  1) cray-libsci/24.11.0 => cray-libsci/24.07.0
+  2) craype/2.7.33 => craype/2.7.32
+
+
+The following have been reloaded with a version change:
+  1) PrgEnv-cray/8.5.0 => PrgEnv-cray/8.6.0
+  2) cce/18.0.0 => cce/20.0.0
+  3) cray-dsmml/0.3.0 => cray-dsmml/0.3.1
+  4) cray-libsci/24.07.0 => cray-libsci/25.09.0
+  5) cray-mpich/8.1.30 => cray-mpich/9.0.1
+  6) cray-pmi/6.1.15.21 => cray-pmi/6.1.16
+  7) craype/2.7.32 => craype/2.7.35
+  8) darshan-runtime/3.4.4-mpi => darshan-runtime/3.4.7-mpi
+  9) perftools-base/24.07.0 => perftools-base/25.09.0
+
++ srun --exact --overlap -N1 -n1 --ntasks-per-node=1 --threads-per-core=1 --cpu-bind=threads -c4 --gpus-per-node=0 python3 analysis-checks/mirror-tail-t14p25/inspect.py
+{
+  "snapshot": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18/bin/cgl_lf_physics_benchmark_beta10.mhd_w_bcc.00057.bin",
+  "sha256": "41232a8f3d2000935522d9e1cdfa6f0a0dddc729823ba88ac480428268819e17",
+  "time": 14.250230767343458,
+  "shape_zyx": [
+    192,
+    96,
+    96
+  ],
+  "lengths_xyz": [
+    1.0,
+    1.0,
+    2.0
+  ],
+  "cell_count": 1769472,
+  "strict_mirror_count": 4872,
+  "rounding_robust_mirror_count": 3,
+  "rounding_robust_firehose_count": 0,
+  "robust_volume_fraction": 1.6954210069444444e-06,
+  "max_X": 1.0002245168227515,
+  "cells": [
+    {
+      "global_kji": [
+        93,
+        10,
+        41
+      ],
+      "rho": 0.9457120895385742,
+      "p_parallel": 7.030231952667236,
+      "p_perp": 7.032604217529297,
+      "B": [
+        -0.05542188137769699,
+        -0.009482002817094326,
+        0.039774004369974136
+      ],
+      "B2": 0.004743464736489623,
+      "X": 1.0002245168227515,
+      "X_minus_1": 0.000224516822751486,
+      "float32_X_rounding_envelope": 0.00020112681072403314,
+      "excess_over_envelope": 2.339001202745285e-05,
+      "excess_to_envelope_ratio": 1.1162948487238054,
+      "delta_p_minus_B2_over_2": 5.324938157354013e-07,
+      "beta_scalar": 2964.8427270818647
+    },
+    {
+      "global_kji": [
+        94,
+        11,
+        44
+      ],
+      "rho": 0.9525241255760193,
+      "p_parallel": 7.073869228363037,
+      "p_perp": 7.076115131378174,
+      "B": [
+        -0.03431234136223793,
+        -0.04812690615653992,
+        0.031580228358507156
+      ],
+      "B2": 0.004490846689134603,
+      "X": 1.0002136214405082,
+      "X_minus_1": 0.00021362144050818266,
+      "float32_X_rounding_envelope": 0.0002124542027565579,
+      "excess_over_envelope": 1.1672377516247544e-06,
+      "excess_to_envelope_ratio": 1.005494067598946,
+      "delta_p_minus_B2_over_2": 4.796705694171122e-07,
+      "beta_scalar": 3151.016717697497
+    },
+    {
+      "global_kji": [
+        104,
+        93,
+        24
+      ],
+      "rho": 1.0149366855621338,
+      "p_parallel": 7.511662483215332,
+      "p_perp": 7.632338047027588,
+      "B": [
+        0.001054269727319479,
+        -0.1306411176919937,
+        0.4735841453075409
+      ],
+      "B2": 0.2413501558031453,
+      "X": 1.0000040266034351,
+      "X_minus_1": 4.026603435125509e-06,
+      "float32_X_rounding_envelope": 4.017959620208141e-06,
+      "excess_over_envelope": 8.643814917367302e-09,
+      "excess_to_envelope_ratio": 1.0021512946207556,
+      "delta_p_minus_B2_over_2": 4.859106832039162e-07,
+      "beta_scalar": 62.913676884324
+    }
+  ],
+  "provenance": {
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/mirror-tail-t14p25/inspect.py": "89ffece7ea23d32301bec9cc50ee4ea802f52ab7367ccfe70fe2dec813b40e60",
+    "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py": "a8241542d0d3cc5e4ecc83dd17b4cd7819467f9c2079eb707ebf231a5df812aa",
+    "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_paper.py": "6ef84240662c49f78678078e33a8283e5a594c8277ac06b1e22446ce25ed0b2c",
+    "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/src/eos/ideal_c2p_mhd.hpp": "4376e3f1eae6ff697a2d75bcc9bb82fb9a5aa9d324ecdabbd4a83c759a2f497d",
+    "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/src/mhd/mhd_sts.cpp": "a3f64cebf49163baef0d10c10131b0f909d6b34ae41c416673eeb48ed601606a",
+    "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/src/driver/driver.cpp": "cae45ef5c977cec92e3c68d1f1e7c5072e1ce7c86847112e50cdb296dd543ab2",
+    "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18/benchmark_metadata.json": "8f8700a7e0cf108b81b5d61548851b08084ca16c4a620d6deacbaf994f4ca3b7"
+  },
+  "runtime": {
+    "job": 5629677,
+    "solver_run": false,
+    "numpy": "1.26.4"
+  }
+}
+Traceback (most recent call last):
+  File "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/mirror-tail-t14p25/inspect.py", line 3, in <module>
+    import numpy as np
+  File "/ccs/home/dfielding/.local/lib/python3.11/site-packages/numpy/__init__.py", line 159, in <module>
+    from . import ma
+  File "/ccs/home/dfielding/.local/lib/python3.11/site-packages/numpy/ma/__init__.py", line 42, in <module>
+    from . import core
+  File "/ccs/home/dfielding/.local/lib/python3.11/site-packages/numpy/ma/core.py", line 7940, in <module>
+    inner.__doc__ = doc_note(np.inner.__doc__,
+                    ^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "/ccs/home/dfielding/.local/lib/python3.11/site-packages/numpy/ma/core.py", line 125, in doc_note
+    notesplit = re.split(r'\n\s*?Notes\n\s*?-----', inspect.cleandoc(initialdoc))
+                                                    ^^^^^^^^^^^^^^^^
+AttributeError: module 'inspect' has no attribute 'cleandoc'
+srun: error: frontier04623: task 0: Exited with exit code 1
+srun: Terminating StepId=5629677.5

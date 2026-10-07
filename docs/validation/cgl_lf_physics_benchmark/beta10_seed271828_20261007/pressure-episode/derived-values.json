@@ -1,0 +1,20 @@
+[
+  {
+    "time": 10.0,
+    "forcing_perp_variance_fraction": 0.7345507092290754,
+    "forcing_total_variance_fraction": 0.6768137276186718,
+    "max_fft_stored_difference": 2.220446049250313e-16
+  },
+  {
+    "time": 12.000347469555237,
+    "forcing_perp_variance_fraction": 0.8892678425707355,
+    "forcing_total_variance_fraction": 0.8388547681142285,
+    "max_fft_stored_difference": 8.881784197001252e-16
+  },
+  {
+    "time": 14.0,
+    "forcing_perp_variance_fraction": 0.961828686247035,
+    "forcing_total_variance_fraction": 0.9358091666861346,
+    "max_fft_stored_difference": 1.1102230246251565e-15
+  }
+]

@@ -1,0 +1,56 @@
+{
+  "declared_before_simulation_utc": "2026-10-07T00:25:47.941291+00:00",
+  "physical_input_sha256": "5b4ffa934eb3f954929a0c473bcd22cf5b798c5a2b5fe8e77a005670e4b14094",
+  "source_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+  "fixed_seed": 271828,
+  "dedt_decision": "User explicitly confirmed dedt=0.32 per volume, nominal total-box power0.64; measured accumulated work authoritative. Difference from stated paper total0.32 retained.",
+  "plumbing": {
+    "grid": [
+      24,
+      24,
+      48
+    ],
+    "blocks": [
+      12,
+      12,
+      24
+    ],
+    "tlim": 0.1,
+    "history_dt": 0.01,
+    "snapshot_dt": 0.02,
+    "restart_dt": 0.05,
+    "ranks": 1,
+    "classification": "plumbing only, not physical validation"
+  },
+  "canonical": {
+    "grid": [
+      96,
+      96,
+      192
+    ],
+    "blocks": [
+      24,
+      24,
+      48
+    ],
+    "initial_tlim": 10,
+    "ranks": 8,
+    "first_averaging_window": [
+      6,
+      10
+    ],
+    "block_duration": 2,
+    "preferred_minimum_blocks": 4,
+    "extension_endpoints": [
+      14,
+      18
+    ],
+    "extension_procedure": "Inspect startup and late block drift/correlation. Extend same realization from checkpoint if initial support inadequate. Fixed averaging start6; report each provisional analysis. Heating drift is physical, not a reason to retune parameters. Longer sampling may remain inconclusive.",
+    "forbidden_inferences": [
+      "active/passive causal contrast",
+      "spatial convergence",
+      "LF coefficient correctness",
+      "universal fitted slope"
+    ]
+  }
+}

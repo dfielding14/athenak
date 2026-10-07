@@ -1,0 +1,178 @@
+{
+  "runs": [
+    {
+      "segment": "canonical",
+      "classification": "canonical scientific experiment",
+      "simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+      "start_utc": "2026-10-07T00:42:24.200904+00:00",
+      "end_utc": "2026-10-07T01:21:41.819941+00:00",
+      "launch_wall_seconds": 2357.617402425967,
+      "solver_reported_seconds": 2352.716,
+      "gpu_devices": 8,
+      "application_gpu_device_hours": 5.239149783168816,
+      "returncode": 0,
+      "last_time": 10.0,
+      "last_cycle": 17226
+    },
+    {
+      "segment": "canonical-fixed",
+      "classification": "canonical scientific experiment",
+      "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+      "start_utc": "2026-10-07T01:41:59.605828+00:00",
+      "end_utc": "2026-10-07T02:20:45.911479+00:00",
+      "launch_wall_seconds": 2326.3039672691375,
+      "solver_reported_seconds": 2323.802,
+      "gpu_devices": 8,
+      "application_gpu_device_hours": 5.169564371709194,
+      "returncode": 0,
+      "last_time": 10.0,
+      "last_cycle": 17227
+    },
+    {
+      "segment": "canonical-fixed-to14",
+      "classification": "canonical scientific experiment",
+      "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+      "start_utc": "2026-10-07T02:20:47.086925+00:00",
+      "end_utc": "2026-10-07T02:38:09.443406+00:00",
+      "launch_wall_seconds": 1042.3539948938414,
+      "solver_reported_seconds": 1039.688,
+      "gpu_devices": 8,
+      "application_gpu_device_hours": 2.316342210875203,
+      "returncode": 0,
+      "last_time": 14.0,
+      "last_cycle": 24683
+    },
+    {
+      "segment": "canonical-fixed-to18",
+      "classification": "canonical scientific experiment",
+      "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+      "start_utc": "2026-10-07T02:44:20.274580+00:00",
+      "end_utc": "2026-10-07T03:02:37.272411+00:00",
+      "launch_wall_seconds": 1096.9953409100417,
+      "solver_reported_seconds": 1093.087,
+      "gpu_devices": 8,
+      "application_gpu_device_hours": 2.4377674242445373,
+      "returncode": 0,
+      "last_time": 18.0,
+      "last_cycle": 32604
+    },
+    {
+      "segment": "canonical-to14",
+      "classification": "canonical scientific experiment",
+      "simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+      "start_utc": "2026-10-07T01:22:21.582024+00:00",
+      "end_utc": "2026-10-07T01:22:23.223410+00:00",
+      "launch_wall_seconds": 1.638021650025621,
+      "solver_reported_seconds": null,
+      "gpu_devices": 8,
+      "application_gpu_device_hours": 0.003640048111168047,
+      "returncode": 143,
+      "last_time": null,
+      "last_cycle": null
+    },
+    {
+      "segment": "plumbing",
+      "classification": "plumbing check only",
+      "simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+      "start_utc": "2026-10-07T00:41:21.332312+00:00",
+      "end_utc": "2026-10-07T00:41:29.627850+00:00",
+      "launch_wall_seconds": 8.293920105090365,
+      "solver_reported_seconds": 4.735096,
+      "gpu_devices": 1,
+      "application_gpu_device_hours": 0.0023038666958584346,
+      "returncode": 0,
+      "last_time": 0.1,
+      "last_cycle": 33
+    },
+    {
+      "segment": "plumbing-fixed",
+      "classification": "plumbing check only",
+      "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+      "start_utc": "2026-10-07T01:39:30.419134+00:00",
+      "end_utc": "2026-10-07T01:39:36.939273+00:00",
+      "launch_wall_seconds": 6.518746685003862,
+      "solver_reported_seconds": 4.733772,
+      "gpu_devices": 1,
+      "application_gpu_device_hours": 0.0018107629680566282,
+      "returncode": 0,
+      "last_time": 0.1,
+      "last_cycle": 33
+    }
+  ],
+  "analyses": [
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/analysis-6-10.log",
+      "wall_seconds": 89.49,
+      "max_rss_kbytes": 1151700
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/analysis-fixed-6-10.log",
+      "wall_seconds": 101.5,
+      "max_rss_kbytes": 1151800
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/analysis-fixed-6-14.log",
+      "wall_seconds": 161.37,
+      "max_rss_kbytes": 1151840
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/analysis-fixed-6-18.log",
+      "wall_seconds": 224.86,
+      "max_rss_kbytes": 1151828
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/plumbing-analysis-availability.log",
+      "wall_seconds": 12.48,
+      "max_rss_kbytes": 121848
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/plumbing-analysis-final.log",
+      "wall_seconds": 12.67,
+      "max_rss_kbytes": 121908
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/plumbing-analysis.log",
+      "wall_seconds": 14.21,
+      "max_rss_kbytes": 122044
+    },
+    {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/logs/plumbing-fixed-analysis.log",
+      "wall_seconds": 11.7,
+      "max_rss_kbytes": 120692
+    }
+  ],
+  "definition": "Application device-hours = measured launcher wall seconds times requested GPU compute devices / 3600. A Frontier node has four dual-device MI250X packages (eight compute devices). Excludes queue, compilation, allocation idle time and CPU analysis; Slurm allocation wall accounting is separate.",
+  "all_recorded_run_gpu_device_hours": 15.170578467772835,
+  "allocation_accounting": {
+    "5629372": {
+      "JobID": "5629372",
+      "Start": "2026-10-06T20:41:15",
+      "End": "2026-10-06T22:38:56",
+      "Elapsed": "01:57:41",
+      "State": "COMPLETED",
+      "AllocTRES": "billing=112,cpu=112,energy=8120796,mem=500G,node=1",
+      "timestamp_timezone": "America/New_York; retained sacct output",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/metadata/allocation-5629372-accounting.txt",
+      "source_sha256": "6dd15453f07c3f69f9781bdfe8a9d9071941692227b3f83e7f761aa065c7bb09"
+    },
+    "5629677": {
+      "JobID": "5629677",
+      "Start": "2026-10-06T22:39:47",
+      "End": "2026-10-06T23:10:26",
+      "Elapsed": "00:30:39",
+      "State": "COMPLETED",
+      "AllocTRES": "billing=112,cpu=112,energy=1749857,mem=500G,node=1",
+      "timestamp_timezone": "America/New_York; retained sacct output",
+      "source_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/metadata/allocation-5629677-accounting.txt",
+      "source_sha256": "8cefc40fce71ca862a12b7be162af8ab0c08473e1159cf1729902d8fb0de2126"
+    }
+  },
+  "corrected_reference": {
+    "launcher_wall_seconds": 4465.653303073021,
+    "application_gpu_device_hours": 9.923674006828936,
+    "final_analysis_wall_seconds": 224.86,
+    "final_analysis_peak_RSS_KiB": 1151828,
+    "scope": "Three corrected solver segments; final CPU analysis reported separately."
+  },
+  "cost_scope_caveat": "Run table covers staged application segments and time-instrumented analyses. Small probes/regression steps and build work are not all separately wall-timed. The two allocation records include their allocated wall time and idle intervals; this is not a claim of measured kernel time or whole-development CPU cost."
+}

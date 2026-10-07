@@ -1,0 +1,14 @@
+{
+  "status": "complete",
+  "solver_runs": 0,
+  "successful_returncode": 0,
+  "allocation": 5629677,
+  "files": {
+    "analysis-checks/mirror-tail-t14p25/audit_snapshot.py": "89ffece7ea23d32301bec9cc50ee4ea802f52ab7367ccfe70fe2dec813b40e60",
+    "analysis-checks/mirror-tail-t14p25/README.md": "77594fb9f75431719f5606e5d9c71dccaae7f5e2a9ac77db1aa4a1964e176124",
+    "analysis-checks/mirror-tail-t14p25/run.log": "c2ba2608f8a42dae95eef4901e04e70e6ea96409139ca8b484425779a0af8ec6",
+    "analysis-checks/mirror-tail-t14p25/run-initial-module-shadow.log": "92db5cd47a0a082c571f0c26c62dbdd74bd5cba25ae8df5834eeb05d4546803e",
+    "analysis-checks/mirror-tail-t14p25/cells.json": "669de61ce0183d1199a7e0f9b2548ecd2cfe41af2522138d81d33cb9d9403d10",
+    "analysis-checks/mirror-tail-t14p25/run.sh": "802a33bb7f8a031252396795ff82c9fc43df2cf7edd7e6e68dc35aed08e6aa5f"
+  }
+}

@@ -1,0 +1,2063 @@
+{
+  "metrics_sha256": "9c23afa4d8be3fe10fc6560ec37403e18b36068f6041a2a56469c4982b4aa8a0",
+  "sampling": {
+    "snapshots": 50,
+    "times": [
+      5.75034954004,
+      6.00035872084,
+      6.25043921053,
+      6.50014633907,
+      6.75052792247,
+      7.00022885382,
+      7.25052053605,
+      7.50046053373,
+      7.75010911302,
+      8.00045575719,
+      8.25052321494,
+      8.50027855738,
+      8.75048669351,
+      9.00027054022,
+      9.25036076264,
+      9.500110892,
+      9.75016423605,
+      10.0,
+      10.2503838736,
+      10.5002649812,
+      10.7503639329,
+      11.0000737303,
+      11.2501907364,
+      11.5001495268,
+      11.7502215531,
+      12.0003474696,
+      12.2500516364,
+      12.5002396532,
+      12.7503360417,
+      13.0004862832,
+      13.2504806326,
+      13.5001748021,
+      13.7501509461,
+      14.0,
+      14.2502307673,
+      14.5000485983,
+      14.750010387,
+      15.0002536189,
+      15.2504877277,
+      15.5000195591,
+      15.7502944939,
+      16.0000495164,
+      16.2502612562,
+      16.5004161193,
+      16.7504744477,
+      17.0004500077,
+      17.2504532252,
+      17.5003632459,
+      17.7501937679,
+      18.0
+    ],
+    "near_threshold_halfwidth_X": 0.05,
+    "bracketing_snapshot_range": [
+      5.75034954004,
+      18.0
+    ],
+    "max_snapshot_gap": 0.2503838736000006,
+    "endpoint_rule": "linearly interpolate diagnostic values/PDF bins/spectral bins at requested endpoints using bracketing snapshots; no field interpolation or extrapolation",
+    "block_duration": 2.0,
+    "complete_blocks": 6,
+    "block_anchor": 6.0,
+    "instantaneous_output_caveat": "post-operator snapshots may miss transient threshold excursions; inclusive history switches, strict exceedance, and near bands have different meanings"
+  },
+  "adequacy": {
+    "classification": "inconclusive",
+    "reasons": [],
+    "sampling_prerequisites_satisfied": true,
+    "scope": "descriptive single-box finite-window comparison; no causal active/passive, asymptotic convergence, or LF-coefficient claim",
+    "heating": "no cooling: secular thermal-energy/beta drift is expected and must be reported, not mistaken for a stationary thermal ensemble",
+    "classification_rule": "overall scientific classification remains inconclusive pending joint scientific review; sampling prerequisites, numerical analysis checks and group directional findings are separate"
+  },
+  "scalars": {
+    "firehose_near_interior": {
+      "mean": 0.009186390181230027,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.00948954459374441,
+        0.006905488123292596,
+        0.0016903026439389235,
+        0.01058108887275971,
+        0.023334799942181367,
+        0.0031171169114631546
+      ],
+      "block_count": 6,
+      "block_sd": 0.007751703121114812,
+      "block_min": 0.0016903026439389235,
+      "block_max": 0.023334799942181367,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0003818306315827398,
+      "fitted_change_over_window": 0.004581967578992878
+    },
+    "pressure_covariance": {
+      "mean": -0.007195712691072505,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        -0.013251965392442949,
+        -0.007281832771984204,
+        -0.022913859125970236,
+        0.0030761044248869868,
+        0.004370495620269003,
+        -0.007173218901193628
+      ],
+      "block_count": 6,
+      "block_sd": 0.010227743136545111,
+      "block_min": -0.022913859125970236,
+      "block_max": 0.004370495620269003,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0013895085087787373,
+      "fitted_change_over_window": 0.016674102105344847
+    },
+    "curvature_plus_discretization_rms": {
+      "mean": 1.1933930039716651,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        1.1372176337893527,
+        1.1380384333538522,
+        0.9954914183432935,
+        1.457253133305031,
+        1.5011883048667738,
+        0.9311691001716862
+      ],
+      "block_count": 6,
+      "block_sd": 0.2360111561459151,
+      "block_min": 0.9311691001716862,
+      "block_max": 1.5011883048667738,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.007233701292363012,
+      "fitted_change_over_window": 0.08680441550835614
+    },
+    "u_perp_rms": {
+      "mean": 0.5451580087261135,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.5462716371903238,
+        0.567747982775258,
+        0.5264197150203237,
+        0.5798218392178701,
+        0.5171676260770212,
+        0.5335192520758842
+      ],
+      "block_count": 6,
+      "block_sd": 0.02442610926229907,
+      "block_min": 0.5171676260770212,
+      "block_max": 0.5798218392178701,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.0017956115321990911,
+      "fitted_change_over_window": -0.021547338386389094
+    },
+    "induction_rms": {
+      "mean": 0.4910999370061281,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.48883932804215224,
+        0.44104218887837326,
+        0.457746701010967,
+        0.5708298866551068,
+        0.6023427359657703,
+        0.385798781484399
+      ],
+      "block_count": 6,
+      "block_sd": 0.08178445499906946,
+      "block_min": 0.385798781484399,
+      "block_max": 0.6023427359657703,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0011757473711208788,
+      "fitted_change_over_window": 0.014108968453450546
+    },
+    "pressure_variance_perp": {
+      "mean": 0.2868697725384854,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.13953535961318986,
+        0.106661953688741,
+        0.14025136343487277,
+        0.5306303218045691,
+        0.5531981055662463,
+        0.25094153112329365
+      ],
+      "block_count": 6,
+      "block_sd": 0.20362714454499192,
+      "block_min": 0.106661953688741,
+      "block_max": 0.5531981055662463,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.028320365032417753,
+      "fitted_change_over_window": 0.33984438038901305
+    },
+    "X_float32_rounding_envelope_max": {
+      "mean": 1.906429436606943e-05,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        7.252693769479953e-06,
+        3.18433976305054e-06,
+        5.688108814241516e-06,
+        9.291932680328341e-06,
+        8.265358540479968e-05,
+        6.3151057645165224e-06
+      ],
+      "block_count": 6,
+      "block_sd": 3.121617530860394e-05,
+      "block_min": 3.18433976305054e-06,
+      "block_max": 8.265358540479968e-05,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 2.5093637444553923e-06,
+      "fitted_change_over_window": 3.0112364933464706e-05
+    },
+    "firehose_strict": {
+      "mean": 0.002209072932291,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.0022986402118661056,
+        0.0015817026714641865,
+        0.000427260176744802,
+        0.002602158012804622,
+        0.005488236932327495,
+        0.0008564395885387881
+      ],
+      "block_count": 6,
+      "block_sd": 0.0018062957576131082,
+      "block_min": 0.000427260176744802,
+      "block_max": 0.005488236932327495,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 9.348591370974083e-05,
+      "fitted_change_over_window": 0.00112183096451689
+    },
+    "mirror_rounding_ambiguous": {
+      "mean": 0.01573539179747433,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.006859316993276594,
+        0.01382211778250399,
+        0.024542282855548016,
+        0.008543979818205299,
+        0.010748388972868554,
+        0.02989626436244353
+      ],
+      "block_count": 6,
+      "block_sd": 0.00935011835993909,
+      "block_min": 0.006859316993276594,
+      "block_max": 0.02989626436244353,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0011682210478531903,
+      "fitted_change_over_window": 0.014018652574238283
+    },
+    "mirror_near": {
+      "mean": 0.03288195758888221,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.014813675420667912,
+        0.02894140283992837,
+        0.05405852804847375,
+        0.019937440219267924,
+        0.019347080973605286,
+        0.06019361803135001
+      ],
+      "block_count": 6,
+      "block_sd": 0.019427393750667817,
+      "block_min": 0.014813675420667912,
+      "block_max": 0.06019361803135001,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0020816161925573166,
+      "fitted_change_over_window": 0.024979394310687797
+    },
+    "u_parallel_fraction": {
+      "mean": 0.44931194612214237,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.46349404233807623,
+        0.4456584221094012,
+        0.4257096650623404,
+        0.4108166999056922,
+        0.4771952267415638,
+        0.4729976205757802
+      ],
+      "block_count": 6,
+      "block_sd": 0.026802687386550637,
+      "block_min": 0.4108166999056922,
+      "block_max": 0.4771952267415638,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0023555240273991284,
+      "fitted_change_over_window": 0.02826628832878954
+    },
+    "B_over_B0_mean": {
+      "mean": 1.2783819860574255,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        1.2742261030105912,
+        1.2538476078717569,
+        1.326490635193672,
+        1.339902114975744,
+        1.2279884733917452,
+        1.2478369819010429
+      ],
+      "block_count": 6,
+      "block_sd": 0.04514616009894283,
+      "block_min": 1.2279884733917452,
+      "block_max": 1.339902114975744,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.002796713006072769,
+      "fitted_change_over_window": -0.03356055607287323
+    },
+    "mirror_inclusive": {
+      "mean": 0.007925028782918751,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.003440537388910371,
+        0.006985618740616322,
+        0.012357086226002812,
+        0.004303713742764276,
+        0.005448822646285217,
+        0.015014393952933504
+      ],
+      "block_count": 6,
+      "block_sd": 0.004693418912355461,
+      "block_min": 0.003440537388910371,
+      "block_max": 0.015014393952933504,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0005867263763928856,
+      "fitted_change_over_window": 0.007040716516714627
+    },
+    "beta_volume_mean": {
+      "mean": 9.242402463945993,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        7.858446151325338,
+        8.569241561148996,
+        8.165898224691512,
+        8.576573338195367,
+        11.237225933183323,
+        11.047029575131434
+      ],
+      "block_count": 6,
+      "block_sd": 1.4971085573179597,
+      "block_min": 7.858446151325338,
+      "block_max": 11.237225933183323,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.339327874784229,
+      "fitted_change_over_window": 4.071934497410748
+    },
+    "mirror_strict_beyond_rounding_envelope": {
+      "mean": 3.5324704085455955e-08,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        2.1194822451273573e-07,
+        0.0
+      ],
+      "block_count": 6,
+      "block_sd": 8.652750032417538e-08,
+      "block_min": 0.0,
+      "block_max": 2.1194822451273573e-07,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 6.202934297190071e-09,
+      "fitted_change_over_window": 7.443521156628085e-08
+    },
+    "beta_ratio_of_means": {
+      "mean": 8.711513790764773,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        7.423045376561885,
+        8.237599668829079,
+        7.8016868721910235,
+        8.047182579505826,
+        10.27987248964448,
+        10.479695757856343
+      ],
+      "block_count": 6,
+      "block_sd": 1.3221257811934712,
+      "block_min": 7.423045376561885,
+      "block_max": 10.479695757856343,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.3085148880521118,
+      "fitted_change_over_window": 3.7021786566253416
+    },
+    "S_parallel_rms": {
+      "mean": 0.5476076428702836,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.5402366910920997,
+        0.4970525887825691,
+        0.5332905834624443,
+        0.6242101577189998,
+        0.6587589015965303,
+        0.4320969345690589
+      ],
+      "block_count": 6,
+      "block_sd": 0.08292212484475188,
+      "block_min": 0.4320969345690589,
+      "block_max": 0.6587589015965303,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0006895870354265272,
+      "fitted_change_over_window": 0.008275044425118326
+    },
+    "magnetic_density": {
+      "mean": 0.8282599525551186,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.822036768926845,
+        0.7930727062936768,
+        0.8889060221770313,
+        0.910783983891543,
+        0.7666348812151268,
+        0.7881253528264893
+      ],
+      "block_count": 6,
+      "block_sd": 0.05860625791768653,
+      "block_min": 0.7666348812151268,
+      "block_max": 0.910783983891543,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.0033613715260197865,
+      "fitted_change_over_window": -0.040336458312237436
+    },
+    "deltaB_rms_over_B0": {
+      "mean": 0.8066413955246959,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.8019202486711158,
+        0.7650890002145783,
+        0.8808743007731096,
+        0.9052680245374495,
+        0.7281797700250907,
+        0.7585170289268319
+      ],
+      "block_count": 6,
+      "block_sd": 0.07135658104498357,
+      "block_min": 0.7281797700250907,
+      "block_max": 0.9052680245374495,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.004477804683901418,
+      "fitted_change_over_window": -0.05373365620681702
+    },
+    "pressure_correlation": {
+      "mean": -0.15198918051862736,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        -0.20183305785133465,
+        -0.1594820677130072,
+        -0.37331781641792744,
+        0.0010328315129860509,
+        -0.041946232229444415,
+        -0.1363887404130363
+      ],
+      "block_count": 6,
+      "block_sd": 0.13213287320040973,
+      "block_min": -0.37331781641792744,
+      "block_max": 0.0010328315129860509,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.014664530154862819,
+      "fitted_change_over_window": 0.17597436185835383
+    },
+    "u_parallel_rms": {
+      "mean": 0.4916569679246829,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.5078029302613181,
+        0.5093047931635855,
+        0.4527375958381361,
+        0.482729613545342,
+        0.49387722261487255,
+        0.5034896521248434
+      ],
+      "block_count": 6,
+      "block_sd": 0.021501139325786157,
+      "block_min": 0.4527375958381361,
+      "block_max": 0.5093047931635855,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.00046796638776921826,
+      "fitted_change_over_window": 0.005615596653230619
+    },
+    "perp_gradient_u_perp_rms": {
+      "mean": 7.367782142752356,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        7.780210335995403,
+        7.577631443395913,
+        6.863873700954617,
+        7.543422401389919,
+        7.626123927404103,
+        6.8154310473741795
+      ],
+      "block_count": 6,
+      "block_sd": 0.41731023759168206,
+      "block_min": 6.8154310473741795,
+      "block_max": 7.780210335995403,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.053606101288797274,
+      "fitted_change_over_window": -0.6432732154655673
+    },
+    "firehose_inclusive": {
+      "mean": 0.002209072932291,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.0022986402118661056,
+        0.0015817026714641865,
+        0.000427260176744802,
+        0.002602158012804622,
+        0.005488236932327495,
+        0.0008564395885387881
+      ],
+      "block_count": 6,
+      "block_sd": 0.0018062957576131082,
+      "block_min": 0.000427260176744802,
+      "block_max": 0.005488236932327495,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 9.348591370974083e-05,
+      "fitted_change_over_window": 0.00112183096451689
+    },
+    "Mach_isotropic_proxy": {
+      "mean": 0.21365587443397185,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.23417601414272382,
+        0.2312911623674925,
+        0.20458516290915593,
+        0.21622218355964584,
+        0.1977359713868203,
+        0.1979247522379926
+      ],
+      "block_count": 6,
+      "block_sd": 0.016259488201264886,
+      "block_min": 0.1977359713868203,
+      "block_max": 0.23417601414272382,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.003565710219004603,
+      "fitted_change_over_window": -0.042788522628055235
+    },
+    "firehose_near": {
+      "mean": 0.011395463113521027,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.011788184805610516,
+        0.008487190794756785,
+        0.0021175628206837258,
+        0.013183246885564333,
+        0.02882303687450886,
+        0.003973556500001943
+      ],
+      "block_count": 6,
+      "block_sd": 0.009557122033765287,
+      "block_min": 0.0021175628206837258,
+      "block_max": 0.02882303687450886,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.00047531654529248086,
+      "fitted_change_over_window": 0.0057037985435097706
+    },
+    "perp_gradient_u_parallel_rms": {
+      "mean": 7.698840382779952,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        8.522091580364059,
+        8.051421963200475,
+        7.15658865824544,
+        6.551456994046782,
+        7.740244307078643,
+        8.171238793744314
+      ],
+      "block_count": 6,
+      "block_sd": 0.7262859522675558,
+      "block_min": 6.551456994046782,
+      "block_max": 8.522091580364059,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.040485878475658765,
+      "fitted_change_over_window": -0.4858305417079052
+    },
+    "firehose_strict_beyond_rounding_envelope": {
+      "mean": 0.0,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0,
+        0.0
+      ],
+      "block_count": 6,
+      "block_sd": 0.0,
+      "block_min": 0.0,
+      "block_max": 0.0,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0,
+      "fitted_change_over_window": 0.0
+    },
+    "firehose_rounding_ambiguous": {
+      "mean": 0.004431364520904954,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.004623451318330129,
+        0.0031689448940883276,
+        0.000866251041637621,
+        0.0052217677265237565,
+        0.010985881967565331,
+        0.001721890177284562
+      ],
+      "block_count": 6,
+      "block_sd": 0.003612985529357554,
+      "block_min": 0.000866251041637621,
+      "block_max": 0.010985881967565331,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0001875115530563145,
+      "fitted_change_over_window": 0.002250138636675774
+    },
+    "pressure_variance_magnetic": {
+      "mean": 0.03204492022596915,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.032020583789830845,
+        0.021369071031751608,
+        0.031216440660406214,
+        0.044560545679595075,
+        0.033640192999483245,
+        0.029462687194747948
+      ],
+      "block_count": 6,
+      "block_sd": 0.007490185976532878,
+      "block_min": 0.021369071031751608,
+      "block_max": 0.044560545679595075,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0001414751329009847,
+      "fitted_change_over_window": 0.0016977015948118164
+    },
+    "mirror_near_interior": {
+      "mean": 0.024956928805963455,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.011373138031757542,
+        0.02195578409931205,
+        0.04170144182247094,
+        0.015633726476503646,
+        0.013898258327320069,
+        0.04517922407841651
+      ],
+      "block_count": 6,
+      "block_sd": 0.01477878532238149,
+      "block_min": 0.011373138031757542,
+      "block_max": 0.04517922407841651,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0014948898161644304,
+      "fitted_change_over_window": 0.017938677793973165
+    },
+    "parallel_gradient_u_perp_rms": {
+      "mean": 2.037204956167781,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        1.8617097528819333,
+        1.9373286224113617,
+        2.0096561911060267,
+        2.280340775626589,
+        2.3463885207932664,
+        1.7878058741875085
+      ],
+      "block_count": 6,
+      "block_sd": 0.2273509130434373,
+      "block_min": 1.7878058741875085,
+      "block_max": 2.3463885207932664,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.018189538565791752,
+      "fitted_change_over_window": 0.21827446278950102
+    },
+    "thermal_density": {
+      "mean": 10.741826343092805,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        9.139492446111397,
+        9.796271325483646,
+        10.390141652665267,
+        10.964928595261608,
+        11.7780165186491,
+        12.38210752038583
+      ],
+      "block_count": 6,
+      "block_sd": 1.216488172211022,
+      "block_min": 9.139492446111397,
+      "block_max": 12.38210752038583,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.3240576000307183,
+      "fitted_change_over_window": 3.88869120036862
+    },
+    "mirror_strict": {
+      "mean": 0.007925028782918751,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.003440537388910371,
+        0.006985618740616322,
+        0.012357086226002812,
+        0.004303713742764276,
+        0.005448822646285217,
+        0.015014393952933504
+      ],
+      "block_count": 6,
+      "block_sd": 0.004693418912355461,
+      "block_min": 0.003440537388910371,
+      "block_max": 0.015014393952933504,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0005867263763928856,
+      "fitted_change_over_window": 0.007040716516714627
+    },
+    "kinetic_density": {
+      "mean": 0.26991370434224365,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.27847078491643384,
+        0.29065596820468664,
+        0.24095232507564635,
+        0.28428742091506315,
+        0.25534860020463185,
+        0.2697671267369995
+      ],
+      "block_count": 6,
+      "block_sd": 0.01876696085553367,
+      "block_min": 0.24095232507564635,
+      "block_max": 0.29065596820468664,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.0006962284979844273,
+      "fitted_change_over_window": -0.008354741975813127
+    },
+    "div_u_rms": {
+      "mean": 0.30567025503668227,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.36953421744690773,
+        0.3028487453609304,
+        0.2959015118947143,
+        0.3244762660257624,
+        0.300030787770924,
+        0.24123000172085474
+      ],
+      "block_count": 6,
+      "block_sd": 0.041761251997347454,
+      "block_min": 0.24123000172085474,
+      "block_max": 0.36953421744690773,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.007640953772779585,
+      "fitted_change_over_window": -0.09169144527335502
+    },
+    "pressure_normalized_residual_variance": {
+      "mean": 0.8729676531982465,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.8334356800970864,
+        0.8778482177282043,
+        0.6936350384944344,
+        0.9908634076507589,
+        0.9579329764182977,
+        0.884090598800697
+      ],
+      "block_count": 6,
+      "block_sd": 0.10487041383593161,
+      "block_min": 0.6936350384944344,
+      "block_max": 0.9908634076507589,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.011026143581261,
+      "fitted_change_over_window": 0.132313722975132
+    }
+  },
+  "history": {
+    "kinetic": {
+      "mean": 0.5401855212975497,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.5573199082871366,
+        0.5811362925139936,
+        0.48198229743123405,
+        0.5693089003835458,
+        0.5115918258136806,
+        0.5397739033557087
+      ],
+      "block_count": 6,
+      "block_sd": 0.037480950386306444,
+      "block_min": 0.48198229743123405,
+      "block_max": 0.5811362925139936,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.002398296557336185,
+      "fitted_change_over_window": -0.028779558688034217
+    },
+    "magnetic": {
+      "mean": 1.656242509715444,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        1.6436198846949839,
+        1.5858249590222486,
+        1.7775073597608282,
+        1.8211415321629998,
+        1.5322826039353925,
+        1.5770787187162112
+      ],
+      "block_count": 6,
+      "block_sd": 0.11717318602401693,
+      "block_min": 1.5322826039353925,
+      "block_max": 1.8211415321629998,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.006508026790838389,
+      "fitted_change_over_window": -0.07809632149006067
+    },
+    "therm_cgl": {
+      "mean": 21.48357196897179,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        18.279060207012417,
+        19.593038748450795,
+        20.78051034278854,
+        21.929549567432062,
+        23.556125570231433,
+        24.76314737791554
+      ],
+      "block_count": 6,
+      "block_sd": 2.4325828434818892,
+      "block_min": 18.279060207012417,
+      "block_max": 24.76314737791554,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.6489063233473658,
+      "fitted_change_over_window": 7.786875880168389
+    },
+    "beta_volume_mean": {
+      "mean": 9.242913973291982,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        7.860418866545128,
+        8.570160721456665,
+        8.167555714525049,
+        8.570684373141622,
+        11.24582723252871,
+        11.042836931554705
+      ],
+      "block_count": 6,
+      "block_sd": 1.4982364204462573,
+      "block_min": 7.860418866545128,
+      "block_max": 11.24582723252871,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.3444670669746814,
+      "fitted_change_over_window": 4.133604803696176
+    },
+    "force_work": {
+      "mean": 7.6800000000000574,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        4.479999999999993,
+        5.759999999999894,
+        7.03999999999995,
+        8.32000000000011,
+        9.600000000000215,
+        10.880000000000184
+      ],
+      "block_count": 6,
+      "block_sd": 2.3946607275354332,
+      "block_min": 4.479999999999993,
+      "block_max": 10.880000000000184,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.6400000000000295,
+      "fitted_change_over_window": 7.680000000000355
+    }
+  },
+  "energy_budget": {
+    "available": true,
+    "interval": [
+      6.0,
+      18.0
+    ],
+    "requested_interval": [
+      6.0,
+      18.0
+    ],
+    "requested_window_covered": true,
+    "actual_applied_work": 7.6800000000001205,
+    "actual_mean_total_power": 0.64000000000001,
+    "conserved_total_energy_change": 7.679999999994401,
+    "residual_E_minus_work": -5.7198690228688065e-12,
+    "relative_residual": 7.447746123526975e-13,
+    "sampling": "linear interpolation only if explicit endpoints are between retained history rows"
+  },
+  "gradient_comparisons": {
+    "resolved_strain_to_perpendicular_gradient_power": 0.00482573674039363,
+    "cutoff_strain_to_perpendicular_gradient_power": 0.0825060677175919
+  },
+  "forcing": {
+    "available": true,
+    "expected_solenoidal_fraction": 0.5000000000000001,
+    "ratio_of_time_mean_powers": 0.5022943689732536
+  },
+  "forcing_statistics": {
+    "total_acceleration_power": {
+      "mean": 6.367932068237096,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        4.15513571775617,
+        3.724705627030764,
+        6.778551569910315,
+        11.363206459853604,
+        6.931008907716087,
+        5.254984127155634
+      ],
+      "block_count": 6,
+      "block_sd": 2.777055886279682,
+      "block_min": 3.724705627030764,
+      "block_max": 11.363206459853604,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.21333251744711654,
+      "fitted_change_over_window": 2.5599902093653983
+    },
+    "compressive_acceleration_power": {
+      "mean": 3.1693556483573975,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        1.3636295408275232,
+        1.1517326268037467,
+        1.568720354954028,
+        7.024994457662606,
+        5.824990485929435,
+        2.0820664239670474
+      ],
+      "block_count": 6,
+      "block_sd": 2.5688140318376065,
+      "block_min": 1.1517326268037467,
+      "block_max": 7.024994457662606,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.28010394638396874,
+      "fitted_change_over_window": 3.361247356607625
+    },
+    "solenoidal_acceleration_power": {
+      "mean": 3.198576419879698,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        2.7915061769286464,
+        2.5729730002270164,
+        5.209831214956286,
+        4.338212002191,
+        1.1060184217866529,
+        3.1729177031885856
+      ],
+      "block_count": 6,
+      "block_sd": 1.4339078267232768,
+      "block_min": 1.1060184217866529,
+      "block_max": 5.209831214956286,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.06677142893685227,
+      "fitted_change_over_window": -0.8012571472422272
+    },
+    "solenoidal_fraction": {
+      "mean": 0.5620842180121426,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.6677452686912362,
+        0.6832273964609474,
+        0.7625585867826209,
+        0.421251661688755,
+        0.1964747301041403,
+        0.6412476643451565
+      ],
+      "block_count": 6,
+      "block_sd": 0.21250922693072058,
+      "block_min": 0.1964747301041403,
+      "block_max": 0.7625585867826209,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": -0.025086573478371458,
+      "fitted_change_over_window": -0.3010388817404575
+    },
+    "zero_mode_power": {
+      "mean": 0.0034878796352788653,
+      "block_starts": [
+        6.0,
+        8.0,
+        10.0,
+        12.0,
+        14.0,
+        16.0
+      ],
+      "block_duration": 2.0,
+      "block_means": [
+        0.0014434302302060507,
+        0.0007118993125852387,
+        0.0030928546914259824,
+        0.0059581173089359955,
+        0.004861862968643988,
+        0.004859113299875934
+      ],
+      "block_count": 6,
+      "block_sd": 0.0020934216467685244,
+      "block_min": 0.0007118993125852387,
+      "block_max": 0.0059581173089359955,
+      "effective_window": [
+        6.0,
+        18.0
+      ],
+      "linear_slope": 0.0003805073340341873,
+      "fitted_change_over_window": 0.004566088008410248
+    }
+  },
+  "autocorrelation": {
+    "deltaB_rms_over_B0": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 5.75034954004,
+      "uniform_grid_end": 17.750503980040072,
+      "uniform_grid_spacing": 0.25000321750000154,
+      "samples": 49,
+      "positive_sequence_integral_time": 1.1258318122988702,
+      "nominal_effective_samples": 5.329461429721279,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "beta_volume_mean": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 5.75034954004,
+      "uniform_grid_end": 17.750503980040072,
+      "uniform_grid_spacing": 0.25000321750000154,
+      "samples": 49,
+      "positive_sequence_integral_time": 1.6539664330698884,
+      "nominal_effective_samples": 3.6276898370080177,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "S_parallel_rms": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 5.75034954004,
+      "uniform_grid_end": 17.750503980040072,
+      "uniform_grid_spacing": 0.25000321750000154,
+      "samples": 49,
+      "positive_sequence_integral_time": 0.7068672032012219,
+      "nominal_effective_samples": 8.488266527046681,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "u_parallel_rms": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 5.75034954004,
+      "uniform_grid_end": 17.750503980040072,
+      "uniform_grid_spacing": 0.25000321750000154,
+      "samples": 49,
+      "positive_sequence_integral_time": 0.638406326184646,
+      "nominal_effective_samples": 9.3985240651651,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    }
+  },
+  "history_autocorrelation": {
+    "kinetic": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 6.000358720836768,
+      "uniform_grid_end": 17.983362739808676,
+      "uniform_grid_spacing": 0.02000501505671437,
+      "samples": 600,
+      "positive_sequence_integral_time": 0.4212089162404574,
+      "nominal_effective_samples": 14.22453746460001,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "magnetic": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 6.000358720836768,
+      "uniform_grid_end": 17.983362739808676,
+      "uniform_grid_spacing": 0.02000501505671437,
+      "samples": 600,
+      "positive_sequence_integral_time": 1.1475335865160496,
+      "nominal_effective_samples": 5.221199692879016,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "therm_cgl": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 6.000358720836768,
+      "uniform_grid_end": 17.983362739808676,
+      "uniform_grid_spacing": 0.02000501505671437,
+      "samples": 600,
+      "positive_sequence_integral_time": 2.076121691572681,
+      "nominal_effective_samples": 2.8859107988739026,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "beta_volume_mean": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 6.000358720836768,
+      "uniform_grid_end": 17.983362739808676,
+      "uniform_grid_spacing": 0.02000501505671437,
+      "samples": 600,
+      "positive_sequence_integral_time": 1.6752649378627478,
+      "nominal_effective_samples": 3.5764504312552083,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    },
+    "force_work": {
+      "available": true,
+      "resampled_to_median_cadence": true,
+      "uniform_grid_start": 6.000358720836768,
+      "uniform_grid_end": 17.983362739808676,
+      "uniform_grid_spacing": 0.02000501505671437,
+      "samples": 600,
+      "positive_sequence_integral_time": 2.0889876923380344,
+      "nominal_effective_samples": 2.8681365770901945,
+      "caution": "mean-subtracted, not detrended; finite-window/drift-biased diagnostic, not proof of independent blocks"
+    }
+  },
+  "health": {
+    "classification": "consistent",
+    "segments": [
+      {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed",
+        "returncode": 0,
+        "completion_status": "completed"
+      },
+      {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14",
+        "returncode": 0,
+        "completion_status": "completed"
+      },
+      {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18",
+        "returncode": 0,
+        "completion_status": "completed"
+      }
+    ],
+    "reasons": [],
+    "numerical_counters": {
+      "lf_dfloor": {
+        "available": true,
+        "full_retained_min": 0.0,
+        "full_retained_max": 0.0,
+        "last": 0.0,
+        "window_increment": 0.0
+      },
+      "lf_pfloor": {
+        "available": true,
+        "full_retained_min": 0.0,
+        "full_retained_max": 0.0,
+        "last": 0.0,
+        "window_increment": 0.0
+      },
+      "lf_nonfin": {
+        "available": true,
+        "full_retained_min": 0.0,
+        "full_retained_max": 0.0,
+        "last": 0.0,
+        "window_increment": 0.0
+      },
+      "lf_nonpos": {
+        "available": true,
+        "full_retained_min": 0.0,
+        "full_retained_max": 0.0,
+        "last": 0.0,
+        "window_increment": 0.0
+      }
+    },
+    "physical_stage_activity": {
+      "lf_hardbd": {
+        "available": true,
+        "full_retained_min": 0.0,
+        "full_retained_max": 3550875530.0,
+        "last": 3550875530.0,
+        "window_increment": 2922212058.8112035,
+        "meaning": "cumulative active-cell hard-bound crossings at unprojected LF stages; repeated cell-stage events, not unique cells or a time-integrated volume fraction"
+      },
+      "lf_hwproj": {
+        "available": true,
+        "full_retained_min": 0.0,
+        "full_retained_max": 0.0,
+        "last": 0.0,
+        "window_increment": 0.0,
+        "instrumentation": "reserved_uninstrumented",
+        "audited_simulation_revision": "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+        "audited_simulation_revisions": [
+          "7a37710f6c224e24e7c7f364e7e0b812b3a9494c",
+          "71ad25ebce73d33db048defd8f585a7dce0528c2"
+        ],
+        "meaning": "post-WO2 audited source initializes and serializes this field but never increments it; retained values are preserved for provenance and do not establish wall-projection activity or its absence"
+      }
+    },
+    "post_operator_hard_volume": {
+      "available": true,
+      "min_fraction": 0.0,
+      "max_fraction": 0.0,
+      "meaning": "strict hard-bound predicate at retained history times; distinct from unprojected LF stage crossings"
+    },
+    "LF_counter_lifecycle": "audited LF stage/admissibility counters are cumulative and restart-persistent, not reset per history or process; shared-file restart restores the prior global sum on rank0 only, so later MPI history sums preserve it once",
+    "achieved_history_range": [
+      0.0,
+      18.0
+    ],
+    "requested_window_covered": true,
+    "scope": "completion, coverage and numerical counter evidence; no threshold on physical hard-bound/projection activity or energy residual"
+  },
+  "normalization": {
+    "classification": "consistent",
+    "max_parseval_relative_error": 4.188727624076505e-15,
+    "max_PDF_integral_error": 1.2245759961615477e-12,
+    "scope": "analysis normalization/finite-field checks, not simulation physics acceptance"
+  },
+  "scale_bands": {
+    "k_perp_nyquist_inscribed": 301.59289474462014,
+    "resolved_kmax": 75.39822368615503,
+    "full_k_resolved_max": 75.39822368615503,
+    "cutoff_band_kmin": 226.1946710584651,
+    "definition": "resolved guide <=Nyquist/4 (>=8 cells per axis wavelength); scalar resolved ratios require 0<full |k|<=min(Nyquist_xyz)/4, including pure parallel modes at k_perp=0; plotted perpendicular shells sum all k_parallel, so low-k_perp alone does not guarantee resolved full wavevector; not a convergence claim"
+  },
+  "unavailable": {},
+  "temporal_dependence_cautions": [
+    "deltaB_rms_over_B0: block duration is less than twice the empirical positive-sequence integral correlation time",
+    "beta_volume_mean: block duration is less than twice the empirical positive-sequence integral correlation time"
+  ],
+  "integrated_spectra": {
+    "u_parallel": 0.23446416968177744,
+    "u_perp": 0.29415233046785194,
+    "p_perp": 0.2868697725384854,
+    "magnetic_pressure": 0.032044920225969144,
+    "p_parallel": 0.5898005722143185,
+    "kinetic": 0.2699137043422436,
+    "magnetic": 0.3282599525527559
+  },
+  "parallel_fluctuation_fraction": 0.44354304039962883,
+  "sqrt_mean_parallel_fluctuation_variance": 0.48421500356946545,
+  "sqrt_mean_perp_fluctuation_variance": 0.5423581201271462,
+  "pressure_variance_ratio": 8.952113798866838,
+  "perp_pressure_first_two_shell_fraction": 0.9303043468296534,
+  "block_parallel_fluctuation_fraction": [
+    0.4630254610488929,
+    0.4401235291521246,
+    0.40608903653389794,
+    0.40854774492762813,
+    0.47504619250726626,
+    0.46621759667729884
+  ],
+  "block_resolved_strain_ratio": [
+    0.0041122078896339825,
+    0.003766746174687499,
+    0.005390591287084168,
+    0.005781269901446646,
+    0.006234123040054584,
+    0.003539199984432662
+  ],
+  "hard_bound_check_fraction": 0.0037593854784213673,
+  "history_threshold_fractions": {
+    "mirror_inclusive_history_fraction": {
+      "mean": 0.01586528626398016,
+      "blocks": [
+        0.006836874556838894,
+        0.01378363118833061,
+        0.024706505859208826,
+        0.008167699616696096,
+        0.011111317882402117,
+        0.030585688480404417
+      ]
+    },
+    "fire_inclusive_history_fraction": {
+      "mean": 0.0003757114675100711,
+      "blocks": [
+        0.0005024227451005899,
+        0.0003262956512269473,
+        7.455269596476698e-05,
+        0.00046784433348358404,
+        0.0007716363094608567,
+        0.00011151706982368176
+      ]
+    },
+    "strict_soft_rate_history_fraction": {
+      "mean": 0.015865284366590418,
+      "blocks": [
+        0.006836874556838894,
+        0.01378363118833061,
+        0.02470649447487039,
+        0.008167699616696092,
+        0.011111317882402117,
+        0.03058568848040441
+      ]
+    }
+  },
+  "provenance": {
+    "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+    "analysis_revision": "64d652317bec173d1d33e23906d0e93f21463409",
+    "analysis_script": {
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+      "sha256": "a8241542d0d3cc5e4ecc83dd17b4cd7819467f9c2079eb707ebf231a5df812aa",
+      "bytes": 80677
+    },
+    "duplicate_snapshots": [],
+    "discarded_snapshot_branches": [],
+    "discarded_forcing_branches": [],
+    "user_history": {
+      "available": true,
+      "files": [
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed/cgl_lf_physics_benchmark_beta10.user.hst",
+          "sha256": "5602e6b7a645f21839796a6f42ad670f253f2ede60ff3b63a90f50700b43b7cb",
+          "bytes": 313529
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14/cgl_lf_physics_benchmark_beta10.user.hst",
+          "sha256": "2282c29ba488fbe4a4ecc439d53d57421bab7672522cd7dc30cce4de33b96530",
+          "bytes": 125404
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18/cgl_lf_physics_benchmark_beta10.user.hst",
+          "sha256": "555d85a692e5a60971c96ab7799d138c10c6f31be7cffd87b6d34dcb9c89bb23",
+          "bytes": 125404
+        }
+      ],
+      "duplicate_rows": [],
+      "discarded_restart_branches": [
+        {
+          "restart_time": 10.0,
+          "discarded_times": [],
+          "segment": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14",
+          "basis": "retained restart header"
+        },
+        {
+          "restart_time": 14.0,
+          "discarded_times": [],
+          "segment": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18",
+          "basis": "retained restart header"
+        }
+      ],
+      "dedup_rule": "chronological input order; a backward time jump removes the stale future branch, last duplicate row kept (12 significant-digit time key); changes audited"
+    },
+    "mhd_history": {
+      "available": true,
+      "files": [
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed/cgl_lf_physics_benchmark_beta10.mhd.hst",
+          "sha256": "9c0311553733cd17a6de7b1c835e95d20eeac15e765d1282c9a38a804a374287",
+          "bytes": 417861
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14/cgl_lf_physics_benchmark_beta10.mhd.hst",
+          "sha256": "296147dd365a5c1fc4b3791c793d0b63dd5bc1ee3e2a4bdc26476ead23c750c0",
+          "bytes": 167128
+        },
+        {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18/cgl_lf_physics_benchmark_beta10.mhd.hst",
+          "sha256": "60a0bd15a703665f76be2fd283d1bfa9ef2a04c45680d268b8f2f4d3c6db5e21",
+          "bytes": 167128
+        }
+      ],
+      "duplicate_rows": [],
+      "discarded_restart_branches": [
+        {
+          "restart_time": 10.0,
+          "discarded_times": [],
+          "segment": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14",
+          "basis": "retained restart header"
+        },
+        {
+          "restart_time": 14.0,
+          "discarded_times": [],
+          "segment": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18",
+          "basis": "retained restart header"
+        }
+      ],
+      "dedup_rule": "chronological input order; a backward time jump removes the stale future branch, last duplicate row kept (12 significant-digit time key); changes audited"
+    },
+    "segment_completion": [
+      {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed",
+        "simulation": {
+          "revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+          "dirty": false,
+          "revision_basis": "Committed EOS fix compiled against byte-identical frozen headers; immutable unchanged release objects relinked. Exact commands and input hashes in binary_manifest.json. CMakeCache.txt records inherited release build configuration.",
+          "executable": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/build-fixed-hip/athena",
+          "executable_sha256": "bd699cf711d0c2a21037690d28e8639b140f0ed96ad19c2d0406636c331527a3",
+          "input_path": "effective.athinput",
+          "input_sha256": "5b4ffa934eb3f954929a0c473bcd22cf5b798c5a2b5fe8e77a005670e4b14094",
+          "canonical_input_path": "input.athinput",
+          "canonical_input_sha256": "5b4ffa934eb3f954929a0c473bcd22cf5b798c5a2b5fe8e77a005670e4b14094",
+          "build_backend": "Cray CCE20 HIP gfx90a MPI double; PROBLEM=built_in_pgens",
+          "build_cache_path": "CMakeCache.txt",
+          "build_cache_sha256": "4f4f8f95560bdb0061c0596d8df3480550c9efb333db2899f30389c8975cb0bc",
+          "build_manifest_path": "binary_manifest.json",
+          "build_manifest_sha256": "049bdfb53a36456834a89f3c9d31c2c0cbaeb55946913342c02665fb411eefa6"
+        },
+        "launch": {
+          "overrides": [],
+          "restart": null,
+          "restart_sha256": null,
+          "returncode": 0,
+          "launch_wall_seconds": 2326.3039672691375
+        }
+      },
+      {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14",
+        "simulation": {
+          "revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+          "dirty": false,
+          "revision_basis": "Committed EOS fix compiled against byte-identical frozen headers; immutable unchanged release objects relinked. Exact commands and input hashes in binary_manifest.json. CMakeCache.txt records inherited release build configuration.",
+          "executable": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/build-fixed-hip/athena",
+          "executable_sha256": "bd699cf711d0c2a21037690d28e8639b140f0ed96ad19c2d0406636c331527a3",
+          "input_path": "effective.athinput",
+          "input_sha256": "fa816013ff8089a6ba23048f8772b9b9dc029cb6aab54dca4dbad1593463cbe8",
+          "canonical_input_path": "input.athinput",
+          "canonical_input_sha256": "5b4ffa934eb3f954929a0c473bcd22cf5b798c5a2b5fe8e77a005670e4b14094",
+          "build_backend": "Cray CCE20 HIP gfx90a MPI double; PROBLEM=built_in_pgens",
+          "build_cache_path": "CMakeCache.txt",
+          "build_cache_sha256": "4f4f8f95560bdb0061c0596d8df3480550c9efb333db2899f30389c8975cb0bc",
+          "build_manifest_path": "binary_manifest.json",
+          "build_manifest_sha256": "049bdfb53a36456834a89f3c9d31c2c0cbaeb55946913342c02665fb411eefa6"
+        },
+        "launch": {
+          "overrides": [
+            "time/tlim=14",
+            "time/nlim=-1"
+          ],
+          "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed/rst/cgl_lf_physics_benchmark_beta10.00010.rst",
+          "restart_sha256": "eef7bd004fdda771b6839ef8ee33bde87fd4d2ddecd2e37fc9dd6ceed5d1542a",
+          "returncode": 0,
+          "launch_wall_seconds": 1042.3539948938414
+        }
+      },
+      {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to18",
+        "simulation": {
+          "revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+          "dirty": false,
+          "revision_basis": "Committed EOS fix compiled against byte-identical frozen headers; immutable unchanged release objects relinked. Exact commands and input hashes in binary_manifest.json. CMakeCache.txt records inherited release build configuration.",
+          "executable": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/build-fixed-hip/athena",
+          "executable_sha256": "bd699cf711d0c2a21037690d28e8639b140f0ed96ad19c2d0406636c331527a3",
+          "input_path": "effective.athinput",
+          "input_sha256": "b100e02c207a5d281b0d07bbd615fade2d095858731247ae6a363a580c9b0f96",
+          "canonical_input_path": "input.athinput",
+          "canonical_input_sha256": "5b4ffa934eb3f954929a0c473bcd22cf5b798c5a2b5fe8e77a005670e4b14094",
+          "build_backend": "Cray CCE20 HIP gfx90a MPI double; PROBLEM=built_in_pgens",
+          "build_cache_path": "CMakeCache.txt",
+          "build_cache_sha256": "4f4f8f95560bdb0061c0596d8df3480550c9efb333db2899f30389c8975cb0bc",
+          "build_manifest_path": "binary_manifest.json",
+          "build_manifest_sha256": "049bdfb53a36456834a89f3c9d31c2c0cbaeb55946913342c02665fb411eefa6"
+        },
+        "launch": {
+          "overrides": [
+            "time/tlim=18",
+            "time/nlim=-1"
+          ],
+          "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14/rst/cgl_lf_physics_benchmark_beta10.00014.rst",
+          "restart_sha256": "d6e1bacb7a92adae0a1658dd3a78093fa3f718735ec401f49073fe417f3b4fe6",
+          "returncode": 0,
+          "launch_wall_seconds": 1096.9953409100417
+        }
+      }
+    ]
+  },
+  "reblocked_4unit": {
+    "intervals": [
+      [
+        6,
+        10
+      ],
+      [
+        10,
+        14
+      ],
+      [
+        14,
+        18
+      ]
+    ],
+    "block_count": 3,
+    "meaning": "Equal-duration adjacent pairs of the retained duration-two block means; three longer blocks only, no independent-sample confidence claim.",
+    "metrics": {
+      "pressure_correlation": {
+        "means": [
+          -0.18065756278217093,
+          -0.1861424924524707,
+          -0.08916748632124036
+        ],
+        "sample_sd": 0.054474260524990485,
+        "min": -0.1861424924524707,
+        "max": -0.08916748632124036
+      },
+      "pressure_normalized_residual_variance": {
+        "means": [
+          0.8556419489126453,
+          0.8422492230725966,
+          0.9210117876094973
+        ],
+        "sample_sd": 0.042142857222208285,
+        "min": 0.8422492230725966,
+        "max": 0.9210117876094973
+      },
+      "S_parallel_rms": {
+        "means": [
+          0.5186446399373343,
+          0.578750370590722,
+          0.5454279180827946
+        ],
+        "sample_sd": 0.030112092495479147,
+        "min": 0.5186446399373343,
+        "max": 0.578750370590722
+      },
+      "deltaB_rms_over_B0": {
+        "means": [
+          0.783504624442847,
+          0.8930711626552795,
+          0.7433483994759613
+        ],
+        "sample_sd": 0.07749651015099301,
+        "min": 0.7433483994759613,
+        "max": 0.8930711626552795
+      },
+      "Mach_isotropic_proxy": {
+        "means": [
+          0.23273358825510815,
+          0.2104036732344009,
+          0.19783036181240646
+        ],
+        "sample_sd": 0.017677426665368902,
+        "min": 0.19783036181240646,
+        "max": 0.23273358825510815
+      },
+      "beta_volume_mean": {
+        "means": [
+          8.213843856237167,
+          8.371235781443438,
+          11.142127754157379
+        ],
+        "sample_sd": 1.6470914328693411,
+        "min": 8.213843856237167,
+        "max": 11.142127754157379
+      },
+      "mirror_near": {
+        "means": [
+          0.02187753913029814,
+          0.036997984133870836,
+          0.039770349502477646
+        ],
+        "sample_sd": 0.009630390523908253,
+        "min": 0.02187753913029814,
+        "max": 0.039770349502477646
+      },
+      "firehose_near": {
+        "means": [
+          0.010137687800183651,
+          0.007650404853124029,
+          0.0163982966872554
+        ],
+        "sample_sd": 0.0045075383458764145,
+        "min": 0.007650404853124029,
+        "max": 0.0163982966872554
+      },
+      "solenoidal_acceleration_fraction": {
+        "means": [
+          0.6754863325760918,
+          0.591905124235688,
+          0.4188611972246484
+        ],
+        "sample_sd": 0.1308857511707511,
+        "min": 0.4188611972246484,
+        "max": 0.6754863325760918
+      },
+      "thermal_history": {
+        "means": [
+          18.936049477731608,
+          21.3550299551103,
+          24.159636474073487
+        ],
+        "sample_sd": 2.6141647928322485,
+        "min": 18.936049477731608,
+        "max": 24.159636474073487
+      }
+    }
+  },
+  "mirror_tail_audit": {
+    "path": "analysis-checks/mirror-tail-t14p25/cells.json",
+    "sha256": "669de61ce0183d1199a7e0f9b2548ecd2cfe41af2522138d81d33cb9d9403d10",
+    "time": 14.250230767343458,
+    "rounding_robust_cells": 3,
+    "instantaneous_fraction": 1.6954210069444444e-06,
+    "time_mean_fraction": 3.5324704085455955e-08
+  }
+}

@@ -1,0 +1,480 @@
+{
+  "purpose": "Localize the observed global pressure-correlation reversal in wavenumber; three snapshots only, no campaign or new acceptance threshold.",
+  "definitions": {
+    "fields": "a=p_perp-<p_perp>, b=B^2/2-<B^2/2>; volume mean on uniform cells. Primitive float32 snapshots are read into float64 through the current benchmark reader.",
+    "FFT": "A=fftn(a)/N, Bhat=fftn(b)/N on the full complex FFT grid; physical k_i=2*pi*n_i/L_i. Both members of each conjugate pair are included, exactly as Parseval requires.",
+    "variance": "V_a(K)=sum_K |A|^2, V_b(K)=sum_K |Bhat|^2, in pressure^2. These are integrated band powers, not per-shell densities.",
+    "covariance": "cov(K)=sum_K Re[A*conj(Bhat)], signed. Different Fourier bands are orthogonal; covariances and variances add across the disjoint bands.",
+    "C": "cov(K)/sqrt(V_a(K)*V_b(K)); null if either band variance vanishes.",
+    "R": "sum_K |A+Bhat|^2/[V_a(K)+V_b(K)]; null if denominator vanishes. Also verify equivalence to 1+2*cov/(V_a+V_b).",
+    "forcing": "0<|k|<=3*pi (includes pure parallel modes). In this box the smallest nonzero |k| is pi, so this contains the full imposed forcing shell pi..3pi.",
+    "resolved_subforcing": "3*pi<|k|<=min_i(pi*N_i/L_i)/4; terminology denotes resolved scales smaller than the forcing wavelengths, not k below forcing.",
+    "high_k": "|k|>min_i(pi*N_i/L_i)/4, through every represented FFT mode; excludes DC and includes modes with high parallel wavenumber even at low k_perp.",
+    "optional_union": "full_resolved combines the forcing and resolved_subforcing bands; all_nonzero combines all three. DC is separately reported as a roundoff check.",
+    "bounds": "The squared physical-k comparisons use the same grids and Nyquist/4 convention as the reusable analyzer; no additional physical filter or taper.",
+    "verification": "Full Fourier sums and direct real-space values must reproduce stored snapshot variances, signed covariance, C and R within 256*float64_epsilon*max(1,|reference|). This is an arithmetic/reader check, not a physical acceptance tolerance.",
+    "limits": "Instantaneous three-snapshot diagnostic; not time-averaged cross spectra, not a causal forcing decomposition, not resolution convergence. Matching auto-spectra alone is not used to infer pressure balance."
+  },
+  "provenance": {
+    "script": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-checks/pressure-episode/analyze_pressure_episode.py",
+      "sha256": "d1114d6559a3def30f6a31088b6073875ada18f9e05dc41a1307d934ffde8935",
+      "bytes": 6931
+    },
+    "analyzer": {
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_physics_benchmark.py",
+      "sha256": "a8241542d0d3cc5e4ecc83dd17b4cd7819467f9c2079eb707ebf231a5df812aa",
+      "bytes": 80677
+    },
+    "reader": {
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/scripts/analyze_cgl_lf_paper.py",
+      "sha256": "6ef84240662c49f78678078e33a8283e5a594c8277ac06b1e22446ce25ed0b2c",
+      "bytes": 356221
+    },
+    "binary_reader": {
+      "path": "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2/vis/python/bin_convert.py",
+      "sha256": "a4a627f0ec1b69c4a289933904d08560ecd7c9d7550054efbbb2067dcef94e2c",
+      "bytes": 70870
+    },
+    "metrics": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/analysis-fixed-6-14/metrics.json",
+      "sha256": "987272952d0c560a749c5e43ba052b079f18459a0058471db2901515c5a4be3b",
+      "bytes": 1328222
+    },
+    "simulation_revision": "71ad25ebce73d33db048defd8f585a7dce0528c2",
+    "analysis_revision": "82dd42bf0eda8c31f1ecfc68c1e75d348b270fa6",
+    "command": [
+      "analysis-checks/pressure-episode/analyze_pressure_episode.py",
+      "--source",
+      "/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2",
+      "--metrics",
+      "analysis-fixed-6-14/metrics.json",
+      "--output",
+      "analysis-checks/pressure-episode"
+    ],
+    "python": "3.11.7 (main, Jun 17 2024, 15:36:19) [GCC 12.3.0]",
+    "numpy": "1.26.4",
+    "host": "frontier04623",
+    "slurm_job_id": "5629677",
+    "slurm_step_id": "3"
+  },
+  "snapshots": [
+    {
+      "target": 10.0,
+      "time": 10.0,
+      "cycle": 17227,
+      "info": {
+        "time": 10.0,
+        "cycle": 17227,
+        "shape_zyx": [
+          192,
+          96,
+          96
+        ],
+        "lengths_xyz": [
+          1.0,
+          1.0,
+          2.0
+        ],
+        "cell_volume": 1.1302806712962962e-06,
+        "payload_dtype": "float32",
+        "files": [
+          {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed/bin/cgl_lf_physics_benchmark_beta10.mhd_w_bcc.00040.bin",
+            "sha256": "8c0ca5d37d1b915c903632e9743c18010cc093531843726ee3279704c0ff7d09",
+            "bytes": 63714830
+          }
+        ]
+      },
+      "forcing_kmax": 9.42477796076938,
+      "resolved_kmax": 75.39822368615503,
+      "bands": {
+        "forcing": {
+          "modes": 38,
+          "variance_perp": 0.0679081400818504,
+          "variance_magnetic": 0.00955434073120507,
+          "covariance": -0.004368423619583181,
+          "sum_pressure_variance": 0.06872563357388908,
+          "correlation": -0.17149974004258928,
+          "normalized_residual_variance": 0.8872118844185807,
+          "R_from_covariance": 0.8872118844185808
+        },
+        "resolved_subforcing": {
+          "modes": 14338,
+          "variance_perp": 0.024309441405457016,
+          "variance_magnetic": 0.012224534963970636,
+          "covariance": -0.011396352846572026,
+          "sum_pressure_variance": 0.013741270676283598,
+          "correlation": -0.6610924903639923,
+          "normalized_residual_variance": 0.3761230515215027,
+          "R_from_covariance": 0.3761230515215027
+        },
+        "high_k": {
+          "modes": 1755095,
+          "variance_perp": 0.0002309577743608098,
+          "variance_magnetic": 0.00022428371895352042,
+          "covariance": -0.00021902991400628175,
+          "sum_pressure_variance": 1.7181665301766647e-05,
+          "correlation": -0.9623615553864684,
+          "normalized_residual_variance": 0.03774187009333799,
+          "R_from_covariance": 0.03774187009333818
+        },
+        "full_resolved": {
+          "modes": 14376,
+          "variance_perp": 0.09221758148730742,
+          "variance_magnetic": 0.021778875695175705,
+          "covariance": -0.015764776466155206,
+          "sum_pressure_variance": 0.0824669042501727,
+          "correlation": -0.3517735851641698,
+          "normalized_residual_variance": 0.7234163787929077,
+          "R_from_covariance": 0.7234163787929079
+        },
+        "all_nonzero": {
+          "modes": 1769471,
+          "variance_perp": 0.0924485392616682,
+          "variance_magnetic": 0.022003159414129222,
+          "covariance": -0.01598380638016149,
+          "sum_pressure_variance": 0.0824840859154745,
+          "correlation": -0.3543950609882794,
+          "normalized_residual_variance": 0.7206890493528082,
+          "R_from_covariance": 0.7206890493528078
+        },
+        "DC": {
+          "modes": 1,
+          "variance_perp": 1.7313819593328104e-32,
+          "variance_magnetic": 1.3130800145529024e-33,
+          "covariance": 4.768063598943872e-33,
+          "sum_pressure_variance": 2.816302680576875e-32,
+          "correlation": 1.0,
+          "normalized_residual_variance": 1.5119546139526636,
+          "R_from_covariance": 1.5119546139526636
+        },
+        "full_grid": {
+          "modes": 1769472,
+          "variance_perp": 0.09244853926166822,
+          "variance_magnetic": 0.02200315941412924,
+          "covariance": -0.01598380638016149,
+          "sum_pressure_variance": 0.0824840859154745,
+          "correlation": -0.3543950609882792,
+          "normalized_residual_variance": 0.720689049352808,
+          "R_from_covariance": 0.7206890493528078
+        }
+      },
+      "verification": {
+        "correlation": {
+          "stored": -0.35439506098827944,
+          "direct_real_space": -0.35439506098827944,
+          "full_fft": -0.3543950609882792,
+          "fft_minus_stored": 2.220446049250313e-16,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "normalized_residual_variance": {
+          "stored": 0.7206890493528078,
+          "direct_real_space": 0.7206890493528078,
+          "full_fft": 0.720689049352808,
+          "fft_minus_stored": 2.220446049250313e-16,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "covariance": {
+          "stored": -0.015983806380161496,
+          "direct_real_space": -0.015983806380161496,
+          "full_fft": -0.01598380638016149,
+          "fft_minus_stored": 6.938893903907228e-18,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "variance_perp": {
+          "stored": 0.09244853926166824,
+          "direct_real_space": 0.09244853926166824,
+          "full_fft": 0.09244853926166822,
+          "fft_minus_stored": -1.3877787807814457e-17,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "variance_magnetic": {
+          "stored": 0.022003159414129232,
+          "direct_real_space": 0.022003159414129232,
+          "full_fft": 0.02200315941412924,
+          "fft_minus_stored": 6.938893903907228e-18,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        }
+      }
+    },
+    {
+      "target": 12.0,
+      "time": 12.000347469555237,
+      "cycle": 20854,
+      "info": {
+        "time": 12.000347469555237,
+        "cycle": 20854,
+        "shape_zyx": [
+          192,
+          96,
+          96
+        ],
+        "lengths_xyz": [
+          1.0,
+          1.0,
+          2.0
+        ],
+        "cell_volume": 1.1302806712962962e-06,
+        "payload_dtype": "float32",
+        "files": [
+          {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14/bin/cgl_lf_physics_benchmark_beta10.mhd_w_bcc.00048.bin",
+            "sha256": "b2a08ecbe21e36a3095b127c598c4e1ede3811551251d89464a0f45452450147",
+            "bytes": 63714830
+          }
+        ]
+      },
+      "forcing_kmax": 9.42477796076938,
+      "resolved_kmax": 75.39822368615503,
+      "bands": {
+        "forcing": {
+          "modes": 38,
+          "variance_perp": 0.15260158685768382,
+          "variance_magnetic": 0.012673032023344437,
+          "covariance": 0.0012770314323533667,
+          "sum_pressure_variance": 0.16782868174573504,
+          "correlation": 0.029039009308350214,
+          "normalized_residual_variance": 1.0154534488235323,
+          "R_from_covariance": 1.015453448823532
+        },
+        "resolved_subforcing": {
+          "modes": 14338,
+          "variance_perp": 0.018863862965670653,
+          "variance_magnetic": 0.012615126461233996,
+          "covariance": -0.010888368744812593,
+          "sum_pressure_variance": 0.009702251937279461,
+          "correlation": -0.7058325780268203,
+          "normalized_residual_variance": 0.3082135771800566,
+          "R_from_covariance": 0.3082135771800567
+        },
+        "high_k": {
+          "modes": 1755095,
+          "variance_perp": 0.0001381768371309661,
+          "variance_magnetic": 0.00013233054610722726,
+          "covariance": -0.00012897643143213572,
+          "sum_pressure_variance": 1.2554520373921906e-05,
+          "correlation": -0.9538117768670491,
+          "normalized_residual_variance": 0.046411008171511205,
+          "R_from_covariance": 0.046411008171511225
+        },
+        "full_resolved": {
+          "modes": 14376,
+          "variance_perp": 0.17146544982335454,
+          "variance_magnetic": 0.02528815848457843,
+          "covariance": -0.009611337312459226,
+          "sum_pressure_variance": 0.17753093368301442,
+          "correlation": -0.14596102527367805,
+          "normalized_residual_variance": 0.9023007771484742,
+          "R_from_covariance": 0.9023007771484748
+        },
+        "all_nonzero": {
+          "modes": 1769471,
+          "variance_perp": 0.17160362666048543,
+          "variance_magnetic": 0.025420489030685667,
+          "covariance": -0.009740313743891357,
+          "sum_pressure_variance": 0.17754348820338836,
+          "correlation": -0.14747478258026298,
+          "normalized_residual_variance": 0.9011256697209696,
+          "R_from_covariance": 0.9011256697209697
+        },
+        "DC": {
+          "modes": 1,
+          "variance_perp": 3.8956094084988235e-32,
+          "variance_magnetic": 1.6493186276388828e-31,
+          "covariance": 8.015672874713887e-32,
+          "sum_pressure_variance": 3.6420141434315425e-31,
+          "correlation": 1.0,
+          "normalized_residual_variance": 1.7862821324611313,
+          "R_from_covariance": 1.7862821324611313
+        },
+        "full_grid": {
+          "modes": 1769472,
+          "variance_perp": 0.17160362666048554,
+          "variance_magnetic": 0.02542048903068566,
+          "covariance": -0.009740313743891357,
+          "sum_pressure_variance": 0.17754348820338844,
+          "correlation": -0.14747478258026295,
+          "normalized_residual_variance": 0.9011256697209696,
+          "R_from_covariance": 0.9011256697209699
+        }
+      },
+      "verification": {
+        "correlation": {
+          "stored": -0.14747478258026303,
+          "direct_real_space": -0.14747478258026303,
+          "full_fft": -0.14747478258026295,
+          "fft_minus_stored": 8.326672684688674e-17,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "normalized_residual_variance": {
+          "stored": 0.9011256697209687,
+          "direct_real_space": 0.9011256697209687,
+          "full_fft": 0.9011256697209696,
+          "fft_minus_stored": 8.881784197001252e-16,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "covariance": {
+          "stored": -0.009740313743891362,
+          "direct_real_space": -0.009740313743891362,
+          "full_fft": -0.009740313743891357,
+          "fft_minus_stored": 5.204170427930421e-18,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "variance_perp": {
+          "stored": 0.1716036266604855,
+          "direct_real_space": 0.1716036266604855,
+          "full_fft": 0.17160362666048554,
+          "fft_minus_stored": 2.7755575615628914e-17,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "variance_magnetic": {
+          "stored": 0.025420489030685663,
+          "direct_real_space": 0.025420489030685663,
+          "full_fft": 0.02542048903068566,
+          "fft_minus_stored": -3.469446951953614e-18,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        }
+      }
+    },
+    {
+      "target": 14.0,
+      "time": 14.0,
+      "cycle": 24683,
+      "info": {
+        "time": 14.0,
+        "cycle": 24683,
+        "shape_zyx": [
+          192,
+          96,
+          96
+        ],
+        "lengths_xyz": [
+          1.0,
+          1.0,
+          2.0
+        ],
+        "cell_volume": 1.1302806712962962e-06,
+        "payload_dtype": "float32",
+        "files": [
+          {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14/bin/cgl_lf_physics_benchmark_beta10.mhd_w_bcc.00056.bin",
+            "sha256": "5af49a1ab7dac5c655f5b4361344f16497a27f6e21f8a6efddd881ef3ad61af2",
+            "bytes": 63714830
+          }
+        ]
+      },
+      "forcing_kmax": 9.42477796076938,
+      "resolved_kmax": 75.39822368615503,
+      "bands": {
+        "forcing": {
+          "modes": 38,
+          "variance_perp": 0.9551885875062597,
+          "variance_magnetic": 0.01326125351294417,
+          "covariance": 0.058191250571789525,
+          "sum_pressure_variance": 1.0848323421627832,
+          "correlation": 0.5170360670941042,
+          "normalized_residual_variance": 1.1201740102730542,
+          "R_from_covariance": 1.1201740102730537
+        },
+        "resolved_subforcing": {
+          "modes": 14338,
+          "variance_perp": 0.03726099309019319,
+          "variance_magnetic": 0.027877357403106214,
+          "covariance": -0.021581482612417397,
+          "sum_pressure_variance": 0.021975385268464626,
+          "correlation": -0.6696197622591472,
+          "normalized_residual_variance": 0.3373647797655725,
+          "R_from_covariance": 0.33736477976557233
+        },
+        "high_k": {
+          "modes": 1755095,
+          "variance_perp": 0.0006468004579687994,
+          "variance_magnetic": 0.000644634661798821,
+          "covariance": -0.0006165547399493398,
+          "sum_pressure_variance": 5.8325639868940746e-05,
+          "correlation": -0.9548379125497474,
+          "normalized_residual_variance": 0.04516343018411626,
+          "R_from_covariance": 0.04516343018411628
+        },
+        "full_resolved": {
+          "modes": 14376,
+          "variance_perp": 0.9924495805964529,
+          "variance_magnetic": 0.04113861091605038,
+          "covariance": 0.03660976795937214,
+          "sum_pressure_variance": 1.1068077274312478,
+          "correlation": 0.18118320525081275,
+          "normalized_residual_variance": 1.0708401436084505,
+          "R_from_covariance": 1.0708401436084505
+        },
+        "all_nonzero": {
+          "modes": 1769471,
+          "variance_perp": 0.9930963810544221,
+          "variance_magnetic": 0.0417832455778492,
+          "covariance": 0.03599321321942279,
+          "sum_pressure_variance": 1.1068660530711163,
+          "correlation": 0.17669482646044318,
+          "normalized_residual_variance": 1.0695601928826302,
+          "R_from_covariance": 1.0695601928826306
+        },
+        "DC": {
+          "modes": 1,
+          "variance_perp": 1.7313819593328104e-32,
+          "variance_magnetic": 5.537804260446045e-33,
+          "covariance": -9.791861105455212e-33,
+          "sum_pressure_variance": 3.267901642863723e-33,
+          "correlation": -0.9999999999999999,
+          "normalized_residual_variance": 0.1430052264020616,
+          "R_from_covariance": 0.1430052264020616
+        },
+        "full_grid": {
+          "modes": 1769472,
+          "variance_perp": 0.993096381054421,
+          "variance_magnetic": 0.041783245577849217,
+          "covariance": 0.035993213219422796,
+          "sum_pressure_variance": 1.1068660530711172,
+          "correlation": 0.1766948264604433,
+          "normalized_residual_variance": 1.0695601928826322,
+          "R_from_covariance": 1.0695601928826308
+        }
+      },
+      "verification": {
+        "correlation": {
+          "stored": 0.17669482646044346,
+          "direct_real_space": 0.17669482646044346,
+          "full_fft": 0.1766948264604433,
+          "fft_minus_stored": -1.6653345369377348e-16,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "normalized_residual_variance": {
+          "stored": 1.069560192882631,
+          "direct_real_space": 1.069560192882631,
+          "full_fft": 1.0695601928826322,
+          "fft_minus_stored": 1.1102230246251565e-15,
+          "allowed_arithmetic_roundoff": 6.079745804087401e-14
+        },
+        "covariance": {
+          "stored": 0.03599321321942284,
+          "direct_real_space": 0.03599321321942284,
+          "full_fft": 0.035993213219422796,
+          "fft_minus_stored": -4.163336342344337e-17,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "variance_perp": {
+          "stored": 0.9930963810544221,
+          "direct_real_space": 0.9930963810544221,
+          "full_fft": 0.993096381054421,
+          "fft_minus_stored": -1.1102230246251565e-15,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        },
+        "variance_magnetic": {
+          "stored": 0.04178324557784919,
+          "direct_real_space": 0.04178324557784919,
+          "full_fft": 0.041783245577849217,
+          "fft_minus_stored": 2.7755575615628914e-17,
+          "allowed_arithmetic_roundoff": 5.684341886080802e-14
+        }
+      }
+    }
+  ]
+}

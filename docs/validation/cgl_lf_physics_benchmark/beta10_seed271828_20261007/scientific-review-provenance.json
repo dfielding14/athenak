@@ -1,0 +1,22 @@
+{
+  "review_utc": "2026-10-07T03:10:54.375864+00:00",
+  "recommendation": "Retain final finite-window reference; no further extension for favorable agreement. Quantitative/causal paper comparison remains inconclusive.",
+  "files": {
+    "analysis-fixed-6-18/metrics.json": "9c23afa4d8be3fe10fc6560ec37403e18b36068f6041a2a56469c4982b4aa8a0",
+    "analysis-fixed-6-18/report.md": "626c7e980a7f32a8a9682b99df79f1b507a6a545b148330094fe42c49302bbb0",
+    "analysis-fixed-6-18/marginality.png": "2305b72499b57bce0440e92d24672aeebe31b406c3923dbda6b2c30ba14c70b2",
+    "analysis-fixed-6-18/pressure_balance.png": "a25a599674fcc2197e0322ce8708fe058134d50bc80f6a9acb7efa273984b1e4",
+    "analysis-fixed-6-18/gradients.png": "f60cd6116e799ef83b9c257c4412d40dec86ed6bf07a86f81d0099f8bcf5c0d9",
+    "analysis-fixed-6-18/spectra_energy.png": "0d001be5a5df910fafb4e66abab3f6f18ea91c4c2e879a7bcf1626095bfd88c4",
+    "analysis-checks/scientific-review-fixed-6-18.md": "f34d14564d35f20b73835fc5421056c623b9e1d01bcc56f1b83bd3dbacfce396",
+    "analysis-checks/scientific-review-fixed-6-18-values.json": "c9d8502e1ad45ec3484b0f8a67433680f934e73cb097c830105f384d72a944eb",
+    "analysis-run-fixed-to18/benchmark_metadata.json": "b06f6969a448becf5946d502e93dff5c5df51daf3fa76d8f6b69529b5640861d",
+    "canonical-fixed/benchmark_metadata.json": "0568db18fd9bf0d59add96382f3d85ffff0a898ff1337e718949986b23120602",
+    "canonical-fixed-to14/benchmark_metadata.json": "bdcda8ee6f6fa42e15a7fc34801dbe46d9588bce217d6440640623a477de93ff",
+    "canonical-fixed-to18/benchmark_metadata.json": "8f8700a7e0cf108b81b5d61548851b08084ca16c4a620d6deacbaf994f4ca3b7",
+    "analysis-checks/pressure-episode/results.json": "add779b27c6e47dd6e174bd3bc2cf6273384f1da88866c16e25b4b2beabb9c52",
+    "analysis-checks/mirror-tail-t14p25/cells.json": "669de61ce0183d1199a7e0f9b2548ecd2cfe41af2522138d81d33cb9d9403d10",
+    "analysis-checks/mirror-tail-t14p25/README.md": "77594fb9f75431719f5606e5d9c71dccaae7f5e2a9ac77db1aa4a1964e176124",
+    "analysis-checks/mirror-tail-t14p25/manifest.json": "c59b812f630258da025253b6fe50cb6a390cd96cab99098336d54e50ce16621b"
+  }
+}

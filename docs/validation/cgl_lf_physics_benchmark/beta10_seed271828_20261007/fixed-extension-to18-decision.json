@@ -1,0 +1,36 @@
+{
+  "declared_utc": "2026-10-07T02:44:17.495290+00:00",
+  "restart": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/canonical-fixed-to14/rst/cgl_lf_physics_benchmark_beta10.00014.rst",
+  "restart_sha256": "d6e1bacb7a92adae0a1658dd3a78093fa3f718735ec401f49073fe417f3b4fe6",
+  "restart_time": 14.0,
+  "target_time": 18.0,
+  "averaging_start": 6.0,
+  "block_duration": 2.0,
+  "physics_changed": false,
+  "reason": "Predeclared second extension. Four blocks meet inventory but the final block begins a compressively dominated forcing episode and pressure/strain response that remain unresolved at the endpoint; magnetic-amplitude correlation time also exceeds half the2unit block. Preserve6..14 and include the episode in6..18 regardless of agreement.",
+  "evidence": {
+    "pressure_C_blocks": [
+      -0.20183305785133465,
+      -0.1594820677130072,
+      -0.37331781641792744,
+      0.0010328315129860509
+    ],
+    "pressure_R_blocks": [
+      0.8334356800970864,
+      0.8778482177282043,
+      0.6936350384944344,
+      0.9908634076507589
+    ],
+    "solenoidal_acceleration_fraction_blocks": [
+      0.6677452686912362,
+      0.6832273964609474,
+      0.7625585867826209,
+      0.421251661688755
+    ],
+    "deltaB_positive_sequence_correlation_time": 1.180203677739634
+  },
+  "overrides": [
+    "time/tlim=18",
+    "time/nlim=-1"
+  ]
+}
