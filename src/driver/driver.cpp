@@ -76,6 +76,9 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
   ndiag(1),
   nmb_updated_(0),
   npart_updated_(0),
+  last_diag_nmb_updated_(0),
+  last_diag_cycle_(0),
+  last_diag_time_(0.0),
   lb_efficiency_(0),
   pwall_clock_(ptimer),
   wall_time(wtlim),
@@ -719,6 +722,10 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   if (time_evolution == TimeEvolution::tstatic) {
     // TODO(@user): add work for time static problems here
   } else {
+    // Start interval diagnostics after setup, including when resuming a checkpoint.
+    last_diag_time_ = pwall_clock_->seconds();
+    last_diag_nmb_updated_ = nmb_updated_;
+    last_diag_cycle_ = pmesh->ncycle;
     Real elapsed_time = -1.;
     if (wall_time > 0.) {
       elapsed_time = UpdateWallClock();
@@ -929,15 +936,40 @@ void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 //----------------------------------------------------------------------------------------
 //! \fn Driver::OutputCycleDiagnostics()
 //! \brief Simple function to print diagnostics every 'ndiag' cycles to stdout
+//!
+//! Interval throughput follows scaling-tests commit 46a6f704b563587025d0faa87fdd7a1623458d57.
+//! The global MB-update counter counts completed mesh cycles, not RK or STS stages;
+//! its delta also accounts for AMR changes within the reporting interval. The clock
+//! is rank zero's wall clock, not an MPI maximum or accumulated CPU/GPU time. No
+//! measurement fences or barriers are added. Communication and scheduled outputs
+//! between diagnostics are included. wall_seconds_per_cycle is an interval mean;
+//! it measures one cycle only when ndiag=1. The initial no-work interval is labeled
+//! warmup without printing a spurious zero throughput or seconds-per-cycle value.
 
 void Driver::OutputCycleDiagnostics(Mesh *pm) {
 //  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
   const int dtprcsn = 6;
   if (pm->ncycle % ndiag == 0) {
-    Real elapsed = pwall_clock_->seconds();
+    const double elapsed = pwall_clock_->seconds();
+    const double diag_interval = elapsed - last_diag_time_;
+    const int completed_cycles = pm->ncycle - last_diag_cycle_;
+    const std::uint64_t mb_updates = nmb_updated_ - last_diag_nmb_updated_;
+    const std::uint64_t zonecycles =
+        mb_updates * static_cast<std::uint64_t>(pm->NumberOfMeshBlockCells());
     std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << elapsed
               << " cycle=" << pm->ncycle
-              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+              << " time=" << pm->time << " dt=" << pm->dt
+              << " interval_cycles=" << completed_cycles;
+    if (completed_cycles > 0 && diag_interval > 0.0) {
+      std::cout << " wall_seconds_per_cycle=" << diag_interval/completed_cycles
+                << " zone-cycles/s=" << static_cast<double>(zonecycles)/diag_interval;
+    } else {
+      std::cout << " performance_interval=warmup";
+    }
+    std::cout << std::endl;
+    last_diag_time_ = elapsed;
+    last_diag_nmb_updated_ = nmb_updated_;
+    last_diag_cycle_ = pm->ncycle;
   }
   return;
 }

@@ -78,6 +78,9 @@ class Driver {
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
   std::uint64_t nmb_updated_;   // running total of MB updated during run
   std::uint64_t npart_updated_; // running total of particles updated during run
+  std::uint64_t last_diag_nmb_updated_; // global MB updates at previous diagnostic
+  int last_diag_cycle_;         // completed cycles at previous diagnostic
+  double last_diag_time_;       // rank-zero wall seconds at previous diagnostic
   float lb_efficiency_;         // measure of how efficient was load balancing
   // Optional, collisionless LF-only transaction; restart files never store debt.
   bool merge_sts_requested_ = false, merge_sts_enabled_ = false;
