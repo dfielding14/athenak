@@ -99,13 +99,33 @@ in the input. The implementation is
 The older `-DPROBLEM=cgl_lf_paper` route selects `src/pgen/cgl_lf_paper.cpp`, with
 a different interface and history. It is not this benchmark build.
 
-The unchanged numerical implementation can reuse the released Frontier binary:
+Use the Frontier build containing the collision-wall encoding correction:
 
 ```text
-/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-hip
-SHA256 6530c1b31a7d99077f3ff5932d4b1c790e33be38c1fa222cfda097f87b339f9e
-Numerical source revision 7a37710f6, with retained release-source audit
+/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/build-fixed-hip/athena
+SHA256 bd699cf711d0c2a21037690d28e8639b140f0ed96ad19c2d0406636c331527a3
+Numerical source revision 71ad25ebce73d33db048defd8f585a7dce0528c2
+Build manifest: physics-benchmark/build-fixed-hip/manifest.json
 ```
+
+This build recompiles the committed EOS translation unit and links it with
+audited, unchanged release objects and headers. The manifest records source
+hashes, exact compile/link commands, and immutable-input verification. Its base
+CMake cache is `WO2/final-research/release-build-hip/CMakeCache.txt`; retain both
+the cache and the fixed-build manifest, since the cache alone does not identify
+the corrected executable.
+
+The original binary completed the initial run but failed its restart at the
+strict pre-LF wall check. Collision-wall encoding used a different kinetic
+energy evaluation order from canonical pressure recovery and could return
+primitive pressures inconsistent with the encoded conserved state at roundoff.
+The correction in [`cgl_mhd.cpp`](../src/eos/cgl_mhd.cpp) matches that evaluation
+order and always recovers the returned pressures from conserved total energy
+and anisotropy. No admissibility tolerance, limiter threshold or physical model
+is relaxed. Retain the original `canonical/` checkpoint and failed
+`canonical-to14/` attempt as a negative control; do not rewrite that checkpoint
+or assume a new executable repairs its encoded state. New runs below use
+`canonical-fixed/` to keep the two numerical revisions distinct.
 
 For a fresh build, use the committed Kokkos revision and the complete
 [Frontier compiler/runtime contract](validation/wo2/README.md). After loading
@@ -128,9 +148,11 @@ cmake --build "$BENCH_ROOT/build-hip" --parallel 8
 ## Run, resume and retain provenance
 
 All builds, temporary files, logs and analysis belong under `BENCH_ROOT`.
-The following self-contained procedure uses the released binary. For a new
+The following self-contained procedure uses the corrected binary above. For a new
 build, set the binary, expected hash, numerical source revision, dirty-state
-record and build cache to that build's retained provenance. Do not substitute
+record, build cache and build manifest to that build's retained provenance.
+The manifest must identify `revision` and `binary_sha256`, along with the
+build commands and source/input audit. Do not substitute
 the current analysis checkout's revision for the simulation binary's revision.
 Acquire a site-approved eight-GPU allocation first, and retain its allocation
 record. The application step below assigns eight blocks per GPU.
@@ -159,11 +181,12 @@ export TMPDIR="$BENCH_ROOT/tmp" MPLCONFIGDIR="$BENCH_ROOT/mpl-cache"
 export XDG_CACHE_HOME="$BENCH_ROOT/cache"
 mkdir -p "$TMPDIR" "$MPLCONFIGDIR" "$XDG_CACHE_HOME"
 export BENCH_SOURCE BENCH_ROOT
-export BENCH_BINARY=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-bin/athena-hip
+export BENCH_BINARY="$BENCH_ROOT/build-fixed-hip/athena"
 export BENCH_CACHE=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/final-research/release-build-hip/CMakeCache.txt
-export BENCH_BINARY_SHA=6530c1b31a7d99077f3ff5932d4b1c790e33be38c1fa222cfda097f87b339f9e
-export BENCH_SIM_REVISION=7a37710f6c224e24e7c7f364e7e0b812b3a9494c
-export BENCH_SEGMENT=canonical BENCH_END=10 BENCH_RESTART=
+export BENCH_BUILD_MANIFEST="$BENCH_ROOT/build-fixed-hip/manifest.json"
+export BENCH_BINARY_SHA=bd699cf711d0c2a21037690d28e8639b140f0ed96ad19c2d0406636c331527a3
+export BENCH_SIM_REVISION=71ad25ebce73d33db048defd8f585a7dce0528c2
+export BENCH_SEGMENT=canonical-fixed BENCH_END=10 BENCH_RESTART=
 # Use a new segment name if this directory already exists; never overwrite a run.
 python3 - <<'PYRUN'
 import hashlib, json, os, re, shutil, subprocess, time
@@ -175,11 +198,15 @@ source, root = Path(e["BENCH_SOURCE"]), Path(e["BENCH_ROOT"])
 binary = Path(e["BENCH_BINARY"])
 sha = lambda p: hashlib.sha256(Path(p).read_bytes()).hexdigest()
 assert sha(binary) == e["BENCH_BINARY_SHA"]
+build_manifest = json.loads(Path(e["BENCH_BUILD_MANIFEST"]).read_text())
+assert build_manifest["revision"] == e["BENCH_SIM_REVISION"]
+assert build_manifest["binary_sha256"] == e["BENCH_BINARY_SHA"]
 run = root / e["BENCH_SEGMENT"]
 run.mkdir(parents=True, exist_ok=False)
 original = source / "inputs/cgl_lf_paper/cgl_lf_physics_benchmark_beta10.athinput"
 shutil.copy2(original, run / "input.athinput")
 shutil.copy2(e["BENCH_CACHE"], run / "CMakeCache.txt")
+shutil.copy2(e["BENCH_BUILD_MANIFEST"], run / "build_manifest.json")
 overrides = ["time/tlim=" + e["BENCH_END"], "time/nlim=-1"]
 text = original.read_text()
 for key, value in [("tlim", e["BENCH_END"]), ("nlim", "-1")]:
@@ -195,11 +222,13 @@ command = ["srun", "--exact", "-N", "1", "-n", "8", "--ntasks-per-node", "8",
 git = lambda *args: subprocess.check_output(["git", "-C", str(source), *args], text=True).strip()
 metadata = {"schema_version": 1, "simulation": {
     "revision": e["BENCH_SIM_REVISION"], "dirty": False,
-    "revision_basis": "Released binary and numerical source audit",
+    "revision_basis": "Committed numerical correction and fixed-build source/object audit",
     "executable": str(binary), "executable_sha256": sha(binary),
     "input_path": "effective.athinput", "input_sha256": sha(run/"effective.athinput"),
     "canonical_input_path": "input.athinput", "canonical_input_sha256": sha(original),
-    "build_cache_path": "CMakeCache.txt", "build_cache_sha256": sha(run/"CMakeCache.txt")},
+    "build_cache_path": "CMakeCache.txt", "build_cache_sha256": sha(run/"CMakeCache.txt"),
+    "build_manifest_path": "build_manifest.json",
+    "build_manifest_sha256": sha(run/"build_manifest.json")},
     "outputs": {"snapshot_glob": "bin/*.mhd_w_bcc.*.bin",
                 "forcing_glob": "bin/*.turb_force.*.bin"},
     "launch": {"command": command, "overrides": overrides, "cwd": str(run),
@@ -238,8 +267,8 @@ To extend, select a complete checkpoint whose log/header confirms the intended
 physical time, then repeat the Python capture-and-launch block with:
 
 ```bash
-export BENCH_SEGMENT=canonical-to14 BENCH_END=14
-export BENCH_RESTART=/absolute/path/to/canonical/rst/cgl_lf_physics_benchmark_beta10.XXXXX.rst
+export BENCH_SEGMENT=canonical-fixed-to14 BENCH_END=14
+export BENCH_RESTART=/absolute/path/to/canonical-fixed/rst/cgl_lf_physics_benchmark_beta10.XXXXX.rst
 ```
 
 Replace `XXXXX` with the actual checkpoint counter. Keep the same binary, rank
@@ -418,8 +447,8 @@ and remove repeated restart-boundary samples with an explicit provenance rule.
 
 ```bash
 python3 "$BENCH_SOURCE/scripts/analyze_cgl_lf_physics_benchmark.py" \
-  "$BENCH_ROOT/canonical" --time-start 6 --time-end 10 --block-duration 2 \
-  --output-dir "$BENCH_ROOT/analysis-6-10"
+  "$BENCH_ROOT/canonical-fixed" --time-start 6 --time-end 10 --block-duration 2 \
+  --output-dir "$BENCH_ROOT/analysis-fixed-6-10"
 ```
 
 Inspect energy, Mach, beta, occupancy and pressure-balance trends, and estimate
@@ -435,13 +464,13 @@ original [6,10] report, and analyze [6,14] for four blocks. Extend to 18 if need
 Create a separate aggregate directory without changing child metadata:
 
 ```bash
-mkdir "$BENCH_ROOT/analysis-run"
-cat > "$BENCH_ROOT/analysis-run/benchmark_metadata.json" <<'JSON'
-{"schema_version": 1, "segments": ["../canonical", "../canonical-to14"]}
+mkdir "$BENCH_ROOT/analysis-fixed-run"
+cat > "$BENCH_ROOT/analysis-fixed-run/benchmark_metadata.json" <<'JSON'
+{"schema_version": 1, "segments": ["../canonical-fixed", "../canonical-fixed-to14"]}
 JSON
 python3 "$BENCH_SOURCE/scripts/analyze_cgl_lf_physics_benchmark.py" \
-  "$BENCH_ROOT/analysis-run" --time-start 6 --time-end 14 --block-duration 2 \
-  --output-dir "$BENCH_ROOT/analysis-6-14"
+  "$BENCH_ROOT/analysis-fixed-run" --time-start 6 --time-end 14 --block-duration 2 \
+  --output-dir "$BENCH_ROOT/analysis-fixed-6-14"
 ```
 
 The analyzer retains child provenance, trims superseded restart branches and
