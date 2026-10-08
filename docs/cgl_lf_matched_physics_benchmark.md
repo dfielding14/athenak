@@ -42,11 +42,17 @@ The ratio-4 probe cost 124.58 seconds for 0.00838 simulation time, equivalent
 to 4.13 node-hours per time unit locally, including startup and output. This
 short stiff interval does not measure the cost of a complete run.
 
-Job 5637477 was submitted for a bounded ratio-4 passive continuation from
-`t=4.40107` toward `t=5`, with a clean 1h50 wall-clock stop and an automatic
-final-snapshot health check. It uses one node, eight large blocks, `dedt=0.16`,
-and CFL `0.3`. This is a robustness diagnostic, not a fresh matched reference
-or an automatic launch of the active member. Long-run stability is unproven.
+Job 5637477 completed a bounded ratio-4 passive continuation from `t=4.40107`
+to `t=4.9760169`, stopping cleanly at its 1h50 wall-clock limit before `t=5`.
+The final snapshot passed its health check and all recorded failure counters
+were zero. It used one node, eight large blocks, `dedt=0.16`, and CFL `0.3`.
+This is a robustness diagnostic, not a fresh matched reference or an automatic
+launch of the active member. Long-run stability is unproven. Its measured rate
+was 3.730 million zone-cycles/s/node. The subsequent
+[performance audit](cgl_lf_performance_audit_20261008.md) found a 4.65× speedup
+by disabling only detailed LF q diagnostics, preserving strict checks and saved
+endpoint fields in a short comparison. No production settings were changed by
+that audit.
 See `matched/power032/lf-subcycling/README.md`, `comparison.json`,
 `continuation-submission.json`, and the retained qualification records.
 The commands below describe the original
