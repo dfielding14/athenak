@@ -16,17 +16,40 @@ Lower forcing is a changed experiment, not an established cure for the LF
 failure or a claim of physical acceptance.
 
 The lower-power passive member passed `t=3` in job 5635675, then job 5636171
-failed near `t=4.39269`: pre-LF RKL2 stage 7/17 triggered one pressure-floor
+failed at cycle 10316, `t=4.398059` (located by replay): pre-LF RKL2 stage 7/17 triggered one pressure-floor
 event. The two allocations used 2.630833 node-hours. The automatic continuation
 stopped; active and the paired analysis have not started. Evidence is retained
 under `matched/power032`, with the failed log in `passive-continue-to14/run.log`.
 The original executable was replayed to cycle 10300 to retain a checkpoint
 immediately before the failure. A small optional LF-only chunk cap
-(`time/cgl_lf_max_chunk_ratio`, candidate revision `4af7c9a55`) has compiled and
-is undergoing focused regression and checkpoint-refinement tests. It preserves
-the outer CFL, forcing, and logical collision cadence. It is not yet a qualified
-production setting; see `matched/power032/lf-subcycling/README.md` and its
-retained qualification records. The commands below describe the original
+(`time/cgl_lf_max_chunk_ratio`, numerical revision `4af7c9a55`) preserves
+the outer CFL, forcing, and logical collision cadence. Five focused GPU
+regressions passed: unchanged default, collision/limiter cadence, smooth LF
+refinement and conservation, restart consistency, and configuration rejection.
+Qualification job 5637361 then stopped after 55 seconds because its launcher
+tried to override a key absent from the old restart. The corrected launcher
+uses a minimal input overlay and verifies merged parameters before evolving.
+
+Corrected qualification 5637416 completed in 625 seconds on one node. Its
+disabled-cap control reproduced the original stage failure. Chunk ratios
+4, 2, and 1 all passed the same 25 outer steps with zero floor/nonfinite/
+nonpositive counters and identical mechanical fields at snapshot precision.
+Relative to ratio 1, ratio 4 differed by 0.029% RMS in parallel pressure and
+0.027% in perpendicular pressure, but worst local differences remained 14.3%
+and 13.9%. Ratio 1 is not a converged reference: local accuracy remains
+unresolved despite second-order refinement in the separate smooth test.
+The ratio-4 probe cost 124.58 seconds for 0.00838 simulation time, equivalent
+to 4.13 node-hours per time unit locally, including startup and output. This
+short stiff interval does not measure the cost of a complete run.
+
+Job 5637477 was submitted for a bounded ratio-4 passive continuation from
+`t=4.40107` toward `t=5`, with a clean 1h50 wall-clock stop and an automatic
+final-snapshot health check. It uses one node, eight large blocks, `dedt=0.16`,
+and CFL `0.3`. This is a robustness diagnostic, not a fresh matched reference
+or an automatic launch of the active member. Long-run stability is unproven.
+See `matched/power032/lf-subcycling/README.md`, `comparison.json`,
+`continuation-submission.json`, and the retained qualification records.
+The commands below describe the original
 lower-power experiment and must not be read as evidence that it completed.
 
 The first 192-grid pair used 48-cubed blocks and eight nodes per member.
