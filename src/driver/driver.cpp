@@ -108,6 +108,13 @@ Driver::Driver(ParameterInput *pin, Mesh *pmesh, Real wtlim, Kokkos::Timer* ptim
     // Do not insert an absent default into serialized input/restart headers.
     merge_sts_requested_ = pin->DoesParameterExist("time", "sts_merge_half_sweeps") &&
         pin->GetBoolean("time", "sts_merge_half_sweeps");
+    if (pin->DoesParameterExist("time", "cgl_lf_max_chunk_ratio")) {
+      cgl_lf_max_chunk_ratio_ = pin->GetReal("time", "cgl_lf_max_chunk_ratio");
+    }
+    if (!std::isfinite(cgl_lf_max_chunk_ratio_) || cgl_lf_max_chunk_ratio_ < 0.0) {
+      DriverFatalError(__FILE__, __LINE__,
+                       "<time>/cgl_lf_max_chunk_ratio must be finite and non-negative");
+    }
 
     if (integrator == "rk1") {
       // RK1: first-order Runge-Kutta / the forward Euler (FE) method
@@ -492,6 +499,7 @@ void Driver::ResetSTSController() {
   sts.dt_parabolic_min = std::numeric_limits<float>::max();
   sts.nstages = 0;
   sts.current_stage = 0;
+  sts.first_chunk = sts.last_chunk = true;
   sts.coeffs = parabolic::RKL2Coefficients{};
 }
 
@@ -504,6 +512,24 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
   const parabolic::ParabolicProcessDescriptor *first_sts_process = nullptr;
   const bool has_explicit_cgl_lf =
       (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
+
+  if (cgl_lf_max_chunk_ratio_ > 0.0) {
+    auto *pack = pm->pmb_pack;
+    auto *mhd = pack->pmhd;
+    const bool supported = mhd != nullptr && mhd->pcgl_lf != nullptr &&
+        mhd->peos->eos_data.is_cgl && mhd->has_sts_cgl_lf &&
+        pm->sts_integrator == parabolic::STSIntegrator::rkl2 &&
+        pack->parabolic_processes.size() == 1 &&
+        pm->strictly_periodic && !pm->multilevel && !pm->adaptive &&
+        !pm->pgen->user_bcs && !merge_sts_requested_ &&
+        !mhd->has_any_parabolic_field_update &&
+        mhd->porb_u == nullptr && mhd->psbox_u == nullptr && mhd->psbox_b == nullptr;
+    if (!supported) {
+      DriverFatalError(__FILE__, __LINE__,
+                       "<time>/cgl_lf_max_chunk_ratio requires uniform periodic "
+                       "CGL LF-only RKL2 without merging, shear, or orbital advection");
+    }
+  }
 
   for (const auto &process : pm->pmb_pack->parabolic_processes) {
     if (process.UsesSTS()) {
@@ -575,7 +601,10 @@ void Driver::RefreshSTSCycleState(Mesh *pm) {
 
   sts.dt_sweep = 0.5*sts.dt_cycle;
   if (sts.integrator == parabolic::STSIntegrator::rkl2) {
-    sts.nstages = parabolic::ComputeRKL2StageCount(sts.dt_sweep, sts.dt_parabolic_min);
+    const Real stage_duration = cgl_lf_max_chunk_ratio_ > 0.0
+        ? std::min(sts.dt_sweep, cgl_lf_max_chunk_ratio_*sts.dt_parabolic_min)
+        : sts.dt_sweep;
+    sts.nstages = parabolic::ComputeRKL2StageCount(stage_duration, sts.dt_parabolic_min);
   }
   sts.enabled = (sts.nstages > 0);
 }
@@ -589,6 +618,55 @@ void Driver::BeginSTSSweep(Mesh *pm, STSSweep sweep) {
   if (sts.enabled) {
     sts.sweep = sweep;
   }
+}
+
+// Keep the hydro/forcing step and logical pre/post collision cadence unchanged.
+// Each internal chunk restarts only the RKL recurrence, not the U/mu representation.
+void Driver::RunSTSSweep(Mesh *pm, STSSweep sweep) {
+  BeginSTSSweep(pm, sweep);
+  if (!sts.enabled) return;
+  Real remaining = sts.dt_sweep;
+  int chunks = 0;
+  do {
+    if (cgl_lf_max_chunk_ratio_ > 0.0) {
+      auto *mhd = pm->pmb_pack->pmhd;
+      if (chunks > 0) {
+        // General MHD timestep recomputation requires J/A, still U/mu here.
+        mhd->pcgl_lf->NewTimeStep(mhd->w0, mhd->bcc0, mhd->b0,
+                                 mhd->peos->eos_data);
+        pm->RefreshSTSParabolicTimeStep();  // MPI minimum: all ranks take same chunks.
+        sts.dt_parabolic_min = pm->dt_parabolic_sts;
+      }
+      if (!std::isfinite(sts.dt_parabolic_min) || sts.dt_parabolic_min <= 0.0 ||
+          chunks == std::numeric_limits<int>::max()) {
+        DriverFatalError(__FILE__, __LINE__, "Invalid LF chunk timestep or count");
+      }
+      sts.dt_sweep = (remaining/sts.dt_parabolic_min <= cgl_lf_max_chunk_ratio_)
+          ? remaining : cgl_lf_max_chunk_ratio_*sts.dt_parabolic_min;
+      if (!std::isfinite(sts.dt_sweep) || sts.dt_sweep <= 0.0 ||
+          !(remaining - sts.dt_sweep < remaining)) {
+        DriverFatalError(__FILE__, __LINE__, "LF chunk timestep does not advance sweep");
+      }
+      sts.nstages = parabolic::ComputeRKL2StageCount(sts.dt_sweep,
+                                                   sts.dt_parabolic_min);
+    }
+    sts.first_chunk = (chunks == 0);
+    sts.last_chunk = (sts.dt_sweep == remaining);
+    for (int stage = 1; stage <= sts.nstages; ++stage) {
+      SetSTSStage(stage);
+      ExecuteTaskList(pm, "before_parabolic_stagen", stage);
+      ExecuteTaskList(pm, "parabolic_stagen", stage);
+      ExecuteTaskList(pm, "after_parabolic_stagen", stage);
+    }
+    ++chunks;
+    if (cgl_lf_max_chunk_ratio_ > 0.0) {
+      ++lf_chunks_;
+      lf_chunk_rhs_ += sts.nstages;
+    }
+    remaining -= sts.dt_sweep;
+  } while (remaining > 0.0);
+  if (cgl_lf_max_chunk_ratio_ > 0.0) ++lf_chunk_sweeps_;
+  EndSTSSweep();
 }
 
 //----------------------------------------------------------------------------------------
@@ -736,14 +814,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
       const bool merged_pre = pending_sts_half_ > 0.0 && TryMergedSTSPre(pmesh);
       if (sts.enabled && !merged_pre) {
-        BeginSTSSweep(pmesh, STSSweep::pre);
-        for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
-          SetSTSStage(sts_stage);
-          ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
-          ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
-          ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
-        }
-        EndSTSSweep();
+        RunSTSSweep(pmesh, STSSweep::pre);
       }
 
       // Execute TaskLists
@@ -781,16 +852,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
           // CGLCollisions just refreshed limits after the hyperbolic walls.
           // The old post's zero-rate hook completes in the merged/flush sweep.
         } else {
-          BeginSTSSweep(pmesh, STSSweep::post);
-          if (sts.enabled) {
-            for (int sts_stage = 1; sts_stage <= sts.nstages; ++sts_stage) {
-              SetSTSStage(sts_stage);
-              ExecuteTaskList(pmesh, "before_parabolic_stagen", sts_stage);
-              ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
-              ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
-            }
-            EndSTSSweep();
-          }
+          RunSTSSweep(pmesh, STSSweep::post);
         }
       }
 
@@ -853,6 +915,12 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   FlushPendingSTS(pmesh, true);
+  if (cgl_lf_max_chunk_ratio_ > 0.0 && global_variable::my_rank == 0) {
+    // Counts cover this invocation, and count a global stage once, not per MPI rank.
+    std::cout << "CGL LF chunks: max_ratio=" << cgl_lf_max_chunk_ratio_
+              << " logical_sweeps=" << lf_chunk_sweeps_ << " chunks=" << lf_chunks_
+              << " rhs_evaluations=" << lf_chunk_rhs_ << std::endl;
+  }
   if (merge_sts_enabled_ && global_variable::my_rank == 0) {
     std::cout << "STS merge: accepted=" << merge_accepted_
               << " rejected=" << merge_rejected_

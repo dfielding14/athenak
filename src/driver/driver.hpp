@@ -40,6 +40,8 @@ class Driver {
     Real dt_parabolic_min = std::numeric_limits<float>::max();
     int nstages = 0;
     int current_stage = 0;
+    // Internal LF chunks share one representation conversion and collision hook.
+    bool first_chunk = true, last_chunk = true;
     parabolic::RKL2Coefficients coeffs;
   };
 
@@ -91,6 +93,8 @@ class Driver {
   std::uint64_t merge_rejected_cfl_ = 0, merge_rejected_admissibility_ = 0;
   std::uint64_t merge_accepted_stages_ = 0, merge_rejected_stages_ = 0;
   DvceArray5D<Real> merge_u_backup_, merge_w_backup_;
+  Real cgl_lf_max_chunk_ratio_ = 0.0;
+  std::uint64_t lf_chunk_sweeps_ = 0, lf_chunks_ = 0, lf_chunk_rhs_ = 0;
   void ConfigureMergedSTS(Mesh *pm);
   bool CanDeferSTSPost(Mesh *pm, Outputs *pout) const;
   void RunMergedSTSSweep(Mesh *pm, Real duration, Real old_cycle);
@@ -100,6 +104,7 @@ class Driver {
   void ValidateSTSConfiguration(Mesh *pm);
   void RefreshSTSCycleState(Mesh *pm);
   void BeginSTSSweep(Mesh *pm, STSSweep sweep);
+  void RunSTSSweep(Mesh *pm, STSSweep sweep);
   void SetSTSStage(int stage);
   void EndSTSSweep();
   void OutputCycleDiagnostics(Mesh *pm);
