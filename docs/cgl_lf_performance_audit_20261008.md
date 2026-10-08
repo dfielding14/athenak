@@ -11,6 +11,33 @@ Both count outer cell updates, not internal LF stages. The relevant historical
 source is `f2d0a259`, job 4925508, under `CGL/scaling/current_consistent_primary_f2d0a259`;
 the older top-level scaling report describes a slower, earlier implementation.
 
+## Correction: compiler settings differ
+
+The first audit omitted a material build difference. The current application
+and Kokkos libraries add **`-fno-cray -mno-daz-ftz`**, and linking adds
+`-no-pie`; the historical scaling build used none of these. `-fno-cray` disables
+Cray compiler enhancements, including GPU optimizations. Its performance cost
+has not been isolated. Runtime `cgl_lf_arithmetic=fast` is a separate switch
+and does not recreate the historical build. Release/HIP/`-O3` matching alone
+does not establish compiler equivalence.
+
+WO2 introduced these flags for reproduced correctness failures, documented in
+[Task 0](validation/wo2/README.md#task-0-establish-the-actual-gpu-baseline).
+A CCE20 HIP minimum reduction returned a timestep 100.5 times too large on a
+nonuniform density test; `-fno-cray` repaired it where `precise`/`strict` modes
+did not. A separate CPU extreme-value test required the startup subnormal fix.
+The [upstream Kokkos issue](https://github.com/kokkos/kokkos/issues/9476)
+independently reports the minimum-reduction problem. This does not negate the
+historical uniform scaling measurement.
+
+A valid compiler comparison needs the same application and Kokkos sources,
+input, layout and runtime modes under both flag sets, while retaining the
+known compiler correctness test. It has not yet been run. The measured
+same-binary diagnostic speedup below remains valid; cross-build attribution
+is incomplete, and no whole-solver speedup over the historical code has been
+established. The existing WO2 fusion gains concern narrower paired changes
+under the already corrected compiler contract.
+
 ## Direct same-checkpoint comparison
 
 Job 5637965 used one node/eight GPUs, one 96×96×192 block per GPU, the same
@@ -56,8 +83,9 @@ Historical cells/GPU were 16.78 million versus 1.77 million now, a 9.48× ratio.
 That ratio is not itself a measured speed penalty. Current LF timestep bounds
 also inspect faces, transverse derivatives and drift terms and are recomputed
 between chunks. Remaining effects include that work, layout/communication,
-turbulent state, PPM, forcing and source changes. Both builds use optimized
-HIP/VEGA90A Release `-O3`; existing LF fast paths remain present.
+turbulent state, PPM, forcing, source changes and the compiler differences
+above. Both builds use HIP/VEGA90A Release `-O3`; existing LF fast paths remain
+present. These shared settings do not rule out a compiler performance effect.
 
 ## Evidence and reproduction
 
