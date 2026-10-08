@@ -6,7 +6,7 @@ parameters. It asks whether anisotropic-pressure feedback changes magnetic
 strength fluctuations, pressure-anisotropy occupancy, velocity gradients and
 pressure compensation in this finite-time realization.
 
-**Physical validation status: inconclusive; the fresh lower-power pair requires a numerical gate.**
+**Physical validation status: inconclusive; the lower-power passive run also failed.**
 The canonical injection is now `dedt=0.16` per unit volume, giving nominal
 total power `0.32` in the volume-two box. Start both members from the prescribed
 initial state using the existing committed solver. First run passive to `t=3`;
@@ -14,6 +14,20 @@ only if it completes healthily continue that same lineage to `t=14`, then run
 the fresh active member. Adaptive LF stepping is not part of this experiment.
 Lower forcing is a changed experiment, not an established cure for the LF
 failure or a claim of physical acceptance.
+
+The lower-power passive member passed `t=3` in job 5635675, then job 5636171
+failed near `t=4.39269`: pre-LF RKL2 stage 7/17 triggered one pressure-floor
+event. The two allocations used 2.630833 node-hours. The automatic continuation
+stopped; active and the paired analysis have not started. Evidence is retained
+under `matched/power032`, with the failed log in `passive-continue-to14/run.log`.
+The original executable was replayed to cycle 10300 to retain a checkpoint
+immediately before the failure. A small optional LF-only chunk cap
+(`time/cgl_lf_max_chunk_ratio`, candidate revision `4af7c9a55`) has compiled and
+is undergoing focused regression and checkpoint-refinement tests. It preserves
+the outer CFL, forcing, and logical collision cadence. It is not yet a qualified
+production setting; see `matched/power032/lf-subcycling/README.md` and its
+retained qualification records. The commands below describe the original
+lower-power experiment and must not be read as evidence that it completed.
 
 The first 192-grid pair used 48-cubed blocks and eight nodes per member.
 It and the subsequent higher-power preflights used `dedt=0.32`, nominal total
