@@ -448,3 +448,51 @@ See also [CGL Method Physics Primer](cgl_mhd_method.md),
 [Super Time Stepping](super_time_stepping.md),
 [Magnetohydrodynamics](mhd.md), and
 [Turbulence Driving](turbulence_driving.md).
+
+## Optional LF-only RKL2 chunks
+
+`<time>/cgl_lf_max_chunk_ratio` defaults to `0`, which preserves the ordinary
+single RKL2 sweep. A finite positive value divides each LF half-sweep into
+successive RKL2 chunks satisfying
+
+$$
+h_{\rm chunk} \leq r_{\rm chunk}\,
+   \mathrm{sts\_safety}\,\Delta t_{\rm LF}.
+$$
+
+Here $\Delta t_{\rm LF}$ is the current globally reduced LF reference bound.
+It is recomputed between chunks. This setting limits only LF integration;
+it does not reduce the outer timestep or change the advective CFL. In contrast,
+`sts_max_dt_ratio` caps the entire outer timestep. Every chunk uses at least
+three RKL2 stages; a small chunk does not switch to forward Euler.
+
+The temporary energy/magnetic-moment state persists across chunk boundaries.
+The anisotropy conversions and scheduled wall checks still occur only at the
+original half-sweep boundaries. Background collisions and finite soft-limiter
+relaxation remain once per full timestep. Each intermediate stage retains the
+existing admissibility checks, and heat-flux work and stage counts accumulate
+across chunks. A normal restart retains the input setting and cumulative LF
+diagnostics; it occurs after the completed outer cycle, not inside a chunk.
+
+Positive ratios currently require uniform periodic CGL-LF with RKL2, without
+other parabolic operators, shearing/orbital advection, or
+`sts_merge_half_sweeps`. Negative and nonfinite ratios are rejected. Both
+active and passive CGL use this option. A smaller ratio can reduce nonlinear
+stage excursions but is not a positivity guarantee or an accuracy criterion;
+qualify it against finer LF integration and retain strict admissibility.
+
+At completion, `CGL LF chunks: ...` reports the configured ratio, logical
+half-sweeps, actual chunks, and LF right-hand-side evaluations for that process
+invocation. These counts are neither MPI sums nor cumulative restart counters.
+Use them with elapsed time to measure the cost of the selected ratio.
+
+The focused regression module `tst/test_suite/cgl/test_cgl_lf_chunks.py` reuses
+the existing LF fixtures and a prebuilt `PROBLEM=built_in_pgens` executable.
+Run it directly with pytest from the repository root, setting
+`ATHENAK_TEST_EXE` to that executable, `PYTHONPATH` to the repository's `tst`
+directory, and both `--basetemp` and `-o cache_dir=...` to the test workspace.
+It checks the unchanged default, finite collisional/limiter cadence under
+actual multiple chunks, same-grid temporal refinement and conservation,
+restart continuity, and rejected configurations. It does not establish
+turbulent physical validation or remove the accepted B4 sharp-contact
+limitation of the conservative-anisotropy formulation.
