@@ -6,7 +6,19 @@ accepted physical requirement does not justify copying its entire implementation
 
 Branch: `c/cgl-lf-surgical-rebuild`.
 Base: `8222de3aae4aaebd886653e7c61846e5f17987b4`.
-Status: branch and plan created; no solver changes or new validation runs.
+Status: source-reviewed implementation plan only. No solver/test implementation,
+builds, simulations, or numerical tests have been performed on this branch.
+Implementation and execution begin on the GPU system, not on this planning machine.
+
+The first deliverable is a correct active solver with attributable cost. The
+passive model is a separate scientific deliverable. Optimizations are candidates,
+not a list that must all be implemented. Keep an existing implementation when
+its independent check passes; add a test only for an uncovered failure or changed
+contract. Reuse retained tests without importing the surrounding campaign tools.
+
+Read the numbered pieces for source scope, the test map for concrete selectors,
+and the execution cadence for when to run them. In particular, the gates below
+are not instructions to repeat the full CPU/GPU/MPI matrix after every edit.
 
 ## Reference points
 
@@ -56,38 +68,72 @@ exist at the base; their cost cannot simply be attributed to WO1.
   sub-fixes into commits; keep coupled operator/caller changes together when an
   intermediate version would implement the wrong equations. Include the focused
   regression in the same commit. Do not cherry-pick whole historical task files.
+- Preserve exceptional arithmetic that handles demonstrated finite states. The
+  existing scaled LF arithmetic header and RKL2 coefficient implementation are
+  already present at the base and unchanged in the newer reference. Reuse them.
+  Shorten duplicated storage and unnecessary passes, not the physical operator.
+
+The collision contract is explicit. With $\Delta=p_\perp-p_\parallel$, background
+relaxation gives $\Delta_b=\Delta\exp(-\nu_{\rm coll}\,dt)$. Beyond an enabled soft
+threshold $\Delta_*$, use the stable backward-Euler form
+$\Delta'=\Delta_*+(\Delta_b-\Delta_*)/(1+\nu_{\rm lim}\,dt)$ at fixed
+$(p_\parallel+2p_\perp)/3$, then apply the prescribed walls.
+Default soft thresholds are $-B^2$ and $B^2/2$; backup factors are respectively
+1 and 2, and backup scattering defaults to $10^{10}$ in code time units.
+LF scattering adds background, applicable soft, and enabled backup contributions
+once each; equality contributes no extra scattering. Keep numeric threshold
+parameters and the intended legacy-policy mapping, not a second limiter model.
+
+Dependency order: establish 0, then local repairs 1-3; 4 owns the coherent
+collision model; 5-8 correct face transport; 9-10 qualify its controller; 11
+corrects forcing; 12 qualifies refinement. Piece 11 can proceed after 4 without
+waiting for LF tuning. Piece 13 follows the relevant corrected reference; 14
+does not depend on optional optimizations. Piece 15 is conditional on the passive
+failure. Keep separate commits at the performance suspects, even when their
+functional checks share a single GPU allocation.
 
 ## Implementation sequence
 
-All implementation pieces are pending. Finish the relevant correctness and
-measurement gate before advancing; record existing failures rather than making
-them disappear by changing tolerances or fixtures.
+All implementation pieces are pending. Run each piece's focused gate before
+stacking dependent changes; batch broader integration at the milestones below.
+Record existing failures rather than changing tolerances or weakening fixtures.
 
 **0. Establish the baseline before changing production source.**
 Build the exact base and post-WO1 reference with identical qualified compiler,
-Kokkos, precision and runtime settings. Reproduce the reduction correctness probe
-on CCE20/HIP; retain the documented corrective flags on both builds. Record the
-baseline tests and paired timings described below. Confirm the existing fast
-speed against non-unit-density anisotropic limits and independent eigenvalues.
+Kokkos, precision and runtime settings. Retain the documented CCE20/HIP corrective
+flags on both builds; verify one minimum-reduction reproducer, not the historical
+compiler-search matrix. Record the small baseline checks and paired timings below.
+Confirm the existing fast speed against non-unit-density anisotropic limits and
+independent eigenvalues using the existing test, strengthened only where needed.
 Use current source to locate the real test entry points; old work-order line
 numbers and several original findings are stale.
+Keep both binaries as controls and build the candidate incrementally in its own
+directory. Do not rebuild the immutable controls after each source patch. The
+comparison identifies which WO1 costs deserve isolated measurement; it does not
+require speculative optimizations before correcting the equations.
 
 **1. Keep unsupported models out of the accepted domain.**
 Add the small passive-mode rejection until its redesign is complete; preserve
-the existing LF inflow/user-boundary guard. Validate CGL magnetic floors and
-collision/limiter parameters at their existing constructors. Add the units
-requirement if the implemented Spitzer branch is selected; do not add a new
-conduction model. Scope: EOS initialization and affected input/startup tests.
+the existing LF inflow/user-boundary guard. Validate existing CGL floor and rate
+parameters at their constructors. New threshold/backup parameters arrive with
+their consuming physics in 4, not as accepted-but-ignored options here.
+Keep the Spitzer units fix outside this CGL series unless that conduction path
+is needed. Scope: EOS initialization and affected input/startup tests.
 Gate: invalid and unsupported inputs fail clearly; valid active cases are unchanged.
 
 **2. Repair the remaining EOS floor defects individually.**
-Scope: `src/eos/ideal_c2p_mhd.hpp`, `src/eos/cgl_mhd.cpp`, and existing floor tests.
+Scope: `SingleC2P_CGLMHD` and `SingleC2P_CGLMHDFromMagneticMoment` in
+`src/eos/ideal_c2p_mhd.hpp`; repaired-state persistence in
+`CGLMHD::ConsToPrim`, `CGLMagneticMomentToPrim`, and the lightweight refresh.
 Preserve pressure anisotropy under density floors, enforce the magnetization
 ceiling through the density floor in both A and magnetic-moment decoders, and
 make repaired states representable and idempotent. Do not redo the already-correct
-perpendicular energy factor. Gate: analytic pressure ratios and energy identity, repeated C2P with no
-second change, changed A persisted, finite/extreme inputs, focused double/float
+perpendicular energy factor. Gate: analytic pressure ratios and energy identity,
+repeated C2P with no second change, changed A persisted, focused double/float
 checks. A focused float test does not establish whole-application float support.
+Extend the existing floor fixture selectively: the later complete fixture also
+calls `CheckCollisionMap`, which depends on piece 4. Do not import that dependency
+or passive decoder/link machinery into this local repair.
 
 **3. Repair reconstruction and FOFC detection.**
 Scope: all directional PPMX and WENO-Z wrappers and the C2P test-floor path;
@@ -98,13 +144,25 @@ E/A, a steep-pressure evolution, and ordinary MHD controls. Change matching
 reference consumers only where their old expectation is demonstrably wrong.
 
 **4. Restore thresholds, relaxation, walls and their schedule coherently.**
-Scope: `EOS_Data`, `cgl_physics.hpp`, EOS collisions, LF scattering, MHD task
-callers, AMR projection, affected diagnostics and parameter fixtures.
+Scope: `EOS_Data`, `cgl_physics.hpp`, `SingleCollRates_CGLMHD`,
+`SingleCollWalls_CGLMHD`, `CGLWallAdmissibleAnisotropy`, `CGLMHD::Collisions`,
+and the mode/signature declaration plus the base stub in `src/eos/eos.cpp`.
+Update `MHD::AssembleMHDTasks`, `CGLCollisions`, `STSPostSweepCGLCollisions`,
+AMR projection, LF face-rate consumers and affected diagnostics/inputs together.
 Introduce the agreed soft/backup thresholds and additive scattering, then land
 the monotone relaxation map with its full-step schedule. Keep coarse state and
 primitives consistent after updates. Incorporate the later canonical active wall
 encoding correction here (`71ad25ebc`, regression `4cd46a131`), rather than
 reintroducing its known restart failure.
+The call sites choose the mode: no LF split means full rates/walls after RK;
+split LF means walls after the pre-sweep and RK, then full rates/walls after
+the post-sweep, with A restored before those calls. After the final AMR field
+refresh, apply walls and refresh the coarse representation. Do not retain an
+obsolete soft-threshold projection in C2P or AMR alongside the new finite-rate map.
+Honor the specified default thresholds (firehose 2, mirror 1), explicit legacy
+equivalence and finite-rate fixtures. Update shipped runnable inputs that use
+the removed `limiter_hardwall=true` contract with the operator change; preserve
+historical evidence. No input should silently acquire a different physical rate.
 Gate: analytic background relaxation with/without LF; an independent finite-rate
 map distinguishing one full kick from two half kicks; threshold equality and
 additive-rate checks; invariant E/momentum/B; unchanged A on no-op; wall
@@ -121,8 +179,9 @@ sharp-contact expected failures with their original predicates. This patch does
 not solve that formulation's sharp-contact limitation.
 
 **6. Correct LF face geometry.**
-Scope: `cgl_landau_fluid.cpp/.hpp`, existing face-field callers, and reference
-consumers (`910023601`). Use CT normal B and the mean of adjacent cell magnitudes
+Scope: `BuildCGLLFFaceState`, `AddHeatFluxes`, the header and
+`MHD::AddSelectedDiffusionFluxes`, plus reference consumers (`910023601`).
+Use CT normal B and the mean of adjacent cell magnitudes
 for normalization; do not renormalize this vector to unit length.
 Gate: independent face fluxes, reversal-sheet perturbations, frozen-field
 conservation, and smooth oblique decay. Use a small explicit reference timestep
@@ -134,10 +193,15 @@ Scope: existing directional face arithmetic and the smallest reusable VL4 helper
 Gate: hotspot minimum and energy, oblique convergence, and exceptional-slope
 checks. Measure this change alone: it replaces centered sums with several
 harmonic means at every face and is a leading WO1 cost suspect.
+Use the retained `VanLeerLimiter`/`VL4Limiter` arithmetic. Update existing
+diagnostic/profile copies of the directional expressions when they consume the
+same gradients; do not introduce a new general stencil abstraction.
 
-**8. Correct the perpendicular BGK response and consistent scattering.**
-Scope: safe/fast closure arithmetic, logarithmic fallback, and independent
-reference consumers (`d2ab32f58`, `a8a25fb68`). Use the intended $2\nu_{\rm eff}$
+**8. Correct the perpendicular BGK response.**
+Scope: `cgl::PerpendicularHeatFluxRatio` in `src/eos/cgl_physics.hpp`, its normal
+and logarithmic paths, `ChiPerp` reference consumers and associated method docs
+(`d2ab32f58`). Both safe and fast fluxes use that shared helper. Additive scattering
+was completed in 4; do not reimplement it here. Use the intended $2\nu_{\rm eff}$
 perpendicular response. Gate: collisionless identity, strong-collision limit
 $\chi_\perp\nu/c_\parallel^2\to1$, and resolved coupled decay over an e-folding.
 Keep pieces 6-8 at a common conservative explicit-reference timestep until
@@ -146,19 +210,30 @@ at these intermediate commits to attribute a kernel performance regression.
 
 **9. Implement the LF bound for the final stencil.**
 Scope: timestep calculation/callers, existing post-RK refresh, and MPI reduction.
-Use the mathematical work in `822cad5e8`, including CT geometry, neighboring
-density, VL4 derivatives and grad-B coupling. Reuse available temperature/B
-calculations where valid; avoid the later duplicate cache passes. Include
-background collisions. Do not first port WO1's provisional D5 bound merely to
+Select the mathematical blocks from `822cad5e8`: `CGLLFVL4DerivativeNorm`, the
+local logarithmic helpers, representable-sound-speed fallback, and the row loop
+in `CGLLandauFluid::NewTimeStep`. Add face B at the `mhd_newdt.cpp` caller.
+Retain CT geometry, density coupling, limiter derivatives and grad-B reverse
+coupling. The initial bound reuses existing `tpar_`, `tperp_`, `bmag_` storage
+with an explicit fresh one-halo fill: no three new timestep arrays and no new
+cache-validity framework. Fused primitive refresh does not exist until 13;
+reusing its valid values is a later optimization, not a dependency here.
+Include background collisions. Do not first port WO1's provisional D5 bound merely to
 replace it, and do not loosen unrelated conduction bounds.
 Gate: independent frozen-stencil rows/eigenvalues, staggered checkerboard,
 unequal spacing, density-jump seeded-minus-unseeded growth, reversal/grad-B,
 heated post-RK refresh, MPI stage agreement, and explicit-reference convergence.
 Initially retain the old CFL safety multiplier. The bound covers a frozen local
 Jacobian; it does not prove nonlinear positivity, RKL stability, or AMR stability.
+Do not substitute a simpler maximum-diffusivity or secant-limiter estimate.
+The original coefficient-five proposal underbounded the actual VL4 stencil.
+Retained JSON matrices establish old results, not a rerunnable independent test;
+recover the actual checker or add one compact independent row/Jacobian check if
+the reusable runtime fixtures do not cover the adapted mathematics.
 
 **10. Separate STS safety from advective CFL.**
-Only after piece 9 passes, change both initial and refreshed STS budget selection;
+Only after piece 9 passes, add the parameter in `mesh.hpp`, its fresh/restart
+loading in `build_tree.cpp`, and both budget selections in `mesh.cpp`;
 explicit diffusion keeps its CFL multiplier. Gate: parameter bounds, analytic
 stage selection, existing stability tests, and temporal convergence before
 accepting a larger factor such as 0.9. Attribute changes in stage count separately
@@ -173,6 +248,12 @@ required by the next flux evaluation; measure its cost before narrowing it.
 Gate: fixed-seed force modes, RK1/2/3 kick counts, injected power, unchanged
 thermal energy from a pure forcing kick, OU cadence/restart, and affected
 ordinary hydro/MHD and two-fluid consumers. Do not silently retune power or seeds.
+Keep mode selection/counting changes in `IsDrivenMode`/`InitializeModes` separate
+from `ApplyForcingWithStep` energy arithmetic. Move `IncludeInitializeModesTask`
+and `AddForcing` with their `MeshBlockPack` registration and `Driver::Execute`
+refresh atomically. Replace the old RK-recurrence test expectation with the
+physical full-kick expectation. Register the small retained `turb_forcing` pgen
+only if needed for the direct work/cadence fixture; do not add a forcing framework.
 
 **12. Repair refinement/boundary correctness before compact communication.**
 Two separate fixes: refill physical corners after prolongation (`e1b2ecd00`),
@@ -182,6 +263,15 @@ Gate: uniform anisotropic oblique-field SMR/outflow state, the original nonunifo
 fixture, periodic E and integrated magnetic-moment conservation, both prolongation
 modes, 2D/3D, explicit/STS, CPU/HIP and multiple ranks. Preserve AMR churn/restart
 and repair-accounting checks. Do not equate positive pressures with conservation.
+The original shared-face patch followed compact communication, but need not
+depend on it here: add default-off same-face offset/count arguments to flux
+pack/unpack and the receive overload; leave coarse/fine messages full-variable
+and cell-state exchange unchanged. Match receive/send/unpack activation and
+retain existing request completion. Before posting receives, grow both face
+buffers if needed to `max(existing capacity, 2 * full face area)`, preserving
+their block capacity. Six-variable coarse-face storage provides only 1.5 face
+areas in 3D and is insufficient. Cache both original estimates before the
+identically ordered symmetric mean. No new completion framework is needed.
 
 **13. Apply only measured, equivalent optimizations.**
 Try separately: redundant LF flux-clear removal (`15e7ff619`); fused primitive/
@@ -192,6 +282,13 @@ boundary work. Gate: same-configuration full-precision state/restart equality,
 including ghosts/coarse data and scalars, plus paired GPU timing. Keep only a
 beneficial or independently justified simplification; no configurable fallback
 framework. Handle diagnostic reduction-order differences explicitly.
+Only change a path that still contains the waste. For refresh fusion, preserve
+the different raw/scaled B norms needed for identical rounding, repair stores,
+floor counters, and the final full halo. Cache density/B only while frozen;
+invalidate at existing sweep boundaries. For compact exchange, receive sizes,
+packing, unpacking and call-site offsets/counts must land together. A simple
+deletion can be worthwhile even when timing is within noise; a large new kernel
+or cache mechanism needs a repeatable benefit on the target diagnostic-free run.
 
 **14. Add passive thermodynamics as a separate model series.**
 Reuse the physical design of `a2d994a3a` and the later decoding correction
@@ -204,6 +301,16 @@ isothermal flow at matched outer timesteps and forcing; thermal evolution from
 independent smooth references; pressure-work balance; wall decode and restart.
 Document the absence of irreversible shock heating. Optimize only against the
 preceding implementation of this same model, never against the old passive defect.
+Keep the native isothermal flow kernel intact: the attempted combined face
+implementation previously changed HIP flow bits. Implement thermal additions
+behind the passive rejection, then enable the model only when conversions,
+fluxes, initialization, outputs and restart contracts are complete. For reference,
+$J=\rho\ln(p_\parallel B_{\rm eff}^2/\rho^3)$ is stored in IEN outside LF;
+LF uses physical U and magnetic moment instead. A direct source increment to
+IEN is therefore not a passive heating operation.
+After model qualification, profile before considering narrower thermal
+reconstruction or a cheaper wall path. An eager isotropic fallback and bisection
+are candidates for simplification, not reasons to alter the thermal model.
 
 **15. Qualify nonlinear LF time integration before selecting a chunk cap.**
 If the corrected passive target still exhibits the retained depleted-pressure
@@ -213,6 +320,15 @@ Gate: actual failing-state reproduction and timestep refinement, worst-cell
 pressure differences as well as norms, energy and smooth temporal order. Recorded
 positive chunked runs still differed locally by about 14%; cap 4 is not an
 accuracy-qualified default. Do not merge chunking with a kernel optimization.
+Retain the existing smooth refinement, cadence, default-off and restart checks.
+Their current test module imports half-sweep-merge fixture helpers; extract only
+the needed input/run/comparison pieces, not the merge feature or its campaign.
+For the failing state, compare at least three decreasing LF intervals at fixed
+outer step on the same grid. Report worst-cell absolute and relative pressure
+errors, local thermal-energy-scaled errors, and norms; establish decreasing
+temporal error rather than selecting a cap because it survives. The old cap-1
+trajectory is not a converged oracle. If refinement remains unresolved, report
+that numerical limitation instead of silently lowering forcing or changing walls.
 
 ## Deferred work
 
@@ -227,59 +343,238 @@ accuracy-qualified default. Do not merge chunking with a kernel optimization.
 - Leave unrelated cleanup and the large evidence archive on the reference branch.
   Bring across only the fixture, checker and short derivation needed for a change.
 
-## Checks and measurements for every piece
+## Testing cadence
 
-Use `tst/test_suite/cgl/`, `tst/scripts/cgl/`, `test_suite.testutils`, and existing
-inputs/pgen fixtures. Inspect their working-directory and backend setup before
-running; the generic runner's GPU default is CUDA, not Frontier HIP. Recover small
-later fixtures from the pinned reference when needed. Keep baseline failures and
-known limits explicit; never replace physical accuracy checks with smoke completion.
+Reuse `tst/test_suite/`, `tst/scripts/cgl/`, `test_suite.testutils`, existing
+inputs and production pgen fixtures. A gate is evidence for the changed behavior,
+not a required new test file. Do not import whole multi-thousand-line test modules
+to obtain one regression. Add their needed functions/fixtures to the existing
+structure with the owning patch. No whole-repository cleanup or new test framework.
 
-1. Reproduce the defect or independently establish the expected result first.
-   Run the smallest relevant CPU tests and one affected integration case. For
-   GPU arithmetic, driver, MPI or boundary changes, also run the affected actual
-   HIP/MPI cases before calling the piece qualified. Missing hardware is a
-   recorded validation gap, not a pass.
-2. Measure baseline and candidate with the same complete build configuration,
-   including Kokkos, and record source/input/executable hashes. Match arithmetic,
-   diagnostics, strictness, reconstruction, CFL, limits, forcing, block shape and
-   rank/node layout unless the patch explicitly changes one of them.
-3. Use one large uniform aligned active case and one genuinely 3D active case
-   with independently verified nonzero LF transport. Add a refinement timing
-   only for relevant pieces. Avoid using planar zero-transport forcing as the
-   sole performance case. Reuse checkpoints only while physics/encoding match;
-   otherwise initialize explicitly matched primitive states.
-4. Use existing cycle/time/elapsed stdout. Time a fixed completed-cycle interval
-   after warmup, with no output writers inside it and fixed diagnostic frequency.
-   Run a warmup per binary and three alternating sequential baseline/candidate
-   pairs on the same allocation. Report individual values, median and spread;
-   lengthen noisy intervals instead of selecting favorable repeats.
-5. Record zone-cycles/s/node, LF RHS evaluations/cycle, elapsed/physical-time
-   advanced, and amortized whole-step elapsed/RHS. The latter is not pure LF
-   kernel time. Obtain kernel profiles separately because profiling fences perturb
-   timing. Existing `lf_nstage` counts zone-stage evaluations: on a fixed mesh,
-   divide its increment by active cells to obtain RHS evaluations. Use a separate
-   count/endpoint run when output would affect timing.
-6. Compare physics at the same physical time. For optimizations require exact
-   primary-state equality on the same backend/toolchain/layout; for deliberate
-   operator changes require the independent accuracy/conservation gate. Report
-   any diagnostic-only rounding separately. Assess min/max and spatial outliers,
-   not just RMS errors. Stability, positivity and accuracy are separate tests.
-7. Record one compact result row per commit: requirement, source scope, commands,
-   passed/failed/skipped checks, changed expectations, timing/counts, and retained
-   limitation. Stop on an unexplained failure or regression; investigate before
-   adding the next change. A necessary physics correction may cost time, but its
-   cost must be attributed and its implementation reviewed rather than hidden.
+| Change | Immediate check | Broader check or timing trigger |
+| --- | --- | --- |
+| Parameters, guards, documentation | Existing valid/invalid constructor cases or text review | No throughput timing; no new MPI run |
+| Local EOS/reconstruction repair | Relevant arithmetic/wrapper fixture; one affected evolution if not covered directly | Actual HIP reproducer for known backend rounding; broader integration at the active milestone |
+| Collision/forcing schedule | Analytic cadence/work check and affected restart | HIP application; one/four ranks when scheduling or reduction changes; a paired timing if full-domain work changes |
+| Geometry/VL4/BGK | Focused arithmetic and one defect-sensitive evolution | Common conservative reference timestep until 9; one paired timing for added recurring arithmetic, especially VL4 |
+| Timestep controller | Small analytic family, fresh-state and MPI stage-count checks | Compare both work count and physical-time cost; nonlinear case at the active milestone |
+| Refinement/communication | One affected one/four-rank comparison | Remaining dimensions/prolongation/restart/shear at the mesh milestone; timing for message optimization |
+| Equivalent optimization | Exact primary state, relevant ghosts/coarse data and restart comparison | Paired GPU timing on the affected workload; expand coverage only for paths actually changed |
+| Passive model | Identity and independent thermal groups while assembling the model | One model milestone across supported reconstructors, forced restart and MPI; failing-state LF refinement separately |
 
-After the active correctness pieces pass, run the broader relevant CPU/HIP/MPI
-suite once, including resolved wave/decay and refinement/restart cases. Freeze
-that reference before optimizations and establish a separate reference when the
-passive model is added. No speedup target overrides the physical acceptance gates.
-Include a resolved active turbulence check before freezing the active reference
-or starting piece 13. After piece 14, qualify the passive target separately using
-piece 15; the retained depleted-pressure failure was passive. Small smooth tests
-alone do not release either model for the intended turbulent run.
+**Baseline milestone:** on each frozen reference, one focused GPU decay,
+one 3D runtime-path case, final-refresh/layout agreement, and actual restart.
+Run the existing host fast-speed/floor/closure checks once. These establish
+execution and the starting failure list; they are not a new broad qualification
+of the known-defective base.
 
-The immediate next action is piece 0: qualify and measure the unmodified
-pre-WO1 and post-WO1 sources. None of the retained historical passes certify the
-new patch composition in advance.
+**Active milestone:** after 1-11, run the selected physical suite once: resolved
+non-integer-period waves, an e-folding of parallel/perpendicular decay, oblique
+transport, finite-rate relaxation, heating/timestep refresh, forcing/restart,
+and a resolved active turbulence case with nonzero LF work. Run an actual HIP
+wall-encoding fixture; CPU scalar helpers cannot substitute for it. Run the
+small safe/fast and diagnostic/profile branch checks once after all face changes,
+not after each constant edit. Production timings keep detailed q diagnostics off.
+
+**Mesh milestone:** after 12, cover both physical-corner cases, all six retained
+conservation parameters, actual regrid/restart, repair accounting and shearing.
+One/four ranks are the default comparison. Use two-node/16-rank 3D churn only at
+final qualification when the allocation supports it, not as a prerequisite to
+every local fix. These checks gate multilevel/communication acceptance; they do
+not prevent independent uniform-grid work while an unrelated mesh issue is diagnosed.
+
+**Passive milestone:** start with identity and independent thermal evolution;
+then run the six existing groups once on HIP, including all supported
+reconstructors. Check forced identity/restart on multiple ranks. Do not repeat
+the historic hundreds-of-application CPU/HIP/MPI cross-product after each edit.
+Piece 15 qualifies the retained passive failure separately; a small smooth test
+or a clean termination alone does not establish turbulent accuracy.
+
+Use inherited scientific tolerances unless the changed equation requires a new
+analytic expectation. Final-reference tests sometimes hard-code safety 0.9,
+13 heated stages, zero stages for a zero operator, or a timestep cap to hit an AMR
+event. Derive the expectation for the controller currently being tested. Preserve
+the physical error, conservation, amplitude, topology and strictness assertions;
+do not copy a cap blindly or weaken a criterion just to recover a pass.
+
+## Concrete test map
+
+All selectors below were verified in Git source, not executed here. Paths are
+relative to `tst/test_suite/`. `L` means `cgl/test_cgl_landau_fluid_cpu.py`,
+`LM` means `cgl/test_cgl_landau_fluid_mpicpu.py`, and `A` means
+`cgl/test_cgl_lf_acceptance_cpu.py`. Expand a selection as `path::function`.
+The newer test source is pinned at `2afaa0fa1`; import only the checks absent
+from the base and needed for the current piece.
+
+| Piece | Reusable selectors | Fixture or role |
+| --- | --- | --- |
+| 0 | `L::test_cgl_lf_quantitative_decay_and_diagnostics`; `L::test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths`; `L::test_cgl_lf_final_refresh_is_meshblock_layout_independent`; `L::test_cgl_lf_restart_preserves_final_state_and_admissibility` | Already present at the base; select a small representative parameter case first |
+| 0 | `cgl/test_cgl_fast_speed_cpu.py::test_cgl_active_hlle_uses_scaled_literature_discriminant` | Existing focused Serial test; strengthen independent anisotropic eigenvalues from WO1 if absent |
+| 1, 4 | `cgl/test_cgl_parameters_cpu.py::test_cgl_constructor_parameters` | Import parameter cases only when their consuming implementation lands |
+| 2 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_c2p_pressure_floor_energy_consistency` | Existing checker, extended progressively; double and focused float |
+| 3, 5 | `L::test_cgl_reconstruction_pressure_peak`; `L::test_cgl_fofc_live_flux_mutation`; `cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded` | `inputs/unit_tests/cgl_reconstruction_{ppmx,wenoz}.athinput`, built-in FOFC pgen, preserved B4 strict expected failures |
+| 4 | `L::test_cgl_collision_rates_once_per_cycle_with_and_without_lf`; `L::test_cgl_lf_face_collision_rates_add`; `A::test_limiter_stress_matches_cellwise_relaxation`; `A::test_limiter_stress_matches_wall_ordering` | `cgl_collision_once.athinput` and existing mirror/firehose unit inputs; independent rate/cadence oracles |
+| 4 | `L::test_cgl_collision_refreshes_next_timestep_from_relaxed_state`; `L::test_cgl_lf_restart_with_finite_collision_preserves_corrected_split`; `cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh` | Inputs under `inputs/tests/`; actual restart and post-regrid state checks |
+| 4 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_production_wall_encoding_survives_independent_c2p` | Supplied HIP wall binary; real collision kernel followed by independent C2P; serialized fixture bytes do not replace a driver restart |
+| 6, 7 | `L::test_cgl_lf_field_reversal_stability`; `L::test_cgl_lf_hotspot_preserves_minima_and_energy`; `cgl/test_cgl_lf_oblique_decay_cpu.py::test_cgl_lf_oblique_decay_agrees_across_blocks` | Reversal 1D/2D, 30/45-degree hotspot, global oblique decay; start safe/none |
+| 7, 8 | `cgl/test_cgl_heat_flux_limiter_cpu.py::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints`; `A::test_decay_resolves_closure_coefficients` | Reuse `CheckDiffusionSlopeMeans` and collisional/cancellation checks; coupled two-pressure decay oracle rejects the old coefficient |
+| 9 | `L::test_cgl_lf_uniform_collisional_timestep`; `L::test_cgl_lf_density_contact_stability`; `L::test_cgl_lf_staggered_checkerboard_timestep_and_stability`; `L::test_cgl_lf_scaled_face_row_timestep` | Ordinary collision values, seeded/unseeded density jumps, 2D/3D CT counterexample, finite complete-row cold arithmetic |
+| 9 | `L::test_cgl_lf_low_field_faces_disable_transport_cleanly`; `L::test_cgl_lf_post_sweep_timestep_refresh`; `LM::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks` | Zero operator and unheated/heated current-state budget |
+| 10 | `L::test_cgl_lf_invalid_sts_safety_is_rejected`; `L::test_cgl_lf_sts_safety_changes_only_sts_budget`; `L::test_cgl_lf_sts_safety_is_loaded_from_restart` | Constructor, explicit-vs-STS semantics, restart parameter loading |
+| 11 | In `turb/test_turb_driving_cpu.py`: `test_type_two_has_nonzero_force`, `test_conservative_forcing_kick`, `test_once_per_step_power`; `L::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks` | Existing `tst/inputs/turb_driving_edot.athinput`; register the retained `turb_forcing` pgen for direct production tests |
+| 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
+| 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Existing groups: identity, heating, linear, advection, restart, fences; `passive_acceptance.py` and `cgl_passive_validation` pgen |
+| 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_limiter_cadence`, `test_smooth_lf_temporal_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted_run`, `test_invalid_chunk_configurations_fail_before_evolution` | Prebuilt executable; small fixture dependency extraction required; failing passive checkpoint is an additional accuracy check |
+
+The physical oracle must be independent where it matters. A copied production
+Riemann expression only tests wiring; a collision/C2P roundtrip only tests
+consistency. Keep analytic threshold/map checks and independent eigenvalue/decay
+references alongside them. Reuse the resolved decay checker rather than adding
+another permissive smoke test. Do not replay archived JSON and call it a new test.
+
+## Performance comparisons
+
+Freeze two workloads, not a scaling campaign:
+
+- **Uniform control:** a populated-node active case with aligned fields. The
+  historical two-node/16-GPU input used 256 cubed cells per GPU and is identified
+  in `2afaa0fa1:docs/validation/cgl_lf_performance_20261008/matched-timing.json`.
+  Verify the remote file/hash before claiming historical reproduction. If absent
+  or the allocation differs, freeze a new one-node case and label it separately.
+- **Nonzero 3D LF transport:** make a base-compatible active deck through the
+  built-in pgen interface, using the intended production geometry and forcing
+  from `2afaa0fa1:inputs/cgl_lf_paper/cgl_lf_physics_benchmark_matched_beta10.athinput`:
+  192 by 192 by 384 cells, eight 96 by 96 by 192 blocks on one eight-GPU node,
+  PPM4 with three ghost cells, beta 10, seed 271828, `dedt=0.16`, and the full
+  3D solenoidal/compressive mode policy. The old revision needs its supported
+  parallel-threshold spelling; do not copy later STS/passive options and assume
+  they work there. Preserve the specified physical shell and forcing cadence.
+  Remove output from the timing interval and verify nonzero transport separately.
+  The base's built-in `cgl_lf_paper_smoke_active_beta10.athinput` verifies the pgen
+  interface, but its 8 by 8 by 16 grid and different forcing policy are not this
+  benchmark. The custom-pgen `cgl_lf_paper_turb_active` deck is another interface
+  and planar workload; do not silently substitute it. Short startup timings are
+  cost controls, not evidence of developed turbulence or long-run accuracy.
+
+Use a common explicit initial state or a freshly produced compatible active
+checkpoint. No shared full-precision active turbulent checkpoint has yet been
+verified. The retained late turbulent timing checkpoint is passive J/A and must
+not be loaded into pre-WO1 active E/A. New/old physics trajectories can differ;
+record those intentional changes instead of treating every endpoint difference
+as an implementation error or a same-work kernel comparison.
+
+Default production timing configuration: safe arithmetic, diagnostics none,
+weighted STS fluxes, strict checks on. Explicitly put these keys in the timing
+input; account for `ATHENAK_CGL_LF_*` environment overrides. Hold reconstruction,
+CFL, limits, forcing, block shape and ranks/nodes fixed unless they are the
+explicit change under study. Historical fast/physical/non-strict runs remain
+separately labeled historical controls. Do not optimize full q diagnostics.
+
+Use existing cycle/time/elapsed stdout. Time the same completed-cycle interval
+after warmup, without output inside it, at fixed diagnostic frequency. For an
+ordinary cost-sensitive patch, one alternating baseline/candidate pair screens
+the effect. Use a warmup and three alternating pairs to establish the baseline,
+resolve an apparent regression, or substantiate a retained speedup. If spread
+obscures the result, lengthen the interval; do not repeatedly sample for a favorable
+number. Do not run competing jobs concurrently during performance measurement.
+
+Report zone-cycles/s/node, LF RHS evaluations/cycle, elapsed/physical-time advanced,
+and whole-step elapsed/RHS. The last metric is amortized total cost, not pure LF
+kernel time. Profile kernels separately because profiling fences perturb timing.
+On a fixed mesh, `lf_nstage` increments are zone-stage evaluations; divide by
+active cells to obtain RHS evaluations. Obtain counts/endpoints separately if
+their output changes timing. Compare accuracy at a common physical endpoint.
+Reserve refinement timings for refinement/communication changes.
+
+For equivalent optimizations, compare full-precision primary fields, relevant
+ghost/coarse arrays and actual restart/RNG state on the same backend/toolchain/
+rank layout. A float32 snapshot match is insufficient. Existing restart comparators
+may mask documented nonphysical padding only; preserve live RNG and state, and
+do not normalize unexplained differences away. Report diagnostic-only reduction
+rounding separately. A physics correction may legitimately cost time; attribute
+that cost and seek a simpler correct implementation without changing the equations.
+
+## GPU handoff
+
+The following are verified source recipes, not commands executed in this planning
+session. Use the existing Frontier setup if the same platform is selected; do not
+start a toolchain or compiler-flag investigation unless that setup fails.
+
+At `2afaa0fa1`, `scripts/frontier/build_cgl_lf_frontier.sh` records the full build
+contract: CPE 25.09, CCE 20.0.0, ROCm 6.4.2, Cray MPICH 9.0.1, gfx90a, and
+Kokkos `08ceff92bcf3a828844480bc1e6137eb74028517`. Its module/path cleanup is part
+of the recipe. After that setup, the numerical configuration is:
+
+```sh
+cmake -S "$SRC_DIR" -B "$BUILD_DIR" \
+  -DCMAKE_BUILD_TYPE=Release -DPROBLEM=built_in_pgens \
+  -DAthena_ENABLE_MPI=ON -DKokkos_ENABLE_HIP=ON \
+  -DKokkos_ARCH_ZEN3=ON -DKokkos_ARCH_VEGA90A=ON \
+  -DCMAKE_CXX_COMPILER=CC \
+  -DCMAKE_CXX_FLAGS="-fno-cray -mno-daz-ftz" \
+  -DCMAKE_EXE_LINKER_FLAGS="-no-pie"
+cmake --build "$BUILD_DIR" --parallel 16
+```
+
+Apply those flags to both Kokkos and the application. Keep per-reference build
+directories; never compare a candidate against a binary with unrecorded flags.
+Use `docs/validation/wo2/final/evidence/final-research/run_pytest.sh` at the pinned
+ref for the complete accepted MPI/HSA/FI runtime environment. It hardcodes old
+binary/output locations: reuse its setup, not its historical destinations.
+The GPU MPI tests use:
+
+```sh
+export ATHENAK_RUN_MPI_GPU=1
+export ATHENAK_MPI_GPU_LAUNCHER="srun --exact --threads-per-core=1 --cpu-bind=threads -c7 --gpus-per-task=1 --gpu-bind=closest"
+```
+
+Those wrappers append node/rank counts. Keep functional runs in a fresh workspace
+outside the source tree. The retained
+`docs/validation/wo2/final/evidence/scripts/pytest_baseline.py` stages the required
+layout: import `test_suite.testutils` while in staged `tst/`, then run pytest from
+staged `tst/build/src/` with `./athena` and `../../../inputs` available. There is no
+repository `conftest.py` that does this automatically. Its small `launch.py` adapter
+handles direct and legacy mpirun calls through Slurm without nested launches.
+Adapt only source/binary/output selection as needed; do not port a campaign runner.
+Avoid the generic build-and-test runners for frozen HIP binaries: they rebuild
+the test tree and the generic GPU defaults select CUDA.
+
+CPU-named application tests can use the supplied HIP executable in that layout.
+The fast-speed, heat-limiter and ordinary pressure-floor helper tests explicitly
+build Serial/HIP-off executables and remain CPU evidence. For the real production
+wall check, build `PROBLEM=unit_tests/cgl_c2p_pressure_floor_test` under the same
+HIP configuration and provide `ATHENAK_CGL_PRODUCTION_WALL_BINARY` and
+`ATHENAK_CGL_PRODUCTION_WALL_LAUNCHER` (the one-rank srun prefix) to its selector.
+The passive counterpart uses `unit_tests/cgl_passive_wall_decode_test` and
+`ATHENAK_CGL_PASSIVE_WALL_BINARY` / `ATHENAK_CGL_PASSIVE_WALL_LAUNCHER`.
+These custom pgens arrive with their owning corrections, not with the baseline.
+
+The original minimum-reduction probe, archived uniform input, and passive failing
+checkpoint are remote artifacts; their present existence is unverified here.
+The compiler probe is referenced under
+`/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison`.
+Inspect the retained script and manifest before invoking it. If it is unavailable,
+make one small equivalent compiler check during baseline setup, not a new probe
+matrix. Missing old timing input need not block the rebuild: use the newly frozen
+common workload. Missing failing-state evidence does limit the passive accuracy
+claim until that state or a demonstrated equivalent reproducer is recovered.
+
+## Completion record and stopping point
+
+Keep one compact row per implemented piece: commit, behavior changed, reused or
+added test, command/backend, result, and timing/counts only where relevant. Keep
+raw failing logs and full-precision comparison states outside Git; commit small
+fixtures and a concise result summary. A tested correct baseline is enough to
+proceed; there is no need for a new provenance database or exhaustive archive.
+
+Investigate an unexplained numerical failure before stacking changes that depend
+on it. Do not require a global all-green historical suite before an unrelated
+focused correction can proceed. Record known B4 failures and unavailable coverage
+explicitly; neither skipped tests nor old retained passes qualify this composition.
+Refresh the relevant method/parameter/restart documentation with each user-visible
+change; no generated manuscript/PDF rebuild or unrelated formatting pass.
+
+The next GPU session starts with 0: verify environment and needed retained artifacts,
+build the two controls, run the small baseline checks, and freeze the two workloads.
+Then implement 1-4 with focused checks before moving into the LF face series.
+This planning task stops before those builds, tests, fixture ports or solver edits.
