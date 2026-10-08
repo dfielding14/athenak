@@ -51,8 +51,12 @@ launch of the active member. Long-run stability is unproven. Its measured rate
 was 3.730 million zone-cycles/s/node. The subsequent
 [performance audit](cgl_lf_performance_audit_20261008.md) found a 4.65× speedup
 by disabling only detailed LF q diagnostics, preserving strict checks and saved
-endpoint fields in a short comparison. No production settings were changed by
-that audit.
+endpoint fields in a short comparison. Following that audit, the canonical input
+now disables those detailed q sums while retaining safe arithmetic, weighted
+fluxes, strict admissibility, and pressure/forcing-work recording. Historical
+inputs remain unchanged. A resumed run with a changed diagnostic mode requires
+an explicitly recorded override; do not relabel the old segment's settings.
+The compiler comparison remains outstanding before new production.
 See `matched/power032/lf-subcycling/README.md`, `comparison.json`,
 `continuation-submission.json`, and the retained qualification records.
 The commands below describe the original
@@ -100,7 +104,7 @@ Do not override either flag separately or switch modes across a restart.
 | Blocks and halos | 8 blocks of `96×96×192`, one per GPU on one eight-GPU node; `nghost=3` |
 | Initial state | `rho=1`, `B=(0,0,1)`, `u=0`, `p_parallel=p_perp=5`, initial beta ten |
 | Numerics | `ppm4`, HLLE, RK2/RKL2, CFL `0.3`, STS safety `0.9`, merged sweeps off, FOFC off |
-| LF | Local coefficients, `lf_k_parallel=2*pi`, safe arithmetic, weighted fluxes, full diagnostics, strict admissibility and pressure-work recording on |
+| LF | Local coefficients, `lf_k_parallel=2*pi`, safe arithmetic, weighted fluxes, detailed q diagnostics off; strict admissibility and pressure-work recording on |
 | Collisions and limiters | `nu_coll=0`, soft thresholds `X=-2,+1`, finite rate `1e10`, `limiter_hardwall=false`, backups off |
 | Sound-speed parameter | Explicit `iso_sound_speed=sqrt(5)` in both inputs |
 | Forcing | OU, seed `271828`, `tcorr=2`, `dt_update=0.01`, continuous driving |

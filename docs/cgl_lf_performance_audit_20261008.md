@@ -104,3 +104,10 @@ The passive continuation itself stopped cleanly at its wall limit at
 time 4.976016897678366, cycle 12065, with a passing final-snapshot check and
 zero recorded failure counters. The t=5 target and matched active/passive
 experiment remain incomplete. The audit does not change that scientific status.
+
+After review, the canonical matched input was changed to
+`cgl_lf_diagnostics=none`, retaining safe arithmetic, weighted fluxes, and strict
+checks. The measurements above precede that input-only change; their retained
+inputs and artifacts remain unchanged. No new production run was launched.
+The next qualification is a controlled full-build compiler comparison, including
+the known minimum-reduction correctness test, before further production.

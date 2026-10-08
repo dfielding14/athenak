@@ -74,7 +74,9 @@ cgl_heat_flux_integrator = sts
 lf_k_parallel = 6.283185307179586
 lf_coefficient_mode = local
 cgl_lf_strict_admissibility = true
-cgl_lf_diagnostics = full
+# Detailed q-face/cap/work sums are unnecessary for the fixed figures.
+# Stage admissibility and pressure/forcing-work ledgers remain enabled.
+cgl_lf_diagnostics = none
 cgl_lf_arithmetic = safe
 cgl_lf_sts_flux = weighted
 cgl_lf_record_pressure_work = true
