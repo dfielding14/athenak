@@ -1,0 +1,373 @@
+{
+  "schema_version": 1,
+  "purpose": "Explain shared startup X PDF; no new solver or field analysis",
+  "window": [
+    0.5,
+    2.5
+  ],
+  "near_band_halfwidth": 0.05,
+  "block_duration": 0.5,
+  "script": {
+    "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/explain_startup_x_pdf.py",
+    "sha256": "3f959567d54538500c00479fb2aafd076f5f272e99fc873df549826358b11bf2"
+  },
+  "runs": {
+    "active": {
+      "source": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/active/metrics.json",
+        "sha256": "d51aee535a8a010458e36ecaf74309631dcdda6b9a8899966b2f994c84833618"
+      },
+      "bin_count": 128,
+      "edges_range": [
+        -2.0000233529527067,
+        1.0000374650043395
+      ],
+      "bin_width": 0.023437975140289335,
+      "pdf_integral": 0.9999999999987613,
+      "first_bin": {
+        "edges": [
+          -2.0000233529527067,
+          -1.9765853778124174
+        ],
+        "density": 0.0042671792267684975,
+        "mass": 0.00010001404063615912
+      },
+      "last_bin": {
+        "edges": [
+          0.9765994898640504,
+          1.0000374650043395
+        ],
+        "density": 9.411815655018977,
+        "mass": 0.22059390134731868
+      },
+      "near_thresholds": {
+        "mirror_near": {
+          "mean": 0.2572855319639396,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.5801385082950268,
+            0.2416506887657453,
+            0.09486712661458911,
+            0.11248580418039728
+          ],
+          "block_count": 4,
+          "block_sd": 0.2249631023153853,
+          "block_min": 0.09486712661458911,
+          "block_max": 0.5801385082950268,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.3997226849377485,
+          "fitted_change_over_window": -0.799445369875497
+        },
+        "firehose_near": {
+          "mean": 0.00014564575031818648,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0,
+            0.0,
+            0.0002703142299795694,
+            0.00031226877129317656
+          ],
+          "block_count": 4,
+          "block_sd": 0.0001690471631541601,
+          "block_min": 0.0,
+          "block_max": 0.00031226877129317656,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.00016218272152710445,
+          "fitted_change_over_window": 0.0003243654430542089
+        }
+      },
+      "outside_near_bands_fraction": 0.7425688222857423,
+      "snapshots": [
+        {
+          "time": 0.250223673603537,
+          "mirror_near": 0.01658792848940249,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.0142324836646734
+        },
+        {
+          "time": 0.5002540279164936,
+          "mirror_near": 0.9388949782760055,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.0744068448732282
+        },
+        {
+          "time": 0.7501481142604803,
+          "mirror_near": 0.5488021285445602,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.1223792084031325
+        },
+        {
+          "time": 1.0000551721743545,
+          "mirror_near": 0.28321230853045426,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.1448444654780632
+        },
+        {
+          "time": 1.2503227439929188,
+          "mirror_near": 0.25634391219527636,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.169773188755181
+        },
+        {
+          "time": 1.5002938052966144,
+          "mirror_near": 0.17045028121383102,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.181239170104793
+        },
+        {
+          "time": 1.7501761394813689,
+          "mirror_near": 0.04665360627350984,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.1702236915525324
+        },
+        {
+          "time": 2.0002149331334524,
+          "mirror_near": 0.11558596293131511,
+          "firehose_near": 0.001082950168185764,
+          "B_over_B0_mean": 1.187544219081351
+        },
+        {
+          "time": 2.250052514675405,
+          "mirror_near": 0.09737572846589265,
+          "firehose_near": 5.7220458984375e-05,
+          "B_over_B0_mean": 1.1958367728643424
+        },
+        {
+          "time": 2.500227141919865,
+          "mirror_near": 0.13963360256618923,
+          "firehose_near": 5.058006004050926e-05,
+          "B_over_B0_mean": 1.2217786955075025
+        }
+      ],
+      "warning": "Endpoint bin mass is neither exact-wall mass nor threshold exceedance"
+    },
+    "passive": {
+      "source": {
+        "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/paired-startup/passive/metrics.json",
+        "sha256": "38f3e5ab07415d2db0913d1f6cce75e6fb90245798483314638870ba5b648bdb"
+      },
+      "bin_count": 128,
+      "edges_range": [
+        -2.0000233529527067,
+        1.0000374650043395
+      ],
+      "bin_width": 0.023437975140289335,
+      "pdf_integral": 0.9999999999987612,
+      "first_bin": {
+        "edges": [
+          -2.0000233529527067,
+          -1.9765853778124174
+        ],
+        "density": 1.4632892223752014,
+        "mass": 0.03429653641708329
+      },
+      "last_bin": {
+        "edges": [
+          0.9765994898640504,
+          1.0000374650043395
+        ],
+        "density": 12.251473818322559,
+        "mass": 0.28714973878574707
+      },
+      "near_thresholds": {
+        "mirror_near": {
+          "mean": 0.32104556446512517,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.6262332109362205,
+            0.28540087160709426,
+            0.20184512288921863,
+            0.17070305242796724
+          ],
+          "block_count": 4,
+          "block_sd": 0.20914242347026243,
+          "block_min": 0.17070305242796724,
+          "block_max": 0.6262332109362205,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": -0.275044276721088,
+          "fitted_change_over_window": -0.550088553442176
+        },
+        "firehose_near": {
+          "mean": 0.04971006390355174,
+          "block_starts": [
+            0.5,
+            1.0,
+            1.5,
+            2.0
+          ],
+          "block_duration": 0.5,
+          "block_means": [
+            0.0030493335561484177,
+            0.048714786393621985,
+            0.09070423018749293,
+            0.056371905476943616
+          ],
+          "block_count": 4,
+          "block_sd": 0.036069914223811006,
+          "block_min": 0.0030493335561484177,
+          "block_max": 0.09070423018749293,
+          "effective_window": [
+            0.5,
+            2.5
+          ],
+          "linear_slope": 0.03630598664745171,
+          "fitted_change_over_window": 0.07261197329490342
+        }
+      },
+      "outside_near_bands_fraction": 0.6292443716313231,
+      "snapshots": [
+        {
+          "time": 0.25035249236781393,
+          "mirror_near": 0.20065251103153936,
+          "firehose_near": 0.0030995828134042246,
+          "B_over_B0_mean": 1.0140704158680092
+        },
+        {
+          "time": 0.5003587006267833,
+          "mirror_near": 0.6277015120894821,
+          "firehose_near": 0.0,
+          "B_over_B0_mean": 1.082014441589715
+        },
+        {
+          "time": 0.7503610442578461,
+          "mirror_near": 0.7171055122658059,
+          "firehose_near": 0.0016194096317997686,
+          "B_over_B0_mean": 1.16529752750357
+        },
+        {
+          "time": 1.0000312030102498,
+          "mirror_near": 0.44284827620894823,
+          "firehose_near": 0.008974711100260416,
+          "B_over_B0_mean": 1.2091595700069053
+        },
+        {
+          "time": 1.2503364453904964,
+          "mirror_near": 0.2388043580231843,
+          "firehose_near": 0.06406112953468605,
+          "B_over_B0_mean": 1.2103455900223699
+        },
+        {
+          "time": 1.5000185777764605,
+          "mirror_near": 0.2208208861174407,
+          "firehose_near": 0.0578343426739728,
+          "B_over_B0_mean": 1.2550862150146296
+        },
+        {
+          "time": 1.75031270648717,
+          "mirror_near": 0.20213550991482204,
+          "firehose_near": 0.11247394703052661,
+          "B_over_B0_mean": 1.2371555253289037
+        },
+        {
+          "time": 2.0001742706808816,
+          "mirror_near": 0.18222505074960213,
+          "firehose_near": 0.08004393400969328,
+          "B_over_B0_mean": 1.252997088217632
+        },
+        {
+          "time": 2.250245599545316,
+          "mirror_near": 0.16540711014359086,
+          "firehose_near": 0.051884969075520836,
+          "B_over_B0_mean": 1.2758322011169843
+        },
+        {
+          "time": 2.500300303503464,
+          "mirror_near": 0.1697541696053964,
+          "firehose_near": 0.04160400673195168,
+          "B_over_B0_mean": 1.3075161613140025
+        }
+      ],
+      "warning": "Endpoint bin mass is neither exact-wall mass nor threshold exceedance"
+    }
+  },
+  "later_active": {
+    "source": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/interrupted-analysis/active-interrupted/metrics.json",
+      "sha256": "cbc83c4d71511b730cb760dbdd40d58e7a36218a667bbc6862cbc483805d16b5"
+    },
+    "window": [
+      2.0,
+      6.0
+    ],
+    "mirror_near": {
+      "mean": 0.04531641577222327,
+      "block_starts": [
+        2.0,
+        3.0,
+        4.0,
+        5.0
+      ],
+      "block_duration": 1.0,
+      "block_means": [
+        0.09006067904415133,
+        0.017019608125706194,
+        0.036118340193035774,
+        0.0380670357259998
+      ],
+      "block_count": 4,
+      "block_sd": 0.0313045072587885,
+      "block_min": 0.017019608125706194,
+      "block_max": 0.09006067904415133,
+      "effective_window": [
+        2.0,
+        6.0
+      ],
+      "linear_slope": -0.018173175359617457,
+      "fitted_change_over_window": -0.07269270143846983
+    },
+    "firehose_near": {
+      "mean": 0.0021463664171926804,
+      "block_starts": [
+        2.0,
+        3.0,
+        4.0,
+        5.0
+      ],
+      "block_duration": 1.0,
+      "block_means": [
+        0.0013821444017966332,
+        0.005533526921853995,
+        0.0013702191188120617,
+        0.000299575226308029
+      ],
+      "block_count": 4,
+      "block_sd": 0.00231444261862089,
+      "block_min": 0.000299575226308029,
+      "block_max": 0.005533526921853995,
+      "effective_window": [
+        2.0,
+        6.0
+      ],
+      "linear_slope": -0.0004448070422509383,
+      "fitted_change_over_window": -0.0017792281690037532
+    },
+    "warning": "No matched passive data over this later interval; not stationary validation"
+  }
+}

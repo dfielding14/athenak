@@ -6,8 +6,18 @@ parameters. It asks whether anisotropic-pressure feedback changes magnetic
 strength fluctuations, pressure-anisotropy occupancy, velocity gradients and
 pressure compensation in this finite-time realization.
 
-**Physical validation status: inconclusive; numerical restart work ongoing.**
+**Physical validation status: inconclusive; the fresh lower-power pair requires a numerical gate.**
+The canonical injection is now `dedt=0.16` per unit volume, giving nominal
+total power `0.32` in the volume-two box. Start both members from the prescribed
+initial state using the existing committed solver. First run passive to `t=3`;
+only if it completes healthily continue that same lineage to `t=14`, then run
+the fresh active member. Adaptive LF stepping is not part of this experiment.
+Lower forcing is a changed experiment, not an established cure for the LF
+failure or a claim of physical acceptance.
+
 The first 192-grid pair used 48-cubed blocks and eight nodes per member.
+It and the subsequent higher-power preflights used `dedt=0.32`, nominal total
+power `0.64`; their inputs, measurements and reports remain historical evidence.
 Its passive member failed strict admissibility at `t=2.5077145`, cycle 5800;
 the active member was stopped on request after `t=6.16`. Preserve both as
 failed/interrupted evidence, not a completed stationary comparison.
@@ -52,8 +62,8 @@ Do not override either flag separately or switch modes across a restart.
 | Sound-speed parameter | Explicit `iso_sound_speed=sqrt(5)` in both inputs |
 | Forcing | OU, seed `271828`, `tcorr=2`, `dt_update=0.01`, continuous driving |
 | Modes and mixture | Type zero, physical shell `pi<=|k|<=3*pi`, full signed bounds `-3..3`, power-law `expo=2`, solenoidal/compressive amplitude blend `1/(1+sqrt(2))` |
-| Injection | `normalization=edot`, `dedt=0.32` per volume per time; nominal total-box power `0.64` |
-| Initial target | `tlim=14`, no cycle cap; common analysis interval `[6,14]` |
+| Injection | `normalization=edot`, `dedt=0.16` per volume per time; nominal total-box power `0.32` |
+| Initial target | Passive numerical gate at `t=3`, then the same passive lineage to `14` if healthy, followed by fresh active to `14`; no cycle cap; common analysis interval `[6,14]` |
 
 The physical firehose wall `p_perp-p_parallel>=-B²` remains active even with
 backups off. Strict checks and thresholds must not be relaxed to complete a
@@ -81,7 +91,10 @@ Retain each member's forcing snapshots and accumulated `force_work`, and measure
 the realized Helmholtz mixture. The blend gives equal expected innovation
 powers, not an exact instantaneous half-and-half partition. The
 [original guide](cgl_lf_physics_benchmark.md#setup-units-and-references) explains
-the modal spectrum, normalization and differences from the published forcing.
+the modal spectrum and normalization convention. Its `dedt=0.32` experiment
+is historical; the new pair uses `0.16`. The total-power normalization now
+matches MKS24's stated `0.32`, while the forcing projection and other model
+differences remain.
 
 ## Build and retain the executable
 
@@ -98,15 +111,17 @@ with the build directory under the new matched artifact root:
 ```bash
 export BENCH_SOURCE=/autofs/nccs-svm1_home2/dfielding/athenak-cgl-wo2
 export BENCH_ROOT=/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark
-export PAIR_ROOT="$BENCH_ROOT/matched"
+export PAIR_ROOT="$BENCH_ROOT/matched/power032"
 mkdir -p "$PAIR_ROOT/tmp" "$PAIR_ROOT/cache" "$PAIR_ROOT/mpl-cache"
 cd "$PAIR_ROOT"
 export TMPDIR="$PAIR_ROOT/tmp" XDG_CACHE_HOME="$PAIR_ROOT/cache"
 export MPLCONFIGDIR="$PAIR_ROOT/mpl-cache" PYTHONDONTWRITEBYTECODE=1
 ```
 
-After loading the modules and clearing the inherited compiler include overrides
-as described in that procedure, the fresh configuration is:
+For the fresh lower-power pair, reuse the retained committed timing build below;
+do not compile the parked adaptive-controller work. For an independent rebuild
+of that same numerical revision, load the modules and clear inherited compiler
+include overrides as described in that procedure. The configuration is:
 
 ```bash
 cmake -S "$BENCH_SOURCE" -B "$PAIR_ROOT/build-hip" \
@@ -124,16 +139,20 @@ manifest. The launcher requires at least `revision` and `binary_sha256`, checks
 the executable against them, and checks that the current numerical source
 matches the recorded revision. An audited replacement-object build must also
 retain its unchanged-input verification and original cache. A CMake cache alone
-does not identify such an executable. Use the same accepted executable and
+does not identify such an executable. Use the same retained executable and
 build provenance for both members, including every continuation.
 
-Set these paths to the accepted build; a diagnostic or failed-preflight binary
-is not an accepted pair:
+The retained executable has revision
+`635b42562e5e23fc9966c9faa01c9da62134f2ec` and SHA256
+`fb11d6355486dce126be1d4564f99dbcc0e9a13e7227a05f3a2f262ae466d47a`.
+It contains the original committed solver and the verified interval timing
+logging, not adaptive LF trial stepping. Its numerical plumbing checks do not
+establish success of this fresh scientific pair. Use its retained provenance:
 
 ```bash
-export PAIR_BINARY=/absolute/path/to/accepted/athena
-export PAIR_BUILD_MANIFEST=/absolute/path/to/accepted/build-manifest.json
-export PAIR_BUILD_CACHE=/absolute/path/to/accepted/CMakeCache.txt
+export PAIR_BINARY="$BENCH_ROOT/matched/build-timing-hip/athena"
+export PAIR_BUILD_MANIFEST="$BENCH_ROOT/matched/build-timing-hip/manifest.json"
+export PAIR_BUILD_CACHE="$BENCH_ROOT/matched/build-timing-hip/CMakeCache.txt"
 ```
 
 ## Launch one member per new directory
@@ -147,22 +166,63 @@ The launcher records the environment; it does not load modules or establish it.
 
 The following commands use one node and eight ranks/GPUs, or one block per
 rank. They do not reserve an allocation themselves. Preserve the same rank
-layout for both members and their continuations. Running them sequentially
-avoids sharing their requested GPUs; any performance comparison requires its
-own controlled timing protocol.
+layout for both members and their continuations. The prescribed order is the
+passive gate, passive continuation if healthy, then fresh active. These are
+sequential launches; any performance comparison requires its own controlled
+timing protocol. All new segments live under `matched/power032`, leaving the
+older `matched/active-to14` and `matched/passive-to14` evidence untouched.
+
+Start passive from the initial state:
+
+```bash
+python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
+  "$PAIR_ROOT/passive-initial-to3" --mode passive \
+  --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
+  --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
+  --job-id "$SLURM_JOB_ID" \
+  --classification "lower-power passive numerical gate; not physical validation" \
+  --set turb_driving/dedt=0.16 --set time/tlim=3 --set time/nlim=-1
+```
+
+Before continuing, inspect the exit status, final log/checkpoint time and strict
+admissibility counters. Reaching `t=3` without pressure/density-floor, nonfinite
+or nonpositive events is a numerical gate; inspect pressure minima and timestep
+behavior as well. Intermediate LF hard-bound crossings are separate activity,
+not a substitute for those failure checks. A clean wall-clock stop short of
+three is incomplete. Stop and report a failure without relaxing the checks or
+changing the physics. Passing this gate does not establish temporal accuracy,
+stationarity or agreement with the papers.
+
+After a healthy gate, resume its actual complete checkpoint with the same
+forcing state and solver:
+
+```bash
+python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
+  "$PAIR_ROOT/passive-continue-to14" --mode passive \
+  --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
+  --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
+  --job-id "$SLURM_JOB_ID" \
+  --restart "$PAIR_ROOT/passive-initial-to3/rst/ACTUAL_CHECKPOINT.rst" \
+  --set turb_driving/dedt=0.16 --set time/tlim=14 --set time/nlim=-1
+```
+
+Then launch active from its prescribed initial state:
 
 ```bash
 python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
   "$PAIR_ROOT/active-to14" --mode active \
   --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
   --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
-  --job-id "$SLURM_JOB_ID"
+  --job-id "$SLURM_JOB_ID" \
+  --set turb_driving/dedt=0.16 --set time/tlim=14 --set time/nlim=-1
+```
 
-python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
-  "$PAIR_ROOT/passive-to14" --mode passive \
-  --executable "$PAIR_BINARY" --build-manifest "$PAIR_BUILD_MANIFEST" \
-  --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
-  --job-id "$SLURM_JOB_ID"
+Retain the two passive segments in an aggregate manifest for analysis:
+
+```bash
+mkdir "$PAIR_ROOT/passive-union14"
+printf '%s\n' '{"schema_version":1,"segments":["../passive-initial-to3","../passive-continue-to14"]}' \
+  > "$PAIR_ROOT/passive-union14/benchmark_metadata.json"
 ```
 
 Use new segment names if either directory contains previous data. Add
@@ -221,8 +281,9 @@ The [retained timing check](validation/cgl_lf_matched_physics_benchmark/timing_2
 measured startup medians of 0.415 s/cycle active and 0.528 s/cycle passive on
 the one-node layout. It also verified restart timing and zero floor/invalid
 pressure counters. These short checks establish memory use and logging, not
-late-time stability or a controlled scaling comparison. The new layout still
-requires its numerical preflight through the previous failure interval.
+late-time stability or a controlled scaling comparison. The lower-power pair
+still requires its passive numerical gate; reaching the old failure time with
+different forcing does not reproduce the old thermal state or establish a fix.
 When launching concurrent members in a larger allocation, optional
 `--nodelist NODE` pins a launcher to its intended node and is retained in the
 run command and metadata.
@@ -231,7 +292,9 @@ run command and metadata.
 
 Select a complete checkpoint from that member with the same mesh, PPM/halo,
 physics and forcing configuration. Verify its header and time; do not use the
-old 96/PLM reference or a reduced-grid plumbing checkpoint. The checkpoint is
+old 96/PLM reference, a higher-power `dedt=0.32` checkpoint, or a reduced-grid
+plumbing checkpoint. Changing injection requires the fresh initial state, not
+resuming the old higher-power trajectory. The checkpoint is
 authoritative for its state and serialized parameters: specifying the new
 canonical input cannot convert an incompatible checkpoint into this experiment.
 The launcher rejects conflicting mode overrides and compares the checkpoint's
@@ -240,8 +303,9 @@ On resume, `effective.athinput` records the checkpoint header plus explicit
 command-line overrides, including serialized defaults and the passive encoding.
 Preserve its forcing RNG and counters and use a new directory.
 
-For an interrupted run, retain target 14; for a planned extension set target
-18. This active example extends a completed first segment:
+For an interrupted passive gate, retain target 3 until the gate is complete.
+For later interrupted production segments, retain target 14; for a planned
+extension set target 18. This active example extends a completed first segment:
 
 ```bash
 python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
@@ -250,10 +314,11 @@ python3 "$BENCH_SOURCE/scripts/run_cgl_lf_matched_benchmark.py" \
   --build-cache "$PAIR_BUILD_CACHE" --nodes 1 --ranks-per-node 8 \
   --job-id "$SLURM_JOB_ID" \
   --restart "$PAIR_ROOT/active-to14/rst/ACTUAL_CHECKPOINT.rst" \
-  --set time/tlim=18 --set time/nlim=-1
+  --set turb_driving/dedt=0.16 --set time/tlim=18 --set time/nlim=-1
 ```
 
-Repeat for passive using its own checkpoint and `--mode passive`. Replace the
+Repeat for passive in `passive-to18`, using its own checkpoint from
+`passive-continue-to14` and `--mode passive`. Replace the
 checkpoint placeholder with the actual completed file; its numeric filename
 is an output counter, not sufficient evidence of physical time. If additional
 interrupted segments were required, retain every segment in lineage order.
@@ -265,7 +330,7 @@ metadata. For example:
 mkdir "$PAIR_ROOT/active-union18" "$PAIR_ROOT/passive-union18"
 printf '%s\n' '{"schema_version":1,"segments":["../active-to14","../active-to18"]}' \
   > "$PAIR_ROOT/active-union18/benchmark_metadata.json"
-printf '%s\n' '{"schema_version":1,"segments":["../passive-to14","../passive-to18"]}' \
+printf '%s\n' '{"schema_version":1,"segments":["../passive-initial-to3","../passive-continue-to14","../passive-to18"]}' \
   > "$PAIR_ROOT/passive-union18/benchmark_metadata.json"
 ```
 
@@ -288,7 +353,7 @@ Use that environment for the comparison:
 
 ```bash
 python3 "$BENCH_SOURCE/scripts/compare_cgl_lf_physics_benchmark.py" \
-  "$PAIR_ROOT/active-to14" "$PAIR_ROOT/passive-to14" \
+  "$PAIR_ROOT/active-to14" "$PAIR_ROOT/passive-union14" \
   --time-start 6 --time-end 14 --block-duration 2 --near-width 0.05 \
   --output-dir "$PAIR_ROOT/comparison-6-14"
 ```
@@ -384,8 +449,11 @@ comparisons of magnetic-strength fluctuations, anisotropy and flow gradients.
 [Majeski, Kunz & Squire (2024)](https://arxiv.org/html/2405.02418v2) provide
 pressure-balance, gradient and spectral comparisons. These are scientific
 reference points, not pixel targets or numerical acceptance bands. In
-particular, the forcing geometry and the intentional total-box injection of
-0.64 here differ from the stated 0.32 total-box normalization in MKS24.
+particular, the forcing geometry still differs. The fresh pair prescribes total
+power `0.32` (`dedt=0.16` per volume), matching MKS24's stated total-power
+normalization. The earlier total-power `0.64` runs remain separately labeled
+historical experiments; neither their measurements nor their validation status
+transfer automatically to the fresh pair.
 
 Evaluate the diagnostic groups together, including achieved regime, numerical
 health, sampling and model differences. Label a comparison consistent,

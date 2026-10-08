@@ -84,11 +84,15 @@
     "bytes": 19386
   },
   "report.md": {
-    "sha256": "45cd1f1e563bda77af9166444bc19191867e1f5569e27aa533e8e2d7c3c41903",
-    "bytes": 12037
+    "sha256": "9506bde4f006c7398a7598597f95e4e8f02eadf0c0f276c1964be435ab982b0f",
+    "bytes": 19670
   },
   "restore_interrupted_history_inventory.py": {
     "sha256": "95593e9f0758d3ade3af80e7132e1f62a2ff1318b6b47749c1b137f51f1e8bba",
     "bytes": 7327
+  },
+  "startup-x-pdf-audit.json": {
+    "sha256": "50c0a7d528946e39a7a402dff9cbf60c4271291d071f1b8a2575a7fffe985ac8",
+    "bytes": 11059
   }
 }

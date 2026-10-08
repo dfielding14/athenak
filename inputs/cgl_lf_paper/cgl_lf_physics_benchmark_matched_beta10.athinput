@@ -101,8 +101,9 @@ projection_policy = solenoidal_compressive
 # and compressive innovation power: 2*s^2 = (1-s)^2, s = 1/(1+sqrt(2)).
 sol_fraction = 0.4142135623730951
 normalization = edot
-# Volume-averaged energy injection: volume = 2, so total power = 0.64.
-dedt = 0.32
+# Volume-averaged energy injection: volume = 2, so total power = 0.32.
+# Earlier interrupted runs used dedt=0.32; start this prescription from t=0.
+dedt = 0.16
 tcorr = 2.0
 dt_update = 0.01
 rseed = 271828
