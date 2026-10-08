@@ -474,6 +474,23 @@ existing admissibility checks, and heat-flux work and stage counts accumulate
 across chunks. A normal restart retains the input setting and cumulative LF
 diagnostics; it occurs after the completed outer cycle, not inside a chunk.
 
+Command-line overrides require the parameter to exist in the input or restart
+header. For a diagnostic comparison starting from an older checkpoint, supply
+the new key through a minimal input overlay, then retain that overlay with the
+command and original checkpoint:
+
+```ini
+<time>
+cgl_lf_max_chunk_ratio = 2
+```
+
+Use `athena -r checkpoint.rst -i chunk-overlay.athinput ...`; `-n` checks the
+merged parameters without evolving the state. The overlay is read after the
+restart parameters and before command-line overrides. Keep it limited to this
+key so inherited output schedules and restart metadata remain intact. A changed
+chunk ratio is an explicit numerical-method comparison, not an unchanged-settings
+production restart.
+
 Positive ratios currently require uniform periodic CGL-LF with RKL2, without
 other parabolic operators, shearing/orbital advection, or
 `sts_merge_half_sweeps`. Negative and nonfinite ratios are rejected. Both
