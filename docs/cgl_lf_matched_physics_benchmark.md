@@ -56,7 +56,22 @@ now disables those detailed q sums while retaining safe arithmetic, weighted
 fluxes, strict admissibility, and pressure/forcing-work recording. Historical
 inputs remain unchanged. A resumed run with a changed diagnostic mode requires
 an explicitly recorded override; do not relabel the old segment's settings.
-The compiler comparison remains outstanding before new production.
+The full-build compiler comparison and matched timing have now completed
+(jobs 5638165/5638232). The current corrected build reaches 203.2 million
+zone-cycles/s/node on the exact archived uniform scaling input versus 103.2
+million for the archived executable, partly because the corrected timestep
+bound reduces LF stages from 42 to 14 per outer step. The turbulent checkpoint
+still uses about 146 stages and measures 15.44 million with diagnostics off.
+Removing correctness flags gives only 4.9% on the equal-work uniform test and
+reproduces an incorrect minimum reduction, so retain those flags. The fresh
+corrected build matches all retained endpoint fields at snapshot precision.
+The user explicitly requires detailed LF diagnostics off; do not spend further
+work on full-mode diagnostic optimization or enable it for this benchmark.
+Chunk tuning and speculative kernel experiments have also been stopped at the
+user's request. No larger chunk setting or experimental kernel patch was
+adopted. The current task is a source and commit comparison against the exact
+pre-WO1 baseline, separating WO1, WO2, and later changes. The matched
+scientific run is still incomplete, and no simulation is currently running.
 See `matched/power032/lf-subcycling/README.md`, `comparison.json`,
 `continuation-submission.json`, and the retained qualification records.
 The commands below describe the original

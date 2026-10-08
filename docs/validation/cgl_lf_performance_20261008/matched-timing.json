@@ -1,0 +1,1197 @@
+{
+  "job_id": "5638232",
+  "status": "completed; inspect failures and correctness qualification",
+  "definitions": {
+    "headline": "Mean of two independent measured invocations, after one warmup invocation per binary; within-run cycles 5 through 20 for uniform, start+5 through start+25 for turbulent.",
+    "uniform": "Exact archived input, 2 nodes, 16 GPUs, 256^3 cells/GPU, no outputs; fast arithmetic, physical flux, strictness false are retained historical benchmark settings ONLY.",
+    "turbulent": "Identical native checkpoint, 1 node, 8 GPUs; safe arithmetic, diagnostics none, weighted flux, strictness true, cap 4, output dt=0. Strict checks and timing schedules are retained; no final field outputs, so this does not establish field accuracy.",
+    "profiles": "Separate profiled invocations excluded from headline throughput.",
+    "work": "One zone-cycle means one physical mesh cell advanced one outer timestep. Internal LF stages are additional work, not additional counted zone-cycles.",
+    "qualification": "Historical compiler options may have a known reduction defect. Throughput alone never qualifies those options for production."
+  },
+  "aggregate": {
+    "uniform": {
+      "old": {
+        "repeats": 2,
+        "values_zc_s_node": [
+          103279039.05827703,
+          103155306.41917855
+        ],
+        "mean_zc_s_node": 103217172.73872778,
+        "min_zc_s_node": 103155306.41917855,
+        "max_zc_s_node": 103279039.05827703,
+        "sample_stdev_zc_s_node": 87492.1881606432
+      },
+      "corrected": {
+        "repeats": 2,
+        "values_zc_s_node": [
+          202502157.52486333,
+          203832839.0558957
+        ],
+        "mean_zc_s_node": 203167498.29037952,
+        "min_zc_s_node": 202502157.52486333,
+        "max_zc_s_node": 203832839.0558957,
+        "sample_stdev_zc_s_node": 940933.9341926746
+      },
+      "historical": {
+        "repeats": 2,
+        "values_zc_s_node": [
+          213178732.63399893,
+          213199185.60831892
+        ],
+        "mean_zc_s_node": 213188959.12115893,
+        "min_zc_s_node": 213178732.63399893,
+        "max_zc_s_node": 213199185.60831892,
+        "sample_stdev_zc_s_node": 14462.43683710239
+      }
+    },
+    "turbulent": {
+      "corrected": {
+        "repeats": 2,
+        "values_zc_s_node": [
+          15305767.162900984,
+          15575783.58648875
+        ],
+        "mean_zc_s_node": 15440775.374694867,
+        "min_zc_s_node": 15305767.162900984,
+        "max_zc_s_node": 15575783.58648875,
+        "sample_stdev_zc_s_node": 190930.44415064825
+      },
+      "historical": {
+        "repeats": 2,
+        "values_zc_s_node": [
+          16847799.042899903,
+          16853022.141966574
+        ],
+        "mean_zc_s_node": 16850410.592433237,
+        "min_zc_s_node": 16847799.042899903,
+        "max_zc_s_node": 16853022.141966574,
+        "sample_stdev_zc_s_node": 3693.28876885218
+      }
+    }
+  },
+  "uniform_current_corrected_over_archived_throughput": 1.968349770678709,
+  "uniform_historical_flag_throughput_gain_fraction": 0.04932610242833291,
+  "turbulent_historical_flag_throughput_gain_fraction_confounded_by_changed_work": 0.09129303312374781,
+  "uniform_rhs_per_outer_step": {
+    "old": 42.0,
+    "corrected": 14.0,
+    "historical": 14.0
+  },
+  "turbulent_work_per_25_steps": {
+    "corrected": {
+      "logical_sweeps": 50,
+      "chunks": 745,
+      "rhs_evaluations": 3653,
+      "rhs_per_outer_step": 146.12
+    },
+    "historical": {
+      "logical_sweeps": 50,
+      "chunks": 709,
+      "rhs_evaluations": 3489,
+      "rhs_per_outer_step": 139.56
+    }
+  },
+  "profiles": {
+    "uniform-old-profile-0": {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/uniform-old-profile-0/run.log",
+      "solver_seconds": 1.316834,
+      "buckets": {
+        "heat_flux_total": {
+          "rank_mean_seconds": 0.5705631,
+          "rank_max_seconds": 0.580302,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.01381671
+        },
+        "heat_flux_precompute": {
+          "rank_mean_seconds": 0.04430323,
+          "rank_max_seconds": 0.04482563,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.001067277
+        },
+        "heat_flux_flux1": {
+          "rank_mean_seconds": 0.1592176,
+          "rank_max_seconds": 0.1604431,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.003820074
+        },
+        "heat_flux_flux2": {
+          "rank_mean_seconds": 0.1548674,
+          "rank_max_seconds": 0.1588993,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.003783318
+        },
+        "heat_flux_flux3": {
+          "rank_mean_seconds": 0.211485,
+          "rank_max_seconds": 0.2165851,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.005156789
+        },
+        "heat_flux_work_diagnostics": {
+          "rank_mean_seconds": 2.099631e-05,
+          "rank_max_seconds": 2.1779e-05,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 5.185476e-07
+        },
+        "timestep_reduction": {
+          "rank_mean_seconds": 0.00549262,
+          "rank_max_seconds": 0.005694686,
+          "calls_rank_mean": 3.0,
+          "calls_rank_max": 3.0,
+          "max_seconds_per_call": 0.001898229
+        },
+        "sweep_begin_conversion": {
+          "rank_mean_seconds": 0.002995891,
+          "rank_max_seconds": 0.003024189,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001512095
+        },
+        "sts_clear_flux": {
+          "rank_mean_seconds": 0.06463108,
+          "rank_max_seconds": 0.06490931,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.00154546
+        },
+        "sts_update_copies": {
+          "rank_mean_seconds": 0.03814716,
+          "rank_max_seconds": 0.03914359,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.0009319901
+        },
+        "sts_update_kernel": {
+          "rank_mean_seconds": 0.1051524,
+          "rank_max_seconds": 0.1073489,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.002555926
+        },
+        "primitive_refresh": {
+          "rank_mean_seconds": 0.105866,
+          "rank_max_seconds": 0.1067793,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.002542365
+        },
+        "admissibility": {
+          "rank_mean_seconds": 0.03749763,
+          "rank_max_seconds": 0.03780384,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 0.0009000915
+        },
+        "sweep_end_conversion": {
+          "rank_mean_seconds": 0.002874325,
+          "rank_max_seconds": 0.002909111,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001454555
+        },
+        "parabolic_init_recv": {
+          "rank_mean_seconds": 0.0002275512,
+          "rank_max_seconds": 0.00023236,
+          "calls_rank_mean": 42.0,
+          "calls_rank_max": 42.0,
+          "max_seconds_per_call": 5.532381e-06
+        },
+        "parabolic_send_u": {
+          "rank_mean_seconds": 0.05518845,
+          "rank_max_seconds": 0.05800183,
+          "calls_rank_mean": 45.0,
+          "calls_rank_max": 45.0,
+          "max_seconds_per_call": 0.00128893
+        },
+        "parabolic_recv_u": {
+          "rank_mean_seconds": 0.09203188,
+          "rank_max_seconds": 0.1030681,
+          "calls_rank_mean": 16876.5,
+          "calls_rank_max": 21232.0,
+          "max_seconds_per_call": 4.854376e-06
+        }
+      }
+    },
+    "uniform-corrected-profile-0": {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/uniform-corrected-profile-0/run.log",
+      "solver_seconds": 0.6751371,
+      "buckets": {
+        "heat_flux_total": {
+          "rank_mean_seconds": 0.24438,
+          "rank_max_seconds": 0.2504431,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.01788879
+        },
+        "heat_flux_precompute": {
+          "rank_mean_seconds": 0.002414579,
+          "rank_max_seconds": 0.002460518,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001230259
+        },
+        "heat_flux_work_diagnostics": {
+          "rank_mean_seconds": 7.264625e-06,
+          "rank_max_seconds": 7.747e-06,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 5.533571e-07
+        },
+        "timestep_reduction": {
+          "rank_mean_seconds": 0.09136742,
+          "rank_max_seconds": 0.09271117,
+          "calls_rank_mean": 4.0,
+          "calls_rank_max": 4.0,
+          "max_seconds_per_call": 0.02317779
+        },
+        "sweep_begin_conversion": {
+          "rank_mean_seconds": 0.003052887,
+          "rank_max_seconds": 0.003105347,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001552674
+        },
+        "sts_update_copies": {
+          "rank_mean_seconds": 0.01515789,
+          "rank_max_seconds": 0.01549374,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.001106696
+        },
+        "sts_update_kernel": {
+          "rank_mean_seconds": 0.03528441,
+          "rank_max_seconds": 0.03594816,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.002567726
+        },
+        "primitive_refresh": {
+          "rank_mean_seconds": 0.03058486,
+          "rank_max_seconds": 0.03157686,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.00225549
+        },
+        "admissibility": {
+          "rank_mean_seconds": 0.01244904,
+          "rank_max_seconds": 0.01254849,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.0008963209
+        },
+        "sweep_end_conversion": {
+          "rank_mean_seconds": 0.002950023,
+          "rank_max_seconds": 0.002977911,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001488955
+        },
+        "post_sweep_collisions": {
+          "rank_mean_seconds": 0.002070484,
+          "rank_max_seconds": 0.002085201,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001042601
+        },
+        "parabolic_init_recv": {
+          "rank_mean_seconds": 8.860538e-05,
+          "rank_max_seconds": 9.07e-05,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 6.478571e-06
+        },
+        "parabolic_send_u": {
+          "rank_mean_seconds": 0.02222405,
+          "rank_max_seconds": 0.02314537,
+          "calls_rank_mean": 17.0,
+          "calls_rank_max": 17.0,
+          "max_seconds_per_call": 0.001361492
+        },
+        "parabolic_recv_u": {
+          "rank_mean_seconds": 0.02393941,
+          "rank_max_seconds": 0.03603858,
+          "calls_rank_mean": 3605.5,
+          "calls_rank_max": 8903.0,
+          "max_seconds_per_call": 4.047914e-06
+        }
+      }
+    },
+    "uniform-historical-profile-0": {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/uniform-historical-profile-0/run.log",
+      "solver_seconds": 0.6404267,
+      "buckets": {
+        "heat_flux_total": {
+          "rank_mean_seconds": 0.1951364,
+          "rank_max_seconds": 0.1966549,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.01404678
+        },
+        "heat_flux_precompute": {
+          "rank_mean_seconds": 0.002408957,
+          "rank_max_seconds": 0.002438386,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001219193
+        },
+        "heat_flux_work_diagnostics": {
+          "rank_mean_seconds": 7.314563e-06,
+          "rank_max_seconds": 8.759e-06,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 6.256429e-07
+        },
+        "timestep_reduction": {
+          "rank_mean_seconds": 0.09483552,
+          "rank_max_seconds": 0.09625233,
+          "calls_rank_mean": 4.0,
+          "calls_rank_max": 4.0,
+          "max_seconds_per_call": 0.02406308
+        },
+        "sweep_begin_conversion": {
+          "rank_mean_seconds": 0.003037505,
+          "rank_max_seconds": 0.00307744,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.00153872
+        },
+        "sts_update_copies": {
+          "rank_mean_seconds": 0.01553943,
+          "rank_max_seconds": 0.01579749,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.001128392
+        },
+        "sts_update_kernel": {
+          "rank_mean_seconds": 0.03540353,
+          "rank_max_seconds": 0.03617968,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.002584263
+        },
+        "primitive_refresh": {
+          "rank_mean_seconds": 0.03256664,
+          "rank_max_seconds": 0.033453,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.0023895
+        },
+        "admissibility": {
+          "rank_mean_seconds": 0.01251214,
+          "rank_max_seconds": 0.01259618,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 0.0008997272
+        },
+        "sweep_end_conversion": {
+          "rank_mean_seconds": 0.002962755,
+          "rank_max_seconds": 0.002985976,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001492988
+        },
+        "post_sweep_collisions": {
+          "rank_mean_seconds": 0.002026538,
+          "rank_max_seconds": 0.002053548,
+          "calls_rank_mean": 2.0,
+          "calls_rank_max": 2.0,
+          "max_seconds_per_call": 0.001026774
+        },
+        "parabolic_init_recv": {
+          "rank_mean_seconds": 8.902056e-05,
+          "rank_max_seconds": 9.0602e-05,
+          "calls_rank_mean": 14.0,
+          "calls_rank_max": 14.0,
+          "max_seconds_per_call": 6.471571e-06
+        },
+        "parabolic_send_u": {
+          "rank_mean_seconds": 0.02290204,
+          "rank_max_seconds": 0.02399854,
+          "calls_rank_mean": 17.0,
+          "calls_rank_max": 17.0,
+          "max_seconds_per_call": 0.001411679
+        },
+        "parabolic_recv_u": {
+          "rank_mean_seconds": 0.02332186,
+          "rank_max_seconds": 0.0250705,
+          "calls_rank_mean": 3288.9,
+          "calls_rank_max": 3774.0,
+          "max_seconds_per_call": 6.642951e-06
+        }
+      }
+    },
+    "turbulent-corrected-profile-0": {
+      "log": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-corrected-profile-0/run.log",
+      "solver_seconds": 23.2018,
+      "buckets": {
+        "heat_flux_total": {
+          "rank_mean_seconds": 9.66615,
+          "rank_max_seconds": 10.18755,
+          "calls_rank_mean": 3653.0,
+          "calls_rank_max": 3653.0,
+          "max_seconds_per_call": 0.002788816
+        },
+        "heat_flux_precompute": {
+          "rank_mean_seconds": 0.008499758,
+          "rank_max_seconds": 0.008688822,
+          "calls_rank_mean": 50.0,
+          "calls_rank_max": 50.0,
+          "max_seconds_per_call": 0.0001737764
+        },
+        "heat_flux_work_diagnostics": {
+          "rank_mean_seconds": 0.001897731,
+          "rank_max_seconds": 0.001911864,
+          "calls_rank_mean": 3653.0,
+          "calls_rank_max": 3653.0,
+          "max_seconds_per_call": 5.233682e-07
+        },
+        "timestep_reduction": {
+          "rank_mean_seconds": 3.79982,
+          "rank_max_seconds": 3.845149,
+          "calls_rank_mean": 771.0,
+          "calls_rank_max": 771.0,
+          "max_seconds_per_call": 0.004987224
+        },
+        "sweep_begin_conversion": {
+          "rank_mean_seconds": 0.007231419,
+          "rank_max_seconds": 0.007413004,
+          "calls_rank_mean": 50.0,
+          "calls_rank_max": 50.0,
+          "max_seconds_per_call": 0.0001482601
+        },
+        "sts_update_copies": {
+          "rank_mean_seconds": 0.4642595,
+          "rank_max_seconds": 0.4694223,
+          "calls_rank_mean": 3653.0,
+          "calls_rank_max": 3653.0,
+          "max_seconds_per_call": 0.0001285032
+        },
+        "sts_update_kernel": {
+          "rank_mean_seconds": 1.363568,
+          "rank_max_seconds": 1.405121,
+          "calls_rank_mean": 3653.0,
+          "calls_rank_max": 3653.0,
+          "max_seconds_per_call": 0.0003846485
+        },
+        "primitive_refresh": {
+          "rank_mean_seconds": 1.180785,
+          "rank_max_seconds": 1.214259,
+          "calls_rank_mean": 3653.0,
+          "calls_rank_max": 3653.0,
+          "max_seconds_per_call": 0.0003324005
+        },
+        "admissibility": {
+          "rank_mean_seconds": 0.5747923,
+          "rank_max_seconds": 0.5873264,
+          "calls_rank_mean": 3753.0,
+          "calls_rank_max": 3753.0,
+          "max_seconds_per_call": 0.0001564952
+        },
+        "sweep_end_conversion": {
+          "rank_mean_seconds": 0.009543402,
+          "rank_max_seconds": 0.00985645,
+          "calls_rank_mean": 50.0,
+          "calls_rank_max": 50.0,
+          "max_seconds_per_call": 0.000197129
+        },
+        "post_sweep_collisions": {
+          "rank_mean_seconds": 0.08398329,
+          "rank_max_seconds": 0.1300952,
+          "calls_rank_mean": 50.0,
+          "calls_rank_max": 50.0,
+          "max_seconds_per_call": 0.002601904
+        },
+        "parabolic_init_recv": {
+          "rank_mean_seconds": 0.01128349,
+          "rank_max_seconds": 0.01141401,
+          "calls_rank_mean": 3653.0,
+          "calls_rank_max": 3653.0,
+          "max_seconds_per_call": 3.124559e-06
+        },
+        "parabolic_send_u": {
+          "rank_mean_seconds": 1.636504,
+          "rank_max_seconds": 1.681753,
+          "calls_rank_mean": 3729.0,
+          "calls_rank_max": 3729.0,
+          "max_seconds_per_call": 0.0004509931
+        },
+        "parabolic_recv_u": {
+          "rank_mean_seconds": 2.14423,
+          "rank_max_seconds": 2.53189,
+          "calls_rank_mean": 488534.8,
+          "calls_rank_max": 729299.0,
+          "max_seconds_per_call": 3.471677e-06
+        }
+      }
+    }
+  },
+  "uniform_step_derivation": {
+    "rho": 1,
+    "p_parallel": 0.6,
+    "p_perp": 0.6,
+    "Bz": 0.34641016151377546,
+    "cell_spacing": 0.00390625,
+    "chi_parallel": 0.1967278356507777,
+    "old_raw_dt": 1.2927156454519826e-05,
+    "old_reference_dt": 3.878146936355948e-06,
+    "new_raw_dt": 3.878146936355948e-05,
+    "new_reference_dt": 3.4903322427203535e-05,
+    "new_over_old_reference_dt": 9,
+    "same_outer_dt_logged": 0.0008734641,
+    "old_nstages_per_half_sweep": 21,
+    "new_nstages_per_half_sweep": 7,
+    "reason": "Old h^2/(6chi) times CFL .3; new aligned-field h^2/(2chi) times independent STS safety .9."
+  },
+  "endpoint_comparison": {
+    "scope": "Separate untimed 25-step endpoints; not a physical validation or long-run accuracy test",
+    "expected_cycle": 12090,
+    "cases": {
+      "retained_safe_none": {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/performance-audit/job-5637965/safe-none",
+        "snapshot": {
+          "time": 4.984607300153982,
+          "cycle": 12090,
+          "shape_zyx": [
+            384,
+            192,
+            192
+          ],
+          "lengths_xyz": [
+            1.0,
+            1.0,
+            2.0
+          ],
+          "cell_volume": 1.4128508391203703e-07,
+          "payload_dtype": "float32",
+          "files": [
+            {
+              "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/performance-audit/job-5637965/safe-none/bin/cgl_lf_matched_beta10.mhd_w_bcc.00023.bin",
+              "sha256": "d1e795df491558d3ab6918a5b7e65b51053e5166e1a75e067e4bc5e8b8e5d540",
+              "bytes": 509617033
+            }
+          ]
+        },
+        "cycle_matches_expected": true,
+        "all_fields_finite": true,
+        "pressure_minima": {
+          "eint": 3.3101038932800293,
+          "p_perp": 3.745718479156494
+        },
+        "health": {
+          "last_time": 4.984607300153982,
+          "rows": 1,
+          "failure_counters_zero": true,
+          "history": {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/performance-audit/job-5637965/safe-none/cgl_lf_matched_beta10.mhd.hst",
+            "sha256": "2492507cde2a0b4151332b72c72687b332010276458d043bc4e6a89b95b33b8c",
+            "bytes": 1405
+          },
+          "failure_counter_maxima": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          }
+        },
+        "status": "read"
+      },
+      "corrected": {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-corrected-endpoint-0",
+        "snapshot": {
+          "time": 4.984607300153982,
+          "cycle": 12090,
+          "shape_zyx": [
+            384,
+            192,
+            192
+          ],
+          "lengths_xyz": [
+            1.0,
+            1.0,
+            2.0
+          ],
+          "cell_volume": 1.4128508391203703e-07,
+          "payload_dtype": "float32",
+          "files": [
+            {
+              "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-corrected-endpoint-0/bin/cgl_lf_matched_beta10.mhd_w_bcc.00023.bin",
+              "sha256": "d1e795df491558d3ab6918a5b7e65b51053e5166e1a75e067e4bc5e8b8e5d540",
+              "bytes": 509617033
+            }
+          ]
+        },
+        "cycle_matches_expected": true,
+        "all_fields_finite": true,
+        "pressure_minima": {
+          "eint": 3.3101038932800293,
+          "p_perp": 3.745718479156494
+        },
+        "health": {
+          "last_time": 4.984607300153982,
+          "rows": 1,
+          "failure_counters_zero": true,
+          "history": {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-corrected-endpoint-0/cgl_lf_matched_beta10.mhd.hst",
+            "sha256": "2492507cde2a0b4151332b72c72687b332010276458d043bc4e6a89b95b33b8c",
+            "bytes": 1405
+          },
+          "failure_counter_maxima": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          }
+        },
+        "status": "read"
+      },
+      "historical": {
+        "directory": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-historical-endpoint-0",
+        "snapshot": {
+          "time": 4.984607300153982,
+          "cycle": 12090,
+          "shape_zyx": [
+            384,
+            192,
+            192
+          ],
+          "lengths_xyz": [
+            1.0,
+            1.0,
+            2.0
+          ],
+          "cell_volume": 1.4128508391203703e-07,
+          "payload_dtype": "float32",
+          "files": [
+            {
+              "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-historical-endpoint-0/bin/cgl_lf_matched_beta10.mhd_w_bcc.00023.bin",
+              "sha256": "35164234f4a9050d9f4c786dd4451abab3ce06878e54976363f13bdde666efa4",
+              "bytes": 509617033
+            }
+          ]
+        },
+        "cycle_matches_expected": true,
+        "all_fields_finite": true,
+        "pressure_minima": {
+          "eint": 3.310105800628662,
+          "p_perp": 3.745713710784912
+        },
+        "health": {
+          "last_time": 4.984607300153982,
+          "rows": 1,
+          "failure_counters_zero": true,
+          "history": {
+            "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/turbulent-historical-endpoint-0/cgl_lf_matched_beta10.mhd.hst",
+            "sha256": "5d881453bc80ad9fed242cca743f398d0b043c50fc7638483cc182b34f17b868",
+            "bytes": 1405
+          },
+          "failure_counter_maxima": {
+            "lf_dfloor": 0.0,
+            "lf_pfloor": 0.0,
+            "lf_nonfin": 0.0,
+            "lf_nonpos": 0.0
+          }
+        },
+        "status": "read"
+      }
+    },
+    "comparisons": {
+      "corrected_versus_retained_safe_none": {
+        "status": "compared",
+        "same_physical_endpoint": true,
+        "time_difference": 0.0,
+        "cycle_difference": 0,
+        "fields": {
+          "dens": {
+            "finite": true,
+            "min": 0.6075929999351501,
+            "max": 1.2737559080123901,
+            "mean": 0.9999999999927409,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "velx": {
+            "finite": true,
+            "min": -1.7987284660339355,
+            "max": 1.3795806169509888,
+            "mean": 0.005178836732877907,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "vely": {
+            "finite": true,
+            "min": -1.588680624961853,
+            "max": 1.898983359336853,
+            "mean": 0.0021294020627121257,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "velz": {
+            "finite": true,
+            "min": -1.5943291187286377,
+            "max": 1.4132249355316162,
+            "mean": -0.0001938004762587251,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "eint": {
+            "finite": true,
+            "min": 3.3101038932800293,
+            "max": 8.824067115783691,
+            "mean": 6.200720101072589,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "p_perp": {
+            "finite": true,
+            "min": 3.745718479156494,
+            "max": 8.694945335388184,
+            "mean": 6.272147555783552,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc1": {
+            "finite": true,
+            "min": -1.6600397825241089,
+            "max": 1.7602788209915161,
+            "mean": 3.94491345454304e-12,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc2": {
+            "finite": true,
+            "min": -1.2104828357696533,
+            "max": 1.3228667974472046,
+            "mean": -5.387327608196445e-12,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc3": {
+            "finite": true,
+            "min": 0.07098239660263062,
+            "max": 1.9637027978897095,
+            "mean": 1.0000000000036116,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          }
+        },
+        "all_stored_fields_exactly_equal": true
+      },
+      "historical_versus_retained_safe_none": {
+        "status": "compared",
+        "same_physical_endpoint": true,
+        "time_difference": 0.0,
+        "cycle_difference": 0,
+        "fields": {
+          "dens": {
+            "finite": true,
+            "min": 0.6075929999351501,
+            "max": 1.2737559080123901,
+            "mean": 0.9999999999927409,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "velx": {
+            "finite": true,
+            "min": -1.7987284660339355,
+            "max": 1.3795806169509888,
+            "mean": 0.005178836732877907,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "vely": {
+            "finite": true,
+            "min": -1.588680624961853,
+            "max": 1.898983359336853,
+            "mean": 0.0021294020627121257,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "velz": {
+            "finite": true,
+            "min": -1.5943291187286377,
+            "max": 1.4132249355316162,
+            "mean": -0.0001938004762587251,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "eint": {
+            "finite": true,
+            "min": 3.310105800628662,
+            "max": 8.829771995544434,
+            "mean": 6.200717522553094,
+            "rms_difference": 0.0016587996711920551,
+            "rms_relative_difference": 0.00026472147355857114,
+            "max_absolute_difference": 0.17888307571411133,
+            "max_local_relative_difference_on_nonzero_reference": 0.03362924595618951,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": false
+          },
+          "p_perp": {
+            "finite": true,
+            "min": 3.745713710784912,
+            "max": 8.696013450622559,
+            "mean": 6.272148687774478,
+            "rms_difference": 0.0015763094860608178,
+            "rms_relative_difference": 0.00025001132971799224,
+            "max_absolute_difference": 0.17888307571411133,
+            "max_local_relative_difference_on_nonzero_reference": 0.02720327531365037,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": false
+          },
+          "bcc1": {
+            "finite": true,
+            "min": -1.6600397825241089,
+            "max": 1.7602788209915161,
+            "mean": 3.94491345454304e-12,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc2": {
+            "finite": true,
+            "min": -1.2104828357696533,
+            "max": 1.3228667974472046,
+            "mean": -5.387327608196445e-12,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc3": {
+            "finite": true,
+            "min": 0.07098239660263062,
+            "max": 1.9637027978897095,
+            "mean": 1.0000000000036116,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          }
+        },
+        "all_stored_fields_exactly_equal": false
+      },
+      "historical_versus_corrected": {
+        "status": "compared",
+        "same_physical_endpoint": true,
+        "time_difference": 0.0,
+        "cycle_difference": 0,
+        "fields": {
+          "dens": {
+            "finite": true,
+            "min": 0.6075929999351501,
+            "max": 1.2737559080123901,
+            "mean": 0.9999999999927409,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "velx": {
+            "finite": true,
+            "min": -1.7987284660339355,
+            "max": 1.3795806169509888,
+            "mean": 0.005178836732877907,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "vely": {
+            "finite": true,
+            "min": -1.588680624961853,
+            "max": 1.898983359336853,
+            "mean": 0.0021294020627121257,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "velz": {
+            "finite": true,
+            "min": -1.5943291187286377,
+            "max": 1.4132249355316162,
+            "mean": -0.0001938004762587251,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "eint": {
+            "finite": true,
+            "min": 3.310105800628662,
+            "max": 8.829771995544434,
+            "mean": 6.200717522553094,
+            "rms_difference": 0.0016587996711920551,
+            "rms_relative_difference": 0.00026472147355857114,
+            "max_absolute_difference": 0.17888307571411133,
+            "max_local_relative_difference_on_nonzero_reference": 0.03362924595618951,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": false
+          },
+          "p_perp": {
+            "finite": true,
+            "min": 3.745713710784912,
+            "max": 8.696013450622559,
+            "mean": 6.272148687774478,
+            "rms_difference": 0.0015763094860608178,
+            "rms_relative_difference": 0.00025001132971799224,
+            "max_absolute_difference": 0.17888307571411133,
+            "max_local_relative_difference_on_nonzero_reference": 0.02720327531365037,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": false
+          },
+          "bcc1": {
+            "finite": true,
+            "min": -1.6600397825241089,
+            "max": 1.7602788209915161,
+            "mean": 3.94491345454304e-12,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc2": {
+            "finite": true,
+            "min": -1.2104828357696533,
+            "max": 1.3228667974472046,
+            "mean": -5.387327608196445e-12,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          },
+          "bcc3": {
+            "finite": true,
+            "min": 0.07098239660263062,
+            "max": 1.9637027978897095,
+            "mean": 1.0000000000036116,
+            "rms_difference": 0.0,
+            "rms_relative_difference": 0.0,
+            "max_absolute_difference": 0.0,
+            "max_local_relative_difference_on_nonzero_reference": 0.0,
+            "zero_reference_cells": 0,
+            "zero_reference_cells_with_nonzero_difference": 0,
+            "exact_stored_values_equal": true
+          }
+        },
+        "all_stored_fields_exactly_equal": false
+      }
+    },
+    "issues": [],
+    "precision_limit": "Exact agreement only means agreement at retained snapshot precision. Relative errors near zero can be misleading; zero reference cells are counted explicitly.",
+    "definitions": {
+      "eint": "p_parallel",
+      "p_perp": "p_perp",
+      "rms_relative_difference": "sqrt(mean((value-reference)^2))/sqrt(mean(reference^2))",
+      "max_local_relative_difference_on_nonzero_reference": "max(abs(value-reference)/abs(reference)) over nonzero reference cells"
+    },
+    "script": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/compare_endpoints.py",
+      "sha256": "3a9a608ecafc7609c60c58fd534811d9365abea3bdee79a37f85228619216c65",
+      "bytes": 5713
+    },
+    "comparison_helper": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/performance-audit/compare_fields.py",
+      "sha256": "50e46198243e11e1fbd1fa314c2c5a6199fab22400898ceda783cbec1ca42375",
+      "bytes": 5334
+    },
+    "reader": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/source/scripts/analyze_cgl_lf_physics_benchmark.py",
+      "sha256": "51027ef8df4d09795aaaf6f875e27b0b15619262d71d01cde345509fc98ca166",
+      "bytes": 107580
+    },
+    "slurm_job_id": "5638232",
+    "status": "complete; requires review"
+  },
+  "binaries": {
+    "old": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/build/frontier-hip-f2d0a25978e4-cpe25.09-cce20-rocm6.4.2/src/athena",
+      "sha256": "3166a908d95d99d5cc7230ffba968fc75d9ea3e638aee0fbeeaa065e38042470",
+      "source_revision": "f2d0a25978e4fad9beae6874f279148c0460533b",
+      "qualification": "Historical benchmark only",
+      "revision_evidence": "Commit and matching executable SHA recorded in archived input",
+      "build_artifacts": {
+        "CMakeCache.txt": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/build/frontier-hip-f2d0a25978e4-cpe25.09-cce20-rocm6.4.2/CMakeCache.txt",
+          "sha256": "aff4ba9f09c56d653d659cd7710ef77c89fdc3e205f9358639ee6dc8a62780fa"
+        },
+        "src/CMakeFiles/athena.dir/flags.make": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/build/frontier-hip-f2d0a25978e4-cpe25.09-cce20-rocm6.4.2/src/CMakeFiles/athena.dir/flags.make",
+          "sha256": "e4cb63d330197f04da72a52ac052a92bbc725a4163a5866e235084faf1aeef94"
+        },
+        "src/CMakeFiles/athena.dir/link.txt": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/build/frontier-hip-f2d0a25978e4-cpe25.09-cce20-rocm6.4.2/src/CMakeFiles/athena.dir/link.txt",
+          "sha256": "1a23acf9772935dd4f91962fe15b803751b32bee3b3f6976452ffcb9a6f68bb6"
+        },
+        "config.hpp": {
+          "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/build/frontier-hip-f2d0a25978e4-cpe25.09-cce20-rocm6.4.2/config.hpp",
+          "sha256": "aa8a435cbb2f93eb67b7fe46f2d17ed0023f5dc36153968c78f8a279c44acbfe"
+        }
+      }
+    },
+    "corrected": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/corrected/build/src/athena",
+      "sha256": "8ffec7131d3a151d1a3b48ddd1bba40bf097fcf82dd7b2d1bce1bf0c17c04cfb",
+      "source_revision": "4af7c9a55cd5c5621f7d8a337c1ab132e4440968",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/corrected/manifest.json",
+      "manifest_sha256": "1cba9266d3e70a2fa6b9b7a6f49b8dd92cb1ac5124f59e717890edc06250b0c4",
+      "qualification": "reduction check passed; further correctness qualification required",
+      "production_qualified": false,
+      "reduction_check": {
+        "cycle_dt": 3.825989667318296e-05,
+        "dt_matches_analytic": true,
+        "dt_ratio": 1.0,
+        "expected_cycle_dt": 3.825989667318296e-05,
+        "stiffness_left_high": 1,
+        "stiffness_left_low": 100.5,
+        "stiffness_right_high": 1,
+        "stiffness_right_low": 100.5
+      }
+    },
+    "historical": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/historical/build/src/athena",
+      "sha256": "4ef60862e8e35cf9f646f0415e9ad9e99689e63def8658389dea66e9ccbd3566",
+      "source_revision": "4af7c9a55cd5c5621f7d8a337c1ab132e4440968",
+      "manifest_path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/historical/manifest.json",
+      "manifest_sha256": "f53bd6aa09704c14a3e92a0a6ff39cd102e2cf8f7474887df5a77b553adff366",
+      "qualification": "reduction check FAILED",
+      "production_qualified": false,
+      "reduction_check": {
+        "cycle_dt": 0.003845119615654887,
+        "dt_matches_analytic": false,
+        "dt_ratio": 100.5,
+        "expected_cycle_dt": 3.825989667318296e-05,
+        "stiffness_left_high": 1,
+        "stiffness_left_low": 100.5,
+        "stiffness_right_high": 1,
+        "stiffness_right_low": 100.5
+      }
+    }
+  },
+  "cost": {
+    "elapsed_seconds": 469,
+    "allocated_nodes": 2,
+    "node_hours": 0.26055555555555554,
+    "evidence": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/sacct-5638232.txt"
+  },
+  "provenance": {
+    "summary": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison/timing/job-5638232/summary.json",
+    "script_sha256": "4f394c33aa4e09c821ab79ea406d4dff55f867dced3074608f7faab726eff9dc",
+    "archived_input": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/scaling/current_consistent_primary_f2d0a259/inputs/cglws_lf_sts_0002n.athinput",
+      "sha256": "d1e06b2a9cc1b9d9b1dcea489211d2fa13a8cf386ca37cec34491fc5320ea763"
+    },
+    "restart": {
+      "path": "/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/passive-chunk4-to5/rst/cgl_lf_matched_beta10.00007.rst",
+      "sha256": "790affbd140ba56e980c1373d4cbb32dc6f49445ffa3043b9db72ca62892c8c8",
+      "cycle": 12065,
+      "time": 4.976016897678366,
+      "dt": 0.00034362892971714936
+    },
+    "runtime_sha256": "f8e9c3e942ba86f9d493d980b8f094ff8171ae646f4dbd89391f4d25e6afa5a0",
+    "source_manifest_sha256": "0fccf8cb9e36cc1759674603cefaad9b5e3892f2acc6609c52313bb6edcaaf5b"
+  }
+}
