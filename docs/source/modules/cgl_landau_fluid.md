@@ -61,7 +61,9 @@ This lifecycle prevents ordinary hyperbolic fluxes, output, and restart state
 from interpreting magnetic moment as pressure anisotropy.
 
 Collision rates are applied once per cycle with the full outer timestep.
-Without split LF, rates and walls follow RK. With split LF, the order is
+Without split LF, rates and walls follow RK. If another STS process is enabled,
+walls also follow each parabolic half-sweep, without repeating collision rates.
+With split LF, the order is
 `L(dt/2) W H(dt) W L(dt/2) C(dt) W`, where `W` applies walls and `C` applies
 background and finite-rate limiter relaxation. A skipped LF sweep still receives
 its wall/rate checkpoint. After regridding, walls use the final refreshed field

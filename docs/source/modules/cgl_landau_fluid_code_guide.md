@@ -87,14 +87,25 @@ For STS LF transport, MHD owns the split lifecycle:
    and refreshes both cached pressures from the stored E/A state.
 
 `CGLCollisions` applies walls after RK for every CGL configuration. Without
-split LF it also applies rates with the full cycle timestep. With split LF,
-`STSPostSweepCGLCollisions` applies walls after the pre-sweep and full-step
-rates plus walls after the post-sweep, after A has been restored. The driver
-also invokes the post checkpoint when the post-sweep has no stages. Coarse
-state is refreshed after these updates. The post-RK hook refreshes the local
+split LF it also applies rates with the full cycle timestep.
+`STSPostSweepCGLCollisions` applies walls after every CGL parabolic sweep.
+For non-LF STS processes, such as viscosity or resistivity, both sweep
+checkpoints use `walls_only`; rates remain in the post-RK hook. With split LF,
+A is restored first, and the post-sweep checkpoint applies full-step rates
+before walls. The driver also invokes that LF post checkpoint when the
+post-sweep has no stages. Each sweep checkpoint follows the final field and
+primitive refresh. Both collision hooks refresh coarse state after their
+updates, and the post-sweep timestep estimate uses the corrected state.
+The post-RK hook refreshes the local
 timestep from the corrected state before the driver's global minimum.
 It is the sole post-RK CGL timestep owner; ordinary MHD retains its last-stage
-`NewTimeStep` task. Initialization, regridding, and post-LF refreshes remain.
+`NewTimeStep` task. Initialization, regridding, and post-parabolic refreshes remain.
+
+The scalar rate map retains both the target anisotropy and its pressure exchange.
+`expm1` preserves tiny background kicks; the initially smaller pressure receives
+the exchange directly, and the larger pressure is recovered from the target.
+This avoids small-pressure cancellation while retaining the monotone stiff limit.
+The grid operator still changes only conserved A and refreshes pressures from E/A.
 
 `RecordAdmissibility` counts each unprojected LF stage. Intermediate wall
 crossings are diagnostic; invalid pressures and floors remain fatal in strict

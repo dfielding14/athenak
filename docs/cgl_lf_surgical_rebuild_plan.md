@@ -182,7 +182,10 @@ encoding correction here (`71ad25ebc`, regression `4cd46a131`), rather than
 reintroducing its known restart failure.
 The call sites choose the mode: no LF split means full rates/walls after RK;
 split LF means walls after the pre-sweep and RK, then full rates/walls after
-the post-sweep, with A restored before those calls. After the final AMR field
+the post-sweep, with A restored before those calls. Without LF, other enabled
+STS processes also receive walls-only checkpoints after both parabolic sweeps;
+rates remain once after RK. These checkpoints follow the final field/primitive
+refresh and precede the post-sweep timestep estimate. After the final AMR field
 refresh, apply walls and refresh the coarse representation. Do not retain an
 obsolete soft-threshold projection in C2P or AMR alongside the new finite-rate map.
 Honor the specified default thresholds (firehose 2, mirror 1), explicit legacy
@@ -517,6 +520,7 @@ from the base and needed for the current piece.
 | 2 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_c2p_pressure_floor_energy_consistency` | Existing checker, extended progressively; double and focused float |
 | 3, 5 | `L::test_cgl_reconstruction_pressure_peak`; `L::test_cgl_fofc_live_flux_mutation`; `cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded` | `inputs/unit_tests/cgl_reconstruction_{ppmx,wenoz}.athinput`, built-in FOFC pgen, preserved B4 strict expected failures |
 | 4 | `L::test_cgl_collision_rates_once_per_cycle_with_and_without_lf`; `L::test_cgl_lf_face_collision_rates_add`; `A::test_limiter_stress_matches_cellwise_relaxation`; `A::test_limiter_stress_matches_wall_ordering` | `cgl_collision_once.athinput` and existing mirror/firehose unit inputs; independent rate/cadence oracles |
+| 4 | `L::test_cgl_sts_viscosity_finishes_with_admissible_pressures` | No-LF viscous heating from the fluid-firehose wall; final admissibility, shear decay and conserved totals. The cadence selector also checks that non-LF STS checkpoints add no rate kicks |
 | 4 | `L::test_cgl_collision_refreshes_next_timestep_from_relaxed_state`; `L::test_cgl_lf_restart_with_finite_collision_preserves_corrected_split`; `cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh` | Inputs under `inputs/tests/`; actual restart and post-regrid state checks |
 | 4 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_production_wall_encoding_survives_independent_c2p` | Supplied HIP wall binary; real collision kernel followed by independent C2P; serialized fixture bytes do not replace a driver restart |
 | 6, 7 | `L::test_cgl_lf_field_reversal_stability`; `L::test_cgl_lf_hotspot_preserves_minima_and_energy`; `cgl/test_cgl_lf_oblique_decay_cpu.py::test_cgl_lf_oblique_decay_agrees_across_blocks` | Reversal 1D/2D, 30/45-degree hotspot, global oblique decay; start safe/none |
