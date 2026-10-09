@@ -15,6 +15,9 @@ passive model is a separate scientific deliverable. Optimizations are candidates
 not a list that must all be implemented. Keep an existing implementation when
 its independent check passes; add a test only for an uncovered failure or changed
 contract. Reuse retained tests without importing the surrounding campaign tools.
+The scientific acceptance target is time to a specified physical endpoint at
+demonstrated accuracy. Zone-cycles/s and cost per LF evaluation explain that
+result; neither alone establishes a faster usable solver.
 
 Read the numbered pieces for source scope, the test map for concrete selectors,
 and the execution cadence for when to run them. In particular, the gates below
@@ -88,9 +91,27 @@ Dependency order: establish 0, then local repairs 1-3; 4 owns the coherent
 collision model; 5-8 correct face transport; 9-10 qualify its controller; 11
 corrects forcing; 12 qualifies refinement. Piece 11 can proceed after 4 without
 waiting for LF tuning. Piece 13 follows the relevant corrected reference; 14
-does not depend on optional optimizations. Piece 15 is conditional on the passive
-failure. Keep separate commits at the performance suspects, even when their
-functional checks share a single GPU allocation.
+does not depend on optional optimizations or multilevel work in 12. The uniform
+active milestone is a usable stopping point; add refinement or passive support
+when that model is needed. Nonlinear temporal qualification applies to both
+models; the chunk implementation in 15 remains conditional on demonstrated need.
+Keep separate commits at the performance suspects, even when their functional
+checks share a single GPU allocation.
+
+Keep the representation changes visible at existing operator boundaries:
+
+| Model / operator | IEN | IAN | Quantities held fixed during LF |
+| --- | --- | --- | --- |
+| Active, ordinary evolution | Total energy E | A | — |
+| Active, LF sweep | Total energy E | Magnetic moment density | Density, momentum, B; E changes through heat flux |
+| Passive, ordinary evolution | J | A | — |
+| Passive, LF sweep | Thermal energy U | Magnetic moment density | Density, momentum, B; U changes through heat flux |
+
+Reuse the current EOS conversions, face helpers, task lists and STS controller.
+Keep exceptional arithmetic beside the formula it protects. Do not add a generic
+state wrapper, representation dispatcher, parallel scheduler or new cache manager
+to express this table. Comments should explain the invariant or dependency,
+not narrate the loop. Keep physical-oracle tests independent of shared code.
 
 ## Implementation sequence
 
@@ -125,10 +146,15 @@ Gate: invalid and unsupported inputs fail clearly; valid active cases are unchan
 Scope: `SingleC2P_CGLMHD` and `SingleC2P_CGLMHDFromMagneticMoment` in
 `src/eos/ideal_c2p_mhd.hpp`; repaired-state persistence in
 `CGLMHD::ConsToPrim`, `CGLMagneticMomentToPrim`, and the lightweight refresh.
-Preserve pressure anisotropy under density floors, enforce the magnetization
-ceiling through the density floor in both A and magnetic-moment decoders, and
-make repaired states representable and idempotent. Do not redo the already-correct
-perpendicular energy factor. Gate: analytic pressure ratios and energy identity,
+For otherwise valid magnetized states, preserve the pressure ratio under density
+floors in the A decoder. In the magnetic-moment decoder, retain the accepted
+different density repair: at fixed B and without further pressure-floor repair,
+preserve magnetic moment (thus perpendicular pressure), momentum and total
+energy; the changed kinetic energy changes parallel pressure. Do not impose
+ratio preservation on that representation. Enforce the magnetization ceiling
+through the density floor in both decoders, and make repaired states representable
+and idempotent. Do not redo the already-correct perpendicular energy factor.
+Gate: analytic pressure ratios and energy identity,
 repeated C2P with no second change, changed A persisted, focused double/float
 checks. A focused float test does not establish whole-application float support.
 Extend the existing floor fixture selectively: the later complete fixture also
@@ -167,8 +193,15 @@ Gate: analytic background relaxation with/without LF; an independent finite-rate
 map distinguishing one full kick from two half kicks; threshold equality and
 additive-rate checks; invariant E/momentum/B; unchanged A on no-op; wall
 idempotence; a separate production C2P after collision encoding; real restart.
-Measure added full-domain passes and timestep refreshes. Remove a superseded
-refresh only in a separate equivalence-checked optimization.
+Give the post-RK timestep one owner. The newer reference registers the ordinary
+last-stage `MHD::NewTimeStep` and then recomputes it in `CGLCollisions`, before
+the driver consumes the budget. Once the unconditional post-wall CGL hook is
+installed, omit only the redundant CGL task registration; keep `NewTimeStep`
+callable for initialization and regridding. Keep the post-LF refresh and global
+post-RK minimum.
+This small dependent deletion can follow 4 immediately; it need not wait for 13.
+Use existing heated/wall/restart checks and call counts to verify the ownership,
+including zero rates and no LF. Ordinary MHD keeps its last-stage task.
 
 **5. Restore the small weak-field face-transport correction.**
 Scope: HLLE/LLF face helpers and their direct/evolution fixtures (`7d1f79557`).
@@ -204,9 +237,14 @@ and logarithmic paths, `ChiPerp` reference consumers and associated method docs
 was completed in 4; do not reimplement it here. Use the intended $2\nu_{\rm eff}$
 perpendicular response. Gate: collisionless identity, strong-collision limit
 $\chi_\perp\nu/c_\parallel^2\to1$, and resolved coupled decay over an e-folding.
-Keep pieces 6-8 at a common conservative explicit-reference timestep until
-piece 9 qualifies the final controller. Do not use unrestricted turbulence runs
-at these intermediate commits to attribute a kernel performance regression.
+Keep pieces 6-8 at a common conservative reference timestep until piece 9
+qualifies the final controller. For their timing screen, enlarge the existing
+kinematic `cgl_lf_rotated_decay.athinput` with an oblique field and background
+coefficient: zero velocity and fixed density/B keep the pre-9 budget independent
+of the evolving pressure. Verify actual dt and RHS counts; selecting explicit
+integration alone does not fix dt, and there is no general fixed-dt input at the
+base. This is a short patch screen, not another benchmark campaign. Do not use
+unrestricted turbulence before the forcing correction to attribute kernel cost.
 
 **9. Implement the LF bound for the final stencil.**
 Scope: timestep calculation/callers, existing post-RK refresh, and MPI reduction.
@@ -230,6 +268,10 @@ The original coefficient-five proposal underbounded the actual VL4 stencil.
 Retained JSON matrices establish old results, not a rerunnable independent test;
 recover the actual checker or add one compact independent row/Jacobian check if
 the reusable runtime fixtures do not cover the adapted mathematics.
+In that same checker, retain real/imaginary eigenvalues and RKL amplification
+at the selected step, not just spectral radius versus row norm. Interpret growth
+against the explicit reference; a positive or nonnormal frozen operator is not
+automatically a timestep bug. Do not turn this into another parameter campaign.
 
 **10. Separate STS safety from advective CFL.**
 Only after piece 9 passes, add the parameter in `mesh.hpp`, its fresh/restart
@@ -288,7 +330,11 @@ floor counters, and the final full halo. Cache density/B only while frozen;
 invalidate at existing sweep boundaries. For compact exchange, receive sizes,
 packing, unpacking and call-site offsets/counts must land together. A simple
 deletion can be worthwhile even when timing is within noise; a large new kernel
-or cache mechanism needs a repeatable benefit on the target diagnostic-free run.
+or cache mechanism needs a repeatable benefit on the target with q diagnostics off.
+Start with the existing non-detailed profile of the corrected target. Optimize
+the dominant recurring work; do not implement every historical optimization in
+the listed order. In particular, reducing bound cost at the expense of extra LF
+evaluations can make the whole calculation slower.
 
 **14. Add passive thermodynamics as a separate model series.**
 Reuse the physical design of `a2d994a3a` and the later decoding correction
@@ -312,10 +358,13 @@ After model qualification, profile before considering narrower thermal
 reconstruction or a cheaper wall path. An eager isotropic fallback and bisection
 are candidates for simplification, not reasons to alter the thermal model.
 
-**15. Qualify nonlinear LF time integration before selecting a chunk cap.**
-If the corrected passive target still exhibits the retained depleted-pressure
-failure, use `4af7c9a55` as a small implementation reference. Hold the outer step,
-forcing and collision cadence fixed; change only LF substeps within each sweep.
+**15. Add LF chunking only if nonlinear accuracy or positivity requires it.**
+The active/passive milestones below first qualify temporal accuracy without
+requiring a new integrator feature. If either target needs smaller LF intervals
+at a fixed outer step, use `4af7c9a55` as a small implementation reference;
+the retained passive depleted-pressure failure is the known motivating case.
+Hold the outer step, forcing and collision cadence fixed; change only LF substeps
+within each sweep.
 Gate: actual failing-state reproduction and timestep refinement, worst-cell
 pressure differences as well as norms, energy and smooth temporal order. Recorded
 positive chunked runs still differed locally by about 14%; cap 4 is not an
@@ -334,14 +383,32 @@ that numerical limitation instead of silently lowering forcing or changing walls
 
 - LF inflow/user boundaries: implement only when needed, using `738810c88` and
   independent uniform-state/callback tests across all newly supported paths.
-- Directional fusion: consider after profiling the corrected diagnostic-free
-  workload. Retain only a measured gain with one readable face-arithmetic
+- Directional fusion: consider after profiling the corrected workload with q
+  diagnostics off. Retain only a measured gain with one readable face-arithmetic
   implementation; do not copy the large duplicate fused kernel by default.
 - Half-sweep merging, entropy-variable fluxes, A-to-Q reformulation, new limiter
   models, symmetric collision splitting, and broad float portability are outside
   this reconstruction. No speculative runtime switches or analysis framework.
 - Leave unrelated cleanup and the large evidence archive on the reference branch.
   Bring across only the fixture, checker and short derivation needed for a change.
+
+One conditional controller simplification deserves a note, not an implementation
+commit yet. The VL4 transverse derivative envelope for finite slopes is bounded
+by $\Gamma=8$. If the bound remains a measured bottleneck, compare a scratch
+implementation using 8 in the same coupled CT/density/grad-B rows against the
+slope-dependent bound. It can remove the timestep's two temperature scratch
+reads/fill and derivative arithmetic, but must preserve fresh B and fail-closed
+exceptional-state handling. For constant density/B and frozen uniform
+$\chi_\parallel$, isotropic pressure, a 45-degree field on a square 2D grid and
+equal nonzero slopes, the parallel row increases from $6\chi_\parallel/h^2$ to
+$20\chi_\parallel/h^2$, potentially about 1.83 times as many stages asymptotically;
+aligned fields have no transverse penalty. This changes the controller, so use
+9-10's accuracy/work checks, not 13's bitwise-equivalence claim. Judge actual odd
+stage counts and physical-time cost at matched accuracy. Retain only a clear
+overall benefit and one implementation, with no new runtime mode. This is a
+valid conservative alternative, unlike the rejected secant estimate, but is
+not the initial controller choice. An early zero-normal-B shortcut is also
+deferred: it must not bypass the current rejection of invalid face sound speeds.
 
 ## Testing cadence
 
@@ -375,6 +442,26 @@ and a resolved active turbulence case with nonzero LF work. Run an actual HIP
 wall-encoding fixture; CPU scalar helpers cannot substitute for it. Run the
 small safe/fast and diagnostic/profile branch checks once after all face changes,
 not after each constant edit. Production timings keep detailed q diagnostics off.
+Add one short nonlinear temporal-refinement comparison using the existing
+64-by-64 hotspot with `lf_coefficient_mode=local`, kinematic/advect evolution,
+zero velocity and no forcing/collisions. Compare full-precision parallel and
+perpendicular pressures on the same grid and physical endpoint across at least
+three decreasing `sts_max_dt_ratio` values; 1, 0.5, 0.25, with 0.125 as a finer
+reference if needed, is a starting ladder, not prevalidated accuracy. Confirm the
+actual steps and RHS counts, preserve the existing minima/conservation checks
+and its at-least-five nominal diffusion-time duration (`tlim=0.201` in the input).
+Report worst-cell absolute/relative and thermal-energy-scaled errors as well as
+norms, and require decreasing temporal error. This adds an assertion to the
+existing fixture, not a new pgen or chunk feature. It checks nonlinear LF and
+representation conversions; it does not certify turbulent threshold switching.
+
+At this milestone, compare once against a qualified executable from `2afaa0fa1`
+with the same active physics/settings, merging and chunking off. Reuse a verified
+binary or make one additional build, not another full validation matrix. The
+pre-WO1 controls locate historical costs; this corrected reference answers
+whether the smaller reconstruction improves on the newer solver. Use physical
+endpoint checks for intentional arithmetic differences. Exact equivalence of
+each optimization remains a comparison with its immediate rebuilt parent.
 
 **Mesh milestone:** after 12, cover both physical-corner cases, all six retained
 conservation parameters, actual regrid/restart, repair accounting and shearing.
@@ -387,8 +474,24 @@ not prevent independent uniform-grid work while an unrelated mesh issue is diagn
 then run the six existing groups once on HIP, including all supported
 reconstructors. Check forced identity/restart on multiple ranks. Do not repeat
 the historic hundreds-of-application CPU/HIP/MPI cross-product after each edit.
-Piece 15 qualifies the retained passive failure separately; a small smooth test
-or a clean termination alone does not establish turbulent accuracy.
+Require a short nonlinear temporal comparison in the supported passive model;
+reuse the smooth refinement and retained depleted-pressure state as applicable.
+Keep forcing and rate cadence matched for an LF-only comparison. Reducing the
+outer timestep in a forced run changes that composition and is not an isolated
+LF refinement. Piece 15 is implemented only when needed to refine LF intervals
+independently; a small smooth test or clean termination does not establish
+turbulent accuracy. Do not relabel the active kinematic fixture as a passive
+test: the current passive guard requires dynamic evolution.
+
+For these scientific milestones, read the existing LF floor/invalid counters,
+endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
+strict LF admissibility still counts and rejects invalid/floor-repaired stages.
+The event log covers repair activity outside LF. Investigate changed or dominant
+repair activity before treating the result as accurate physics, without imposing
+a universal zero-repair criterion on every turbulent case. Counts may include
+ghosts and repeated refreshes; they are not distinct-cell fractions or an energy
+budget. Read these in functional runs; add no hot-path instrumentation or new
+logging system.
 
 Use inherited scientific tolerances unless the changed equation requires a new
 analytic expectation. Final-reference tests sometimes hard-code safety 0.9,
@@ -469,6 +572,15 @@ input; account for `ATHENAK_CGL_LF_*` environment overrides. Hold reconstruction
 CFL, limits, forcing, block shape and ranks/nodes fixed unless they are the
 explicit change under study. Historical fast/physical/non-strict runs remain
 separately labeled historical controls. Do not optimize full q diagnostics.
+Freeze the other diagnostic settings explicitly too: the nonzero research target
+has both `mhd/cgl_lf_record_pressure_work=true` and
+`turb_driving/record_injected_work=true`. Keep these for target-workload timings.
+Q diagnostics off and output writers removed do not disable their traction
+storage, stage reductions, or forcing-energy global reductions. An optional
+false/false timing is a separately labeled core-cost control, never a replacement
+for the research result. The injected-work flag is validated in restart metadata;
+do not toggle it on a resumed checkpoint. Construct any alternate control from
+the same initial state with its diagnostic settings fixed from the start.
 
 Use existing cycle/time/elapsed stdout. Time the same completed-cycle interval
 after warmup, without output inside it, at fixed diagnostic frequency. For an
@@ -480,7 +592,17 @@ number. Do not run competing jobs concurrently during performance measurement.
 
 Report zone-cycles/s/node, LF RHS evaluations/cycle, elapsed/physical-time advanced,
 and whole-step elapsed/RHS. The last metric is amortized total cost, not pure LF
-kernel time. Profile kernels separately because profiling fences perturb timing.
+kernel time. At final acceptance report node-seconds to the common physical
+endpoint at the demonstrated accuracy. Profile separately because profiling
+fences perturb timing: start with one short `cgl_lf_profile=true`,
+`cgl_lf_profile_detail=false` run, using bucket call counts and `rank_max_s` to
+locate expensive work or imbalance. Do not sum nested buckets or maxima from
+different ranks. Detailed profiling replays arithmetic and, on the newer reference,
+selects different directional kernels; it is not production kernel timing.
+Use the ordinary elapsed interval as the speed authority. Compare bound cost
+and LF work together: schematically, step cost is refresh/reduction overhead
+plus RHS count times stage cost plus RK/forcing work. Profile only far enough
+to select the next small change; do not add instrumentation for every helper.
 On a fixed mesh, `lf_nstage` increments are zone-stage evaluations; divide by
 active cells to obtain RHS evaluations. Obtain counts/endpoints separately if
 their output changes timing. Compare accuracy at a common physical endpoint.
