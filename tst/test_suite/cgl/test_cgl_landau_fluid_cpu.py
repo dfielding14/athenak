@@ -1567,15 +1567,21 @@ def test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude():
         _cleanup()
 
 
-def test_cgl_lf_paper_multicycle_forcing_work_follows_rk_state_recurrence():
+@pytest.mark.parametrize("integrator", ("rk1", "rk2", "rk3"))
+def test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks(integrator):
     try:
-        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4")
+        _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4",
+                   f"time/integrator={integrator}")
         mhd = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.mhd.hst")
         user = testutils.athena_read.hst("cgl_ci_paper_multicycle_work.user.hst")
         energy_delta = mhd["tot-E"][-1] - mhd["tot-E"][0]
         applied_work = user["force_work"][-1] - user["force_work"][0]
         assert applied_work > 0.0
         assert np.isclose(applied_work, energy_delta, rtol=1.0e-10, atol=1.0e-12)
+        # The smoke input prescribes dedt=0.32 in a periodic volume of 1*1*2.
+        expected_work = 0.32 * 2.0 * (user["time"] - user["time"][0])
+        np.testing.assert_allclose(user["force_work"] - user["force_work"][0],
+                                   expected_work, rtol=1.0e-10, atol=1.0e-12)
         assert np.all(np.isfinite(mhd["lf_cpwrk"]))
         assert np.all(np.isfinite(mhd["lf_cawrk"]))
     finally:
@@ -1711,7 +1717,7 @@ def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
     assert "passive_delta must match" in result.stdout
 
 
-def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
+def test_cgl_lf_paper_type_two_rejects_alfvenic_policy():
     command = [
         "./athena",
         "-i",
@@ -1720,7 +1726,7 @@ def test_cgl_lf_paper_rejects_unsupported_forcing_mode():
     ]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "driving_type must be 0" in result.stdout
+    assert "driving_type = 2 requires mks24_random_unprojected" in result.stdout
 
 
 def test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend():

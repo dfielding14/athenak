@@ -369,22 +369,27 @@ def test_type_two_rejects_projected_policy(tmp_path):
     )
 
 
-def test_type_two_matches_unprojected_type_zero(tmp_path):
-    """Equal fixed-seed isotropic policies render the same OU force trajectory."""
-    outputs = []
-    for driving_type in (0, 2):
-        directory = tmp_path / f"type_{driving_type}"
-        path = staged_turb_input(directory, "turb_driving_edot.athinput", {
-            "turb_driving": f"driving_type = {driving_type}\n"
-                            "projection_policy = mks24_random_unprojected\n"
-                            "spectrum = power_law\nrseed = 2718",
-        })
-        output_dir = directory / "run"
-        require_success(run_athena(output_dir, path))
-        output = latest_force(output_dir)
-        assert rms_acceleration(read_force_blocks(output)) > 0.0
-        outputs.append(output)
-    assert_equal_force_outputs(*outputs)
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+@pytest.mark.parametrize("driving_type", [0, 2])
+def test_once_per_step_power(tmp_path, integrator, driving_type):
+    """Periodic total energy gains dedt*dt on every step, including the first."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": f"driving_type = {driving_type}\nrecord_injected_work = true",
+        "output1": "data_format = %24.16e",
+    })
+    result = run_athena(tmp_path / "run", path, f"time/integrator={integrator}")
+    require_success(result)
+    history = next((tmp_path / "run").glob("*.hydro.hst"))
+    header = history.read_text().splitlines()[1].split()
+    names = [field.split("=", 1)[1] for field in header if "=" in field]
+    data = np.loadtxt(history)
+    dt = np.diff(data[:, names.index("time")])
+    work = np.diff(data[:, names.index("tot-E")])
+    assert np.all(dt >= 0.0)
+    assert np.count_nonzero(dt > 0.0) == 6
+    np.testing.assert_array_equal(work[dt == 0.0], 0.0)
+    np.testing.assert_allclose(work[dt > 0.0] / dt[dt > 0.0], 0.1,
+                               rtol=2e-7, atol=2e-8)
 
 
 @pytest.mark.parametrize("hydro_eos,mhd_eos", [
@@ -429,3 +434,56 @@ def test_every_selected_mode_is_nonzero(tmp_path, driving_type):
     result = run_athena(tmp_path / "run", path, "time/nlim=0")
     require_success(result)
     assert "nonzero modes" in result.stdout
+
+
+def test_type_two_matches_unprojected_type_zero(tmp_path):
+    """Equal fixed-seed isotropic policies render the same OU force trajectory."""
+    outputs = []
+    for driving_type in (0, 2):
+        directory = tmp_path / f"type_{driving_type}"
+        path = staged_turb_input(directory, "turb_driving_edot.athinput", {
+            "turb_driving": f"driving_type = {driving_type}\n"
+                            "projection_policy = mks24_random_unprojected\n"
+                            "spectrum = power_law\nrseed = 2718",
+        })
+        output_dir = directory / "run"
+        require_success(run_athena(output_dir, path))
+        output = latest_force(output_dir)
+        assert rms_acceleration(read_force_blocks(output)) > 0.0
+        outputs.append(output)
+    assert_equal_force_outputs(*outputs)
+
+
+@pytest.mark.parametrize("integrator", ["imex2", "imex3"])
+def test_two_fluid_once_per_step_power(tmp_path, integrator):
+    """Both periodic fluid energies gain dedt*dt*volume once per full step."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "hydro": "gamma = 1.666666666666667",
+        "mhd": "eos = ideal\ngamma = 1.666666666666667\n"
+               "reconstruct = plm\nrsolver = hlle",
+        "ion-neutral": "drag_coeff = 0.0",
+        "problem": "d_n = 1.3\nd_i = 0.7",
+        "turb_driving": "driving_type = 0\nrseed = 2718\ndedt = 0.1\n"
+                        "record_injected_work = false",
+        "output1": "data_format = %24.16e",
+    })
+    output_dir = tmp_path / "run"
+    require_success(run_athena(output_dir, path, f"time/integrator={integrator}"))
+    times, energies = [], []
+    for fluid, density in (("hydro", 1.3), ("mhd", 0.7)):
+        history = next(output_dir.glob(f"*.{fluid}.hst"))
+        header = history.read_text().splitlines()[1].split()
+        names = [field.split("=", 1)[1] for field in header if "=" in field]
+        data = np.loadtxt(history)
+        # The inherited periodic cube has unit volume.
+        assert data[0, names.index("mass")] == pytest.approx(density, rel=1e-12)
+        times.append(data[:, names.index("time")])
+        energies.append(data[:, names.index("tot-E")])
+    np.testing.assert_array_equal(*times)
+    dt = np.diff(times[0])
+    work = np.diff(energies[0] + energies[1])
+    assert np.all(dt >= 0.0)
+    assert np.count_nonzero(dt > 0.0) == 6
+    np.testing.assert_array_equal(work[dt == 0.0], 0.0)
+    np.testing.assert_allclose(work[dt > 0.0] / dt[dt > 0.0], 0.1,
+                               rtol=2e-7, atol=2e-8)
