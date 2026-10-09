@@ -77,6 +77,8 @@ class Driver {
  private:
   Kokkos::Timer run_time_;      // generalized timer for cpu/gpu/etc
   std::uint64_t nmb_updated_;   // running total of MB updated during run
+  std::uint64_t last_diag_nmb_; // completed MB updates at the previous diagnostic
+  double last_diag_elapsed_;   // wall time at the previous diagnostic
   std::uint64_t npart_updated_; // running total of particles updated during run
   float lb_efficiency_;         // measure of how efficient was load balancing
   void ResetSTSController();

@@ -499,6 +499,8 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
   //---- Step 4.  Initialize various counters, timers, etc.
   run_time_.reset();
   nmb_updated_ = 0;
+  last_diag_nmb_ = 0;
+  last_diag_elapsed_ = pwall_clock_->seconds();
 
   // allocate memory for stiff source terms with ImEx integrators
   // only implemented for ion-neutral two fluid for now
@@ -718,10 +720,18 @@ void Driver::OutputCycleDiagnostics(Mesh *pm) {
 //  const int dtprcsn = std::numeric_limits<Real>::max_digits10 - 1;
   const int dtprcsn = 6;
   if (pm->ncycle % ndiag == 0) {
-    Real elapsed = pwall_clock_->seconds();
+    const double elapsed = pwall_clock_->seconds();
+    const double interval = elapsed - last_diag_elapsed_;
+    // Count completed block updates so the interval rate also handles AMR and restarts.
+    const double zonecycles = static_cast<double>(nmb_updated_ - last_diag_nmb_)
+                              * pm->NumberOfMeshBlockCells();
+    const double zcps = (interval > 0.0) ? zonecycles / interval : 0.0;
     std::cout << "elapsed=" << std::scientific << std::setprecision(dtprcsn) << elapsed
               << " cycle=" << pm->ncycle
-              << " time=" << pm->time << " dt=" << pm->dt << std::endl;
+              << " time=" << pm->time << " dt=" << pm->dt
+              << " zone-cycles/s=" << zcps << std::endl;
+    last_diag_nmb_ = nmb_updated_;
+    last_diag_elapsed_ = elapsed;
   }
   return;
 }
