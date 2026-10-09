@@ -165,7 +165,8 @@ def test_cgl_lf_resolved_reversal_converges(tmp_path):
 ])
 def test_cgl_lf_uniform_oblique_decay(tmp_path, axis, field):
     case = tmp_path / axis
-    nx = 24 if axis == "oblique" else 16
+    # Resolve the limited transverse slopes to the existing 3% e-fold bound.
+    nx = 32 if axis == "oblique" else 16
     wave = 2*np.pi*np.array([1.0, 1.0, 1.0] if axis == "oblique" else
                             [float(axis == direction) for direction in ("x", "y", "z")])
     k_parallel = np.dot(field, wave) / np.linalg.norm(field)

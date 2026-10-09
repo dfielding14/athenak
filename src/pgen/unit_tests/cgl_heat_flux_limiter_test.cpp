@@ -16,6 +16,7 @@
 #include "athena.hpp"
 #include "diffusion/cgl_landau_fluid_arithmetic.hpp"
 #include "diffusion/sts_rkl2.hpp"
+#include "diffusion/limiters.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/cgl_physics.hpp"
 #include "parameter_input.hpp"
@@ -62,6 +63,36 @@ void RequireOverflowClose(const std::string &label, const Real got,
               << ": got=" << got << ", expected=" << expected << std::endl;
     std::exit(EXIT_FAILURE);
   }
+}
+
+void CheckDiffusionSlopeMeans() {
+  const Real large = 0.75*std::numeric_limits<Real>::max();
+  const Real small = std::numeric_limits<Real>::min();
+  const Real subnormal = 4.0*std::numeric_limits<Real>::denorm_min();
+  for (const Real sign : {Real(-1.0), Real(1.0)}) {
+    for (const Real a : {Real(0.125), Real(1.1), Real(7.0), Real(1024.0)}) {
+      const Real x = sign*a, y = sign*3.0*a;
+      Require("ordinary van Leer arithmetic is unchanged",
+              VanLeerLimiter(x,y) == static_cast<Real>(2.0*x*y/(x+y)));
+    }
+    for (const Real value : {large, small, subnormal}) {
+      const Real x = sign*value;
+      Require("equal extreme slopes", VanLeerLimiter(x,x) == x &&
+              VL4Limiter(x,x,x,x) == x);
+    }
+    const Real pairs[][2] = {{large,0.5}, {large,Real(0.5)*large},
+                            {small,Real(2.0)*small}, {subnormal,Real(2.0)*subnormal}};
+    for (const auto &pair : pairs) {
+      const Real a = sign*pair[0], b = sign*pair[1];
+      // Extended-range host oracle does not multiply two extreme Real values.
+      const Real expected = static_cast<Real>(2.0L/(1.0L/a+1.0L/b));
+      RequireRelativeClose("unequal extreme slopes", VanLeerLimiter(a,b), expected);
+      RequireRelativeClose("unequal extreme four slopes", VL4Limiter(a,a,b,b), expected);
+    }
+  }
+  Require("slope signs and stationary points", VanLeerLimiter(-1.0,1.0) == 0.0 &&
+          VanLeerLimiter(0.0,1.0) == 0.0 && VL4Limiter(1.0,2.0,-1.0,2.0) == 0.0);
+  RequireClose("known four-slope harmonic mean", VL4Limiter(1.0,2.0,3.0,6.0), 2.0);
 }
 
 void CheckModerateValues() {
@@ -772,6 +803,7 @@ void CheckWeightedRKLCacheAlgebra() {
 } // namespace
 
 void RunCglHeatFluxLimiterChecks() {
+  CheckDiffusionSlopeMeans();
   CheckModerateValues();
   CheckBackupLimiterPolicy();
   CheckAdditiveCollisionRates();

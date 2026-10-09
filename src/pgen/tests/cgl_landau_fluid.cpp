@@ -29,10 +29,12 @@
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
+#include "diffusion/limiters.hpp"
 #include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
+#include "outputs/outputs.hpp"
 
 namespace {
 
@@ -50,6 +52,8 @@ enum class TestMode {
   paper_eigen_wave,
   rotated_decay,
   face_geometry,
+  transverse_flux,
+  hotspot,
   field_reversal,
   low_field,
   timestep_refresh
@@ -146,6 +150,8 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   if (mode == "rotated_decay") return TestMode::rotated_decay;
   if (mode == "face_geometry") return TestMode::face_geometry;
+  if (mode == "transverse_flux") return TestMode::transverse_flux;
+  if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "field_reversal") return TestMode::field_reversal;
   if (mode == "timestep_refresh") return TestMode::timestep_refresh;
   if (mode == "low_field") return TestMode::low_field;
@@ -153,6 +159,7 @@ TestMode ParseMode(ParameterInput *pin) {
        "collision_relaxation, grad_b, grad_b_wall, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
+       "transverse_flux, hotspot, "
        "face_geometry, field_reversal, low_field, or timestep_refresh");
 }
 
@@ -171,6 +178,8 @@ const char *ModeName(const TestMode mode) {
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
     case TestMode::rotated_decay: return "rotated_decay";
     case TestMode::face_geometry: return "face_geometry";
+    case TestMode::transverse_flux: return "transverse_flux";
+    case TestMode::hotspot: return "hotspot";
     case TestMode::field_reversal: return "field_reversal";
     case TestMode::timestep_refresh: return "timestep_refresh";
     case TestMode::low_field: return "low_field";
@@ -670,7 +679,7 @@ void CheckRotatedDecay(ParameterInput *pin, Mesh *pm) {
   const Real initial_amp = (ppar0/rho0)*amp;
   const Real expected_amp =
       initial_amp*std::exp(-chi_parallel*SQR(k_parallel)*pm->time);
-  const Real measured_amp = std::abs(projection.sin_amp);
+  const Real measured_amp = projection.sin_amp;
   const Real rel_err = RelativeError(measured_amp, expected_amp);
   RequireRelative("rotated_decay Fourier amplitude", measured_amp, expected_amp, rel_tol);
   Require(std::abs(projection.cos_amp) <= phase_tol*std::abs(initial_amp),
@@ -949,6 +958,132 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
             << " max_parallel_unlimited_over_qmax=" << max_ratio_parallel
             << " max_perp_unlimited_over_qmax=" << max_ratio_perp
             << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
+}
+
+void CheckDeviceSlopeMeans() {
+  const Real large = 0.75*std::numeric_limits<Real>::max();
+  const Real small = std::numeric_limits<Real>::min();
+  const Real subnormal = 4.0*std::numeric_limits<Real>::denorm_min();
+  const Real pairs[][2] = {{0.125,0.375}, {1.1,3.3}, {7.0,21.0}, {1024.0,3072.0},
+      {large,large}, {small,small}, {subnormal,subnormal}, {large,0.5},
+      {large,Real(0.5)*large}, {small,Real(2.0)*small}, {subnormal,Real(2.0)*subnormal}};
+  constexpr int count = sizeof(pairs)/sizeof(pairs[0]);
+  DvceArray2D<Real> arguments("slope_arguments", 2*count, 2);
+  DvceArray2D<Real> answers("slope_answers", 2*count, 4);
+  auto host = Kokkos::create_mirror_view(arguments);
+  for (int i=0; i<2*count; ++i) {
+    for (int j=0; j<2; ++j) host(i,j) = (i<count ? 1.0 : -1.0)*pairs[i%count][j];
+  }
+  Kokkos::deep_copy(arguments, host);
+  Kokkos::parallel_for("slope_means", Kokkos::RangePolicy<>(DevExeSpace(), 0, 2*count),
+  KOKKOS_LAMBDA(const int i) {
+    const Real a = arguments(i,0), b = arguments(i,1);
+    answers(i,0) = VanLeerLimiter(a,b);
+    answers(i,1) = VL4Limiter(a,a,b,b);
+    answers(i,2) = i%count >= 4 || VanLeerLimiter(a,b) == static_cast<Real>(2.0*a*b/(a+b));
+    answers(i,3) = VanLeerLimiter(a,-b) == 0.0 && VanLeerLimiter(a,0.0) == 0.0 &&
+        VL4Limiter(a,b,-a,b) == 0.0 && VL4Limiter(1.0,2.0,3.0,6.0) == 2.0;
+  });
+  const auto result = HostCopy(answers);
+  for (int i=0; i<2*count; ++i) {
+    const Real expected = static_cast<Real>(2.0L/(1.0L/host(i,0)+1.0L/host(i,1)));
+    for (int j=0; j<2; ++j) {
+      Require(std::isfinite(result(i,j)) && result(i,j) != 0.0 &&
+              std::abs(result(i,j)/expected-1.0) <= 64.0*std::numeric_limits<Real>::epsilon(),
+              "device slope mean lost a finite extreme slope");
+    }
+    Require(result(i,2) == 1.0 && result(i,3) == 1.0,
+            "device slope mean changed ordinary arithmetic or sign decisions");
+  }
+  std::cout << "CGL LF device slope endpoints passed" << std::endl;
+}
+
+// Four independently prescribed one-sided slopes determine one interior face.
+// No production limiter is used to obtain these expected fluxes.
+void CheckTransverseFlux(Mesh *pm) {
+  CheckDeviceSlopeMeans();
+  auto *mhd = pm->pmb_pack->pmhd;
+  auto *lf = mhd->pcgl_lf;
+  Require(pm->ncycle == 0 && pm->three_d && lf != nullptr && !lf->lf_coeff_local &&
+          !lf->effective_backup_limiter, "transverse_flux requires 3D nlim=0 background LF");
+  const auto &ind = pm->mb_indcs;
+  const int face[] = {ind.is+ind.nx1/2, ind.js+ind.nx2/2, ind.ks+ind.nx3/2};
+  const auto size = pm->pmb_pack->pmb->mb_size.h_view(0);
+  const Real h[] = {size.dx1, size.dx2, size.dx3};
+  auto w = HostCopy(mhd->w0), b = HostCopy(mhd->bcc0);
+  const DvceArray4D<Real> fields[] = {mhd->b0.x1f, mhd->b0.x2f, mhd->b0.x3f};
+  const DvceArray5D<Real> flux[] = {mhd->uflx.x1f, mhd->uflx.x2f, mhd->uflx.x3f};
+  EOS_Data eos = mhd->peos->eos_data;
+  eos.nu_coll = 0.0;
+  eos.mlim = eos.flim = false;
+  const Real chi = std::sqrt(2.0/M_PI)*lf->lf_c_parallel0/lf->lf_k_parallel;
+  for (int normal=0; normal<3; ++normal) {
+    for (int transverse=0; transverse<3; ++transverse) {
+      if (normal == transverse) continue;
+      const int third = 3-normal-transverse;
+      for (int kind=0; kind<6; ++kind) {
+        // Harmonic mean of (1,2,3,6) is 2; affine mean 1; an extremum gives 0.
+        // The fourth case varies only |B| and must retain its centered slope.
+        // The final cases isolate parallel and perpendicular temperature gradients.
+        for (int k=0; k<w.extent_int(2); ++k) {
+          for (int j=0; j<w.extent_int(3); ++j) {
+            for (int i=0; i<w.extent_int(4); ++i) {
+              const int index[] = {i,j,k};
+              const int offset = index[transverse]-face[transverse];
+              const bool right = index[normal] >= face[normal];
+              Real temperature = 10.0;
+              if (offset > 0) temperature += kind == 1 ? 1.0 : (right ? 1.0 : 3.0);
+              if (offset < 0) temperature -= kind == 1 ? 1.0 : (right ? 2.0 : 6.0);
+              if (kind == 2 && offset > 0 && right) temperature = 9.0;
+              w(0,IDN,k,j,i) = 1.0;
+              w(0,IVX,k,j,i) = w(0,IVY,k,j,i) = w(0,IVZ,k,j,i) = 0.0;
+              w(0,IPR,k,j,i) = kind == 3 ? 1.0 : (kind == 5 ? 10.0 : temperature);
+              w(0,IPP,k,j,i) = kind == 3 ? 0.7 : (kind == 4 ? 10.0 : temperature);
+              for (int d=0; d<3; ++d) b(0,d,k,j,i) = 1.0;
+              if (kind == 3) b(0,third,k,j,i) = offset > 0 ? 2.0 : (offset < 0 ? 3.0 : 1.0);
+            }
+          }
+        }
+        for (int d=0; d<3; ++d) {
+          auto field = HostCopy(fields[d]);
+          for (int k=0; k<field.extent_int(1); ++k) {
+            for (int j=0; j<field.extent_int(2); ++j) {
+              for (int i=0; i<field.extent_int(3); ++i) {
+                const int index[] = {i,j,k};
+                const int offset = index[transverse]-face[transverse];
+                field(0,k,j,i) = kind == 3 && d == third ?
+                    (offset > 0 ? 2.0 : (offset < 0 ? 3.0 : 1.0)) : 1.0;
+              }
+            }
+          }
+          Kokkos::deep_copy(fields[d], field);
+          Kokkos::deep_copy(flux[d], 0.0);
+        }
+        Kokkos::deep_copy(mhd->w0, w);
+        Kokkos::deep_copy(mhd->bcc0, b);
+        lf->AddHeatFluxes(mhd->w0, mhd->bcc0, mhd->b0, eos, 1.0, 1.0, mhd->uflx);
+        const Real direction = 1.0/std::sqrt(3.0);
+        const Real gradient =
+            (kind == 0 || kind >= 4 ? 2.0 : (kind == 1 ? 1.0 : 0.0))/h[transverse];
+        const Real db = (std::sqrt(6.0)-std::sqrt(11.0))/(2.0*h[transverse]);
+        const Real qpar_l = kind == 5 ? 0.0 : -2.0*chi*direction*gradient;
+        const Real qperp_l = kind == 3 ? chi*direction*0.7*0.3*db/std::sqrt(3.0)
+                                       : (kind == 4 ? 0.0 : -chi*direction*gradient);
+        const Real qpar_max = std::sqrt(8.0/M_PI)*lf->lf_c_parallel0*10.0;
+        const Real qperp_max = std::sqrt(2.0/M_PI)*lf->lf_c_parallel0*(kind == 3 ? 0.7 : 10.0);
+        const Real qpar = qpar_l/(1.0+std::abs(qpar_l)/qpar_max);
+        const Real qperp = qperp_l/(1.0+std::abs(qperp_l)/qperp_max);
+        const auto actual = HostCopy(flux[normal]);
+        const std::string label = "transverse_flux n="+std::to_string(normal)+
+            " t="+std::to_string(transverse)+" case="+std::to_string(kind);
+        RequireRelative(label+" energy", actual(0,IEN,face[2],face[1],face[0]),
+                        direction*(0.5*qpar+qperp), 2.0e-11);
+        RequireRelative(label+" moment", actual(0,IAN,face[2],face[1],face[0]),
+                        qperp/3.0, 2.0e-11);
+      }
+    }
+  }
+  std::cout << "CGL LF transverse_flux passed: six orientations, six slope cases" << std::endl;
 }
 
 void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
@@ -1756,6 +1891,84 @@ void CheckTimestepRefresh(ParameterInput *pin, Mesh *pm) {
   }
 }
 
+Real hotspot_min_parallel, hotspot_min_perp, hotspot_initial_energy;
+Real hotspot_initial_parallel, hotspot_initial_perp, hotspot_max_energy_error;
+Real hotspot_thermal0, hotspot_moment0, hotspot_thermal_error, hotspot_moment_error;
+
+void MonitorHotSpot(Mesh *pm, const Real) {
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  const auto u = HostCopy(pm->pmb_pack->pmhd->u0);
+  const auto &ind = pm->mb_indcs;
+  Real energy=0.0, thermal=0.0, moment=0.0;
+  for (int j=ind.js; j<=ind.je; ++j) {
+    for (int i=ind.is; i<=ind.ie; ++i) {
+      const Real tpar = w(0,IPR,ind.ks,j,i)/w(0,IDN,ind.ks,j,i);
+      const Real tperp = w(0,IPP,ind.ks,j,i)/w(0,IDN,ind.ks,j,i);
+      Require(std::isfinite(tpar) && std::isfinite(tperp), "hotspot became nonfinite");
+      hotspot_min_parallel = std::min(hotspot_min_parallel, tpar);
+      hotspot_min_perp = std::min(hotspot_min_perp, tperp);
+      energy += u(0,IEN,ind.ks,j,i);
+      thermal += 0.5*w(0,IPR,ind.ks,j,i)+w(0,IPP,ind.ks,j,i);
+      // Uniform frozen B makes sum(p_perp) equivalent to sum(p_perp/B).
+      moment += w(0,IPP,ind.ks,j,i);
+    }
+  }
+  Require(std::isfinite(energy) && std::isfinite(thermal) && std::isfinite(moment),
+          "hotspot has nonfinite conserved sums");
+  if (hotspot_initial_energy == 0.0) {
+    hotspot_initial_energy = energy;
+    hotspot_thermal0 = thermal;
+    hotspot_moment0 = moment;
+  }
+  hotspot_thermal_error = std::max(hotspot_thermal_error,
+      std::abs(thermal/hotspot_thermal0-1.0));
+  hotspot_moment_error = std::max(hotspot_moment_error,
+      std::abs(moment/hotspot_moment0-1.0));
+  hotspot_max_energy_error = std::max(hotspot_max_energy_error,
+      std::abs(energy/hotspot_initial_energy - 1.0));
+}
+
+void HotSpotHistory(HistoryData *pdata, Mesh *pm) {
+  MonitorHotSpot(pm, 0.0);
+  pdata->nhist = 5;
+  pdata->label[0] = "min_tpar";
+  pdata->label[1] = "min_tperp";
+  pdata->label[2] = "err_energy";
+  pdata->label[3] = "err_thermal";
+  pdata->label[4] = "err_moment";
+  pdata->hdata[0] = hotspot_min_parallel;
+  pdata->hdata[1] = hotspot_min_perp;
+  pdata->hdata[2] = hotspot_max_energy_error;
+  pdata->hdata[3] = hotspot_thermal_error;
+  pdata->hdata[4] = hotspot_moment_error;
+}
+
+void CheckHotSpot(ParameterInput *pin, Mesh *pm) {
+  MonitorHotSpot(pm, 0.0);
+  const Real width = pin->GetReal("problem", "hotspot_width");
+  const Real cpar = pin->GetReal("mhd", "lf_c_parallel0");
+  const Real chi_perp = std::sqrt(2.0/std::acos(-1.0))*cpar/
+                       pin->GetReal("mhd", "lf_k_parallel");
+  const Real diffusion_times = pm->time*chi_perp/SQR(width);
+  std::cout << std::setprecision(17)
+            << "CGL LF hotspot: min_tpar=" << hotspot_min_parallel
+            << " min_tperp=" << hotspot_min_perp
+            << " energy_error=" << hotspot_max_energy_error
+            << " thermal_error=" << hotspot_thermal_error
+            << " moment_error=" << hotspot_moment_error
+            << " diffusion_times=" << diffusion_times << std::endl;
+  Require(diffusion_times >= 5.0, "hotspot requires at least five diffusion times");
+  Require(hotspot_min_parallel >= hotspot_initial_parallel*(1.0 - 1.0e-12) &&
+          hotspot_min_perp >= hotspot_initial_perp*(1.0 - 1.0e-12),
+          "hotspot fell below its initial temperature minima");
+  // Thermal energy inherits the absolute roundoff budget of total E, from which
+  // magnetic energy is subtracted. The raw thermal-relative history stays unchanged.
+  Require(std::max({hotspot_max_energy_error, hotspot_moment_error,
+                    hotspot_thermal_error*hotspot_thermal0/hotspot_initial_energy})
+              <= 5.0e-13,
+          "hotspot did not conserve energy and perpendicular moment");
+}
+
 HostArray5D<Real> reversal_initial_w, reversal_initial_b;
 Real reversal_ppar0=1.0, reversal_pperp0=1.0;
 Real reversal_peak=0.0, reversal_min=1.0, reversal_frozen_error=0.0;
@@ -1820,7 +2033,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
           "quantitative LF tests require <mhd>/eos = cgl");
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
-      mode == TestMode::field_reversal) {
+      mode == TestMode::field_reversal || mode == TestMode::transverse_flux ||
+      mode == TestMode::hotspot) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -1858,6 +2072,10 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckRotatedDecay(pin, pm);
   } else if (mode == TestMode::face_geometry) {
     CheckFaceGeometry(pin, pm);
+  } else if (mode == TestMode::transverse_flux) {
+    CheckTransverseFlux(pm);
+  } else if (mode == TestMode::hotspot) {
+    CheckHotSpot(pin, pm);
   } else if (mode == TestMode::field_reversal) {
     CheckFieldReversal(pin, pm);
   } else if (mode == TestMode::timestep_refresh) {
@@ -1880,7 +2098,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   }
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
-      mode == TestMode::field_reversal) {
+      mode == TestMode::field_reversal || mode == TestMode::transverse_flux ||
+      mode == TestMode::hotspot) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -1918,6 +2137,19 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     refresh_pre_dt = 0.0;
     user_srcs_func = HeatTimestepRefresh;
   }
+  const Real hotspot_width = pin->GetOrAddReal("problem", "hotspot_width", 0.04);
+  if (mode == TestMode::hotspot) {
+    Require(pmy_mesh_->multi_d && !pmy_mesh_->three_d && user_srcs && user_hist &&
+            hotspot_width > 0.0 && pmhd->pcgl_lf != nullptr &&
+            !pmhd->pcgl_lf->lf_coeff_local && pmhd->peos->eos_data.nu_coll == 0.0 &&
+            !pmhd->peos->eos_data.mlim && !pmhd->peos->eos_data.flim,
+            "hotspot requires 2D, user monitors, background closure and no collisions");
+    user_srcs_func = MonitorHotSpot;
+    user_hist_func = HotSpotHistory;
+    hotspot_min_parallel = hotspot_min_perp = std::numeric_limits<Real>::max();
+    hotspot_initial_energy = hotspot_max_energy_error = 0.0;
+    hotspot_thermal_error = hotspot_moment_error = 0.0;
+  }
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
@@ -1947,6 +2179,9 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real reversal_center = 0.5*(xmin+pmy_mesh_->mesh_size.x1max);
   const Real ymin = pmy_mesh_->mesh_size.x2min;
   const Real ymax = pmy_mesh_->mesh_size.x2max;
+  const Real hotspot_x = 0.5*(xmin+pmy_mesh_->mesh_size.x1max) +
+      0.5*(pmy_mesh_->mesh_size.x1max-xmin)/pmy_mesh_->mesh_indcs.nx1;
+  const Real hotspot_y = 0.5*(ymin+ymax) + 0.5*(ymax-ymin)/pmy_mesh_->mesh_indcs.nx2;
   const Real zmin = pmy_mesh_->mesh_size.x3min;
   const Real zmax = pmy_mesh_->mesh_size.x3max;
   const std::string limiter_kind =
@@ -1992,7 +2227,12 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::field_reversal) {
+    if (mode == TestMode::hotspot) {
+      const Real gaussian = exp(-(SQR(x-hotspot_x)+SQR(y-hotspot_y))/
+                                  (2.0*SQR(hotspot_width)));
+      ppar = ppar0*(1.0+99.0*gaussian);
+      pperp = pperp0*(1.0+99.0*gaussian);
+    } else if (mode == TestMode::field_reversal) {
       by = reversal_width > 0.0
           ? tanh(sin(k_wave*(x-reversal_center))/(k_wave*reversal_width))
           : tanh((x-reversal_center)/block_size.dx1);
@@ -2080,6 +2320,11 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
+  if (mode == TestMode::hotspot) {
+    MonitorHotSpot(pmy_mesh_, 0.0);
+    hotspot_initial_parallel = hotspot_min_parallel;
+    hotspot_initial_perp = hotspot_min_perp;
+  }
   if (mode == TestMode::field_reversal) {
     reversal_initial_w = Kokkos::create_mirror(w0);
     reversal_initial_b = Kokkos::create_mirror(bcc0);
