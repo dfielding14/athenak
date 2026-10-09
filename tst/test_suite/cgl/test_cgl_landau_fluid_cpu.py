@@ -633,19 +633,33 @@ def test_cgl_lf_background_collision_advances_one_physical_timestep():
         _cleanup()
 
 
-@pytest.mark.parametrize("disabled_sweep", (False, True), ids=("transport", "zero_sweep"))
+@pytest.mark.parametrize("integrator", ("rk1", "rk2", "rk3"))
+@pytest.mark.parametrize(("split_mode", "disabled_sweep"),
+                         (("sts", False), ("explicit", False), ("sts", True),
+                          ("viscosity", False)),
+                         ids=("sts", "explicit", "zero_sweep", "viscosity"))
 @pytest.mark.parametrize("soft_limiter", [False, True])
-def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(soft_limiter, disabled_sweep, tmp_path):
+def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(
+    soft_limiter, split_mode, disabled_sweep, integrator, tmp_path
+):
     histories = []
     try:
-        for lf in (False, True):
-            flags = []
+        for split in (False, True):
+            flags = [f"time/integrator={integrator}"]
             source = (Path(UNIT_INPUT_ROOT) / "cgl_collision_once.athinput").read_text()
-            if lf:
-                source = source.replace("<mhd>", "<mhd>\ncgl_heat_flux = landau_fluid"
-                                        "\ncgl_heat_flux_integrator = sts"
-                                        "\nlf_k_parallel = 6.283185307179586")
+            if split and split_mode == "viscosity":
+                source = source.replace("<mhd>", "<mhd>\nviscosity = 0.1"
+                                        "\nviscosity_integrator = sts")
                 source = source.replace("<time>", "<time>\nsts_integrator = rkl2")
+            elif split:
+                # Keep the explicit diffusion bound above the hyperbolic bound so
+                # both paired uniform runs advance the same physical timesteps.
+                k_parallel = "1000.0" if split_mode == "explicit" else "6.283185307179586"
+                source = source.replace("<mhd>", "<mhd>\ncgl_heat_flux = landau_fluid"
+                                        f"\ncgl_heat_flux_integrator = {split_mode}"
+                                        f"\nlf_k_parallel = {k_parallel}")
+                if split_mode == "sts":
+                    source = source.replace("<time>", "<time>\nsts_integrator = rkl2")
             if disabled_sweep:
                 # Uniform states remain stable at this deliberate controller boundary.
                 # Huge finite k makes the registered LF bound reach its FLT_MAX sentinel.
@@ -653,7 +667,7 @@ def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(soft_limiter, di
                 source = source.replace("nlim = 20", "nlim = 2")
                 source = source.replace("lf_k_parallel = 6.283185307179586",
                                         "lf_k_parallel = 1.0e42")
-            input_path = tmp_path / f"collision_{int(lf)}.athinput"
+            input_path = tmp_path / f"collision_{int(split)}.athinput"
             input_path.write_text(source)
             pperp = 1.2
             if soft_limiter:
@@ -662,12 +676,28 @@ def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(soft_limiter, di
                           "problem/limiter_kind=mirror", "problem/pperp0=1.8",
                           "mhd/nu_coll=0", "mhd/mirror_limiter=true",
                           "mhd/limiter_nu_coll=10"]
-            basename = f"cgl_ci_once_{int(lf)}"
-            testutils.run(str(input_path), [f"job/basename={basename}", *flags])
+            basename = f"cgl_ci_once_{int(split)}"
+            if split and split_mode == "viscosity":
+                # Nonzero viscosity activates both STS sweeps even though the
+                # uniform state has zero viscous flux. Neither hook owes rates.
+                result = subprocess.run(
+                    ["./athena", "-i", str(input_path), f"job/basename={basename}", *flags],
+                    capture_output=True, text=True, check=False,
+                    env=_lf_mode_env(ATHENAK_CGL_LF_TASK_TRACE="1"),
+                )
+                output = result.stdout + result.stderr
+                (tmp_path / f"{basename}.log").write_text(output)
+                assert result.returncode == 0, output
+                assert output.count("task=STSUpdateU point=end stage=1 ") == 2 * 20
+                assert output.count("task=STSPostSweepCGLCollisions point=end ") == 2 * 20
+            else:
+                testutils.run(str(input_path), [f"job/basename={basename}", *flags])
             history = testutils.athena_read.hst(f"{basename}.mhd.hst")
             assert len(history["time"]) == (3 if disabled_sweep else 21)
-            if lf:
+            if split and split_mode != "viscosity":
                 assert (history["lf_nstage"][-1] == 0.0) == disabled_sweep
+                if split_mode == "explicit":
+                    assert history["lf_nstage"][-1] == 2 * 20 * 16
             # Uniform rho=B=1: A=log(p_perp/p_parallel), with fixed thermal energy.
             ratio = np.exp(history["aam-D"])
             piso = (1.0 + 2.0 * pperp) / 3.0
@@ -683,6 +713,96 @@ def test_cgl_collision_rates_once_per_cycle_with_and_without_lf(soft_limiter, di
                                    atol=1.0e-14)
     finally:
         _cleanup()
+
+
+def test_cgl_sts_viscosity_finishes_with_admissible_pressures(tmp_path):
+    source = (Path(UNIT_INPUT_ROOT) / "cgl_collision_once.athinput").read_text()
+    source += """
+<job>
+basename = cgl_ci_viscous_wall
+<mesh>
+nx1 = 64
+<meshblock>
+nx1 = 64
+<time>
+evolution = kinematic
+nlim = 1
+tlim = 0.003
+sts_integrator = rkl2
+<mhd>
+rsolver = advect
+nu_coll = 0
+firehose_limiter = false
+backup_limiters = false
+viscosity = 0.1
+viscosity_integrator = sts
+<problem>
+test_mode = paper_oblique_wave
+ppar0 = 2
+pperp0 = 1
+b0 = 0
+by0 = 1
+bz0 = 0
+amp = 1
+<output1>
+data_format = %25.17e
+<output2>
+file_type = tab
+variable = mhd_w_bcc
+dcycle = 1
+data_format = %25.17e
+slice_x2 = 0
+slice_x3 = 0
+<output3>
+file_type = tab
+variable = mhd_u_bcc
+dcycle = 1
+data_format = %25.17e
+slice_x2 = 0
+slice_x3 = 0
+"""
+    staged = tmp_path / "viscous-wall.athinput"
+    staged.write_text(source)
+    result = subprocess.run([str(Path("athena").resolve()), "-i", str(staged)],
+                            cwd=tmp_path, capture_output=True, text=True, check=False)
+    (tmp_path / "run.log").write_text(result.stdout + result.stderr)
+    assert result.returncode == 0, result.stdout + result.stderr
+    history = testutils.athena_read.hst(str(tmp_path / "cgl_ci_viscous_wall.mhd.hst"))
+    np.testing.assert_allclose(history["time"], [0, 0.003], rtol=0, atol=1e-16)
+    for field in ("mass", "1-mom", "2-mom", "3-mom", "tot-E"):
+        np.testing.assert_allclose(history[field], history[field][0],
+                                   rtol=1e-13, atol=1e-14)
+    states = {}
+    for variable in ("mhd_w_bcc", "mhd_u_bcc"):
+        paths = sorted((tmp_path / "tab").glob(f"*.{variable}.*.tab"))
+        assert len(paths) >= 2
+        states[variable] = [testutils.athena_read.tab(str(path))
+                            for path in (paths[0], paths[-1])]
+        assert states[variable][0]["cycle"] == 0 and states[variable][1]["cycle"] == 1
+        for state in states[variable]:
+            assert all(np.isfinite(value).all() for value in state.values())
+    w0, w1 = states["mhd_w_bcc"]
+    u0, u1 = states["mhd_u_bcc"]
+    # Parallel shear and B leave kinematic RK/CT idle. Viscosity alone damps
+    # the shear and heats the gas; the new checkpoints must preserve that work.
+    for field in ("dens", "mom1", "mom3", "bcc1", "bcc2", "bcc3"):
+        np.testing.assert_array_equal(u1[field], u0[field])
+    damping = np.dot(u1["mom2"], u0["mom2"])/np.dot(u0["mom2"], u0["mom2"])
+    np.testing.assert_allclose(damping, np.exp(-0.1*(2*np.pi)**2*0.003),
+                               rtol=5e-5, atol=0)
+    kinetic = [0.5*np.mean(u["mom2"]**2/u["dens"]) for u in (u0, u1)]
+    assert kinetic[0] - kinetic[1] > 1e-3
+    for w, u in ((w0, u0), (w1, u1)):
+        assert np.all(w["eint"] > 0) and np.all(w["p_perp"] > 0)
+        bsqr = sum(w[field]**2 for field in ("bcc1", "bcc2", "bcc3"))
+        thermal = u["ener"] - 0.5*u["mom2"]**2/u["dens"] - 0.5*bsqr
+        np.testing.assert_allclose(0.5*w["eint"] + w["p_perp"], thermal,
+                                   rtol=2e-14, atol=0)
+    # No finite rates or transport of A: a change proves wall-checkpoint work.
+    assert history["aam-D"][-1] - history["aam-D"][0] > 1e-4
+    bsqr = sum(w1[field]**2 for field in ("bcc1", "bcc2", "bcc3"))
+    assert np.all(w1["p_perp"] - w1["eint"] >= -bsqr)
+
 
 @pytest.mark.parametrize("arithmetic", ("safe", "fast"))
 @pytest.mark.parametrize(("backup", "expected_rate"), (("false", 18), ("true", 119)))

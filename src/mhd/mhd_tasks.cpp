@@ -201,6 +201,8 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     if (has_cgl_lf_split) {
       pend = tl["parabolic_stagen"]->AddTask(&MHD::EndCGLLandauFluidSTSSweep,
                                              this, pc2p);
+    }
+    if (peos->eos_data.is_cgl) {
       pend = tl["parabolic_stagen"]->AddTask(&MHD::STSPostSweepCGLCollisions,
                                              this, pend);
     }
