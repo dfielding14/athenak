@@ -264,6 +264,32 @@ void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
   ++validation_count;
 }
 
+void ValidatePressureStep(Mesh *pm, const Real /*bdt*/) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto u = HostCopy(pmhd->u0);
+  const auto w = HostCopy(pmhd->w0);
+  auto &indcs = pm->mb_indcs;
+  for (int i=indcs.is; i<=indcs.ie; ++i) {
+    for (int n=0; n<pmhd->nmhd; ++n) {
+      if (!std::isfinite(u(0,n,indcs.ks,indcs.js,i)) ||
+          !std::isfinite(w(0,n,indcs.ks,indcs.js,i))) {
+        Fail("pressure-step finite state", 0.0, 1.0);
+      }
+    }
+    if (!(w(0,IPR,indcs.ks,indcs.js,i) > 0.0) ||
+        !(w(0,IPP,indcs.ks,indcs.js,i) > 0.0)) {
+      Fail("pressure-step positive pressures", 0.0, 1.0);
+    }
+  }
+}
+
+void FinalizePressureStep(ParameterInput *, Mesh *pm) {
+  ValidatePressureStep(pm, 0.0);
+  CheckClose("pressure-step completed cycles", pm->ncycle, 50.0);
+  std::cout << "CGL pressure-step test passed after 50 cycles; FOFC counts are in "
+            << "the event log" << std::endl;
+}
+
 void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
   if (validation_count != 1) {
     std::cout << "CGL FOFC end-to-end test failed: expected one validation, got "
@@ -276,8 +302,15 @@ void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
 } // namespace
 
 void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
-  pgen_final_func = FinalizeFOFCMutationTest;
-  user_srcs_func = ValidateFOFCMutation;
+  const std::string mode = pin->GetOrAddString("problem", "test_mode", "flux_mutation");
+  const bool pressure_step = mode == "pressure_step";
+  if (!pressure_step && mode != "flux_mutation") {
+    std::cout << "CGL FOFC test requires test_mode = flux_mutation or pressure_step"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  pgen_final_func = pressure_step ? FinalizePressureStep : FinalizeFOFCMutationTest;
+  user_srcs_func = pressure_step ? ValidatePressureStep : ValidateFOFCMutation;
   if (restart) return;
 
   auto *pmbp = pmy_mesh_->pmb_pack;
@@ -292,6 +325,10 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
   int nmb = pmbp->nmb_thispack;
+  if (pressure_step && (pmy_mesh_->nmb_total != 1 || indcs.nx2 != 1 || indcs.nx3 != 1)) {
+    std::cout << "CGL pressure-step test requires a single 1D MeshBlock" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   auto w0 = pmhd->w0;
   auto bcc0 = pmhd->bcc0;
   auto b0 = pmhd->b0;
@@ -310,23 +347,37 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
     bcc0(m,IBX,k,j,i) = 0.43;
     bcc0(m,IBY,k,j,i) = -0.31;
     bcc0(m,IBZ,k,j,i) = 0.26;
+    if (pressure_step) {
+      // A three-cell peak has 1000:1 perpendicular-pressure contrast.
+      const int distance = abs(i - (is + ie)/2);
+      w0(m,IDN,k,j,i) = 1.0;
+      w0(m,IVX,k,j,i) = 1.0;
+      w0(m,IVY,k,j,i) = 0.0;
+      w0(m,IVZ,k,j,i) = 0.0;
+      w0(m,IPR,k,j,i) = 1.0;
+      w0(m,IPP,k,j,i) = distance == 0 ? 1.0 : (distance == 1 ? 0.25 : 0.001);
+      bcc0(m,IBX,k,j,i) = 2.0;
+      bcc0(m,IBY,k,j,i) = 0.0;
+      bcc0(m,IBZ,k,j,i) = 0.0;
+    }
   });
 
   par_for("cgl_fofc_e2e_b1", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x1f(m,k,j,i) = 0.43;
+    b0.x1f(m,k,j,i) = pressure_step ? 2.0 : 0.43;
   });
   par_for("cgl_fofc_e2e_b2", DevExeSpace(), 0, nmb-1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x2f(m,k,j,i) = -0.31;
+    b0.x2f(m,k,j,i) = pressure_step ? 0.0 : -0.31;
   });
   par_for("cgl_fofc_e2e_b3", DevExeSpace(), 0, nmb-1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x3f(m,k,j,i) = 0.26;
+    b0.x3f(m,k,j,i) = pressure_step ? 0.0 : 0.26;
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
   Kokkos::deep_copy(pmhd->fofc, false);
+  if (pressure_step) return;
 
   auto fofc = pmhd->fofc;
   int flag_i = is + 1;
