@@ -25,11 +25,13 @@
 namespace {
 
 void CheckWrapper(const ReconstructionMethod method, const int direction,
-                  const bool is_cgl, const bool apply_floors, const int orientation) {
+                  const bool is_cgl, const bool apply_floors, const int orientation,
+                  const bool quadratic) {
   constexpr int nvars = 7;
   constexpr int width = 5;
   constexpr int center = 2;
-  const Real value[nvars] = {0.5, -1.0, 2.0, -3.0, 1.0, 1.0, 0.125};
+  const Real value[nvars] = {quadratic ? Real(1.0) : Real(0.5), -1.0, 2.0, -3.0,
+                            quadratic && !is_cgl ? Real(1.5) : Real(1.0), 1.0, 0.125};
   const Real slope[nvars] = {0.125, 0.25, -0.125, 0.125, 0.25, -0.25, 0.03125};
   EOS_Data eos{};
   eos.is_ideal = true;
@@ -45,7 +47,11 @@ void CheckWrapper(const ReconstructionMethod method, const int direction,
       for (int j = 0; j < width; ++j) {
         for (int i = 0; i < width; ++i) {
           const int coordinate = direction == 0 ? i : (direction == 1 ? j : k);
-          host_q(0,n,k,j,i) = value[n] + orientation*slope[n]*(coordinate - center);
+          const int offset = orientation*(coordinate - center);
+          host_q(0,n,k,j,i) = value[n] + slope[n]*offset;
+          if (quadratic && (n == IEN || n == IPP)) {
+            host_q(0,n,k,j,i) = value[n] + 12.0*offset*(offset - 1);
+          }
         }
       }
     }
@@ -93,6 +99,15 @@ void CheckWrapper(const ReconstructionMethod method, const int direction,
     for (int n = 0; n < nvars; ++n) {
       // Every method reconstructs an affine profile exactly before its optional floors.
       Real expected = value[n] + (side == 0 ? 0.5 : -0.5)*orientation*slope[n];
+      if (quadratic && (n == IEN || n == IPP)) {
+        // q(s)=q0+12*s*(s-1) gives PPMX/WENO faces q0-4 and q0+8.
+        // PPM4 flattens this minimum to q0 on both faces.
+        expected = value[n];
+        if (method != ReconstructionMethod::ppm4) {
+          const bool undershoot = (side == 0) == (orientation > 0);
+          expected += undershoot ? -4.0 : 8.0;
+        }
+      }
       if (apply_floors && method != ReconstructionMethod::ppm4) {
         if (n == IDN) expected = std::max(expected, Real(0.5));
         if (n == IEN) expected = std::max(expected, is_cgl ? Real(1.0) : Real(1.5));
@@ -104,6 +119,7 @@ void CheckWrapper(const ReconstructionMethod method, const int direction,
         std::cout << "CGL reconstruction floor check failed: method=" << method_name
                   << " direction=" << direction << " cgl=" << is_cgl
                   << " floors=" << apply_floors << " orientation=" << orientation
+                  << " quadratic=" << quadratic
                   << " side=" << side << " variable=" << n
                   << " got=" << got << " expected=" << expected << std::endl;
         std::exit(EXIT_FAILURE);
@@ -119,7 +135,10 @@ void RunCglReconstructionFloorChecks() {
       for (const bool is_cgl : {false, true}) {
         for (const bool apply_floors : {false, true}) {
           for (const int orientation : {-1, 1}) {
-            CheckWrapper(method, direction, is_cgl, apply_floors, orientation);
+            for (const bool quadratic : {false, true}) {
+              CheckWrapper(method, direction, is_cgl, apply_floors, orientation,
+                           quadratic);
+            }
           }
         }
       }

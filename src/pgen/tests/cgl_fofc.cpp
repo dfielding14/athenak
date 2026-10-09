@@ -8,11 +8,14 @@
 
 #include <cmath>
 #include <cstdlib>
+#include <cstring>
 #include <iostream>
+#include <limits>
 #include <string>
 #include <utility>
 
 #include "athena.hpp"
+#include "driver/driver.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/mhd.hpp"
@@ -43,6 +46,23 @@ void CheckClose(const std::string &label, Real got, Real expected) {
 template <typename ViewType>
 auto HostCopy(const ViewType &view) {
   return Kokkos::create_mirror_view_and_copy(HostMemSpace(), view);
+}
+
+template <typename ViewType>
+auto Snapshot(const ViewType &view) {
+  auto host = Kokkos::create_mirror(view);
+  Kokkos::deep_copy(host, view);
+  return host;
+}
+
+template <typename ViewType, typename HostView>
+void CheckUnchanged(const std::string &label, const ViewType &view,
+                    const HostView &before) {
+  const auto after = HostCopy(view);
+  if (std::memcmp(before.data(), after.data(),
+                  before.size()*sizeof(typename ViewType::non_const_value_type)) != 0) {
+    Fail(label, 0.0, 1.0);
+  }
 }
 
 MHDPrim1D XState(const decltype(HostCopy(std::declval<DvceArray5D<Real>>())) &w,
@@ -168,7 +188,7 @@ void CheckZPressure(const std::string &label, const FluxView &flx,
   CheckClose(label + ".AZ", flx(m,mhd::ICGLAnisPressureZ,k,j,i), anisotropic.mx);
 }
 
-void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
+void CheckCorrectedCell(Mesh *pm, const int k, const int j, const int i) {
   auto *pmhd = pm->pmb_pack->pmhd;
   if (pmhd == nullptr) {
     std::cout << "CGL FOFC end-to-end test requires MHD" << std::endl;
@@ -200,10 +220,6 @@ void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
   auto fofc = HostCopy(pmhd->fofc);
 
   int m = 0;
-  auto &indcs = pm->mb_indcs;
-  int i = indcs.is + 1;
-  int j = indcs.js + 1;
-  int k = indcs.ks + 1;
   const EOS_Data &eos = pmhd->peos->eos_data;
 
   MHDCons1D expected, pressure, anisotropic;
@@ -260,8 +276,123 @@ void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
     std::cout << "CGL FOFC end-to-end test failed: FOFC flag was not reset" << std::endl;
     std::exit(EXIT_FAILURE);
   }
+}
 
+void ValidateFOFCMutation(Mesh *pm, const Real /*bdt*/) {
+  const auto &indcs = pm->mb_indcs;
+  CheckCorrectedCell(pm, indcs.ks+1, indcs.js+1, indcs.is+1);
   ++validation_count;
+}
+
+void CheckNonfinitePredictorFluxes(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto saved_u0 = Snapshot(pmhd->u0), saved_w0 = Snapshot(pmhd->w0);
+  const auto saved_bcc = Snapshot(pmhd->bcc0), saved_u1 = Snapshot(pmhd->u1);
+  const auto saved_bx = Snapshot(pmhd->b0.x1f), saved_by = Snapshot(pmhd->b0.x2f);
+  const auto saved_bz = Snapshot(pmhd->b0.x3f), saved_b1x = Snapshot(pmhd->b1.x1f);
+  const auto saved_b1y = Snapshot(pmhd->b1.x2f), saved_b1z = Snapshot(pmhd->b1.x3f);
+  const auto saved_flags = Snapshot(pmhd->fofc);
+  const auto saved_events = pm->ecounter;
+  const Real saved_dt = pm->dt;
+  Kokkos::Timer timer;
+  Driver driver(pin, pm, -1.0, &timer);
+  pm->dt = 1.0e-4;
+  Kokkos::deep_copy(pmhd->u1, pmhd->u0);
+  Kokkos::deep_copy(pmhd->b1.x1f, pmhd->b0.x1f);
+  Kokkos::deep_copy(pmhd->b1.x2f, pmhd->b0.x2f);
+  Kokkos::deep_copy(pmhd->b1.x3f, pmhd->b0.x3f);
+
+  const DvceArray5D<Real> flux[] = {pmhd->uflx.x1f, pmhd->uflx.x2f, pmhd->uflx.x3f};
+  const DvceArray5D<Real> traction[] = {pmhd->cgl_pflux.x1f, pmhd->cgl_pflux.x2f,
+                                      pmhd->cgl_pflux.x3f};
+  const DvceArray4D<Real> emf1[] = {pmhd->e3x1, pmhd->e1x2, pmhd->e2x3};
+  const DvceArray4D<Real> emf2[] = {pmhd->e2x1, pmhd->e3x2, pmhd->e1x3};
+  const Real invalid[] = {std::numeric_limits<Real>::quiet_NaN(),
+                         std::numeric_limits<Real>::infinity(),
+                         -std::numeric_limits<Real>::infinity()};
+  const auto &indcs = pm->mb_indcs;
+  const int lower[] = {indcs.is+1, indcs.js+1, indcs.ks+1};
+  for (int direction=0; direction<3; ++direction) {
+    int upper[] = {lower[0], lower[1], lower[2]};
+    ++upper[direction];
+    const int *cells[] = {lower, upper};
+    for (const int field : {IEN, IAN}) {
+      for (int bad=0; bad<3; ++bad) {
+        const std::string label = "nonfinite predictor dir=" + std::to_string(direction)
+            + " field=" + std::to_string(field) + " bad=" + std::to_string(bad);
+        for (int d=0; d<3; ++d) {
+          Kokkos::deep_copy(flux[d], 0.0);
+          Kokkos::deep_copy(traction[d], 0.0);
+          Kokkos::deep_copy(emf1[d], 0.0);
+          Kokkos::deep_copy(emf2[d], 0.0);
+        }
+        Kokkos::deep_copy(pmhd->fofc, false);
+        Kokkos::deep_copy(Kokkos::subview(flux[direction], 0, field,
+            upper[2], upper[1], upper[0]), invalid[bad]);
+        const int before = pm->ecounter.nfofc;
+        pmhd->FOFC(&driver, 1);
+        CheckClose(label + " detection count", pm->ecounter.nfofc-before, 2.0);
+        CheckCorrectedCell(pm, lower[2], lower[1], lower[0]);
+        CheckCorrectedCell(pm, upper[2], upper[1], upper[0]);
+
+        // Only faces touching either detected cell may be replaced.
+        for (int d=0; d<3; ++d) {
+          const auto f = HostCopy(flux[d]), p = HostCopy(traction[d]);
+          const auto e1 = HostCopy(emf1[d]), e2 = HostCopy(emf2[d]);
+          for (int m=0; m<f.extent_int(0); ++m) {
+            for (int k=0; k<f.extent_int(2); ++k) {
+              for (int j=0; j<f.extent_int(3); ++j) {
+                for (int i=0; i<f.extent_int(4); ++i) {
+                  const int face[] = {i, j, k};
+                  bool touched = false;
+                  for (const int *cell : cells) {
+                    bool adjacent = m == 0;
+                    for (int axis=0; axis<3; ++axis) {
+                      const int delta = face[axis] - cell[axis];
+                      adjacent = adjacent && (axis == d ? delta == 0 || delta == 1
+                                                        : delta == 0);
+                    }
+                    touched = touched || adjacent;
+                  }
+                  if (touched) continue;
+                  for (int n=0; n<f.extent_int(1); ++n) {
+                    if (f(m,n,k,j,i) != 0.0) Fail(label + " unrelated flux", 1.0, 0.0);
+                  }
+                  for (int n=0; n<p.extent_int(1); ++n) {
+                    if (p(m,n,k,j,i) != 0.0) Fail(label + " unrelated traction", 1.0, 0.0);
+                  }
+                  // EMF scratch views omit the extra outer plane of the flux views.
+                  if (k < e1.extent_int(1) && j < e1.extent_int(2) &&
+                      i < e1.extent_int(3) &&
+                      (e1(m,k,j,i) != 0.0 || e2(m,k,j,i) != 0.0)) {
+                    Fail(label + " unrelated EMF", 1.0, 0.0);
+                  }
+                }
+              }
+            }
+          }
+        }
+        const auto flags = HostCopy(pmhd->fofc);
+        for (size_t c=0; c<flags.size(); ++c) {
+          if (flags.data()[c]) Fail(label + " flag reset", 1.0, 0.0);
+        }
+        CheckUnchanged(label + " u0", pmhd->u0, saved_u0);
+        CheckUnchanged(label + " w0", pmhd->w0, saved_w0);
+        CheckUnchanged(label + " bcc0", pmhd->bcc0, saved_bcc);
+        CheckUnchanged(label + " b0.x1f", pmhd->b0.x1f, saved_bx);
+        CheckUnchanged(label + " b0.x2f", pmhd->b0.x2f, saved_by);
+        CheckUnchanged(label + " b0.x3f", pmhd->b0.x3f, saved_bz);
+      }
+    }
+  }
+  Kokkos::deep_copy(pmhd->u1, saved_u1);
+  Kokkos::deep_copy(pmhd->b1.x1f, saved_b1x);
+  Kokkos::deep_copy(pmhd->b1.x2f, saved_b1y);
+  Kokkos::deep_copy(pmhd->b1.x3f, saved_b1z);
+  Kokkos::deep_copy(pmhd->fofc, saved_flags);
+  pm->dt = saved_dt;
+  pm->ecounter = saved_events;
+  std::cout << "CGL nonfinite predictor-to-FOFC checks passed (18 cases)" << std::endl;
 }
 
 void ValidatePressureStep(Mesh *pm, const Real /*bdt*/) {
@@ -290,12 +421,13 @@ void FinalizePressureStep(ParameterInput *, Mesh *pm) {
             << "the event log" << std::endl;
 }
 
-void FinalizeFOFCMutationTest(ParameterInput *, Mesh *) {
+void FinalizeFOFCMutationTest(ParameterInput *pin, Mesh *pm) {
   if (validation_count != 1) {
     std::cout << "CGL FOFC end-to-end test failed: expected one validation, got "
               << validation_count << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  CheckNonfinitePredictorFluxes(pin, pm);
   std::cout << "CGL FOFC end-to-end test passed" << std::endl;
 }
 
