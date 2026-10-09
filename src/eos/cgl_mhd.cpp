@@ -195,6 +195,8 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
       if (dfloor_used || efloor_used || tfloor_used ||
+          !Kokkos::isfinite(u.mu) || !Kokkos::isfinite(w.vx) ||
+          !Kokkos::isfinite(w.vy) || !Kokkos::isfinite(w.vz) ||
           !Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp) ||
           !(w.e >= eos.pfloor) || !(w.pp >= eos.pfloor)) {
         fofc_(m,k,j,i) = true;

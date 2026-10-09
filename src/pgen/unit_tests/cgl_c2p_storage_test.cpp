@@ -245,16 +245,37 @@ void CheckNonfiniteFOFC(MeshBlockPack *pack) {
   const int exponent = sizeof(Real) == sizeof(float) ? 80 : 600;
   const Real large = std::ldexp(Real(1.0), exponent);
   const Real small = std::ldexp(Real(1.0), -exponent);
-  peos->eos_data.dfloor = 0.25;
+  const Real tiny_density = 0.75*std::ldexp(Real(1.0),
+                                         1-std::numeric_limits<Real>::max_exponent);
+  const Real large_density = std::numeric_limits<Real>::max()/64.0;
+  const Real momentum = 1.625;
+  peos->eos_data.dfloor = tiny_density/2.0;
   peos->eos_data.pfloor = small/16.0;
   peos->eos_data.bfloor = 1.0e-10;
   peos->eos_data.sigma_max = std::numeric_limits<Real>::max();
+  const Real inverse_density = Real(1.0)/tiny_density;
+  const Real velocity = inverse_density*momentum;
+  const Real thermal = std::numeric_limits<Real>::max() -
+                       0.5*inverse_density*SQR(momentum);
+  const Real tiny_anisotropy = tiny_density*(2.0*std::log(tiny_density) -
+                                           3.0*std::log(peos->eos_data.bfloor));
+  const Real large_anisotropy = large_density*(2.0*std::log(large_density) -
+                                             3.0*std::log(peos->eos_data.bfloor));
+  Require("weak-B fixture overflows repaired A", std::isfinite(large_density) &&
+          !std::isfinite(large_anisotropy));
+  Require("weak-B fixture overflows velocity with finite thermal energy and A",
+          peos->eos_data.dfloor > 0.0 && tiny_density > peos->eos_data.dfloor &&
+          std::isfinite(inverse_density) && !std::isfinite(velocity) &&
+          std::isfinite(thermal) && thermal > 1.5*peos->eos_data.pfloor &&
+          std::isfinite(tiny_anisotropy));
 
   const int nmb = pack->nmb_thispack, nmhd = pack->pmhd->nmhd;
   const int field_cases = 1 + 3*(nmhd + 3);
   const int first_extreme = 2*field_cases;
   const int overflow_case = first_extreme + 2;
-  const int ncases = overflow_case + 1;
+  const int anisotropy_overflow_case = overflow_case + 1;
+  const int first_velocity_overflow = anisotropy_overflow_case + 1;
+  const int ncases = first_velocity_overflow + 3;
   DvceArray5D<Real> cons("nonfinite_cons", nmb, nmhd, 1, 1, ncases);
   DvceArray5D<Real> prim("nonfinite_prim", nmb, nmhd, 1, 1, ncases);
   DvceArray5D<Real> bcc("nonfinite_bcc", nmb, 3, 1, 1, ncases);
@@ -293,10 +314,20 @@ void CheckNonfiniteFOFC(MeshBlockPack *pack) {
         const Real perp = c == first_extreme ? large : small;
         initial_cons(m,IEN,0,0,c) = 0.5*parallel + perp + 0.5;
         initial_cons(m,IAN,0,0,c) = std::log(perp) - std::log(parallel);
-      } else {
+      } else if (c == overflow_case) {
         // Finite inputs can still overflow a recovered pressure without triggering floors.
         initial_cons(m,IEN,0,0,c) = std::numeric_limits<Real>::max();
         initial_cons(m,IAN,0,0,c) = -std::log(Real(4.0));
+      } else if (c == anisotropy_overflow_case) {
+        // The weak-B fallback keeps pressures finite while its rewritten A overflows.
+        initial_cons(m,IDN,0,0,c) = large_density;
+        initial_bcc(m,IBZ,0,0,c) = 0.0;
+      } else {
+        // Multiplying by 1/2 before momentum squared keeps K finite despite infinite v.
+        initial_cons(m,IDN,0,0,c) = tiny_density;
+        initial_cons(m,IM1+c-first_velocity_overflow,0,0,c) = momentum;
+        initial_cons(m,IEN,0,0,c) = std::numeric_limits<Real>::max();
+        initial_bcc(m,IBZ,0,0,c) = 0.0;
       }
     }
   }
@@ -320,12 +351,18 @@ void CheckNonfiniteFOFC(MeshBlockPack *pack) {
   Require("nonfinite FOFC magnetic field unchanged",
           std::memcmp(initial_bcc.data(), tested_bcc.data(),
                       initial_bcc.size()*sizeof(Real)) == 0);
+  bool flags_match = true;
   for (int m = 0; m < nmb; ++m) {
     for (int c = 0; c < ncases; ++c) {
-      const bool expected = c < first_extreme ? c%field_cases != 0 : c == overflow_case;
-      Require("nonfinite FOFC flag " + std::to_string(c), flags(m,0,0,c) == expected);
+      const bool expected = c < first_extreme ? c%field_cases != 0 : c >= overflow_case;
+      if (flags(m,0,0,c) != expected) {
+        std::cout << "CGL nonfinite FOFC flag mismatch: block " << m << " case " << c
+                  << " got=" << flags(m,0,0,c) << " expected=" << expected << std::endl;
+        flags_match = false;
+      }
     }
   }
+  Require("nonfinite FOFC cell flags", flags_match);
   Require("nonfinite FOFC counters", events.nfofc == nfofc + nmb*(ncases-4) &&
           events.neos_dfloor == ndfloor && events.neos_efloor == nefloor &&
           events.neos_tfloor == ntfloor);
