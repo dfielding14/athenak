@@ -57,10 +57,13 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
   peos->eos_data.bfloor = 1.0e-10;
   peos->eos_data.sigma_max = sigma_max;
   peos->eos_data.hardwall_lim = false;
+  const Real b_eff = std::max(bmag, peos->eos_data.bfloor);
+  const bool low_b = bmag <= peos->eos_data.bfloor;
 
   const int nmb = pack->nmb_thispack;
-  DvceArray5D<Real> cons("storage_cons", nmb, 6, 1, 1, 1);
-  DvceArray5D<Real> prim("storage_prim", nmb, 6, 1, 1, 1);
+  const int scalar = pack->pmhd->nmhd;
+  DvceArray5D<Real> cons("storage_cons", nmb, scalar+1, 1, 1, 1);
+  DvceArray5D<Real> prim("storage_prim", nmb, scalar+1, 1, 1, 1);
   DvceArray5D<Real> bcc("storage_bcc", nmb, 3, 1, 1, 1);
   DvceFaceFld4D<Real> b("storage_b", nmb, 1, 1, 1);
   Kokkos::deep_copy(b.x1f, 0.0);
@@ -91,9 +94,13 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
       initial(m,IEN,0,0,0) = initial_energy;
       initial(m,IAN,0,0,0) = mode == 0
           ? density*std::log(initial_perp/initial_parallel*density*density/
-                             (bmag*bmag*bmag)) : initial_perp/bmag;
+                             (b_eff*b_eff*b_eff)) : initial_perp/b_eff;
+      initial(m,scalar,0,0,0) = 0.25;
     }
     Kokkos::deep_copy(cons, initial);
+    Kokkos::deep_copy(prim, 0.0);
+    Kokkos::deep_copy(Kokkos::subview(prim, Kokkos::ALL, scalar,
+        Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 0.25/density);
 
     auto convert = [&]() {
       if (mode == 0) {
@@ -107,15 +114,16 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
     // Density repair releases kinetic energy at fixed total E and momentum.
     const Real thermal = initial_energy - expected_kinetic - magnetic;
     const Real ratio = initial_perp/initial_parallel;
-    const Real unfloored_parallel =
-        mode == 0 ? thermal/(0.5 + ratio) : 2.0*(thermal - initial_perp);
-    const Real unfloored_perp = mode == 0 ? ratio*unfloored_parallel : initial_perp;
+    const Real unfloored_parallel = low_b ? 2.0*thermal/3.0
+        : (mode == 0 ? thermal/(0.5 + ratio) : 2.0*(thermal - initial_perp));
+    const Real unfloored_perp = low_b ? unfloored_parallel
+        : (mode == 0 ? ratio*unfloored_parallel : initial_perp);
     const Real expected_parallel = std::max(Real(1.0), unfloored_parallel);
     const Real expected_perp = std::max(Real(1.0), unfloored_perp);
     const Real expected_slot = mode == 0
         ? expected_density*std::log(expected_perp/expected_parallel*
-                                    expected_density*expected_density/(bmag*bmag*bmag))
-        : expected_perp/bmag;
+                                    expected_density*expected_density/(b_eff*b_eff*b_eff))
+        : expected_perp/b_eff;
     const bool pressure_repair = unfloored_parallel < 1.0 || unfloored_perp < 1.0;
     const Real expected_energy = pressure_repair
         ? 0.5*expected_parallel + expected_perp + expected_kinetic + magnetic
@@ -123,6 +131,35 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
     auto &events = pack->pmesh->ecounter;
     const int density_events = events.neos_dfloor;
     const int pressure_events = events.neos_efloor;
+    if (mode == 0) {
+      const auto saved_fofc = pack->pmhd->fofc;
+      pack->pmhd->fofc = DvceArray4D<bool>("storage_fofc", nmb, 1, 1, 1);
+      Kokkos::deep_copy(pack->pmhd->fofc, false);
+      const auto initial_prim = Snapshot(prim);
+      const auto initial_bcc = Snapshot(bcc);
+      const int fofc_events = events.nfofc;
+      peos->ConsToPrim(cons, b, prim, bcc, true, 0, 0, 0, 0, 0, 0);
+      const auto tested_cons = Snapshot(cons);
+      const auto tested_prim = Snapshot(prim);
+      const auto tested_bcc = Snapshot(bcc);
+      const auto flags = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pack->pmhd->fofc);
+      const bool expect_flag = expected_density > density || pressure_repair;
+      Require(label + " test-floor conserved state unchanged",
+              std::memcmp(initial.data(), tested_cons.data(), initial.size()*sizeof(Real)) == 0);
+      Require(label + " test-floor primitives unchanged",
+              std::memcmp(initial_prim.data(), tested_prim.data(),
+                          initial_prim.size()*sizeof(Real)) == 0);
+      Require(label + " test-floor magnetic field unchanged",
+              std::memcmp(initial_bcc.data(), tested_bcc.data(),
+                          initial_bcc.size()*sizeof(Real)) == 0);
+      Require(label + " test-floor counters",
+              events.nfofc == fofc_events + nmb*expect_flag &&
+              events.neos_dfloor == density_events && events.neos_efloor == pressure_events);
+      for (int m = 0; m < nmb; ++m) {
+        Require(label + " test-floor cell flag", flags(m,0,0,0) == expect_flag);
+      }
+      pack->pmhd->fofc = saved_fofc;
+    }
     convert();
     Require(label + " expected density repairs",
             events.neos_dfloor == density_events + nmb*(expected_density > density));
@@ -133,6 +170,13 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
     for (int m = 0; m < nmb; ++m) {
       RequireClose(label + " stored density", corrected(m,IDN,0,0,0), expected_density);
       RequireClose(label + " stored extra slot", corrected(m,IAN,0,0,0), expected_slot);
+      if (low_b) {
+        Require(label + " repaired low-B slot",
+                corrected(m,IAN,0,0,0) != initial(m,IAN,0,0,0));
+      }
+      Require(label + " preserved scalar mass", corrected(m,scalar,0,0,0) == 0.25);
+      RequireClose(label + " scalar fraction", recovered(m,scalar,0,0,0),
+                   0.25/expected_density);
       for (int v = IM1; v <= IM3; ++v) {
         Require(label + " unchanged momentum",
                 corrected(m,v,0,0,0) == initial(m,v,0,0,0));
@@ -158,17 +202,18 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
       if (!unresolved) {
         // A representable E can shift pressures while preserving the floored ratio or moment.
         const Real floored_ratio = expected_perp/expected_parallel;
-        const Real canonical_parallel = mode == 0
-            ? stored_thermal/(0.5 + floored_ratio) : 2.0*(stored_thermal - expected_perp);
-        const Real canonical_perp = mode == 0
-            ? floored_ratio*canonical_parallel : expected_perp;
+        const Real canonical_parallel = low_b ? 2.0*stored_thermal/3.0
+            : (mode == 0 ? stored_thermal/(0.5 + floored_ratio)
+                         : 2.0*(stored_thermal - expected_perp));
+        const Real canonical_perp = low_b ? canonical_parallel
+            : (mode == 0 ? floored_ratio*canonical_parallel : expected_perp);
         RequireClose(label + " parallel pressure", recovered(m,IPR,0,0,0),
                      canonical_parallel);
         RequireClose(label + " perpendicular pressure", recovered(m,IPP,0,0,0),
                      canonical_perp);
       }
-      const Real rounded_moment = Real(1.0)/bmag;
-      if (mode != 0 && expected_perp == 1.0 && rounded_moment*bmag < 1.0) {
+      const Real rounded_moment = Real(1.0)/b_eff;
+      if (!low_b && mode != 0 && expected_perp == 1.0 && rounded_moment*bmag < 1.0) {
         Require(label + " upward moment encoding", corrected(m,IAN,0,0,0) > rounded_moment);
       }
       RequireClose(label + " internal energy identity", stored_thermal,
@@ -263,19 +308,23 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Require("active CGL without scalars", pmhd != nullptr &&
       pmhd->peos->eos_data.is_cgl && !pmhd->peos->eos_data.passive &&
       pmhd->nscalars == 0);
+  // Only the isolated views own a scalar; restore metadata before live mesh startup.
+  const int saved_nscalars = pmhd->nscalars;
+  pmhd->nscalars = 1;
   const Real max_sigma = std::numeric_limits<Real>::max();
   CheckFloorStorage(pack, "density-floor", 0.5, 2.0, 4.0, 1.0, max_sigma);
   CheckFloorStorage(pack, "magnetization-floor", 0.5, 2.0, 4.0, 0.25, 1.0);
   CheckFloorStorage(pack, "parallel-pressure-floor", 2.0, 0.25, 2.0, 0.25, max_sigma);
   CheckFloorStorage(pack, "perpendicular-pressure-floor", 2.0, 2.0, 0.25, 0.25, max_sigma);
   CheckFloorStorage(pack, "both-pressure-floor", 2.0, 0.25, 0.5, 0.25, max_sigma);
+  CheckFloorStorage(pack, "low-magnetic-field", 2.0, 4.0, 1.0, 0.25, max_sigma, 0.0);
   const Real rounding_b = sizeof(Real) == sizeof(float) ? 41.0 : 49.0;
   Require("moment division fixture rounds pressure down", (Real(1.0)/rounding_b)*rounding_b < 1.0);
   CheckFloorStorage(pack, "moment-division-rounding", 1.0, 5.5, 0.25, 0.25,
                     max_sigma, rounding_b);
   CheckFloorStorage(pack, "unresolved-internal-energy", 2.0, 1.0, 1.0, 0.25,
                     max_sigma, 1.0, true);
-
+  pmhd->nscalars = saved_nscalars;
   CheckExtremeRatiosOnDevice();
 
   // Normal zero-step startup still needs a finite live state after the isolated fixture.

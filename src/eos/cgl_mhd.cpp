@@ -359,7 +359,7 @@ void CGLMHD::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
 //! During a pure CGL Landau-fluid STS sweep, only total energy and the temporary
 //! magnetic-moment slot change.  The face-centered and cell-centered magnetic fields are
 //! fixed, so this refresh reuses bcc and avoids the full face-to-cell magnetic-field
-//! average and scalar primitive conversion done by CGLMagneticMomentToPrim().
+//! average; scalar primitives need refreshing only when a density floor is applied.
 
 void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                               const DvceArray5D<Real> &bcc,
@@ -367,6 +367,8 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                               const int il, const int iu,
                                               const int jl, const int ju,
                                               const int kl, const int ku) {
+  const int nmhd = pmy_pack->pmhd->nmhd;
+  const int nscal = pmy_pack->pmhd->nscalars;
   const int nmb = pmy_pack->nmb_thispack;
   const EOS_Data eos = eos_data;
 
@@ -410,6 +412,12 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
 
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;
+      for (int n=nmhd; n<(nmhd+nscal); ++n) {
+        if (cons(m,n,k,j,i) < 0.0) {
+          cons(m,n,k,j,i) = 0.0;
+        }
+        prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
+      }
       sumd++;
     }
     if (efloor_used) {
