@@ -12,9 +12,9 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–2 complete, including the piece-2 adversarial follow-up.
+**Status:** pieces 0–3 complete.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** piece 3 — reconstruction and FOFC detection.
+**Next:** piece 4 — collisions, walls and their schedule.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
@@ -56,7 +56,7 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   momentum, and energy in the moment decoder. Gate: independent pressure/energy
   identities, idempotence, stored A, and focused double/float checks.
 
-- [ ] **3 — Reconstruction and FOFC.** Repair both CGL pressure floors in every
+- [x] **3 — Reconstruction and FOFC.** Repair both CGL pressure floors in every
   directional PPMX/WENO-Z wrapper and detect incoming nonfinite E/A before repair.
   Gate: wrapper tests, NaN/Inf injection, steep-pressure evolution, and MHD controls.
 
@@ -184,3 +184,5 @@ candidate. Keep commands/backend and evidence paths sufficient to resume the wor
 | 2 / ratio underflow | `ef42d98e9`; split an underflowing pressure-ratio exponential into two factors so representable small pressures survive | `analysis/piece2-sweep.sbatch`, jobs `5640984`/`5640989`; bounded grid plus seeded scalar sweep in both precisions. Permanent boundary fixture and 4 HIP extreme-ratio cases in job `5640993` | Before: two analytic underflow failures per precision; after: all 106,252 states per precision pass pressure/energy, primary-field and exact-repeat checks. Added 16 boundary states per precision without relaxing inherited tolerances | Workspace `runs/piece2-sweep-5640984/` preserves failures; `runs/piece2-sweep-5640989/` preserves successful sweep, source, seed and commands. Ordinary arithmetic unchanged |
 | 2 / scalar persistence and final gate | `c8f31d67e`; refresh scalar fractions in the lightweight moment decoder when density is repaired | `analysis/piece2-followup.sbatch`, job `5640993`; 2 Serial precision configurations, 24 HIP wrapper cases, 8 read-only FOFC floor checks, 4 device ratio cases, and 4 retained LF selectors | All passed, including scalar mass/fractions, low-B writeback and exact repeated arrays. Independent whole-piece review found no further persistence defect. Original controls and saved initial piece-2 binary unchanged | Workspace `runs/piece2-followup-5640993/`; candidate SHA-256 `4a0881e6522c94941847687859daa35f0c9576ea9b85ac05b75726475a3405d5`. Whole-application float, nonfinite FOFC detection and later physics remain unqualified |
 | 2 / follow-up cost screen | `c8f31d67e` candidate versus saved initial piece-2 binary `acc48e3c…` | `analysis/piece2-followup-timing.sbatch`, job `5640998`; same frozen inputs, one measured pair after warmup, separate profiles and transport checks | All 14 invocations passed; matching printed timesteps, RHS/cycle and recorded active transport, with zero repair/invalid/hard-bound events | Million zone-cycles/s/node before→after: uniform 103.932→103.873 (−0.06%, 42 RHS/cycle); active 70.870→69.743 (−1.59%, 38 RHS/cycle). Single pair, no repeatable performance claim. Full metrics in workspace `runs/piece2-followup-timing-5640998/summary.json` and `README.md` |
+| 3 / incoming FOFC state | `51b24a3b1`; detect nonfinite rho/momentum/E/A/B before local C2P can hide it, and reject nonfinite or below-floor recovered pressures in the test-only path | `analysis/piece3.sbatch`, job `5641014`; extended production storage HIP fixture | All 59 states passed: NaN/±Inf in all nine incoming fields at finite/zero B, valid controls including extreme ratios, and finite-input pressure overflow. Exact input/primitive/B preservation and counters checked; earlier piece-2 device cases also passed | Workspace `runs/piece3-5641014/device.log`; ordinary C2P repair policy unchanged. Saved piece-2 and original control hashes verified |
+| 3 / reconstruction and evolution | `51d70fc86`; all directional PPMX/WENO-Z wrappers use pfloor for both CGL pressures; retain PPM4 and ordinary-MHD behavior | Same job; `test_cgl_reconstruction_floor_cpu.py` double/float plus custom `cgl_reconstruction_floor_test` HIP pgen; pressure-peak, live FOFC and RJ2a selectors | 72 wrapper calls / 1,008 analytic face-variable checks passed per backend/precision. Both 50-cycle peaks stayed finite/positive with zero EOS/FOFC events; live flux/EMF/traction mutation passed; ordinary-MHD PPMX/WENO-Z shock-tube convergence passed at 128/256 cells | 2 host and 5 application pytest cases passed, plus both custom HIP fixtures. Workspace `runs/piece3-5641014/`; qualified flags checked. No throughput rerun under the plan's local-repair cadence; broad physical/MPI/mesh acceptance and whole-application float remain later gates |
