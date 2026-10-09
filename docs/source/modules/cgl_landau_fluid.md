@@ -136,9 +136,21 @@ cgl_lf_profile = false
 cgl_lf_profile_detail = false
 ```
 
-At an operator face with `|B| <= bfloor`, LF does not construct a local field
-direction and applies zero heat-flux contribution at that face. The local
-accuracy campaign exercises this shutdown behavior with strict monitoring.
+LF faces use the CT normal field and arithmetic means of the adjacent
+cell-centered tangential components. They divide this vector by
+$\bar B=(|\boldsymbol B_L|+|\boldsymbol B_R|)/2$, without renormalizing it
+to unit length. The same $\bar B$ supplies inverse-field factors and the
+magnetic pressure in the effective scattering rate. Faces with
+$\bar B\le B_{\rm floor}$ contribute zero heat flux.
+
+For neighboring fields $(g,+B,0)$ and $(g,-B,0)$, the normal thermal
+conduction factor in the small-gradient limit is $g^2/(g^2+B^2)$.
+Normalizing the canceled vector instead would incorrectly give unity.
+This is a discrete regularization of unresolved reversals; a smooth sheet
+of fixed physical width and nonzero guide field recovers the continuum
+direction under refinement. The CT normal component is a separate staggered
+value, so the resulting vector is not universally bounded by unit length.
+This geometry alone does not establish a stability bound for the full stencil.
 
 The default soft thresholds match `beta Delta = -2` and `+1`. Shipped decks
 that formerly requested `limiter_hardwall=true` now explicitly use stiff

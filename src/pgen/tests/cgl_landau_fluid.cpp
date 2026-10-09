@@ -49,6 +49,8 @@ enum class TestMode {
   paper_oblique_wave,
   paper_eigen_wave,
   rotated_decay,
+  face_geometry,
+  field_reversal,
   low_field,
   timestep_refresh
 };
@@ -143,13 +145,15 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   if (mode == "rotated_decay") return TestMode::rotated_decay;
+  if (mode == "face_geometry") return TestMode::face_geometry;
+  if (mode == "field_reversal") return TestMode::field_reversal;
   if (mode == "timestep_refresh") return TestMode::timestep_refresh;
   if (mode == "low_field") return TestMode::low_field;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, "
        "collision_relaxation, grad_b, grad_b_wall, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "low_field, or timestep_refresh");
+       "face_geometry, field_reversal, low_field, or timestep_refresh");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -166,6 +170,8 @@ const char *ModeName(const TestMode mode) {
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
     case TestMode::rotated_decay: return "rotated_decay";
+    case TestMode::face_geometry: return "face_geometry";
+    case TestMode::field_reversal: return "field_reversal";
     case TestMode::timestep_refresh: return "timestep_refresh";
     case TestMode::low_field: return "low_field";
   }
@@ -474,9 +480,8 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const int left = (face - 1 + nx1)%nx1;
   const int right = face%nx1;
   const Real bx = pin->GetOrAddReal("problem", "b0", 1.0);
-  const Real bz = pin->GetOrAddReal("problem", "bz0", 0.0);
-  const Real by = 0.5*(ByCell(pin, pm, left) + ByCell(pin, pm, right));
-  const Real bmag_face = std::sqrt(SQR(bx) + SQR(by) + SQR(bz));
+  const Real bmag_face = 0.5*BMagCell(pin, pm, left) +
+                           0.5*BMagCell(pin, pm, right);
   const Real bhx = bx/bmag_face;
   const Real grad_b_x = (BMagCell(pin, pm, right) - BMagCell(pin, pm, left))/dx;
   const Real gradpar_b = bhx*grad_b_x;
@@ -485,7 +490,9 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const Real pperp = pin->GetOrAddReal("problem", "pperp0", 1.2);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
   const Real cpar = FaceCParallel(pin, rho, ppar);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar, pperp, bx, by, bz);
+  // Scattering uses the same mean magnitude as the transport factors.
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar, pperp,
+                                                   bmag_face, 0.0, 0.0);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
   const Real qperp = LimitedHeatFlux(qperp_l, cgl::kSqrtTwoOverPi*cpar*pperp);
@@ -944,6 +951,154 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
             << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
 }
 
+void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto *lf = pmhd->pcgl_lf;
+  Require(pm->ncycle == 0 && lf != nullptr && !lf->lf_coeff_local && pm->three_d &&
+          pm->mb_indcs.nx1 >= 4 && pm->mb_indcs.nx2 >= 4 && pm->mb_indcs.nx3 >= 4,
+          "face_geometry requires nlim=0, background coefficients and a 3D block >=4^3");
+  Require(!lf->effective_backup_limiter, "face_geometry requires backup limiters off");
+  const auto &ind = pm->mb_indcs;
+  const int center[] = {ind.is+ind.nx1/2, ind.js+ind.nx2/2, ind.ks+ind.nx3/2};
+  const auto size = pm->pmb_pack->pmb->mb_size.h_view(0);
+  const Real h[] = {size.dx1, size.dx2, size.dx3};
+  auto w = HostCopy(pmhd->w0), bcc = HostCopy(pmhd->bcc0);
+  auto bx = HostCopy(pmhd->b0.x1f);
+  decltype(bx) fields[] = {bx, HostCopy(pmhd->b0.x2f), HostCopy(pmhd->b0.x3f)};
+  const DvceArray4D<Real> device_fields[] = {pmhd->b0.x1f, pmhd->b0.x2f, pmhd->b0.x3f};
+  const DvceArray5D<Real> flux[] = {pmhd->uflx.x1f, pmhd->uflx.x2f, pmhd->uflx.x3f};
+  const char *cases[] = {"reversal", "ct", "grad_b", "zero", "low", "floor",
+                         "above_floor", "scattering"};
+  const std::string selected = pin->GetOrAddString("problem", "geometry_case", "all");
+  int checked = 0;
+  for (int kind=0; kind<8; ++kind) {
+    if (selected != "all" && selected != cases[kind]) continue;
+    for (int dir=0; dir<3; ++dir) {
+      for (const Real scale : {Real(1.0), Real(-1.0), Real(4.0)}) {
+        EOS_Data eos = pmhd->peos->eos_data;
+        eos.nu_coll = 0.0;
+        eos.flim = false;
+        eos.mlim = kind == 7;
+        eos.mirror_threshold = 1.0;
+        eos.lim_coll = 7.0;
+        const int tangent = (dir+1)%3;
+        const int third = (dir+2)%3;
+        const Real pperp = kind == 2 ? 0.7 : (kind == 7 ? 1.75 : 1.0);
+        const Real gradient = kind == 2 ? 0.0 : 0.02;
+        // The scattering threshold check isolates the parallel collisional response.
+        const Real perp_gradient = kind == 7 ? 0.0 : gradient;
+        const Real uniform_b = kind == 4 ? 0.5*eos.bfloor :
+            (kind == 5 ? eos.bfloor : std::nextafter(eos.bfloor, Real(1.0)));
+        for (int component=0; component<3; ++component) {
+          for (int k=0; k<fields[component].extent_int(1); ++k) {
+            for (int j=0; j<fields[component].extent_int(2); ++j) {
+              for (int i=0; i<fields[component].extent_int(3); ++i) {
+                const int index[] = {i,j,k};
+                const Real x = (index[dir]-center[dir]+0.5
+                                - (component == dir ? 0.5 : 0.0))*h[dir];
+                const Real y = (index[tangent]-center[tangent]
+                                - (component == tangent ? 0.5 : 0.0))*h[tangent];
+                Real value = 0.0;
+                if (kind == 0 || kind == 7) {
+                  if (component == dir) value = 0.03;
+                  if (component == tangent) value = x < 0.0 ? -1.0 : 1.0;
+                } else if (kind == 1) {
+                  // Divergence-free quadratic: Bn=1+0.4*x^2, Bt=-0.8*x*y.
+                  if (component == dir) value = 1.0+0.4*x*x;
+                  if (component == tangent) value = -0.8*x*y;
+                  if (component == third) value = 0.4;
+                } else if (kind == 2) {
+                  if (component == dir) value = 0.4;
+                  if (component == tangent) value = 1.0+0.2*x;
+                } else if (kind >= 4 && component == dir) {
+                  value = uniform_b;
+                }
+                fields[component](0,k,j,i) = scale*value;
+              }
+            }
+          }
+        }
+        for (int k=0; k<w.extent_int(2); ++k) {
+          for (int j=0; j<w.extent_int(3); ++j) {
+            for (int i=0; i<w.extent_int(4); ++i) {
+              const int index[] = {i,j,k};
+              const Real x = (index[dir]-center[dir]+0.5)*h[dir];
+              w(0,IDN,k,j,i) = 1.0;
+              w(0,IVX,k,j,i) = w(0,IVY,k,j,i) = w(0,IVZ,k,j,i) = 0.0;
+              w(0,IPR,k,j,i) = 1.0+gradient*x;
+              w(0,IPP,k,j,i) = pperp+perp_gradient*x;
+              bcc(0,IBX,k,j,i) = 0.5*(fields[0](0,k,j,i)+fields[0](0,k,j,i+1));
+              bcc(0,IBY,k,j,i) = 0.5*(fields[1](0,k,j,i)+fields[1](0,k,j+1,i));
+              bcc(0,IBZ,k,j,i) = 0.5*(fields[2](0,k,j,i)+fields[2](0,k+1,j,i));
+              if (i >= ind.is && i <= ind.ie && j >= ind.js && j <= ind.je &&
+                  k >= ind.ks && k <= ind.ke) {
+                const Real divergence = (fields[0](0,k,j,i+1)-fields[0](0,k,j,i))/h[0]
+                    +(fields[1](0,k,j+1,i)-fields[1](0,k,j,i))/h[1]
+                    +(fields[2](0,k+1,j,i)-fields[2](0,k,j,i))/h[2];
+                Require(std::abs(divergence) < 1.0e-11*std::abs(scale),
+                        "face_geometry fixture has nonzero CT divergence");
+              }
+            }
+          }
+        }
+        Kokkos::deep_copy(pmhd->w0, w);
+        Kokkos::deep_copy(pmhd->bcc0, bcc);
+        for (int d=0; d<3; ++d) {
+          Kokkos::deep_copy(device_fields[d], fields[d]);
+          Kokkos::deep_copy(flux[d], 0.0);
+        }
+        lf->AddHeatFluxes(pmhd->w0, pmhd->bcc0, pmhd->b0, eos, 1.0, 1.0, pmhd->uflx);
+
+        // Closed-form face data; CT cell averages add 0.4*h^2/4 to pointwise Bn.
+        Real bn=0.0, bbar=0.0, db=0.0;
+        if (kind == 0 || kind == 7) {
+          bn = scale*0.03;
+          bbar = std::abs(scale)*std::sqrt(1.0009);
+        } else if (kind == 1) {
+          bn = scale;
+          bbar = std::abs(scale)*std::hypot(1.0+0.2*SQR(h[dir]), 0.4);
+        } else if (kind == 2) {
+          bn = 0.4*scale;
+          const Real left = std::hypot(0.4, 1.0-0.1*h[dir]);
+          const Real right = std::hypot(0.4, 1.0+0.1*h[dir]);
+          bbar = 0.5*std::abs(scale)*(left+right);
+          db = std::abs(scale)*(right-left)/h[dir];
+        } else if (kind >= 4) {
+          bn = scale*uniform_b;
+          bbar = std::abs(bn);
+        }
+        Real expected_e=0.0, expected_m=0.0;
+        if (bbar > eos.bfloor) {
+          const Real direction = bn/bbar;
+          const Real nu = kind == 7 && pperp-1.0 > 0.5*bbar*bbar ? 7.0 : 0.0;
+          const Real c = lf->lf_c_parallel0, k = lf->lf_k_parallel;
+          const Real chi_par = 8.0*c*c/(std::sqrt(8.0*M_PI)*c*k+(3.0*M_PI-8.0)*nu);
+          const Real chi_perp = 2.0*c*c/(std::sqrt(2.0*M_PI)*c*k+nu);
+          const Real qpar_l = -chi_par*direction*gradient;
+          const Real qperp_l = -chi_perp*direction*
+              (perp_gradient-pperp*(1.0-pperp)*db/bbar);
+          const Real qpar = qpar_l/(1.0+std::abs(qpar_l)/(std::sqrt(8.0/M_PI)*c));
+          const Real qperp = qperp_l/(1.0+std::abs(qperp_l)/
+                                      (std::sqrt(2.0/M_PI)*c*pperp));
+          expected_e = direction*(qperp+0.5*qpar);
+          expected_m = direction*qperp/bbar;
+        }
+        const auto actual = HostCopy(flux[dir]);
+        const Real got_e = actual(0,IEN,center[2],center[1],center[0]);
+        const Real got_m = actual(0,IAN,center[2],center[1],center[0]);
+        const std::string label = std::string("face_geometry ")+cases[kind]+" dir="+
+            std::to_string(dir)+" scale="+std::to_string(scale);
+        RequireRelative(label+" energy", got_e, expected_e, 2.0e-11);
+        RequireRelative(label+" moment", got_m, expected_m, 2.0e-11);
+        ++checked;
+      }
+    }
+  }
+  Require(checked > 0, "unknown face_geometry case");
+  std::cout << "CGL LF face_geometry passed: case=" << selected << " checks=" << checked
+            << std::endl;
+}
+
 void CheckPrescribedCollisionRateFlux(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   auto *lf = pmhd->pcgl_lf;
@@ -959,7 +1114,7 @@ void CheckPrescribedCollisionRateFlux(ParameterInput *pin, Mesh *pm) {
   const auto &indcs = pm->mb_indcs;
   DvceFaceFld5D<Real> flux("prescribed_rate_flux", 1, pmhd->nmhd, 1, 1,
                            indcs.nx1 + 2*indcs.ng);
-  lf->AddHeatFluxes(pmhd->w0, pmhd->bcc0, pmhd->peos->eos_data,
+  lf->AddHeatFluxes(pmhd->w0, pmhd->bcc0, pmhd->b0, pmhd->peos->eos_data,
                       1.0, 1.0, flux);
   auto actual = HostCopy(flux.x1f);
   auto w = HostCopy(pmhd->w0);
@@ -1601,12 +1756,71 @@ void CheckTimestepRefresh(ParameterInput *pin, Mesh *pm) {
   }
 }
 
+HostArray5D<Real> reversal_initial_w, reversal_initial_b;
+Real reversal_ppar0=1.0, reversal_pperp0=1.0;
+Real reversal_peak=0.0, reversal_min=1.0, reversal_frozen_error=0.0;
+Real reversal_energy=0.0, reversal_moment=0.0, reversal_energy0=0.0, reversal_moment0=0.0;
+
+// User sources sample every RK stage between LF sweeps; finalization samples the last sweep.
+void MonitorFieldReversal(Mesh *pm, const Real) {
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  const auto b = HostCopy(pm->pmb_pack->pmhd->bcc0);
+  const auto &ind = pm->mb_indcs;
+  reversal_energy = reversal_moment = 0.0;
+  for (int k=ind.ks; k<=ind.ke; ++k) {
+    for (int j=ind.js; j<=ind.je; ++j) {
+      for (int i=ind.is; i<=ind.ie; ++i) {
+        const Real ppar = w(0,IPR,k,j,i), pperp = w(0,IPP,k,j,i);
+        Require(std::isfinite(ppar) && std::isfinite(pperp),
+                "field_reversal developed nonfinite pressures");
+        reversal_min = std::min(reversal_min, std::min(ppar,pperp));
+        reversal_peak = std::max(reversal_peak,
+            std::max(std::abs(ppar/reversal_ppar0-1.0),
+                     std::abs(pperp/reversal_pperp0-1.0)));
+        const Real magnitude = std::sqrt(SQR(b(0,IBX,k,j,i))+SQR(b(0,IBY,k,j,i))+
+                                         SQR(b(0,IBZ,k,j,i)));
+        reversal_energy += 0.5*ppar+pperp;
+        reversal_moment += pperp/magnitude;
+        for (int n=IDN; n<=IVZ; ++n) {
+          reversal_frozen_error = std::max(reversal_frozen_error,
+              std::abs(w(0,n,k,j,i)-reversal_initial_w(0,n,k,j,i)));
+        }
+        for (int n=0; n<3; ++n) {
+          reversal_frozen_error = std::max(reversal_frozen_error,
+              std::abs(b(0,n,k,j,i)-reversal_initial_b(0,n,k,j,i)));
+        }
+      }
+    }
+  }
+}
+
+void CheckFieldReversal(ParameterInput *pin, Mesh *pm) {
+  MonitorFieldReversal(pm, 0.0);
+  const Real amplitude = pin->GetReal("problem", "amp");
+  const Real growth = reversal_peak/amplitude;
+  std::cout << std::setprecision(17) << "CGL LF field_reversal: cycles=" << pm->ncycle
+            << " time=" << pm->time << " peak_delta_p=" << reversal_peak
+            << " growth=" << growth << " min_pressure=" << reversal_min
+            << " energy0=" << reversal_energy0 << " energy=" << reversal_energy
+            << " moment0=" << reversal_moment0 << " moment=" << reversal_moment
+            << " frozen_error=" << reversal_frozen_error << std::endl;
+  Require(reversal_min > 0.0, "field_reversal developed nonpositive pressures");
+  Require(reversal_frozen_error == 0.0, "field_reversal changed its frozen primary fields");
+  reversal_initial_w = HostArray5D<Real>();
+  reversal_initial_b = HostArray5D<Real>();
+  if (pin->GetOrAddReal("problem", "reversal_width", 0.0) == 0.0) {
+    Require(reversal_peak < 1.0e-2 && growth < 10.0,
+            "field_reversal amplified the pressure seed");
+  }
+}
+
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
           "quantitative LF tests require <mhd>/eos = cgl");
   const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::rotated_decay) {
+  if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
+      mode == TestMode::field_reversal) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -1642,6 +1856,10 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckPaperEigenWave(pin, pm);
   } else if (mode == TestMode::rotated_decay) {
     CheckRotatedDecay(pin, pm);
+  } else if (mode == TestMode::face_geometry) {
+    CheckFaceGeometry(pin, pm);
+  } else if (mode == TestMode::field_reversal) {
+    CheckFieldReversal(pin, pm);
   } else if (mode == TestMode::timestep_refresh) {
     CheckTimestepRefresh(pin, pm);
   } else if (mode == TestMode::low_field) {
@@ -1661,7 +1879,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Fail("quantitative LF tests require <mhd>/eos = cgl");
   }
   const TestMode mode = ParseMode(pin);
-  if (mode == TestMode::rotated_decay) {
+  if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
+      mode == TestMode::field_reversal) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -1675,6 +1894,18 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real reversal_width = pin->GetOrAddReal("problem", "reversal_width", 0.0);
+  if (mode == TestMode::field_reversal) {
+    Require(user_srcs && std::isfinite(reversal_width) && reversal_width >= 0.0 &&
+            amp > 0.0 && pmhd->peos->eos_data.nu_coll == 0.0 &&
+            !pmhd->peos->eos_data.mlim && !pmhd->peos->eos_data.flim,
+            "field_reversal requires user_srcs, width>=0, positive seed and no collisions");
+    user_srcs_func = MonitorFieldReversal;
+    reversal_ppar0 = ppar0;
+    reversal_pperp0 = pperp0;
+    reversal_peak = reversal_frozen_error = 0.0;
+    reversal_min = std::min(ppar0,pperp0);
+  }
   if (mode == TestMode::timestep_refresh) {
     Require(user_srcs && rho0 == 1.0 && ppar0 == 1.0 && pperp0 == 1.0 &&
             pmhd->pcgl_lf != nullptr && pmhd->pcgl_lf->lf_coeff_local &&
@@ -1713,6 +1944,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     rotated_wave = RotatedWavenumber(pin, pmy_mesh_);
   }
   const Real xmin = pmy_mesh_->mesh_size.x1min;
+  const Real reversal_center = 0.5*(xmin+pmy_mesh_->mesh_size.x1max);
   const Real ymin = pmy_mesh_->mesh_size.x2min;
   const Real ymax = pmy_mesh_->mesh_size.x2max;
   const Real zmin = pmy_mesh_->mesh_size.x3min;
@@ -1760,7 +1992,14 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::parallel_decay || mode == TestMode::rotated_decay) {
+    if (mode == TestMode::field_reversal) {
+      by = reversal_width > 0.0
+          ? tanh(sin(k_wave*(x-reversal_center))/(k_wave*reversal_width))
+          : tanh((x-reversal_center)/block_size.dx1);
+      const Real seed = reversal_width > 0.0 ? amp*s : amp*(q%2 == 0 ? 1.0 : -1.0);
+      ppar = ppar0*(1.0+seed);
+      pperp = pperp0*(1.0+seed);
+    } else if (mode == TestMode::parallel_decay || mode == TestMode::rotated_decay) {
       ppar = ppar0*(1.0 + amp*s);
     } else if (mode == TestMode::perp_decay) {
       pperp = pperp0*(1.0 + amp*s);
@@ -1822,6 +2061,11 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     b0.x2f(m,k,j,i) = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s :
         by0 + ((mode == TestMode::paper_eigen_wave) ?
                EigenRealSpacePerturbation(amp, eig_by_re, eig_by_im, c, s) : 0.0);
+    if (mode == TestMode::field_reversal) {
+      b0.x2f(m,k,j,i) = reversal_width > 0.0
+          ? tanh(sin(k_wave*(x-reversal_center))/(k_wave*reversal_width))
+          : tanh((x-reversal_center)/block_size.dx1);
+    }
   });
   par_for("cgl_lf_quant_init_b3", DevExeSpace(), 0, nmb - 1, ks, ke + 1, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1836,4 +2080,13 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
+  if (mode == TestMode::field_reversal) {
+    reversal_initial_w = Kokkos::create_mirror(w0);
+    reversal_initial_b = Kokkos::create_mirror(bcc0);
+    Kokkos::deep_copy(reversal_initial_w, w0);
+    Kokkos::deep_copy(reversal_initial_b, bcc0);
+    MonitorFieldReversal(pmy_mesh_, 0.0);
+    reversal_energy0 = reversal_energy;
+    reversal_moment0 = reversal_moment;
+  }
 }

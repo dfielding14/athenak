@@ -77,7 +77,8 @@ For STS LF transport, MHD owns the split lifecycle:
 2. Each STS stage clears the LF flux slots and calls
    `CGLLandauFluid::AddHeatFluxes`.
 3. `AddHeatFluxes` precomputes `T_parallel`, `T_perp`, and `|B|`, constructs
-   x1/x2/x3 face states, evaluates capped parallel and perpendicular LF heat
+   x1/x2/x3 face states using the supplied CT face field, evaluates capped
+   parallel and perpendicular LF heat
    fluxes, and writes only `IEN` and `IAN` face fluxes.
 4. `STSUpdateU` applies the RKL2 update to energy and magnetic moment.
 5. `CGLRefreshPrimFromMagneticMoment` rebuilds CGL primitives between stages.
@@ -115,9 +116,12 @@ counts. After AMR, walls run after the final field refresh.
 ## LF Face Closure
 
 `BuildCGLLFFaceState` is the face-level admission gate. It averages density and
-pressures to the face, applies floors, constructs the field direction, selects
-local or background `c_parallel`, combines background and limiter collision
-frequencies, and returns false for faces with unusable magnetic-field strength.
+pressures to the face, applies floors, and divides the CT-normal/averaged-tangential
+field vector by the mean adjacent cell magnitudes. It selects local or background
+`c_parallel`, combines background and limiter collision frequencies, and returns
+false when the mean magnitude is at or below `bfloor`. Transport, diagnostics,
+and profile probes all use this geometry; see the
+[face regularization](cgl_landau_fluid.md) for its physical limits.
 
 The closure formulas are shared through `src/eos/cgl_physics.hpp`:
 

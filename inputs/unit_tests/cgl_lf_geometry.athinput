@@ -1,0 +1,64 @@
+# Direct LF face geometry checks on the configured execution device.
+<job>
+basename = cgl_lf_geometry
+<mesh>
+nghost = 2
+nx1 = 8
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 8
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 8
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 8
+<time>
+evolution = kinematic
+integrator = rk2
+sts_integrator = none
+cfl_number = 0.1
+nlim = 0
+tlim = 1.0
+<mhd>
+eos = cgl
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = explicit
+lf_k_parallel = 6.283185307179586
+lf_coefficient_mode = background
+lf_c_parallel0 = 1.0
+cgl_lf_strict_admissibility = true
+cgl_lf_arithmetic = safe
+cgl_lf_diagnostics = full
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+reconstruct = plm
+rsolver = advect
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+bfloor = 1.0e-10
+nu_coll = 0.0
+mirror_limiter = false
+firehose_limiter = false
+backup_limiters = false
+<problem>
+pgen_name = cgl_landau_fluid
+test_mode = face_geometry
+geometry_case = all
+rho0 = 1.0
+ppar0 = 1.0
+pperp0 = 1.0
+b0 = 1.0
+amp = 1.0e-8
