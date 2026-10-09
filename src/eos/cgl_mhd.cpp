@@ -387,6 +387,8 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
   const int nscal = pmy_pack->pmhd->nscalars;
   const int nmb = pmy_pack->nmb_thispack;
   const EOS_Data eos = eos_data;
+  const auto *pcgl_lf = pmy_pack->pmhd->pcgl_lf;
+  const bool strict_lf = pcgl_lf != nullptr && pcgl_lf->strict_admissibility;
 
   const int ni   = (iu - il + 1);
   const int nji  = (ju - jl + 1)*ni;
@@ -415,6 +417,11 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     u.by = bcc(m,IBY,k,j,i);
     u.bz = bcc(m,IBZ,k,j,i);
 
+    // Weak-B recovery can overwrite an invalid moment before stage diagnostics see it.
+    if (strict_lf && (!Kokkos::isfinite(u.e) || !Kokkos::isfinite(u.mu))) {
+      Kokkos::abort("CGL Landau-fluid strict admissibility failed before primitive refresh: "
+                    "nonfinite energy or magnetic moment");
+    }
     HydPrim1D w;
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
     SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,

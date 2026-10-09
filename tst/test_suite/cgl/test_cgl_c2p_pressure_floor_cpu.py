@@ -1,6 +1,8 @@
 """Focused custom-pgen regression for generic CGL C2P pressure floors."""
 
 from pathlib import Path
+import os
+import shlex
 import subprocess
 
 import pytest
@@ -74,3 +76,44 @@ def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path, single_precision):
     ])
     result = _run([str(test_executable)])
     assert "CGL C2P pressure-floor checks passed" in result.stdout
+
+
+def test_cgl_strict_lf_rejects_nonfinite_state_before_weak_field_refresh(tmp_path):
+    """Exercise the actual lightweight EOS kernel, including HIP when supplied."""
+    supplied = os.environ.get("ATHENAK_CGL_STORAGE_BINARY")
+    if supplied:
+        executable = Path(supplied).resolve()
+        assert executable.is_file()
+    else:
+        build_dir = tmp_path / "storage-build"
+        _run(["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
+              "-DPROBLEM=unit_tests/cgl_c2p_storage_test",
+              "-DAthena_ENABLE_MPI=OFF", "-DKokkos_ENABLE_HIP=OFF",
+              "-DKokkos_ENABLE_SERIAL=ON", "-DCMAKE_BUILD_TYPE=Release"])
+        _run(["cmake", "--build", str(build_dir), "--target", "athena", "-j4"])
+        executable = build_dir / "src/athena"
+    launcher = shlex.split(os.environ.get("ATHENAK_CGL_STORAGE_LAUNCHER", ""))
+    source = (REPO_ROOT / "inputs/unit_tests/cgl_lf_sts_grad_b.athinput").read_text()
+    source = source.replace("<mhd>", "<mhd>\ncgl_lf_strict_admissibility = false", 1)
+    source = source.replace("<problem>", "<problem>\nlf_nonfinite_case = 0", 1)
+    input_file = tmp_path / "lf-nonfinite-refresh.athinput"
+    input_file.write_text(source)
+    failure = "strict admissibility failed before primitive refresh"
+    for strict in (False, True):
+        # Healthy control, then E and moment each poisoned with NaN, +Inf, and -Inf.
+        for test_case in range(7):
+            command = launcher + [str(executable), "-i", str(input_file),
+                                  "time/nlim=0", f"problem/lf_nonfinite_case={test_case}",
+                                  f"mhd/cgl_lf_strict_admissibility={str(strict).lower()}"]
+            result = subprocess.run(command, cwd=tmp_path, capture_output=True,
+                                    text=True, check=False)
+            output = result.stdout + result.stderr
+            (tmp_path / f"lf-refresh-{strict}-{test_case}.log").write_text(output)
+            if strict and test_case != 0:
+                assert result.returncode != 0, output
+                assert failure in output, output
+                assert "CGL LF nonfinite refresh returned" not in output
+            else:
+                assert result.returncode == 0, output
+                assert f"CGL LF nonfinite refresh returned: case={test_case}" in output
+                assert failure not in output

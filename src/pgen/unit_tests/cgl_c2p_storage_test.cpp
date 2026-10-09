@@ -45,6 +45,50 @@ auto Snapshot(const DvceArray5D<Real> &view) {
   return host;
 }
 
+void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
+  Require("LF refresh fixture configuration", test_case >= 0 && test_case <= 6 &&
+          pack->pmhd->pcgl_lf != nullptr);
+  auto *peos = pack->pmhd->peos;
+  const int nmb = pack->nmb_thispack;
+  DvceArray5D<Real> cons("lf_nonfinite_cons", nmb, pack->pmhd->nmhd, 1, 1, 1);
+  DvceArray5D<Real> prim("lf_nonfinite_prim", nmb, pack->pmhd->nmhd, 1, 1, 1);
+  DvceArray5D<Real> bcc("lf_nonfinite_bcc", nmb, 3, 1, 1, 1);
+  auto initial = Kokkos::create_mirror(cons);
+  Kokkos::deep_copy(initial, 0.0);
+  Kokkos::deep_copy(bcc, 0.0);
+  Kokkos::deep_copy(prim, 0.0);
+  const Real invalid[] = {std::numeric_limits<Real>::quiet_NaN(),
+                         std::numeric_limits<Real>::infinity(),
+                         -std::numeric_limits<Real>::infinity()};
+  for (int m = 0; m < nmb; ++m) {
+    initial(m,IDN,0,0,0) = 1.0;
+    initial(m,IEN,0,0,0) = 1.5;
+    initial(m,IAN,0,0,0) = 1.0/peos->eos_data.bfloor;
+    if (test_case > 0) {
+      initial(m,test_case <= 3 ? IEN : IAN,0,0,0) = invalid[(test_case-1)%3];
+    }
+  }
+  Kokkos::deep_copy(cons, initial);
+  const int dfloor_before = pack->pmesh->ecounter.neos_dfloor;
+  const int pfloor_before = pack->pmesh->ecounter.neos_efloor;
+  peos->CGLRefreshPrimFromMagneticMoment(cons, bcc, prim, 0, 0, 0, 0, 0, 0);
+  if (test_case == 0 || test_case >= 4) {
+    const auto recovered = Snapshot(prim);
+    const auto stored = Snapshot(cons);
+    for (int m = 0; m < nmb; ++m) {
+      RequireClose("weak-B refresh parallel pressure", recovered(m,IPR,0,0,0), 1.0);
+      RequireClose("weak-B refresh perpendicular pressure", recovered(m,IPP,0,0,0), 1.0);
+      RequireClose("weak-B refresh stored moment", stored(m,IAN,0,0,0),
+                   1.0/peos->eos_data.bfloor);
+      Require("weak-B refresh fixed energy", stored(m,IEN,0,0,0) == 1.5);
+    }
+    Require("weak-B refresh without pressure or density floors",
+            pack->pmesh->ecounter.neos_dfloor == dfloor_before &&
+            pack->pmesh->ecounter.neos_efloor == pfloor_before);
+  }
+  std::cout << "CGL LF nonfinite refresh returned: case=" << test_case << std::endl;
+}
+
 void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
                        const Real density, const Real initial_parallel,
                        const Real initial_perp, const Real density_floor,
@@ -434,13 +478,14 @@ void CheckExtremeRatiosOnDevice() {
 } // namespace
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
-  (void) pin;
   if (restart) return;
   auto *pack = pmy_mesh_->pmb_pack;
   auto *pmhd = pack->pmhd;
   Require("active CGL without scalars", pmhd != nullptr &&
       pmhd->peos->eos_data.is_cgl && !pmhd->peos->eos_data.passive &&
       pmhd->nscalars == 0);
+  const int lf_nonfinite_case = pin->GetOrAddInteger("problem", "lf_nonfinite_case", -1);
+  if (lf_nonfinite_case >= 0) CheckNonfiniteLFRefresh(pack, lf_nonfinite_case);
   // Only the isolated views own a scalar; restore metadata before live mesh startup.
   const int saved_nscalars = pmhd->nscalars;
   pmhd->nscalars = 1;
