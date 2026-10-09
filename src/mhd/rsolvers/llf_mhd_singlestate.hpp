@@ -115,7 +115,7 @@ void SingleStateLLF_CGLStateAndFlux(const MHDPrim1D &w, const Real &bxi,
   } else {
     ppar = TWO_3RDS*pperp + ONE_3RD*ppar;
     pperp = ppar;
-    u.mu = w.d*log(SQR(w.d)/(eos.bfloor*SQR(eos.bfloor)));
+    u.mu = w.d*(2.0*log(w.d) - 3.0*log(eos.bfloor));
   }
 
   Real vsq = SQR(w.vx) + SQR(w.vy) + SQR(w.vz);
@@ -161,7 +161,14 @@ void SingleStateLLF_CGL(const MHDPrim1D &wl, const MHDPrim1D &wr, const Real &bx
   flux.my = 0.5*(fl.my + fr.my - a*(ur.my - ul.my));
   flux.mz = 0.5*(fl.mz + fr.mz - a*(ur.mz - ul.mz));
   flux.e  = 0.5*(fl.e  + fr.e  - a*(ur.e  - ul.e ));
-  flux.mu = (flux.d >= 0.0) ? flux.d*(ul.mu/ul.d) : flux.d*(ur.mu/ur.d);
+  const MHDPrim1D &upwind = (flux.d >= 0.0) ? wl : wr;
+  const MHDPrim1D &other = (flux.d >= 0.0) ? wr : wl;
+  Real specific_anis = (flux.d >= 0.0) ? ul.mu/ul.d : ur.mu/ur.d;
+  if (sqrt(SQR(bxi) + SQR(upwind.by) + SQR(upwind.bz)) <= eos.bfloor) {
+    const Real bref = fmax(sqrt(SQR(bxi) + SQR(other.by) + SQR(other.bz)), eos.bfloor);
+    specific_anis = 2.0*log(upwind.d) - 3.0*log(bref);
+  }
+  flux.mu = flux.d*specific_anis;
   flux.by = -0.5*(fl.by + fr.by - a*(ur.by - ul.by));
   flux.bz =  0.5*(fl.bz + fr.bz - a*(ur.bz - ul.bz));
 

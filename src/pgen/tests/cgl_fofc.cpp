@@ -15,10 +15,13 @@
 #include <utility>
 
 #include "athena.hpp"
+#include "coordinates/cell_locations.hpp"
 #include "driver/driver.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
+#include "mhd/rsolvers/hlle_cgl.hpp"
 #include "mhd/rsolvers/llf_mhd_singlestate.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -46,6 +49,223 @@ void CheckClose(const std::string &label, Real got, Real expected) {
 template <typename ViewType>
 auto HostCopy(const ViewType &view) {
   return Kokkos::create_mirror_view_and_copy(HostMemSpace(), view);
+}
+
+// Both solvers and pressure recovery execute on the configured device.
+MHDCons1D WeakFieldFlux(const MHDPrim1D left, const MHDPrim1D right,
+                        const EOS_Data eos, const bool llf, const Real bnormal=0.0,
+                        MHDCons1D *pressure=nullptr) {
+  if (llf) {
+    DvceArray1D<MHDCons1D> result("weak_field_llf", 3);
+    par_for("weak_field_llf", DevExeSpace(), 0, 0, KOKKOS_LAMBDA(int) {
+      mhd::SingleStateLLF_CGL(left, right, bnormal, eos, result(0));
+      mhd::SingleStateLLF_CGLPressureTraction(left, right, bnormal, eos,
+                                             result(1), result(2));
+    });
+    const auto host = HostCopy(result);
+    if (pressure != nullptr) *pressure = host(1);
+    return host(0);
+  }
+  constexpr int nvars = IAN + 1;
+  RegionIndcs indcs{};
+  CoordData coord{};
+  DualArray1D<RegionSize> size("weak_field_size", 1);
+  DvceArray4D<Real> bx("weak_field_bx", 1, 1, 1, 1);
+  DvceArray4D<Real> ey("weak_field_ey", 1, 1, 1, 1);
+  DvceArray4D<Real> ez("weak_field_ez", 1, 1, 1, 1);
+  DvceArray5D<Real> flux("weak_field_flux", 1, nvars, 1, 1, 1);
+  DvceArray5D<Real> pflux("weak_field_pflux", 1, 6, 1, 1, 1);
+  Kokkos::deep_copy(bx, bnormal);
+  const size_t scratch_size = 2*ScrArray2D<Real>::shmem_size(nvars, 1)
+                           + 2*ScrArray2D<Real>::shmem_size(NMAG, 1);
+  par_for_outer("weak_field_hlle", DevExeSpace(), scratch_size, 0, 0, 0,
+  KOKKOS_LAMBDA(TeamMember_t member, const int) {
+    ScrArray2D<Real> wl(member.team_scratch(0), nvars, 1);
+    ScrArray2D<Real> wr(member.team_scratch(0), nvars, 1);
+    ScrArray2D<Real> bl(member.team_scratch(0), NMAG, 1);
+    ScrArray2D<Real> br(member.team_scratch(0), NMAG, 1);
+    par_for_inner(member, 0, 0, [&](const int i) {
+      wl(IDN,i) = left.d; wl(IVX,i) = left.vx;
+      wl(IVY,i) = left.vy; wl(IVZ,i) = left.vz;
+      wl(IPR,i) = left.e; wl(IPP,i) = left.pp;
+      wr(IDN,i) = right.d; wr(IVX,i) = right.vx;
+      wr(IVY,i) = right.vy; wr(IVZ,i) = right.vz;
+      wr(IPR,i) = right.e; wr(IPP,i) = right.pp;
+      bl(IBX,i) = bnormal; bl(IBY,i) = left.by; bl(IBZ,i) = left.bz;
+      br(IBX,i) = bnormal; br(IBY,i) = right.by; br(IBZ,i) = right.bz;
+    });
+    member.team_barrier();
+    mhd::HLLE_CGL(member, eos, indcs, size, coord, 0, 0, 0, 0, 0, IVX,
+                  wl, wr, bl, br, bx, flux, ey, ez, true, pflux);
+  });
+  const auto hf = HostCopy(flux);
+  const auto hy = HostCopy(ey), hz = HostCopy(ez);
+  if (pressure != nullptr) {
+    const auto hp = HostCopy(pflux);
+    pressure->mx = hp(0,mhd::ICGLPressureX,0,0,0);
+    pressure->my = hp(0,mhd::ICGLPressureY,0,0,0);
+    pressure->mz = hp(0,mhd::ICGLPressureZ,0,0,0);
+  }
+  MHDCons1D f{};
+  f.d = hf(0,IDN,0,0,0); f.mx = hf(0,IM1,0,0,0);
+  f.my = hf(0,IM2,0,0,0); f.mz = hf(0,IM3,0,0,0);
+  f.e = hf(0,IEN,0,0,0); f.mu = hf(0,IAN,0,0,0);
+  f.by = hy(0,0,0,0); f.bz = hz(0,0,0,0);
+  return f;
+}
+
+void CheckWeakFieldTransport(const EOS_Data &input_eos) {
+  EOS_Data eos = input_eos;
+  eos.bfloor = 1.0e-10;
+  eos.dfloor = eos.pfloor = 1.0e-30;
+  eos.passive = false;
+  for (const bool llf : {false, true}) {
+    eos.bfloor = 1.0e-10;
+    const std::string name = llf ? "weak-field LLF" : "weak-field HLLE";
+    auto solve = [&](const MHDPrim1D &left, const MHDPrim1D &right) {
+      return WeakFieldFlux(left, right, eos, llf);
+    };
+    MHDPrim1D weak{}, strong{};
+    weak.d = strong.d = 1.0;
+    weak.e = weak.pp = 1.5;
+    strong.e = strong.pp = 1.0;
+    weak.by = 1.0e-12;
+    strong.by = 1.0;
+    for (const Real sign : {Real(1.0), Real(-1.0)}) {
+      weak.vx = strong.vx = sign*10.0;
+      const MHDCons1D incoming = sign > 0.0 ? solve(weak, strong) : solve(strong, weak);
+      const MHDCons1D outgoing = solve(strong, strong);
+      // Pressure balance fixes mass/momentum; transverse CGL gives cf=sqrt(3).
+      const Real mix_speed = llf ? 10.0 + 0.5*std::sqrt(3.0) : 10.0;
+      const Real expected_b = 1.0 - 0.01*mix_speed*(1.0 - weak.by);
+      const Real expected_e = 52.0 + 0.0025*mix_speed;
+      const Real expected_ratio = expected_b*expected_b*expected_b;
+      const Real thermal = expected_e - 50.0 - 0.5*expected_b*expected_b;
+      CheckClose(name + " mass flux", incoming.d, sign*10.0);
+      CheckClose(name + " balanced momentum flux", incoming.mx, 101.5);
+      CheckClose(name + " weak-upwind A/mass", incoming.mu/incoming.d, 0.0);
+      DvceArray1D<MHDCons1D> updated("weak_field_updated", 1);
+      DvceArray1D<HydPrim1D> recovered("weak_field_recovered", 1);
+      DvceArray1D<int> repairs("weak_field_repairs", 1);
+      par_for("weak_field_first_update", DevExeSpace(), 0, 0, KOKKOS_LAMBDA(int) {
+        MHDCons1D u{};
+        u.d = 1.0; u.mx = sign*10.0; u.e = 52.0; u.by = 1.0;
+        const Real dt_dx = sign*0.01;
+        u.d += dt_dx*(incoming.d - outgoing.d);
+        u.mx += dt_dx*(incoming.mx - outgoing.mx);
+        u.my += dt_dx*(incoming.my - outgoing.my);
+        u.mz += dt_dx*(incoming.mz - outgoing.mz);
+        u.e += dt_dx*(incoming.e - outgoing.e);
+        u.mu += dt_dx*(incoming.mu - outgoing.mu);
+        u.by += dt_dx*(outgoing.by - incoming.by);  // EMF slot is -F(By).
+        u.bz += dt_dx*(incoming.bz - outgoing.bz);
+        updated(0) = u;
+        bool df=false, ef=false, tf=false, bf=false;
+        SingleC2P_CGLMHD(u, eos, recovered(0), df, ef, tf, bf);
+        repairs(0) = df || ef || tf || bf || u.mu != updated(0).mu
+                     || u.e != updated(0).e;
+      });
+      const auto u = HostCopy(updated)(0);
+      const auto w = HostCopy(recovered)(0);
+      CheckClose(name + " updated density", u.d, 1.0);
+      CheckClose(name + " updated normal momentum", u.mx, sign*10.0);
+      CheckClose(name + " updated transverse momentum", u.my, 0.0);
+      CheckClose(name + " updated energy", u.e, expected_e);
+      CheckClose(name + " updated field", u.by, expected_b);
+      CheckClose(name + " updated A", u.mu, 0.0);
+      CheckClose(name + " recovered parallel pressure", w.e, thermal/(0.5+expected_ratio));
+      CheckClose(name + " recovered perpendicular pressure", w.pp,
+                  thermal*expected_ratio/(0.5+expected_ratio));
+      CheckClose(name + " recovery repairs", HostCopy(repairs)(0), 0.0);
+      std::cout << name << " first update sign=" << sign
+                << " pperp/ppar=" << w.pp/w.e << " repairs=0" << std::endl;
+    }
+
+    weak.vx = strong.vx = 10.0;
+    strong.e = 0.75; strong.pp = 1.5;
+    for (const Real sign : {Real(1.0), Real(-1.0)}) {
+      weak.vx = strong.vx = sign*10.0;
+      const auto f = sign > 0.0 ? solve(strong, weak) : solve(weak, strong);
+      CheckClose(name + " magnetized-upwind A/mass", f.mu/f.d, std::log(2.0));
+      if (!llf) CheckClose(name + " magnetized pressure", f.mx, 102.0);
+    }
+    weak.vx = strong.vx = 10.0;
+    // Vary density and neighboring magnitude so neither can be silently replaced by one.
+    weak.d = 3.0; strong.d = 0.7;
+    strong.by = 2.0;
+    for (const Real floor : {Real(1.0e-10), Real(1.0e-110)}) {
+      eos.bfloor = floor;
+      for (const Real bweak : {Real(0.0), 0.5*floor, floor}) {
+        weak.by = bweak;
+        const auto f = solve(weak, strong);
+        CheckClose(name + " zero/below/at-floor neighboring A/mass", f.mu/f.d,
+                    std::log(9.0/8.0));
+        const auto both = solve(weak, weak);
+        CheckClose(name + " both-weak A/mass", both.mu/both.d,
+                    std::log(9.0) - 3.0*std::log(floor));
+        if (llf) {
+          DvceArray1D<MHDCons1D> state("weak_field_llf_state", 1);
+          par_for("weak_field_llf_state", DevExeSpace(), 0, 0, KOKKOS_LAMBDA(int) {
+            MHDCons1D flux{};
+            Real speed;
+            mhd::SingleStateLLF_CGLStateAndFlux(weak, 0.0, eos, state(0), flux, speed);
+          });
+          CheckClose(name + " finite weak conserved A", HostCopy(state)(0).mu/weak.d,
+                      std::log(9.0) - 3.0*std::log(floor));
+        }
+        MHDPrim1D still = weak;
+        still.vx = 0.0;
+        CheckClose(name + " stationary weak A flux", solve(still, still).mu, 0.0);
+      }
+    }
+    eos.bfloor = 1.0e-10;
+    weak.vx = strong.vx = -10.0;
+    const auto reverse_density = solve(strong, weak);
+    CheckClose(name + " reverse weak donor density", reverse_density.mu/reverse_density.d,
+                std::log(9.0/8.0));
+    weak.vx = strong.vx = 10.0;
+    weak.by = std::nextafter(eos.bfloor, Real(1.0));
+    weak.e = 0.75; weak.pp = 1.5;
+    const auto above = solve(weak, strong);
+    CheckClose(name + " immediately above floor", above.mu/above.d,
+                std::log(18.0) - 3.0*std::log(weak.by));
+    // Dissipation can make mass flow opposite to both primitive velocities.
+    weak.d = 100.0; weak.by = 0.0; weak.vx = strong.vx = -0.1;
+    const auto reversed_mass = solve(weak, strong);
+    if (!(reversed_mass.d > 0.0)) Fail(name + " mass-flux sign", reversed_mass.d, 1.0);
+    CheckClose(name + " mass-flux-selected weak side", reversed_mass.mu/reversed_mass.d,
+                std::log(10000.0/8.0));
+    // An oblique strong state must retain its pressure traction beside a weak state.
+    eos.bfloor = 0.5;
+    weak.d = strong.d = 1.0;
+    weak.e = 0.9; weak.pp = 1.8;
+    strong.e = 0.75; strong.pp = 1.5; strong.by = 1.0;
+    const Real normal = 0.25;
+    const Real strong_px = 1.5 - 0.75/17.0;
+    const Real strong_py = -3.0/17.0;
+    for (const Real sign : {Real(1.0), Real(-1.0)}) {
+      weak.vx = strong.vx = sign*10.0;
+      MHDCons1D pressure{};
+      const auto f = sign > 0.0
+          ? WeakFieldFlux(strong, weak, eos, llf, normal, &pressure)
+          : WeakFieldFlux(weak, strong, eos, llf, normal, &pressure);
+      const Real expected_px = llf ? 0.5*(strong_px+1.5) : strong_px;
+      const Real expected_py = llf ? 0.5*strong_py : strong_py;
+      CheckClose(name + " mixed oblique normal traction", pressure.mx, expected_px);
+      CheckClose(name + " mixed oblique tangent traction", pressure.my, expected_py);
+      CheckClose(name + " mixed oblique normal momentum", f.mx,
+                  100.0 + expected_px + (llf ? 0.25 : 0.5) - 0.5*SQR(normal));
+      CheckClose(name + " mixed oblique tangent momentum", f.my,
+                  expected_py - (llf ? 0.5 : 1.0)*normal);
+    }
+    weak.vx = strong.vx = 10.0;
+    const auto oblique_weak = WeakFieldFlux(weak, strong, eos, llf, normal);
+    CheckClose(name + " neighboring full magnitude", oblique_weak.mu/oblique_weak.d,
+                -1.5*std::log(17.0/16.0));
+    CheckClose(name + " weak isotropization energy",
+                WeakFieldFlux(weak, weak, eos, llf, normal).e, 537.5);
+  }
+  std::cout << "CGL weak-field device flux and first-update checks passed" << std::endl;
 }
 
 template <typename ViewType>
@@ -436,13 +656,28 @@ void FinalizeFOFCMutationTest(ParameterInput *pin, Mesh *pm) {
 void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
   const std::string mode = pin->GetOrAddString("problem", "test_mode", "flux_mutation");
   const bool pressure_step = mode == "pressure_step";
-  if (!pressure_step && mode != "flux_mutation") {
-    std::cout << "CGL FOFC test requires test_mode = flux_mutation or pressure_step"
+  const bool weak_field = mode == "weak_field_transport";
+  const Real weak_velocity = weak_field ? pin->GetReal("problem", "weak_field_velocity")
+                                       : 0.0;
+  const Real profile_width = weak_field ? pin->GetOrAddReal("problem", "profile_width", 0.0)
+                                       : 0.0;
+  if (weak_field && (!std::isfinite(weak_velocity) || weak_velocity == 0.0 ||
+                    !std::isfinite(profile_width) || profile_width < 0.0)) {
+    std::cout << "CGL weak-field test requires finite nonzero velocity and width >= 0"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (!pressure_step && !weak_field && mode != "flux_mutation") {
+    std::cout << "CGL FOFC test requires flux_mutation, pressure_step or weak_field_transport"
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
   pgen_final_func = pressure_step ? FinalizePressureStep : FinalizeFOFCMutationTest;
   user_srcs_func = pressure_step ? ValidatePressureStep : ValidateFOFCMutation;
+  if (weak_field) {
+    pgen_final_func = nullptr;
+    user_srcs_func = nullptr;
+  }
   if (restart) return;
 
   auto *pmbp = pmy_mesh_->pmb_pack;
@@ -457,13 +692,18 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
   int js = indcs.js, je = indcs.je;
   int ks = indcs.ks, ke = indcs.ke;
   int nmb = pmbp->nmb_thispack;
-  if (pressure_step && (pmy_mesh_->nmb_total != 1 || indcs.nx2 != 1 || indcs.nx3 != 1)) {
-    std::cout << "CGL pressure-step test requires a single 1D MeshBlock" << std::endl;
+  if ((pressure_step && pmy_mesh_->nmb_total != 1) ||
+      ((pressure_step || weak_field) && (indcs.nx2 != 1 || indcs.nx3 != 1))) {
+    std::cout << "CGL pressure/weak-field tests require 1D; pressure-step needs one block"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
   auto w0 = pmhd->w0;
   auto bcc0 = pmhd->bcc0;
   auto b0 = pmhd->b0;
+  const Real middle = 0.5*(pmy_mesh_->mesh_size.x1min + pmy_mesh_->mesh_size.x1max);
+  const auto size = pmbp->pmb->mb_size;
+  const int nx1 = indcs.nx1;
 
   par_for("cgl_fofc_e2e_init", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -492,24 +732,43 @@ void ProblemGenerator::CGLFOFC(ParameterInput *pin, const bool restart) {
       bcc0(m,IBY,k,j,i) = 0.0;
       bcc0(m,IBZ,k,j,i) = 0.0;
     }
+    if (weak_field) {
+      const Real xcoord = CellCenterX(i-is, nx1, size.d_view(m).x1min,
+                                      size.d_view(m).x1max);
+      const bool weak_side = (xcoord < middle) == (weak_velocity > 0.0);
+      Real field = weak_side ? 1.0e-12 : 1.0;
+      if (profile_width > 0.0) {
+        const Real sign = weak_velocity > 0.0 ? 1.0 : -1.0;
+        field = 1.0e-12+(1.0-1.0e-12)*0.5*
+            (1.0+tanh(sign*(xcoord-middle)/profile_width));
+      }
+      w0(m,IDN,k,j,i) = 1.0;
+      w0(m,IVX,k,j,i) = weak_velocity;
+      w0(m,IVY,k,j,i) = w0(m,IVZ,k,j,i) = 0.0;
+      w0(m,IPR,k,j,i) = w0(m,IPP,k,j,i) = 1.5-0.5*SQR(field);
+      bcc0(m,IBX,k,j,i) = bcc0(m,IBZ,k,j,i) = 0.0;
+      bcc0(m,IBY,k,j,i) = field;
+    }
   });
 
   par_for("cgl_fofc_e2e_b1", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie+1,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x1f(m,k,j,i) = pressure_step ? 2.0 : 0.43;
+    b0.x1f(m,k,j,i) = weak_field ? 0.0 : (pressure_step ? 2.0 : 0.43);
   });
   par_for("cgl_fofc_e2e_b2", DevExeSpace(), 0, nmb-1, ks, ke, js, je+1, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
     b0.x2f(m,k,j,i) = pressure_step ? 0.0 : -0.31;
+    if (weak_field) b0.x2f(m,k,j,i) = bcc0(m,IBY,k,js,i);
   });
   par_for("cgl_fofc_e2e_b3", DevExeSpace(), 0, nmb-1, ks, ke+1, js, je, is, ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
-    b0.x3f(m,k,j,i) = pressure_step ? 0.0 : 0.26;
+    b0.x3f(m,k,j,i) = (pressure_step || weak_field) ? 0.0 : 0.26;
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
   Kokkos::deep_copy(pmhd->fofc, false);
-  if (pressure_step) return;
+  if (weak_field || pressure_step) return;
+  CheckWeakFieldTransport(pmhd->peos->eos_data);
 
   auto fofc = pmhd->fofc;
   int flag_i = is + 1;

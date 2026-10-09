@@ -84,6 +84,24 @@ where $B=|\boldsymbol{B}|$. This is the sixth MHD conserved component outside
 Landau-fluid sweeps. The code guide describes the temporary magnetic-moment
 reinterpretation used during LF transport.
 
+At an HLLE or LLF face, each state with $B\le B_{\rm floor}$ is isotropized
+at fixed thermal energy. The magnetized neighbor retains its pressure tensor.
+For a weak donor, the transported specific anisotropy is
+$A/\rho=2\ln\rho-3\ln B_{\rm ref}$, where
+$B_{\rm ref}=\max(B_{\rm other},B_{\rm floor})$ uses the full neighboring
+field magnitude, including the shared normal field. The numerical mass-flux
+sign selects the donor. Separated logarithms keep this weak-field encoding
+finite when the cubic field product would underflow.
+
+This face regularization suppresses contamination by the arbitrary magnetic
+floor. Its reference changes at the floor, and nonlinear mixing of $A$, density,
+and field can still generate anisotropy at unresolved contacts. The two strict
+sharp-contact expected failures remain in the
+[rebuild work order](../../cgl_lf_surgical_rebuild_work_order.md).
+Smooth-interface convergence tests use a fully magnetized profile and qualify
+that resolved limit separately. Shared face fluxes conserve $A$ during transport;
+weak-field EOS recovery and collision walls can subsequently re-encode it.
+
 ## Magneto-Immutability
 
 The model is useful for high-beta turbulence because pressure anisotropy
