@@ -635,6 +635,43 @@ void CheckCollisionMap() {
     RequireClose("stiff rate preserves energy", 0.5*w.e+w.pp, 5.0);
   }
 
+  // A tiny inward kick must raise the smaller pressure even when the change
+  // cannot be represented by subtracting two large anisotropies or pressures.
+  const Real small_pressure = kSinglePrecision ? Real(9.51513186e-7)
+                                               : Real(1.4305114746093706e-6);
+  const Real large_pressure = kSinglePrecision ? Real(0.000243587376)
+                                               : Real(51539607552.0);
+  const Real epsilon = std::numeric_limits<Real>::epsilon();
+  for (const bool reverse : {false, true}) {
+    for (const bool soft : {false, true}) {
+      for (const Real rate : {epsilon/8, epsilon/4, epsilon/2, epsilon}) {
+        MHDPrim1D w{};
+        w.e = reverse ? large_pressure : small_pressure;
+        w.pp = reverse ? small_pressure : large_pressure;
+        w.bx = kSinglePrecision ? Real(0.00039366493) : Real(0.00042286396669162041);
+        eos.nu_coll = soft ? 0.0 : rate;
+        eos.lim_coll = soft ? rate : 0.0;
+        const long double ppar = w.e, pperp = w.pp;
+        const long double delta = pperp-ppar;
+        const long double threshold = (reverse ? -0.5L*eos.firehose_threshold
+                                               : 0.5L*eos.mirror_threshold)*SQR(w.bx);
+        const long double exchange = soft
+            ? (threshold-delta)*(static_cast<long double>(rate)/(1.0L+rate))
+            : delta*std::expm1(-static_cast<long double>(rate));
+        const Real expected_ppar = static_cast<Real>(ppar-(2.0L/3.0L)*exchange);
+        const Real expected_pperp = static_cast<Real>(pperp+exchange/3.0L);
+        SingleCollRates_CGLMHD(w, eos, 1.0, true, true);
+        Require("tiny relaxation preserves minimum pressure",
+                w.e >= small_pressure && w.pp >= small_pressure);
+        RequireRelativeClose("tiny-kick parallel pressure", w.e, expected_ppar, 64*epsilon);
+        RequireRelativeClose("tiny-kick perpendicular pressure", w.pp, expected_pperp,
+                             64*epsilon);
+        RequireRelativeClose("tiny-kick thermal energy", 0.5*w.e+w.pp,
+                             static_cast<Real>(0.5L*ppar+pperp), 8*epsilon);
+      }
+    }
+  }
+
   // Backup walls ignore soft flags; the fluid firehose wall ignores backup.
   eos.mlim = eos.flim = false;
   for (const bool backup : {false, true}) {
@@ -881,6 +918,98 @@ void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filenam
             << ncase << " states per block" << std::endl;
 }
 
+// A tiny anisotropy loss must increase the small pressure, even at a binade edge.
+void CheckProductionTinyCollisionRates(MeshBlockPack *pack) {
+  auto *peos = pack->pmhd->peos;
+  Require("tiny-rate fixture has no LF policy override", pack->pmhd->pcgl_lf == nullptr);
+  const EOS_Data saved_eos = peos->eos_data;
+  const int nmb = pack->nmb_thispack;
+  constexpr Real state[9] = {0.3, 0., 0., 0., 51539607552., 17.706158816790296,
+                             0.00042286396669162041, 0., 0.};
+  DvceArray5D<Real> cons("tiny_rate_cons", nmb, 6, 1, 1, 1);
+  DvceArray5D<Real> prim("tiny_rate_prim", nmb, 6, 1, 1, 1);
+  DvceArray5D<Real> decoded("tiny_rate_decoded", nmb, 6, 1, 1, 1);
+  DvceArray5D<Real> bcc("tiny_rate_bcc", nmb, 3, 1, 1, 1);
+  auto initial = Kokkos::create_mirror(cons);
+  auto initial_b = Kokkos::create_mirror(bcc);
+  for (int m=0; m<nmb; ++m) {
+    for (int v=0; v<6; ++v) initial(m,v,0,0,0) = state[v];
+    for (int v=0; v<3; ++v) initial_b(m,v,0,0,0) = state[v+6];
+  }
+  auto copy_to_host = [](const DvceArray5D<Real> &view) {
+    auto host = Kokkos::create_mirror(view);
+    Kokkos::deep_copy(host, view);
+    return host;
+  };
+  for (const bool soft : {false, true}) {
+    EOS_Data eos = saved_eos;
+    eos.backup_lim = false;
+    eos.flim = false;
+    eos.mlim = soft;
+    eos.mirror_threshold = 1.0;
+    eos.nu_coll = soft ? 0.0 : 0.5*std::numeric_limits<Real>::epsilon();
+    eos.lim_coll = soft ? std::numeric_limits<Real>::epsilon() : 0.0;
+    peos->eos_data = eos;
+    Kokkos::deep_copy(cons, initial);
+    Kokkos::deep_copy(bcc, initial_b);
+    auto decode = [&](DvceArray5D<Real> dest) {
+      Kokkos::parallel_for("tiny_rate_independent_c2p", nmb,
+      KOKKOS_LAMBDA(const int m) {
+        MHDCons1D u{cons(m,IDN,0,0,0), cons(m,IM1,0,0,0), cons(m,IM2,0,0,0),
+                    cons(m,IM3,0,0,0), cons(m,IEN,0,0,0), cons(m,IAN,0,0,0),
+                    bcc(m,IBX,0,0,0), bcc(m,IBY,0,0,0), bcc(m,IBZ,0,0,0)};
+        HydPrim1D w{};
+        bool df=false, ef=false, tf=false, bf=false;
+        SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
+        if (df || ef || tf || bf || u.d != cons(m,IDN,0,0,0) ||
+            u.e != cons(m,IEN,0,0,0) || u.mu != cons(m,IAN,0,0,0)) {
+          Kokkos::abort("Tiny-rate stored state requires C2P repair");
+        }
+        dest(m,IDN,0,0,0)=w.d; dest(m,IVX,0,0,0)=w.vx;
+        dest(m,IVY,0,0,0)=w.vy; dest(m,IVZ,0,0,0)=w.vz;
+        dest(m,IPR,0,0,0)=w.e; dest(m,IPP,0,0,0)=w.pp;
+      });
+    };
+    decode(prim);
+    const auto before = copy_to_host(prim);
+    // Put the canonical input exactly on its floor to expose any pressure decrease.
+    eos.pfloor = before(0,IPR,0,0,0);
+    peos->eos_data = eos;
+    peos->Collisions(prim, bcc, cons, 1.0, CGLCollisionMode::full, 0, 0, 0, 0, 0, 0);
+    decode(decoded);
+    const auto after = copy_to_host(cons);
+    const auto cached = copy_to_host(prim);
+    const auto fresh = copy_to_host(decoded);
+    const auto final_b = copy_to_host(bcc);
+    for (int m=0; m<nmb; ++m) {
+      for (int v=0; v<5; ++v) {
+        Require("tiny rates conserve rho/momentum/total E bitwise",
+                std::memcmp(&after(m,v,0,0,0), &initial(m,v,0,0,0), sizeof(Real)) == 0);
+      }
+      for (int v=0; v<6; ++v) {
+        Require("tiny-rate primitive cache is canonical",
+                cached(m,v,0,0,0) == fresh(m,v,0,0,0));
+      }
+      const long double ppar = before(m,IPR,0,0,0), pperp = before(m,IPP,0,0,0);
+      const long double delta = pperp - ppar;
+      const long double nudt = soft ? eos.lim_coll : eos.nu_coll;
+      const long double threshold = 0.5L*state[6]*state[6];
+      const long double loss = soft ? (delta-threshold)*nudt/(1.0L+nudt)
+                                    : delta*(-std::expm1(-nudt));
+      Require("tiny rates increase the small pressure", fresh(m,IPR,0,0,0) > ppar);
+      RequireRelativeClose("tiny-rate parallel pressure", fresh(m,IPR,0,0,0),
+                           static_cast<Real>(ppar + (2.0L/3.0L)*loss), kTol);
+      RequireRelativeClose("tiny-rate perpendicular pressure", fresh(m,IPP,0,0,0),
+                           static_cast<Real>(pperp - loss/3.0L), kTol);
+    }
+    Require("tiny rates leave magnetic field bitwise unchanged",
+            std::memcmp(initial_b.data(), final_b.data(), final_b.size()*sizeof(Real)) == 0);
+  }
+  peos->eos_data = saved_eos;
+  std::cout << "CGL production tiny-rate cancellation checks passed: 2 states per block"
+            << std::endl;
+}
+
 } // namespace
 
 void RunCglC2PPressureFloorChecks() {
@@ -922,6 +1051,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   RunCglC2PPressureFloorChecks();
   if (!kSinglePrecision) {
     CheckProductionWallEncoding(pmy_mesh_->pmb_pack, "wall_state.bin");
+    CheckProductionTinyCollisionRates(pmy_mesh_->pmb_pack);
   }
   // Leave a finite uniform state for zero-step application startup.
   auto *pmhd = pmy_mesh_->pmb_pack->pmhd;

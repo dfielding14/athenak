@@ -171,6 +171,7 @@ limiter_nu_coll = 7
     assert result.returncode == 0, result.stdout + result.stderr
     assert "CGL production wall encoding/restart checks passed: 6 states" in result.stdout
     assert "CGL LF conversion wall encoding checks passed: 6 states" in result.stdout
+    assert "CGL production tiny-rate cancellation checks passed: 2 states" in result.stdout
     if backup:
         assert "CGL asymmetric backup wall/full-rate checks passed" in result.stdout
     assert (tmp_path / "wall_state.bin").stat().st_size == 6 * 6 * 8

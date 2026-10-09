@@ -519,21 +519,39 @@ KOKKOS_INLINE_FUNCTION
 void SingleCollRates_CGLMHD(MHDPrim1D &w, const EOS_Data &eos,
                             const Real dt, const bool mlim, const bool flim) {
   const Real initial = w.pp - w.e;
-  Real paniso = initial*exp(-eos.nu_coll*dt);
+  Real paniso = initial;
+  Real exchange = 0.0;
+  if (eos.nu_coll > 0.0) {
+    const Real nudt = eos.nu_coll*dt;
+    paniso = initial*exp(-nudt);
+    // Retain tiny pressure exchange even when the large anisotropy rounds unchanged.
+    exchange = initial*expm1(-nudt);
+  }
   const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
   const Real nudt = eos.lim_coll*dt;
-  if (nudt > 0.0 && flim && paniso < cgl::FirehoseThreshold(bsqr, eos)) {
-    const Real threshold = cgl::FirehoseThreshold(bsqr, eos);
-    paniso = threshold + (paniso - threshold)/(1.0 + nudt);
+  if (nudt > 0.0) {
+    const Real fraction = nudt <= 1.0 ? nudt/(1.0 + nudt) : 1.0/(1.0 + 1.0/nudt);
+    if (flim && paniso < cgl::FirehoseThreshold(bsqr, eos)) {
+      const Real threshold = cgl::FirehoseThreshold(bsqr, eos);
+      exchange += (threshold - paniso)*fraction;
+      paniso = threshold + (paniso - threshold)/(1.0 + nudt);
+    }
+    if (mlim && paniso > cgl::MirrorThreshold(bsqr, eos)) {
+      const Real threshold = cgl::MirrorThreshold(bsqr, eos);
+      exchange += (threshold - paniso)*fraction;
+      paniso = threshold + (paniso - threshold)/(1.0 + nudt);
+    }
   }
-  if (nudt > 0.0 && mlim && paniso > cgl::MirrorThreshold(bsqr, eos)) {
-    const Real threshold = cgl::MirrorThreshold(bsqr, eos);
-    paniso = threshold + (paniso - threshold)/(1.0 + nudt);
+  if (exchange == 0.0) return;
+  // Update the smaller pressure without cancellation, then recover the larger
+  // pressure from the target anisotropy so a stiff kick retains its monotone limit.
+  if (initial >= 0.0) {
+    w.e -= TWO_3RDS*exchange;
+    w.pp = w.e + paniso;
+  } else {
+    w.pp += ONE_3RD*exchange;
+    w.e = w.pp - paniso;
   }
-  if (paniso == initial) return;
-  const Real piso = ONE_3RD*w.e + TWO_3RDS*w.pp;
-  w.pp = piso + ONE_3RD*paniso;
-  w.e = piso - TWO_3RDS*paniso;
 }
 
 //----------------------------------------------------------------------------------------
