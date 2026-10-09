@@ -657,7 +657,7 @@ void CheckCollisionMap() {
 void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filename) {
   Require("production wall fixture uses double", !kSinglePrecision);
   constexpr int ncase = 6;
-  const double cases[ncase][9] = {
+  double cases[ncase][9] = {
     {1.0580936533619145, 0.4998698938877745, 0.162893050030097,
      -0.03657178263370929, 11.505868899072333, -0.1425980922790349,
      0.23714419782252238, 0.03332376975719438, 1.0067785045133788},
@@ -675,8 +675,43 @@ void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filenam
   const int nmb = pack->nmb_thispack;
   auto *peos = pack->pmhd->peos;
   const EOS_Data eos = peos->eos_data;
-  Require("active no-backup production wall fixture",
-          eos.is_cgl && !eos.passive && !eos.backup_lim);
+  const bool backup = eos.backup_lim;
+  Require("active production wall fixture", eos.is_cgl && !eos.passive);
+  Real expected_delta[ncase]{};
+  Real expected_thermal[ncase]{};
+  if (backup) {
+    Require("asymmetric backup fixture policy",
+            eos.firehose_threshold == 1.4 && eos.firehose_backup_factor == 1.1 &&
+            eos.mirror_threshold == 0.7 && eos.mirror_backup_factor == 1.3 &&
+            eos.nu_coll == 0.3 && eos.lim_coll == 7.0);
+    for (int c=0; c<ncase; ++c) {
+      const Real rho = 1.7 + 0.13*c;
+      const Real mx = 0.31 - 0.06*c, my = -0.23 + 0.04*c, mz = 0.11 + 0.02*c;
+      const Real bx = 0.91 - 0.03*c, by = -0.28 + 0.02*c, bz = 0.37 + 0.01*c;
+      const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+      // Independent numeric bounds; do not reuse the production threshold helpers.
+      const Real lower = 1.1*(-0.5*1.4*bsqr), upper = 1.3*(0.5*0.7*bsqr);
+      const Real delta = c == 0 ? -1.4*bsqr : c == 1 ? 1.2*bsqr :
+                         c == 2 ? lower : c == 4 ? upper : c == 5 ? 0.44*bsqr : 0.0;
+      const Real thermal = 6.0 + 0.2*c;
+      const Real ppar = (2.0/3.0)*(thermal - delta);
+      const Real pperp = (2.0/3.0)*thermal + delta/3.0;
+      cases[c][0] = rho; cases[c][1] = mx; cases[c][2] = my; cases[c][3] = mz;
+      cases[c][4] = thermal + 0.5/rho*(SQR(mx) + SQR(my) + SQR(mz)) + 0.5*bsqr;
+      cases[c][5] = rho*(std::log(pperp/ppar) + 2.0*std::log(rho)
+                        - 3.0*std::log(std::sqrt(bsqr)));
+      cases[c][6] = bx; cases[c][7] = by; cases[c][8] = bz;
+      expected_delta[c] = std::min(upper, std::max(lower, delta));
+      expected_thermal[c] = thermal;
+      if (c == 5) {
+        // This interior state sees background relaxation, then a finite soft kick.
+        const Real after_background = delta*std::exp(-0.3*0.2);
+        Require("finite-rate fixture activates soft mirror relaxation",
+                after_background > 0.35*bsqr && delta < upper);
+        expected_delta[c] = 0.35*bsqr + (after_background - 0.35*bsqr)/(1.0 + 7.0*0.2);
+      }
+    }
+  }
   DvceArray5D<Real> cons("wall_cons", nmb, 6, 1, 1, ncase);
   DvceArray5D<Real> prim("wall_prim", nmb, 6, 1, 1, ncase);
   DvceArray5D<Real> decoded("wall_decoded", nmb, 6, 1, 1, ncase);
@@ -713,11 +748,18 @@ void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filenam
       dest(m,IVY,0,0,c)=w.vy; dest(m,IVZ,0,0,c)=w.vz;
       dest(m,IPR,0,0,c)=w.e; dest(m,IPP,0,0,c)=w.pp;
       const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+      const Real lower = backup ? 1.1*(-0.5*1.4*bsqr) : -bsqr;
+      const Real upper = backup ? 1.3*(0.5*0.7*bsqr) :
+                                 std::numeric_limits<Real>::max();
       hard_bad(index) = !Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp) ||
-                        !(w.e > 0.0) || !(w.pp > 0.0) || w.pp-w.e < -bsqr;
+                        !(w.e > 0.0) || !(w.pp > 0.0) ||
+                        w.pp-w.e < lower || w.pp-w.e > upper;
     });
   };
   decode(prim);
+  if (backup) {
+    peos->Collisions(prim, bcc, cons, 0.2, CGLCollisionMode::full, 5, 5, 0, 0, 0, 0);
+  }
   peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
                   0, ncase-1, 0, 0, 0, 0);
   decode(decoded);
@@ -734,7 +776,14 @@ void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filenam
                             sizeof(Real)) == 0);
       }
       Require("production wall survives independent C2P", bad(m*ncase+c) == 0);
-      if (c != 3) {
+      if (backup) {
+        RequireClose("encoded backup/rate anisotropy",
+                     fresh(m,IPP,0,0,c)-fresh(m,IPR,0,0,c), expected_delta[c]);
+        RequireClose("encoded backup/rate parallel pressure", fresh(m,IPR,0,0,c),
+                     (2.0/3.0)*(expected_thermal[c] - expected_delta[c]));
+        RequireClose("encoded backup/rate perpendicular pressure", fresh(m,IPP,0,0,c),
+                     (2.0/3.0)*expected_thermal[c] + expected_delta[c]/3.0);
+      } else if (c != 3) {
         const Real bsqr = SQR(initial_b(m,IBX,0,0,c)) + SQR(initial_b(m,IBY,0,0,c)) +
                           SQR(initial_b(m,IBZ,0,0,c));
         RequireClose("encoded wall retains boundary anisotropy",
@@ -781,6 +830,9 @@ void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filenam
           std::memcmp(corrected.data(), repeated.data(), bytes) == 0);
   std::cout << "CGL production wall encoding/restart checks passed: "
             << ncase << " states per block" << std::endl;
+  if (backup) {
+    std::cout << "CGL asymmetric backup wall/full-rate checks passed" << std::endl;
+  }
 
   // Reproduce the LF sweep exit. Conversion must refresh the pressure cache
   // from stored E and A before the following wall operation can skip a cell.

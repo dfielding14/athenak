@@ -84,7 +84,8 @@ def test_cgl_c2p_pressure_floor_energy_consistency(tmp_path, single_precision):
     assert "CGL C2P pressure-floor checks passed" in result.stdout
 
 
-def test_cgl_production_wall_encoding_survives_independent_c2p(tmp_path):
+@pytest.mark.parametrize("backup", (False, True), ids=("fluid_wall", "backup_walls"))
+def test_cgl_production_wall_encoding_survives_independent_c2p(tmp_path, backup):
     """Use actual CGLMHD::Collisions, including its compiled grid-kernel context.
 
     The optional custom-pgen executable/launcher allow this exact check on HIP.
@@ -103,7 +104,7 @@ def test_cgl_production_wall_encoding_survives_independent_c2p(tmp_path):
         _run(["cmake", "--build", str(build_dir), "--target", "athena", "-j4"])
         executable = build_dir / "src/athena"
     input_file = tmp_path / "production-wall.athinput"
-    input_file.write_text("""<job>
+    source = """<job>
 basename = production_wall
 <mesh>
 nghost = 2
@@ -149,7 +150,19 @@ dfloor = 1e-12
 pfloor = 1e-12
 bfloor = 1e-10
 <problem>
-""")
+"""
+    if backup:
+        source += """
+<mhd>
+backup_limiters = true
+firehose_threshold = 1.4
+firehose_backup_factor = 1.1
+mirror_threshold = 0.7
+mirror_backup_factor = 1.3
+nu_coll = 0.3
+limiter_nu_coll = 7
+"""
+    input_file.write_text(source)
     launcher = shlex.split(os.environ.get("ATHENAK_CGL_PRODUCTION_WALL_LAUNCHER", ""))
     command = launcher + [str(executable), "-i", str(input_file)]
     result = subprocess.run(command, cwd=tmp_path, capture_output=True,
@@ -158,6 +171,8 @@ bfloor = 1e-10
     assert result.returncode == 0, result.stdout + result.stderr
     assert "CGL production wall encoding/restart checks passed: 6 states" in result.stdout
     assert "CGL LF conversion wall encoding checks passed: 6 states" in result.stdout
+    if backup:
+        assert "CGL asymmetric backup wall/full-rate checks passed" in result.stdout
     assert (tmp_path / "wall_state.bin").stat().st_size == 6 * 6 * 8
 
 
