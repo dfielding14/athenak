@@ -98,6 +98,142 @@ MHDCons1D MakeConserved(const Real p_parallel, const Real p_perp) {
   return u;
 }
 
+void CheckIdempotence(const std::string &label, MHDCons1D &u,
+                      const HydPrim1D &first, const EOS_Data &eos,
+                      const bool magnetic_moment) {
+  const MHDCons1D corrected = u;
+  HydPrim1D recovered{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  if (magnetic_moment) {
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, recovered, dfloor_used, efloor_used,
+                                     tfloor_used, bfloor_used);
+  } else {
+    SingleC2P_CGLMHD(u, eos, recovered, dfloor_used, efloor_used,
+                     tfloor_used, bfloor_used);
+  }
+  Require(label + " no repeated density or pressure floor", !dfloor_used && !efloor_used);
+  Require(label + " unchanged conserved fields",
+          u.d == corrected.d && u.mx == corrected.mx && u.my == corrected.my &&
+          u.mz == corrected.mz && u.e == corrected.e && u.mu == corrected.mu &&
+          u.bx == corrected.bx && u.by == corrected.by && u.bz == corrected.bz);
+  Require(label + " unchanged primitive fields",
+          recovered.d == first.d && recovered.vx == first.vx &&
+          recovered.vy == first.vy && recovered.vz == first.vz &&
+          recovered.e == first.e && recovered.pp == first.pp);
+  const Real kinetic = 0.5*(1.0/u.d)*(SQR(u.mx) + SQR(u.my) + SQR(u.mz));
+  const Real magnetic = 0.5*(SQR(u.bx) + SQR(u.by) + SQR(u.bz));
+  const Real tolerance = kSinglePrecision ? 32.0*std::numeric_limits<Real>::epsilon()
+                                        : 1.0e-14;
+  RequireRelativeClose(label + " internal energy identity", u.e - kinetic - magnetic,
+                       0.5*first.e + first.pp, tolerance);
+}
+
+void CheckDensityRepair(const std::string &label, MHDCons1D u, const EOS_Data &eos,
+                         const Real expected_density, const Real initial_parallel,
+                         const Real initial_perp, const bool magnetic_moment) {
+  const MHDCons1D original = u;
+  const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+  const Real bmag = std::sqrt(bsqr);
+  const Real kinetic = 0.5*(SQR(u.mx) + SQR(u.my) + SQR(u.mz))/expected_density;
+  const Real internal = original.e - kinetic - 0.5*bsqr;
+  const Real ratio = initial_perp/initial_parallel;
+  const Real expected_parallel = magnetic_moment ? 2.0*(internal - initial_perp)
+                                                : internal/(0.5 + ratio);
+  const Real expected_perp = magnetic_moment ? initial_perp : ratio*expected_parallel;
+  const Real tolerance = kSinglePrecision ? 2.0e-5 : 1.0e-12;
+  HydPrim1D w{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  if (magnetic_moment) {
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                     tfloor_used, bfloor_used);
+  } else {
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  }
+  Require(label + " density floor flag", dfloor_used);
+  Require(label + " no other floors", !efloor_used && !tfloor_used && !bfloor_used);
+  Require(label + " density floor value",
+          u.d == expected_density && w.d == expected_density);
+  Require(label + " preserved total energy", u.e == original.e);
+  Require(label + " preserved momentum",
+          u.mx == original.mx && u.my == original.my && u.mz == original.mz);
+  Require(label + " preserved magnetic field",
+          u.bx == original.bx && u.by == original.by && u.bz == original.bz);
+  RequireClose(label + " vx", w.vx, original.mx/expected_density);
+  RequireClose(label + " vy", w.vy, original.my/expected_density);
+  RequireClose(label + " vz", w.vz, original.mz/expected_density);
+  RequireRelativeClose(label + " p_parallel", w.e, expected_parallel, tolerance);
+  RequireRelativeClose(label + " p_perp", w.pp, expected_perp, tolerance);
+  if (magnetic_moment) {
+    Require(label + " preserved magnetic moment", u.mu == original.mu);
+  } else {
+    RequireRelativeClose(label + " preserved pressure ratio", w.pp/w.e, ratio, tolerance);
+    const Real expected_anisotropy = expected_density*
+        (std::log(ratio) + 2.0*std::log(expected_density) - 3.0*std::log(bmag));
+    RequireClose(label + " repaired conserved anisotropy", u.mu, expected_anisotropy);
+    Require(label + " changed conserved anisotropy", u.mu != original.mu);
+  }
+  CheckIdempotence(label, u, w, eos, magnetic_moment);
+}
+
+void CheckDensityFloorRatios() {
+  EOS_Data eos = MakeCglEOS();
+  eos.dfloor = 1.0e-4;
+  eos.pfloor = 1.0e-12;
+  const Real densities[] = {5.0e-5, 1.0e-5, 1.0e-6, 1.0e-8};
+  const Real ratios[] = {1.0, 0.3, 4.0};
+  for (const Real density : densities) {
+    for (const Real ratio : ratios) {
+      MHDCons1D u{};
+      u.d = density;
+      u.mx = 0.2*density;
+      u.my = -0.1*density;
+      u.mz = 0.3*density;
+      u.bx = 1.0;
+      u.e = 1.0e-3*(0.5 + ratio)
+          + 0.5*(SQR(u.mx) + SQR(u.my) + SQR(u.mz))/density + 0.5;
+      u.mu = density*(std::log(ratio) + 2.0*std::log(density));
+      CheckDensityRepair("density floor", u, eos, eos.dfloor, 1.0e-3,
+                          1.0e-3*ratio, false);
+    }
+  }
+}
+
+void CheckMagneticMomentDensityFloor() {
+  EOS_Data eos = MakeCglEOS();
+  eos.dfloor = 2.0*kDensity;
+  eos.pfloor = 1.0e-12;
+  MHDCons1D u = MakeConserved(1.0, 2.0);
+  u.mu = 2.0/std::sqrt(SQR(kBx) + SQR(kBy) + SQR(kBz));
+  CheckDensityRepair("moment density floor", u, eos, eos.dfloor, 1.0, 2.0, true);
+}
+
+void CheckNonpositiveDensityFloor() {
+  EOS_Data eos = MakeCglEOS();
+  eos.dfloor = 1.0;
+  eos.pfloor = 1.0e-12;
+  for (const Real density : {0.0, -1.0}) {
+    MHDCons1D u{};
+    u.d = density;
+    u.bx = 1.0;
+    u.e = 3.5;
+    HydPrim1D w{};
+    bool dfloor_used = false, efloor_used = false;
+    bool tfloor_used = false, bfloor_used = false;
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+    Require("nonpositive density floor flag", dfloor_used);
+    Require("nonpositive density no other floors",
+            !efloor_used && !tfloor_used && !bfloor_used);
+    Require("nonpositive density floor value", u.d == 1.0 && w.d == 1.0);
+    RequireClose("nonpositive density p_parallel", w.e, 2.0);
+    RequireClose("nonpositive density p_perp", w.pp, 2.0);
+    Require("nonpositive density preserved energy", u.e == 3.5);
+    Require("nonpositive density canonical anisotropy", u.mu == 0.0);
+    CheckIdempotence("nonpositive density", u, w, eos, false);
+  }
+}
+
 void CheckFloorCase(const std::string &label, const Real initial_parallel,
                     const Real initial_perp, const Real expected_parallel,
                     const Real expected_perp) {
@@ -271,6 +407,9 @@ void RunCglC2PPressureFloorChecks() {
   CheckExtremeLogRatioFloor("large-negative-log-ratio", -1000.0, 1.0e-11,
                             6.0, 1.0e-12);
   CheckNegativeInternalEnergyFloor();
+  CheckDensityFloorRatios();
+  CheckMagneticMomentDensityFloor();
+  CheckNonpositiveDensityFloor();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
 }
