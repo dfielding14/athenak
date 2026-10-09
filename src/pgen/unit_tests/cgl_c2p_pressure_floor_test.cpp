@@ -255,16 +255,23 @@ void CheckMagnetizationDensityFloor() {
 
 void CheckFloorCase(const std::string &label, const Real initial_parallel,
                     const Real initial_perp, const Real expected_parallel,
-                    const Real expected_perp) {
+                    const Real expected_perp, const bool magnetic_moment = false) {
   const EOS_Data eos = MakeCglEOS();
   MHDCons1D u = MakeConserved(initial_parallel, initial_perp);
+  const Real bmag = std::sqrt(SQR(kBx) + SQR(kBy) + SQR(kBz));
+  if (magnetic_moment) u.mu = initial_perp/bmag;
   HydPrim1D w{};
   bool dfloor_used = false;
   bool efloor_used = false;
   bool tfloor_used = false;
   bool bfloor_used = false;
 
-  SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  if (magnetic_moment) {
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                     tfloor_used, bfloor_used);
+  } else {
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  }
 
   Require(label + " pressure floor flag", efloor_used);
   Require(label + " no density floor", !dfloor_used);
@@ -281,25 +288,14 @@ void CheckFloorCase(const std::string &label, const Real initial_parallel,
   RequireClose(label + " expected total energy", u.e, expected_energy);
   RequireClose(label + " primitive/conserved energy consistency", u.e,
                0.5*w.e + w.pp + KineticEnergy() + MagneticEnergy());
-  const Real bmag = std::sqrt(SQR(kBx) + SQR(kBy) + SQR(kBz));
-  RequireClose(label + " conserved anisotropy", u.mu,
-               CGLConservedAnisotropy(kDensity, expected_parallel, expected_perp, bmag));
-
-  const MHDCons1D corrected = u;
-  HydPrim1D recovered{};
-  dfloor_used = false;
-  efloor_used = false;
-  tfloor_used = false;
-  bfloor_used = false;
-  SingleC2P_CGLMHD(u, eos, recovered, dfloor_used, efloor_used, tfloor_used, bfloor_used);
-  Require(label + " repeated conversion floor is precision-compatible",
-          !efloor_used || kSinglePrecision);
-  RequireRelativeClose(label + " idempotent p_parallel", recovered.e,
-                       expected_parallel, relative_tolerance);
-  RequireRelativeClose(label + " idempotent p_perp", recovered.pp, expected_perp,
-                       relative_tolerance);
-  RequireClose(label + " idempotent total energy", u.e, corrected.e);
-  RequireClose(label + " idempotent conserved anisotropy", u.mu, corrected.mu);
+  if (magnetic_moment) {
+    RequireClose(label + " magnetic moment", u.mu, expected_perp/bmag);
+  } else {
+    RequireClose(label + " conserved anisotropy", u.mu,
+                 CGLConservedAnisotropy(
+                     kDensity, expected_parallel, expected_perp, bmag));
+  }
+  CheckIdempotence(label, u, w, eos, magnetic_moment);
 }
 
 void CheckWideDynamicRangeRoundTrip() {
@@ -376,25 +372,13 @@ void CheckExtremeLogRatioFloor(const std::string &label, const Real log_p_ratio,
   RequireClose(label + " primitive/conserved energy consistency", u.e,
                0.5*w.e + w.pp + 0.5*SQR(bmag));
 
-  const MHDCons1D corrected = u;
-  HydPrim1D recovered{};
-  dfloor_used = false;
-  efloor_used = false;
-  tfloor_used = false;
-  bfloor_used = false;
-  SingleC2P_CGLMHD(u, eos, recovered, dfloor_used, efloor_used, tfloor_used,
-                   bfloor_used);
-  Require(label + " repeated conversion floor is precision-compatible",
-          !efloor_used || kSinglePrecision);
-  RequireClose(label + " idempotent p_parallel", recovered.e, expected_parallel);
-  RequireClose(label + " idempotent p_perp", recovered.pp, expected_perp);
-  RequireClose(label + " idempotent total energy", u.e, corrected.e);
-  RequireClose(label + " idempotent conserved anisotropy", u.mu, corrected.mu);
+  CheckIdempotence(label, u, w, eos, false);
 }
 
-void CheckNegativeInternalEnergyFloor() {
+void CheckNegativeInternalEnergyFloor(const bool magnetic_moment = false) {
   const EOS_Data eos = MakeCglEOS();
   MHDCons1D u = MakeConserved(2.0, 2.0);
+  if (magnetic_moment) u.mu = 2.0/std::sqrt(SQR(kBx) + SQR(kBy) + SQR(kBz));
   u.e = KineticEnergy() + MagneticEnergy() - 1.0;
 
   HydPrim1D w{};
@@ -402,15 +386,109 @@ void CheckNegativeInternalEnergyFloor() {
   bool efloor_used = false;
   bool tfloor_used = false;
   bool bfloor_used = false;
-  SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  if (magnetic_moment) {
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                     tfloor_used, bfloor_used);
+  } else {
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  }
 
   Require("negative-eint pressure floor flag", efloor_used);
   RequireClose("negative-eint p_parallel", w.e, kPressureFloor);
-  RequireClose("negative-eint p_perp", w.pp, kPressureFloor);
+  const Real expected_perp = magnetic_moment ? 2.0 : kPressureFloor;
+  RequireClose("negative-eint p_perp", w.pp, expected_perp);
   Require("negative-eint total energy is finite", std::isfinite(u.e));
   Require("negative-eint conserved anisotropy is finite", std::isfinite(u.mu));
   RequireClose("negative-eint corrected total energy", u.e,
-               1.5*kPressureFloor + KineticEnergy() + MagneticEnergy());
+               0.5*kPressureFloor + expected_perp + KineticEnergy() + MagneticEnergy());
+  CheckIdempotence("negative internal energy", u, w, eos, magnetic_moment);
+}
+
+void CheckMagneticFloorCase(const Real bmag, const Real pressure,
+                            const bool magnetic_moment) {
+  const EOS_Data eos = MakeCglEOS();
+  MHDCons1D u = MakeConserved(2.0, 1.0);
+  u.bx = bmag;
+  u.by = u.bz = 0.0;
+  if (magnetic_moment) u.mu = pressure/eos.bfloor;
+  const Real expected_energy = 1.5*pressure + KineticEnergy() + 0.5*SQR(bmag);
+  u.e = expected_energy;
+  HydPrim1D w{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  if (magnetic_moment) {
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                     tfloor_used, bfloor_used);
+  } else {
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  }
+  Require("magnetic floor flag", bfloor_used);
+  Require("magnetic floor isotropy", w.e == w.pp);
+  RequireClose("magnetic floor pressure", w.e, pressure);
+  RequireClose("magnetic floor total energy", u.e, expected_energy);
+  CheckIdempotence("magnetic floor", u, w, eos, magnetic_moment);
+}
+
+void CheckUnresolvedInternalEnergyFloor(const bool magnetic_moment) {
+  const EOS_Data eos = MakeCglEOS();
+  MHDCons1D u{};
+  u.d = 1.0;
+  u.mx = 1.0e12;
+  u.bx = 1.0e8;
+  const Real kinetic = 0.5*SQR(u.mx);
+  const Real magnetic = 0.5*SQR(u.bx);
+  u.e = std::nextafter(static_cast<Real>(kinetic + magnetic), static_cast<Real>(0.0));
+  u.mu = magnetic_moment ? 1.0/u.bx : -3.0*std::log(u.bx);
+  const MHDCons1D original = u;
+  HydPrim1D w{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  if (magnetic_moment) {
+    SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                     tfloor_used, bfloor_used);
+  } else {
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+  }
+  Require("unresolved internal energy uses pressure floor", efloor_used);
+  Require("unresolved internal energy no other floors",
+          !dfloor_used && !tfloor_used && !bfloor_used);
+  Require("representable floor pressures", std::isfinite(w.e) && std::isfinite(w.pp)
+          && w.e >= eos.pfloor && w.pp >= eos.pfloor);
+  // A rounded K+M may already leave positive thermal energy when K and M are subtracted.
+  Require("representable total energy", std::isfinite(u.e) && u.e > original.e);
+  Require("representable anisotropy or moment", std::isfinite(u.mu));
+  Require("unresolved floor preserved primary fields",
+          u.d == original.d && u.mx == original.mx && u.my == original.my &&
+          u.mz == original.mz && u.bx == original.bx && u.by == original.by &&
+          u.bz == original.bz);
+  CheckIdempotence("unresolved internal energy", u, w, eos, magnetic_moment);
+}
+
+void CheckMagneticMomentDivisionRounding() {
+  const EOS_Data eos = MakeCglEOS();
+  const Real bmag = kSinglePrecision ? 41.0 : 49.0;
+  const Real rounded_moment = eos.pfloor/bmag;
+  Require("moment division fixture rounds pressure down",
+          rounded_moment*bmag < eos.pfloor);
+  MHDCons1D u{};
+  u.d = 1.0;
+  u.bx = bmag;
+  u.mu = 0.25/bmag;
+  u.e = 3.0 + 0.5*SQR(bmag);
+  HydPrim1D w{};
+  bool dfloor_used = false, efloor_used = false;
+  bool tfloor_used = false, bfloor_used = false;
+  SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
+                                   tfloor_used, bfloor_used);
+  Require("moment division pressure floor flag", efloor_used);
+  Require("moment division no other floors",
+          !dfloor_used && !tfloor_used && !bfloor_used);
+  RequireClose("moment division p_parallel", w.e, 5.5);
+  RequireClose("moment division p_perp", w.pp, eos.pfloor);
+  RequireClose("moment division total energy", u.e, 3.75 + 0.5*SQR(bmag));
+  Require("moment encoding clears pressure floor", u.mu > rounded_moment
+          && u.mu*bmag >= eos.pfloor && w.pp >= eos.pfloor);
+  CheckIdempotence("moment division", u, w, eos, true);
 }
 
 } // namespace
@@ -419,6 +497,9 @@ void RunCglC2PPressureFloorChecks() {
   CheckFloorCase("parallel-only", 0.25, 2.0, kPressureFloor, 2.0);
   CheckFloorCase("perpendicular-only", 2.0, 0.25, 2.0, kPressureFloor);
   CheckFloorCase("both-pressure", 0.25, 0.5, kPressureFloor, kPressureFloor);
+  CheckFloorCase("moment parallel-only", 0.25, 2.0, kPressureFloor, 2.0, true);
+  CheckFloorCase("moment perpendicular-only", 2.0, 0.25, 2.0, kPressureFloor, true);
+  CheckFloorCase("moment both-pressure", 0.25, 0.5, kPressureFloor, kPressureFloor, true);
   CheckWideDynamicRangeRoundTrip();
   CheckIsotropicExactRoundTrip();
   CheckExtremeLogRatioFloor("large-positive-log-ratio", 1000.0, 1.0e-11,
@@ -426,6 +507,15 @@ void RunCglC2PPressureFloorChecks() {
   CheckExtremeLogRatioFloor("large-negative-log-ratio", -1000.0, 1.0e-11,
                             6.0, 1.0e-12);
   CheckNegativeInternalEnergyFloor();
+  CheckNegativeInternalEnergyFloor(true);
+  for (const bool magnetic_moment : {false, true}) {
+    for (const Real pressure : {kPressureFloor, static_cast<Real>(4.0/3.0)}) {
+      CheckMagneticFloorCase(0.0, pressure, magnetic_moment);
+      CheckMagneticFloorCase(MakeCglEOS().bfloor, pressure, magnetic_moment);
+    }
+    CheckUnresolvedInternalEnergyFloor(magnetic_moment);
+  }
+  CheckMagneticMomentDivisionRounding();
   CheckDensityFloorRatios();
   CheckMagneticMomentDensityFloor();
   CheckNonpositiveDensityFloor();

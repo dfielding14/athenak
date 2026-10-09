@@ -11,6 +11,8 @@
 //! with an ideal gas EOS. Versions for both non-relativistic and relativistic fluids are
 //! provided.
 
+#include <limits>
+
 #include "eos/cgl_physics.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -273,6 +275,38 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
     efloor_used = true;
   }
 
+  if (efloor_used || bfloor_used) {
+    // Decode stored moment before correcting E: division can round p_perp below its floor.
+    if (bmag > bfloor) {
+      w.pp = u.mu*bmag_inv;
+      if (w.pp < pfloor) {
+        u.mu = Kokkos::nextafter(pfloor/bmag_inv, std::numeric_limits<Real>::infinity());
+        w.pp = u.mu*bmag_inv;
+      }
+      w.e = 2.0*(u.e - e_k - e_m - w.pp);
+    } else {
+      w.e = TWO_3RDS*(u.e - e_k - e_m);
+      w.pp = w.e;
+    }
+    if (w.e < pfloor || w.pp < pfloor) {
+      Real corrected_eint = 0.5*fmax(w.e, pfloor) + fmax(w.pp, pfloor);
+      corrected_eint = Kokkos::nextafter(corrected_eint,
+                                        std::numeric_limits<Real>::infinity());
+      const Real energy_with_kinetic = Kokkos::nextafter(
+          corrected_eint + e_k, std::numeric_limits<Real>::infinity());
+      u.e = Kokkos::nextafter(fmax(u.e, energy_with_kinetic + e_m),
+                             std::numeric_limits<Real>::infinity());
+      efloor_used = true;
+      if (bmag > bfloor) {
+        w.e = 2.0*(u.e - e_k - e_m - w.pp);
+      } else {
+        w.e = TWO_3RDS*(u.e - e_k - e_m);
+        w.pp = w.e;
+      }
+    }
+    if (bmag <= bfloor) u.mu = w.pp/bmag_inv;
+  }
+
   (void) tfloor_used;
   return;
 }
@@ -376,7 +410,21 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
   if (dfloor_used || pressure_floor_used || bfloor_used) {
     const Real bmag_inv = (bmag > bfloor) ? bmag : bfloor;
     u.mu = CGLConservedAnisotropy(w.d, w.e, w.pp, bmag_inv);
-    if (dfloor_used) {
+    // Return pressures decoded from stored E/A; round E upward only if a floor was lost.
+    CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
+        u.d, u.mx, u.my, u.mz, u.e, u.mu, u.bx, u.by, u.bz, bfloor, w.e, w.pp);
+    if (w.e < pfloor || w.pp < pfloor) {
+      efloor_used = true;
+      Real corrected_eint = u.e - e_k - e_m;
+      if (w.e > 0.0 && w.pp > 0.0) {
+        corrected_eint = Kokkos::nextafter(
+            corrected_eint*fmax(pfloor/w.e, pfloor/w.pp),
+            std::numeric_limits<Real>::infinity());
+      }
+      const Real energy_with_kinetic = Kokkos::nextafter(
+          corrected_eint + e_k, std::numeric_limits<Real>::infinity());
+      u.e = Kokkos::nextafter(fmax(u.e, energy_with_kinetic + e_m),
+                             std::numeric_limits<Real>::infinity());
       CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
           u.d, u.mx, u.my, u.mz, u.e, u.mu, u.bx, u.by, u.bz, bfloor, w.e, w.pp);
     }
