@@ -248,6 +248,8 @@ of the evolving pressure. Verify actual dt and RHS counts; selecting explicit
 integration alone does not fix dt, and there is no general fixed-dt input at the
 base. This is a short patch screen, not another benchmark campaign. Do not use
 unrestricted turbulence before the forcing correction to attribute kernel cost.
+After piece 8, repeat the Tier 2 measurement on the same compatible checkpoint
+to establish the work-count and cost baseline for pieces 9 and 10.
 
 **9. Implement the LF bound for the final stencil.**
 Scope: timestep calculation/callers, existing post-RK refresh, and MPI reduction.
@@ -441,7 +443,7 @@ of the known-defective base.
 **Active milestone:** after 1-11, run the selected physical suite once: resolved
 non-integer-period waves, an e-folding of parallel/perpendicular decay, oblique
 transport, finite-rate relaxation, heating/timestep refresh, forcing/restart,
-and a resolved active turbulence case with nonzero LF work. Run an actual HIP
+and the Tier 3 matched active run to t=14 with nonzero LF work. Run an actual HIP
 wall-encoding fixture; CPU scalar helpers cannot substitute for it. Run the
 small safe/fast and diagnostic/profile branch checks once after all face changes,
 not after each constant edit. Production timings keep detailed q diagnostics off.
@@ -485,6 +487,7 @@ LF refinement. Piece 15 is implemented only when needed to refine LF intervals
 independently; a small smooth test or clean termination does not establish
 turbulent accuracy. Do not relabel the active kinematic fixture as a passive
 test: the current passive guard requires dynamic evolution.
+Run the Tier 3 matched passive member to t=14 at this milestone.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
@@ -541,34 +544,142 @@ another permissive smoke test. Do not replay archived JSON and call it a new tes
 
 ## Performance comparisons
 
-Freeze two workloads, not a scaling campaign:
+Use three frozen benchmark tiers. Each answers a different question; none
+substitutes for another. Weak/strong scaling sweeps, other MeshBlock sizes and
+higher-resolution boxes, including 384 cubed, belong to the separate proposal
+`CGL/scaling/PRODUCTION_LIKE_SCALING_EXTENSIONS.md` in the project workspace;
+this plan runs none. Only Tier 1 requires two nodes; Tiers 2 and 3 use the same
+one-node matched box. Frozen inputs live under the rebuild workspace's `inputs/`.
 
-- **Uniform control:** a populated-node active case with aligned fields. The
-  historical two-node/16-GPU input used 256 cubed cells per GPU and is identified
-  in `2afaa0fa1:docs/validation/cgl_lf_performance_20261008/matched-timing.json`.
-  Verify the remote file/hash before claiming historical reproduction. If absent
-  or the allocation differs, freeze a new one-node case and label it separately.
-- **Nonzero 3D LF transport:** make a base-compatible active deck through the
-  built-in pgen interface, using the intended production geometry and forcing
-  from `2afaa0fa1:inputs/cgl_lf_paper/cgl_lf_physics_benchmark_matched_beta10.athinput`:
-  192 by 192 by 384 cells, eight 96 by 96 by 192 blocks on one eight-GPU node,
-  PPM4 with three ghost cells, beta 10, seed 271828, `dedt=0.16`, and the full
-  3D solenoidal/compressive mode policy. The old revision needs its supported
-  parallel-threshold spelling; do not copy later STS/passive options and assume
-  they work there. Preserve the specified physical shell and forcing cadence.
-  Remove output from the timing interval and verify nonzero transport separately.
-  The base's built-in `cgl_lf_paper_smoke_active_beta10.athinput` verifies the pgen
-  interface, but its 8 by 8 by 16 grid and different forcing policy are not this
-  benchmark. The custom-pgen `cgl_lf_paper_turb_active` deck is another interface
-  and planar workload; do not silently substitute it. Short startup timings are
-  cost controls, not evidence of developed turbulence or long-run accuracy.
+| Tier | Workload | Allocation | Answers | Run when |
+| --- | --- | --- | --- | --- |
+| 1. Uniform cost control | Archived scaling geometry and uniform state, 40 cycles | 2 nodes / 16 GPUs, one 256 cubed block/GPU | Cost per LF evaluation; LF overhead relative to no-LF CGL | Any change that adds, removes or alters recurring full-domain work |
+| 2. Developed-state restart | Frozen active matched-box checkpoint near t=6; 40-cycle window plus one untimed guard cycle | 1 node / 8 GPUs, eight 96 x 96 x 192 blocks | LF evaluations/cycle and bound, limiter and strict-check cost in a nonuniform state | Controller, STS-safety, LF-interval, wall/limiter or state-dependent kernel changes |
+| 3. Matched turbulence box | Matched box from its initial state to t=14 | Same as Tier 2 | Physical behavior and node-hours to the common endpoint | Active and passive milestones and final acceptance |
 
-Use a common explicit initial state or a freshly produced compatible active
-checkpoint. No shared full-precision active turbulent checkpoint has yet been
-verified. The retained late turbulent timing checkpoint is passive J/A and must
-not be loaded into pre-WO1 active E/A. New/old physics trajectories can differ;
-record those intentional changes instead of treating every endpoint difference
-as an implementation error or a same-work kernel comparison.
+**Tier 1, uniform cost control.** Use the frozen `uniform-2n.athinput`: the
+archived two-node geometry (256 x 1024 x 1024 cells, sixteen 256 cubed blocks,
+domain 1 x 4 x 4) and unforced uniform state (rho=1, p_parallel=p_perp=0.6,
+Bz=sqrt(0.12), beta 10) with production LF modes. Freeze a no-LF companion
+that differs only in basename, `sts_integrator=none` and removal of the heat-flux
+keys, matching the archived collisionless variant. Run both in the same
+allocation; report the LF/no-LF throughput ratio and absolute rates.
+Keep `uniform-historical-2n.athinput` as a separately labeled historical
+control: its bytes, including the original 20-cycle limit and LF modes, match
+the archived `cglws_lf_sts_0002n` input (SHA-256
+`d1e06b2a9cc1b9d9b1dcea489211d2fa13a8cf386ca37cec34491fc5320ea763`).
+Run it when establishing a baseline and at milestones, not for every patch.
+Do not shrink this tier below two nodes or change its block size; continuity
+with the archive depends on that layout.
+
+This state has zero heat flux and a grid-aligned field. It exercises LF kernels,
+exchanges, reductions and the timestep row loop, but does not activate gradient
+terms in the bound, heat-flux caps, low-field branches or limiters. It controls
+cost per evaluation; its evaluation count does not predict turbulent work.
+A change that alters Tier 1 LF evaluations/cycle has changed the controller;
+report it and judge the resulting work and cost on Tier 2.
+
+**Tier 2, developed-state restart.** Produce a full-precision active checkpoint
+of the Tier 3 box from the prescribed initial state with the current candidate,
+q diagnostics off and both work ledgers on from the start. Target t=6, the start
+of the analysis window; record the actual checkpoint time and cycle, producer
+revision, input/binary/checkpoint hashes. A periodic restart near t=6 is acceptable
+if its actual time is recorded. This is a frozen cost-screening state, not a
+physical result or evidence of stationarity. Attempt and qualify it before piece
+7. If a pending correction prevents reaching it healthily, retain the failure,
+record Tier 2 as unavailable, and qualify the checkpoint after that correction;
+do not relax checks or block the needed fix on this prerequisite.
+
+Every invocation loads the same checkpoint. For restart cycle N, use
+`time/nlim=N+41`, `time/ndiag=1` and a `time/tlim` beyond the whole interval.
+Measure between the stdout timestamps at N+5 and N+40: 35 completed updates
+after five warmup cycles. The extra untimed cycle makes N+40 an ordinary loop
+diagnostic; final output and problem-finalization work occur before the final
+diagnostic and would otherwise contaminate it. Override only keys already in
+the checkpoint's parameter record. Disable each existing output writer with
+`dcycle=0` if that key is present, otherwise `dt=0`, and verify no files are
+written. Delaying the next output alone does not suppress unconditional final
+output. Preserve LF diagnostic mode, both ledger flags, forcing parameters and saved forcing/RNG
+state. Verify nonzero LF transport and zero new LF floor/invalid events in a
+separate short history run from the checkpoint; inspect EOS/FOFC repairs too.
+Obtain LF work counts over the same N+5 to N+40 window in a matching history
+replay: delta(lf_nstage)/active_cells gives RHS evaluations, then divide by 35
+for evaluations/cycle. Whole-run counts include warmup and the guard cycle and
+can bias cost/RHS when stage counts vary.
+
+Parent and candidate must load the same checkpoint with verified compatible
+decoding. Regenerate and relabel it after changes to restart contents or newly
+loaded parameters, or when accepted physics changes make the old state
+unrepresentative. Keep old checkpoints and timings, and remeasure both members
+on the replacement; if they cannot read a common checkpoint, establish a new
+baseline without claiming a paired speedup across that transition. A passive
+J/A checkpoint cannot initialize active E/A. The passive model gets its own
+Tier 2 checkpoint from its qualified implementation. Pieces 7, 9 and 10,
+bound/refresh optimizations in 13, and any chunking in 15 report work count and
+cost here together. Repeat Tier 2 after piece 8 to set the baseline for 9 and 10.
+
+**Tier 3, matched turbulence box.** The canonical Majeski-type workload is
+`2afaa0fa1:inputs/cgl_lf_paper/cgl_lf_physics_benchmark_matched_beta10.athinput`.
+Derive a separate milestone deck from the geometry and initial state frozen in
+`active3d-1n.athinput`; preserve that 40-cycle startup control unchanged:
+
+- Grid: periodic (1,1,2), 192 x 192 x 384, eight 96 x 96 x 192 blocks on one
+  eight-GPU node; use the built-in `cgl_lf_paper` turbulence interface.
+- Physics and numerics: PPM4 with three ghosts, RK2/RKL2, CFL 0.3, local LF
+  coefficients, beta 10, rho=1, B=(0,0,1), velocity=0, p_parallel=p_perp=5;
+  retain the canonical forcing, floors, thresholds and finite-rate limiter policy.
+- Forcing: seed 271828, `dedt=0.16` per unit volume (nominal total power
+  0.32 in volume two, matching the stated MKS24 total), tcorr=2,
+  dt_update=0.01, the full 3D solenoidal/compressive amplitude blend
+  1/(1+sqrt(2)) and the physical shell pi <= |k| <= 3*pi.
+
+Start fresh with the qualified milestone solver and run to t=14 with no cycle
+cap; the pre-piece-7 cost checkpoint cannot supply this trajectory. Restore the
+canonical history (0.02), field (0.25, both `mhd_w_bcc` and `turb_force`) and
+restart (1.0) cadences, verifying each writer exists in the candidate. The
+analysis window is [6,14]. The `cgl_lf_paper_standard_*` MKS24 decks (32 x 32 x 64
+blocks, PLM, `dedt=0.32` per volume) are a different benchmark; neither those,
+the small smoke deck nor the custom-pgen planar workload substitutes for this box.
+Until piece 10 qualifies a separate STS safety, use and record the existing CFL
+multiplier (0.3). The WO2-era matched deck used `sts_safety=0.9`, which the frozen
+startup copy omitted; restore 0.9 only if it passes piece 10's accuracy gates.
+Freeze the qualified value for the matched pair and label historical differences.
+Run the active member at the active milestone and the passive member at the
+passive milestone. Restore canonical `iso_sound_speed=sqrt(5)`, omitted from the
+active startup control, and set `mhd/passive` and `problem/passive_delta` together
+for each member. Half-sweep merging stays off; chunking requires piece 15. If
+passive qualification requires different numerical settings, do not label differently
+configured members as a matched pair; rerun the active member when needed.
+
+Report:
+
+- node-hours to t=14, including I/O;
+- interval rates from periodic `zone-cycles/s=` diagnostics, identifying
+  intervals containing I/O and excluding the final diagnostic from evaluation-cost
+  comparisons;
+- LF evaluations/cycle over time;
+- the active energy budget, Delta E minus accumulated injected work;
+- LF floor/invalid counters, pressure extrema and EOS/FOFC repair activity;
+- the retained figure groups from
+  `2afaa0fa1:docs/cgl_lf_matched_physics_benchmark.md` and its retained reports.
+
+The figures are descriptive comparisons with retained references, not a
+physical-validation pass criterion. Surviving to t=14 does not establish accuracy.
+There is no cooling: thermal energy and beta may evolve, and t=6 does not by
+itself establish stationary turbulence. Keep intentional model/trajectory changes
+distinct from equivalent-optimization comparisons. Once a milestone run is
+accepted, its restart near t=6 may become the next Tier 2 checkpoint.
+
+The 40-cycle `active3d-1n.athinput` startup screen remains an optional quick check
+of hyperbolic, forcing and LF evaluation cost on the target geometry. It cannot
+replace Tier 2 work counts or Tier 3 physical-time cost and accuracy evidence.
+
+Planning estimates from measured startup rates, not developed-state measurements:
+Tier 1 takes a few minutes on two nodes per invocation; producing the t=6 state
+is roughly 0.8 node-hours at 480 seconds per simulation-time unit; each Tier 2
+invocation is a few minutes on one node; Tier 3 is roughly two node-hours per
+member to t=14 if work stays near 38 LF evaluations/cycle. Work may grow as
+turbulence develops. Revise these estimates with Tier 2 and milestone evidence.
 
 Default production timing configuration: safe arithmetic, diagnostics none,
 weighted STS fluxes, strict checks on. Explicitly put these keys in the timing
@@ -580,11 +691,11 @@ Freeze the other diagnostic settings explicitly too: the nonzero research target
 has both `mhd/cgl_lf_record_pressure_work=true` and
 `turb_driving/record_injected_work=true`. Keep these for target-workload timings.
 Q diagnostics off and output writers removed do not disable their traction
-storage, stage reductions, or forcing-energy global reductions. An optional
-false/false timing is a separately labeled core-cost control, never a replacement
-for the research result. The injected-work flag is validated in restart metadata;
-do not toggle it on a resumed checkpoint. Construct any alternate control from
-the same initial state with its diagnostic settings fixed from the start.
+storage, stage reductions, or forcing-energy global reductions. Tier 1 is the
+labeled core-cost control with no forcing and pressure-work recording off;
+Tiers 2 and 3 keep both work ledgers on. The injected-work flag is validated in
+restart metadata; do not toggle it on a resumed checkpoint. Fix diagnostic and
+ledger settings from the initial state.
 
 Use existing cycle/time/elapsed stdout. Time the same completed-cycle interval
 after warmup, without output inside it, at fixed diagnostic frequency. For an
@@ -593,12 +704,14 @@ the effect. Use a warmup and three alternating pairs to establish the baseline,
 resolve an apparent regression, or substantiate a retained speedup. If spread
 obscures the result, lengthen the interval; do not repeatedly sample for a favorable
 number. Do not run competing jobs concurrently during performance measurement.
+The alternating-pair protocol applies to Tiers 1 and 2; Tier 3 is one run per
+member at its milestone, repeated only for a changed configuration or a failed gate.
 
 Report zone-cycles/s/node, LF RHS evaluations/cycle, elapsed/physical-time advanced,
 and whole-step elapsed/RHS. The last metric is amortized total cost, not pure LF
-kernel time. At final acceptance report node-seconds to the common physical
-endpoint at the demonstrated accuracy. Profile separately because profiling
-fences perturb timing: start with one short `cgl_lf_profile=true`,
+kernel time. At final acceptance report node-hours to t=14 at the demonstrated
+accuracy. Profile separately because profiling fences perturb timing: start with
+one short `cgl_lf_profile=true`,
 `cgl_lf_profile_detail=false` run, using bucket call counts and `rank_max_s` to
 locate expensive work or imbalance. Do not sum nested buckets or maxima from
 different ranks. Detailed profiling replays arithmetic and, on the newer reference,
@@ -675,14 +788,13 @@ The passive counterpart uses `unit_tests/cgl_passive_wall_decode_test` and
 `ATHENAK_CGL_PASSIVE_WALL_BINARY` / `ATHENAK_CGL_PASSIVE_WALL_LAUNCHER`.
 These custom pgens arrive with their owning corrections, not with the baseline.
 
-The original minimum-reduction probe, archived uniform input, and passive failing
-checkpoint are remote artifacts; their present existence is unverified here.
+The archived uniform input is verified: the frozen historical copy matches its
+SHA-256, recorded in the rebuild workspace's `inputs/README.md` and above.
 The compiler probe is referenced under
 `/lustre/orion/ast207/proj-shared/dfielding/CGL/WO2/physics-benchmark/matched/power032/lf-subcycling/compiler-comparison`.
 Inspect the retained script and manifest before invoking it. If it is unavailable,
 make one small equivalent compiler check during baseline setup, not a new probe
-matrix. Missing old timing input need not block the rebuild: use the newly frozen
-common workload. Missing failing-state evidence does limit the passive accuracy
+matrix. Missing failing-state evidence does limit the passive accuracy
 claim until that state or a demonstrated equivalent reproducer is recovered.
 
 ## Completion record and stopping point
@@ -700,7 +812,6 @@ explicitly; neither skipped tests nor old retained passes qualify this compositi
 Refresh the relevant method/parameter/restart documentation with each user-visible
 change; no generated manuscript/PDF rebuild or unrelated formatting pass.
 
-The next GPU session starts with 0: verify environment and needed retained artifacts,
-build the two controls, run the small baseline checks, and freeze the two workloads.
-Then implement 1-4 with focused checks before moving into the LF face series.
-This planning task stops before those builds, tests, fixture ports or solver edits.
+Follow the work order for the current next step and retained completion evidence.
+Piece 0 describes baseline setup; this benchmark-plan update does not require
+repeating completed solver qualification or changing the frozen startup controls.

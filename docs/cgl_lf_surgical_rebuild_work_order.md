@@ -14,7 +14,9 @@ archive uses a third revision, `f2d0a259`.
 
 **Status:** pieces 0–6 and 11 complete.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** piece 7 — transverse temperature slopes.
+**Next:** prepare and qualify the Tier 2 checkpoint, then piece 7 — transverse
+temperature slopes. Follow the plan's failure rule if a pending fix is needed
+to reach the checkpoint healthily.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
@@ -97,6 +99,7 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   strong-collision limit, and resolved coupled decay. Across 6–8 use the common
   conservative reference step and oblique background-coefficient kinematic screen;
   verify actual dt/RHS counts instead of assuming explicit integration fixes dt.
+  Repeat Tier 2 afterward to set the work-count and cost baseline for 9 and 10.
 
 - [ ] **9 — Final-stencil timestep bound.** Adapt the coupled CT/density/VL4/grad-B
   rows directly, with fresh halo values in existing scratch storage and safe
@@ -111,10 +114,10 @@ Bring conditional chunking (15) forward if active/passive qualification requires
 
 - [ ] **Active milestone.** Run the plan's selected physical suite once, including
   resolved waves/decay, finite-rate relaxation, forcing/restart, HIP wall encoding,
-  and resolved active turbulence. Extend the local-coefficient `64 x 64` hotspot
-  to at least three temporal refinements at the same grid/endpoint, preserving
-  duration and conservation checks. Report worst-cell absolute/relative and
-  thermal-energy-scaled pressure errors, norms, extrema, and repair activity.
+  and the Tier 3 matched active run to t=14. Extend the local-coefficient
+  `64 x 64` hotspot to at least three temporal refinements at the same grid/endpoint,
+  preserving duration and conservation checks. Report worst-cell absolute/relative
+  and thermal-energy-scaled pressure errors, norms, extrema, and repair activity.
   Require decreasing temporal errors.
   Compare once with qualified `2afaa0fa1` at matched active physics, merging and
   chunking off. This qualifies the first usable deliverable within tested limits.
@@ -138,6 +141,7 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   Gate: matched-timestep flow identity, independent thermal evolution/work, HIP
   wall decoding, forced MPI restart, all supported reconstructors, and nonlinear
   temporal refinement. Initial scope is uniform periodic; document absent shock heating.
+  Run the Tier 3 matched passive member to t=14 at the passive milestone.
 
 - [ ] **15 — Conditional LF chunking.** Implement only if active/passive accuracy
   or positivity needs smaller LF intervals at fixed outer dt. Reproduce the failing
@@ -147,18 +151,50 @@ Bring conditional chunking (15) forward if active/passive qualification requires
 
 **Measurement and acceptance**
 
-Use safe/none/weighted LF with strict checks and explicit environment-override
-control. Keep pressure-work and injected-work recording enabled on research
-timings. Use warmup and matching output-free intervals: one alternating pair
-screens a patch; three establish a baseline or support a speedup. Run timing
-jobs without competition; profile separately with detail off initially.
+Use the plan's three frozen benchmark tiers; scaling sweeps and higher-resolution
+boxes are separate work.
 
-Report zone-cycles/s/node, LF evaluations/cycle, elapsed/physical time, and
-amortized whole-step time/RHS. Final acceptance reports node-seconds to the common
-endpoint at demonstrated accuracy. Set additional endpoint-error criteria before
-selecting performance settings. The frozen-row bound does not prove nonlinear or
-AMR stability; hotspot convergence does not certify turbulent threshold switching;
-once-per-cycle collisions do not make the full split second order.
+- **Tier 1, uniform cost control:** two nodes, sixteen 256 cubed blocks,
+  frozen `uniform-2n` plus its no-LF companion, 40 cycles. Run the byte-identical
+  historical input at baselines and milestones only. Use Tier 1 for cost per LF
+  evaluation on any patch that changes recurring full-domain work; report the
+  LF/no-LF throughput ratio and absolute rates.
+- **Tier 2, developed-state restart:** matched box, one node, frozen active
+  checkpoint near t=6. Measure between five and 40 completed cycles after restart
+  (35 updates), with one extra untimed cycle to exclude finalization. Disable
+  writers using existing checkpoint keys and verify no output. Count LF work over
+  the same 35 updates in a separate history replay. Keep both ledgers,
+  LF diagnostic mode and forcing state unchanged. It measures work count and cost
+  in a nonuniform state; require it for 7, 9, 10, bound/refresh work in 13, and 15.
+  Attempt and qualify the checkpoint before piece 7; retain and diagnose any
+  failure without blocking the required correction. Repeat Tier 2 after 8.
+  Parent/candidate share the same compatible checkpoint; regenerate, relabel and
+  rebaseline when restart contents or model changes require it. Passive uses its
+  own qualified checkpoint; passive J/A cannot initialize active E/A.
+- **Tier 3, matched box to t=14:** fresh initial state on one node, active at the
+  active milestone, passive at the passive milestone, canonical history/field/restart
+  output.
+  It provides the physical comparison and node-hours including I/O to the common
+  endpoint. Keep the CFL-based LF safety until piece 10 qualifies a separate
+  value; historical 0.9 is not automatically accepted. Chunking requires piece 15.
+
+Use safe/none/weighted LF with strict checks and explicit environment-override
+control. Keep pressure-work and injected-work recording enabled on Tiers 2 and 3;
+Tier 1 is the core-cost control without them or forcing. For Tiers 1 and 2, use
+warmup and matching output-free intervals: one alternating pair screens a patch;
+three establish a baseline or support a speedup. Tier 3 is one run per member
+at its milestone, repeated for changed settings or failed gates. Run timing jobs
+without competition; profile separately with detail off initially.
+
+Report the tier, zone-cycles/s/node, LF evaluations/cycle, elapsed/physical time,
+and amortized whole-step time/RHS. A change in Tier 1 evaluations/cycle is a
+controller change; judge it on Tier 2. Final acceptance reports node-hours to
+t=14 at demonstrated accuracy. Figures are descriptive; reaching t=6 or t=14
+does not prove stationarity or accuracy. Set additional endpoint-error criteria
+before selecting performance settings. The frozen-row bound does not prove
+nonlinear or AMR stability; hotspot convergence does not certify turbulent
+threshold switching; once-per-cycle collisions do not make the full split second
+order.
 
 Directional fusion, the constant derivative-envelope controller, and boundary
 extensions remain conditional under the plan. Half-sweep merging, A-to-Q,
