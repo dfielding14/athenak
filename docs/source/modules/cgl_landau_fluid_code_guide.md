@@ -93,6 +93,8 @@ rates plus walls after the post-sweep, after A has been restored. The driver
 also invokes the post checkpoint when the post-sweep has no stages. Coarse
 state is refreshed after these updates. The post-RK hook refreshes the local
 timestep from the corrected state before the driver's global minimum.
+It is the sole post-RK CGL timestep owner; ordinary MHD retains its last-stage
+`NewTimeStep` task. Initialization, regridding, and post-LF refreshes remain.
 
 `RecordAdmissibility` counts each unprojected LF stage. Intermediate wall
 crossings are diagnostic; invalid pressures and floors remain fatal in strict

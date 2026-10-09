@@ -125,7 +125,10 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.recvb_shr);
   id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.bcs);
   id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
-  id.newdt     = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
+  // CGL refreshes the timestep after the post-RK collision/wall checkpoint.
+  if (!peos->eos_data.is_cgl) {
+    id.newdt = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
+  }
 
   if (peos->eos_data.is_cgl) {
     id.cglcoll = tl["after_timeintegrator"]->AddTask(&MHD::CGLCollisions, this, none);
