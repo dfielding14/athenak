@@ -36,14 +36,30 @@ f_{\rm corr}=\exp(-\Delta t_{\rm update}/t_{\rm corr}),\qquad
 g_{\rm corr}=\sqrt{1-f_{\rm corr}^{2}},
 ```
 
-where \(\boldsymbol{\xi}^{n}\) is a newly generated, projected modal
-innovation. With negligible `tcorr`, each update replaces the previous state
-with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
-`sol_fraction=0` gives compressive forcing.
+where \(\boldsymbol{\xi}^{n}\) is a newly generated Gaussian modal innovation,
+weighted by the spectrum and selected projection policy. With negligible
+`tcorr`, each update replaces the previous state with a white-noise realization.
+For three-dimensional `solenoidal_compressive` driving, `sol_fraction=1` gives
+solenoidal forcing and `sol_fraction=0` gives compressive forcing.
+
+`driving_type=0` selects a three-dimensional shell and defaults to the
+`solenoidal_compressive` policy. Type 2 uses the same shell with independent
+unprojected amplitudes in all three components; it defaults to `power_law`
+and requires `projection_policy=mks24_random_unprojected`. Type 1 drives only
+the x/y components. Every planar policy uses
+\(k_\parallel=|k_z|\) and \(k_\perp=\sqrt{k_x^2+k_y^2}\) for its anisotropic
+spectrum. The `mks24_alfvenic_perpendicular` policy projects against
+\((k_x,k_y)\), while the generic policy retains its full-wavevector projection.
 
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
+
+The force is normalized and applied once per timestep as a full-`dt` kick before
+`CopyCons`, independent of the RK integrator. Ghost cells and primitive variables
+are refreshed before hyperbolic fluxes. OU coefficients remain fixed between
+`dt_update` boundaries; a step crossing multiple boundaries catches up the OU
+recurrence without applying extra fluid kicks.
 
 ## Tiled Evaluation
 
@@ -107,6 +123,30 @@ and uses the non-negative solution to
 m_0s^2+m_1s=\dot e_{\rm target}.
 ```
 
+For ion-neutral runs, these integrals use the sum of the two fluids' densities
+and conserved momenta.
+
+### Conserved Momentum And Energy
+
+For each nonrelativistic fluid, the normalized acceleration applies
+
+```{math}
+\boldsymbol{p}'=\boldsymbol{p}+\rho\boldsymbol{a}\Delta t,\qquad
+E'=E+\boldsymbol{p}\cdot\boldsymbol{a}\Delta t
+       +\tfrac12\rho|\boldsymbol{a}|^2\Delta t^2.
+```
+
+The work uses that fluid's own pre-kick conserved momentum and density, so a
+pure kick preserves thermal energy up to roundoff even when primitives are
+stale. Each fluid's EOS independently controls whether its energy is updated;
+isothermal fluids receive only the momentum increment. The kick leaves magnetic
+fields and the conserved CGL anisotropy unchanged. Net-momentum removal already
+acts on the acceleration before this update.
+
+With `record_injected_work=true`, each full kick adds its measured total-energy
+change to the cumulative work counter before the RK stages. This diagnostic
+supports a single nonrelativistic ideal/CGL fluid.
+
 ### RMS Acceleration
 
 With `normalization=accel_rms`, `accel_rms` is imposed directly:
@@ -166,15 +206,16 @@ The following keys belong in `<turb_driving>`.
 | `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
 | `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
-| `spectrum` | `parabolic` | `parabolic` or `power_law`. |
+| `spectrum` | `power_law` for type 2, otherwise `parabolic` | `parabolic` or `power_law`. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
 | `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds. |
-| `driving_type` | `0` | `0` for three-dimensional; `1` for planar driving. |
+| `driving_type` | `0` | `0` for three-dimensional driving; `1` for planar x/y driving; `2` for isotropic unprojected random driving. |
+| `projection_policy` | `mks24_random_unprojected` for type 2, otherwise `solenoidal_compressive` | `solenoidal_compressive`, `mks24_random_unprojected` (types 0/2), or `mks24_alfvenic_perpendicular` (type 1). Type 2 requires the unprojected policy. |
 | `physical_k_shell` | `false` | Apply `nlow`/`nhigh` to `abs(k)/k_shell_unit`. |
 | `k_shell_unit` | `0.0` | Positive reference wavenumber required by `physical_k_shell`. |
 | `isotropic_power_spectrum` | `false` | Apply `expo` to total `abs(k)` for planar driving. |
-| `sol_fraction` | `1.0` | Solenoidal fraction in `[0,1]`. |
-| `rseed` | `-1` | Non-negative values select reproducible sequences. |
+| `sol_fraction` | `1.0` | Solenoidal/compressive amplitude blend in `[0,1]`; unused by unprojected driving and required to be 1 for the Alfvénic policy. |
+| `rseed` | `-1` | Positive values select reproducible sequences; zero and negative values use seed 1. |
 | `record_injected_work` | `false` | Restart exact accumulated forcing work for a single nonrelativistic ideal/CGL fluid. |
 | `tile_nx`, `tile_ny`, `tile_nz` | `1` | Tile repetitions in each direction. |
 | `localization` | `none` | `none`, `include`, or `exclude`. |

@@ -218,10 +218,11 @@ pressures are not applied to flow momentum.
   while `IAN` stores magnetic moment, then refreshes CGL primitives before
   the next stage. The pre-sweep uses the displacement at `t` and the
   post-sweep uses `t + dt`.
-- Modal `<turb_driving>` forcing is supported with CGL LF. It is applied in
-  the ordinary source-term task graph, outside the protected LF
-  magnetic-moment sweep; the routine strict AMR/restart regression exercises
-  this combined path.
+- Modal `<turb_driving>` forcing is supported with CGL LF. It applies one
+  full-timestep kick before the RK stages, outside the protected LF
+  magnetic-moment sweep, then refreshes primitives and ghost zones before
+  flux evaluation. The routine strict AMR/restart regression exercises this
+  combined path.
 
 ## Verification
 
@@ -241,7 +242,7 @@ initializes `rho0 = 1`, `B0` along `z`, and
 turbulence driver. The retained passive smoke deck is rejected on this branch;
 its evolution regressions are deferred until rebuild piece 14.
 These are reduced smoke cases, not standard paper-resolution runs. Their
-forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
+forcing-orientation, seed-continuation, and multi-cycle OU/full-kick work checks
 qualify reduced mechanics, not paper-scale active/passive statistics or
 figure diagnostics.
 
@@ -252,9 +253,8 @@ rate, and instantaneous forcing power (written using the compact history
 labels `therm_cgl`, `abs_dp`, `mirror_vol`, `fire_vol`, `hard_vol`, and
 `force_pwr`) in addition to forcing-orientation quantities. Paper inputs
 also enable `record_injected_work`, adding cumulative exact net forcing-source
-work, including the zero-net-momentum projection, as `force_work`. The counter
-is advanced as an explicit-RK companion quantity so earlier stage increments
-receive the same final-state weighting as the evolved conserved variables; the
+work, including the zero-net-momentum projection, as `force_work`. Each full
+kick adds its measured total-energy change before the explicit RK stages. The
 analyzer uses it with conserved `tot-E` to report an active-Delta global
 energy residual. These histories support reduced global
 summaries such as `C_B2`; `.mhd.hst` supplies operator-face heat-flux-cap

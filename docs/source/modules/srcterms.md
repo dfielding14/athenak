@@ -19,10 +19,8 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 
 ## Runtime Wiring
 1. `Hydro`, `MHD`, and `Radiation` constructors create one `SourceTerms` object per pack. Only the features whose flags appear in the corresponding block are activated.
-2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. The driver registers two task chains:
-   - `before_timeintegrator`: `InitializeModes`, followed by `UpdateForcing`, which advances the OU state once per physical timestep.
-   - `stagen`: inserts `AddForcing` after `RKUpdate` and before ordinary source terms in each solver stage.
-3. Restart output stores the accumulated forcing field and RNG state so a resumed run continues the same forcing stream.
+2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. It registers one chain in `before_timeintegrator`: `EnsureBasisSize`, `InitializeModes`, `UpdateForcing`, then a full-timestep `AddForcing` kick. The driver refreshes ghost zones and primitives before `CopyCons` and the first RK flux evaluation. Modal OU coefficients advance at `dt_update` boundaries and remain fixed between updates; forcing is applied once per physical timestep for every RK integrator.
+3. Restart output stores the modal coefficients, OU update count, RNG state, and optional accumulated work so a resumed run continues the same forcing stream. The force field is rendered from the restored coefficients.
 
 ## Source Term Families
 
@@ -122,8 +120,8 @@ Prototype keys previously documented on this page, including
 `constant_edot`, `dt_turb_update`, `spect_form`, `tile_driving`, and
 `x_turb_scale_height`, are rejected by the current implementation.
 
-For MHD calculations using the CGL Landau-fluid closure, modal driving runs
-in the ordinary source-term graph outside the dedicated LF split sweep. The
+For MHD calculations using the CGL Landau-fluid closure, modal driving applies
+its full-timestep kick before the RK stages, outside the dedicated LF split sweep. The
 CGL regression suite includes a strict AMR/restart interaction test for this
 combined path. The relevant CGL model assumptions are summarized in
 [CGL Method Physics Primer](cgl_mhd_method.md).

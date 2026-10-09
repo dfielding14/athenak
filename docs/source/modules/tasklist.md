@@ -85,22 +85,19 @@ id.recvf = tl["stagen"]->AddTask(&Hydro::RecvFlux, this, id.sendf);
 id.rkupdt = tl["stagen"]->AddTask(&Hydro::RKUpdate, this, id.recvf);
 ```
 
-The returned IDs are stored in `HydroTaskIDs` so that other systems (e.g., turbulence
-forcing) can add work immediately before or after specific steps (`src/hydro/hydro.hpp:39`).
+The returned IDs are stored in `HydroTaskIDs` so that other systems can add work
+immediately before or after specific steps (`src/hydro/hydro.hpp:39`).
 Every task implements `TaskStatus f(Driver*, int stage)` so it can access shared driver
 state such as the current stage count or CFL buffers.
 
 ### Inserting Work Between Existing Tasks
 `TaskList::InsertTask` splices a task before a target `TaskID` and rewrites downstream
-dependencies to preserve ordering (`src/tasklist/task_list.hpp:197`). The turbulence
-driver uses this to add forcing between the Runge–Kutta update and source-term evaluation,
-regardless of the hosting physics package:
-
-```cpp
-// src/srcterms/turb_driver.cpp:446
-tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-               pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
-```
+dependencies to preserve ordering (`src/tasklist/task_list.hpp:197`). For example,
+it can order a new source between a solver update and its next consumer.
+Turbulence forcing uses a dependency chain in `before_timeintegrator`:
+`EnsureBasisSize`, `InitializeModes`, `UpdateForcing`, and `AddForcing`. Its
+full-timestep kick runs once before `CopyCons`, followed by a primitive and
+ghost-zone refresh before the first flux evaluation.
 
 ### Numerical Relativity Choreography
 `numrel::NumericalRelativity` maintains three queues (start/run/end). Each queued task
