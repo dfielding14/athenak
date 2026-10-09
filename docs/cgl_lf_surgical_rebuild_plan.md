@@ -564,6 +564,8 @@ Bz=sqrt(0.12), beta 10) with production LF modes. Freeze a no-LF companion
 that differs only in basename, `sts_integrator=none` and removal of the heat-flux
 keys, matching the archived collisionless variant. Run both in the same
 allocation; report the LF/no-LF throughput ratio and absolute rates.
+Freeze and hash the no-LF companion in the workspace `inputs/README.md`, and
+check it on both controls before counting it as a qualified control.
 Keep `uniform-historical-2n.athinput` as a separately labeled historical
 control: its bytes, including the original 20-cycle limit and LF modes, match
 the archived `cglws_lf_sts_0002n` input (SHA-256
@@ -582,8 +584,10 @@ report it and judge the resulting work and cost on Tier 2.
 **Tier 2, developed-state restart.** Produce a full-precision active checkpoint
 of the Tier 3 box from the prescribed initial state with the current candidate,
 q diagnostics off and both work ledgers on from the start. Target t=6, the start
-of the analysis window; record the actual checkpoint time and cycle, producer
-revision, input/binary/checkpoint hashes. A periodic restart near t=6 is acceptable
+of the analysis window. Produce the checkpoint with the canonical writer blocks
+present, so replays can enable or disable them through existing keys. Record the
+actual checkpoint time and cycle, producer revision, input/binary/checkpoint
+hashes. A periodic restart near t=6 is acceptable
 if its actual time is recorded. This is a frozen cost-screening state, not a
 physical result or evidence of stationarity. Attempt and qualify it before piece
 7. If a pending correction prevents reaching it healthily, retain the failure,
@@ -599,13 +603,20 @@ diagnostic and would otherwise contaminate it. Override only keys already in
 the checkpoint's parameter record. Disable each existing output writer with
 `dcycle=0` if that key is present, otherwise `dt=0`, and verify no files are
 written. Delaying the next output alone does not suppress unconditional final
-output. Preserve LF diagnostic mode, both ledger flags, forcing parameters and saved forcing/RNG
-state. Verify nonzero LF transport and zero new LF floor/invalid events in a
-separate short history run from the checkpoint; inspect EOS/FOFC repairs too.
+output. Preserve LF diagnostic mode, both ledger flags, forcing parameters and
+saved forcing/RNG state. Verify zero new LF floor/invalid events in a separate
+short history run from the checkpoint; inspect EOS/FOFC repairs with an event
+writer included in the producer deck. With q diagnostics off, the q-work fields
+are zero, and stage counts alone do not establish nonzero transport. For that
+qualification only, allow a separate untimed full-q replay from the checkpoint;
+verify nonzero q work and full-precision physical/forcing endpoint agreement with
+a matching q-off replay. Keep the frozen checkpoint and all timing runs q-off.
 Obtain LF work counts over the same N+5 to N+40 window in a matching history
 replay: delta(lf_nstage)/active_cells gives RHS evaluations, then divide by 35
-for evaluations/cycle. Whole-run counts include warmup and the guard cycle and
-can bias cost/RHS when stage counts vary.
+for evaluations/cycle. In the history replay, set the existing history `dt`
+below the smallest cycle timestep (for example, 1e-12) so every cycle is recorded;
+verify rows exist at both timing endpoints. Whole-run counts include warmup and
+the guard cycle and can bias cost/RHS when stage counts vary.
 
 Parent and candidate must load the same checkpoint with verified compatible
 decoding. Regenerate and relabel it after changes to restart contents or newly

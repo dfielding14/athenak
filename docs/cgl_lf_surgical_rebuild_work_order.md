@@ -159,12 +159,17 @@ boxes are separate work.
   historical input at baselines and milestones only. Use Tier 1 for cost per LF
   evaluation on any patch that changes recurring full-domain work; report the
   LF/no-LF throughput ratio and absolute rates.
+  Freeze/hash the no-LF companion in `inputs/README.md` and check both controls.
 - **Tier 2, developed-state restart:** matched box, one node, frozen active
   checkpoint near t=6. Measure between five and 40 completed cycles after restart
   (35 updates), with one extra untimed cycle to exclude finalization. Disable
   writers using existing checkpoint keys and verify no output. Count LF work over
-  the same 35 updates in a separate history replay. Keep both ledgers,
-  LF diagnostic mode and forcing state unchanged. It measures work count and cost
+  the same 35 updates in a separate history replay. Produce with canonical writer
+  blocks present, and enable per-cycle history by setting its existing `dt` below
+  the smallest cycle timestep. Keep both ledgers, LF diagnostic mode and forcing
+  state unchanged for timings. Qualify actual transport with a separate untimed
+  full-q replay and check its physical/forcing endpoint against a q-off replay.
+  Include an event writer to inspect EOS/FOFC repairs. Tier 2 measures work count and cost
   in a nonuniform state; require it for 7, 9, 10, bound/refresh work in 13, and 15.
   Attempt and qualify the checkpoint before piece 7; retain and diagnose any
   failure without blocking the required correction. Repeat Tier 2 after 8.
