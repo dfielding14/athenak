@@ -336,3 +336,52 @@ def test_nonpositive_final_cycle_timestep_is_rejected(tmp_path):
         "sts_max_dt_ratio=",
     ):
         assert field in output
+
+
+def staged_turb_input(tmp_path, name, additions):
+    """Add canonical keys to a local input; Athena CLI cannot add missing keys."""
+    text = (INPUTS / name).read_text()
+    for block, keys in additions.items():
+        text += f"\n<{block}>\n{keys}\n"
+    path = tmp_path / "forcing.athinput"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.write_text(text)
+    return path
+
+
+def test_type_two_has_nonzero_force(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "driving_type = 2",
+    })
+    result = run_athena(tmp_path / "run", path)
+    require_success(result)
+    assert rms_acceleration(read_force_blocks(latest_force(tmp_path / "run"))) > 0.0
+
+
+def test_type_two_rejects_projected_policy(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "driving_type = 2\nprojection_policy = solenoidal_compressive",
+    })
+    result = run_athena(tmp_path / "run", path)
+    assert result.returncode != 0
+    assert "driving_type = 2 requires mks24_random_unprojected" in (
+        result.stdout + result.stderr
+    )
+
+
+def test_type_two_matches_unprojected_type_zero(tmp_path):
+    """Equal fixed-seed isotropic policies render the same OU force trajectory."""
+    outputs = []
+    for driving_type in (0, 2):
+        directory = tmp_path / f"type_{driving_type}"
+        path = staged_turb_input(directory, "turb_driving_edot.athinput", {
+            "turb_driving": f"driving_type = {driving_type}\n"
+                            "projection_policy = mks24_random_unprojected\n"
+                            "spectrum = power_law\nrseed = 2718",
+        })
+        output_dir = directory / "run"
+        require_success(run_athena(output_dir, path))
+        output = latest_force(output_dir)
+        assert rms_acceleration(read_force_blocks(output)) > 0.0
+        outputs.append(output)
+    assert_equal_force_outputs(*outputs)
