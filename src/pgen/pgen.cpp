@@ -1028,6 +1028,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     STSDiffusion(pin, is_restart);
   } else if (pgen_fun_name.compare("turb") == 0) {
     Turb(pin, is_restart);
+  } else if (pgen_fun_name.compare("turb_forcing") == 0) {
+    TurbForcing(pin, is_restart);
   } else if (pgen_fun_name.compare("hyperviscous_shear") == 0) {
     HyperViscousShear(pin, is_restart);
   // else, name not set on command line or input file, print warning and quit

@@ -385,3 +385,34 @@ def test_type_two_matches_unprojected_type_zero(tmp_path):
         assert rms_acceleration(read_force_blocks(output)) > 0.0
         outputs.append(output)
     assert_equal_force_outputs(*outputs)
+
+
+@pytest.mark.parametrize("hydro_eos,mhd_eos", [
+    (None, "ideal"), (None, "cgl"), (None, "isothermal"),
+    ("ideal", None), ("isothermal", None),
+    ("ideal", "ideal"), ("isothermal", "isothermal"),
+    ("ideal", "isothermal"), ("isothermal", "ideal"),
+])
+def test_conservative_forcing_kick(tmp_path, hydro_eos, mhd_eos):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {})
+    text = path.read_text()
+    start = text.index("<hydro>")
+    end = text.index("<problem>", start)
+    blocks = []
+    for fluid, eos in (("hydro", hydro_eos), ("mhd", mhd_eos)):
+        if eos is not None:
+            blocks.append(f"<{fluid}>\neos = {eos}\ngamma = 1.666666666666667\n"
+                          "reconstruct = plm\nrsolver = hlle\nnscalars = 1\n"
+                          "iso_sound_speed = 1.0\n")
+    if hydro_eos and mhd_eos:
+        blocks.append("<ion-neutral>\ndrag_coeff = 0.0\n")
+    text = text[:start] + "\n".join(blocks) + "\n" + text[end:]
+    if hydro_eos and mhd_eos:
+        text = text.replace("integrator = rk2", "integrator = imex2")
+    text = text.replace("pgen_name = turb", "pgen_name = turb_forcing")
+    text = text[:text.index("<output1>")]
+    text += "\n<turb_driving>\nspectrum = power_law\n"
+    path.write_text(text)
+    result = run_athena(tmp_path / "run", path, "time/nlim=0")
+    require_success(result)
+    assert "max kick error=" in result.stdout
