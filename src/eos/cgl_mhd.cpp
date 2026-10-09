@@ -6,6 +6,7 @@
 //! \file cgl_mhd.cpp
 //! \brief derived class that implements ideal gas EOS in nonrelativistic mhd
 
+#include <cmath>
 #include <cstdlib>
 #include <iostream>
 #include <string>
@@ -20,10 +21,19 @@
 namespace {
 
 void RequireNonnegativeCGLParameter(const char *name, const Real value) {
-  if (value < 0.0) {
+  if (!std::isfinite(value) || value < 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "<mhd>/" << name << " must be nonnegative" << std::endl;
+              << "<mhd>/" << name << " must be finite and nonnegative" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
+void RequirePositiveCGLParameter(const char *name, const Real value) {
+  if (!std::isfinite(value) || value <= 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "<mhd>/" << name << " must be finite and positive" << std::endl;
     std::exit(EXIT_FAILURE);
   }
 }
@@ -54,6 +64,11 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
     EquationOfState("mhd", pp, pin) {
   eos_data.is_ideal = true;
   eos_data.is_cgl = true;
+  RequirePositiveCGLParameter("dfloor", eos_data.dfloor);
+  RequirePositiveCGLParameter("pfloor", eos_data.pfloor);
+  RequirePositiveCGLParameter("bfloor", eos_data.bfloor);
+  RequireNonnegativeCGLParameter("tfloor", eos_data.tfloor);
+  RequireNonnegativeCGLParameter("sfloor", eos_data.sfloor);
   eos_data.mlim = false;
   eos_data.flim = false;
   eos_data.backup_lim = false;
@@ -64,13 +79,16 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   eos_data.lim_coll = 0.0;
   eos_data.firehose_threshold = ParseCGLFirehoseThreshold(pin);
   eos_data.sigma_max = pin->GetOrAddReal("mhd","sigma_max",(FLT_MAX));
+  RequirePositiveCGLParameter("sigma_max", eos_data.sigma_max);
 
   eos_data.passive = pin->GetOrAddBoolean("mhd", "passive", false);
   if (eos_data.passive) {
-    eos_data.iso_cs = pin->GetReal("mhd", "iso_sound_speed");
-  } else {
-    eos_data.iso_cs = 0.0;
+    std::cout << "### FATAL ERROR: <mhd>/passive=true is not supported during the "
+              << "CGL surgical rebuild; use passive=false until the passive "
+              << "model is redesigned and qualified." << std::endl;
+    std::exit(EXIT_FAILURE);
   }
+  eos_data.iso_cs = 0.0;
 
   eos_data.mlim = pin->GetOrAddBoolean("mhd", "mirror_limiter", false);
   eos_data.flim = pin->GetOrAddBoolean("mhd", "firehose_limiter", false);
@@ -87,6 +105,9 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
     RequireNonnegativeCGLParameter("limiter_nu_coll", eos_data.lim_coll);
     eos_data.coll = true;
     eos_data.backup_lim = pin->GetOrAddBoolean("mhd", "backup_limiters", false);
+  } else if (pin->DoesParameterExist("mhd", "limiter_nu_coll")) {
+    RequireNonnegativeCGLParameter("limiter_nu_coll",
+                                  pin->GetReal("mhd", "limiter_nu_coll"));
   }
 
   eos_data.nu_coll = pin->GetOrAddReal("mhd", "nu_coll", 0.0);

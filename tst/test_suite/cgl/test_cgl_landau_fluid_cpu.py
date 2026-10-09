@@ -1363,6 +1363,7 @@ def test_cgl_lf_paper_forcing_restart_preserves_rng_and_force_state():
         _cleanup()
 
 
+@pytest.mark.skip(reason="Passive evolution is disabled until rebuild piece 14")
 def test_cgl_lf_paper_passive_delta_has_no_anisotropic_flow_feedback():
     try:
         _run_paper_passive("cgl_ci_passive_iso", "time/nlim=4")

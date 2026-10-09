@@ -212,11 +212,9 @@ firehose, ion-Larmor-radius, or kinetic phase-space physics.
 ## Active And Passive Runs
 
 In active CGL runs, the anisotropic pressure tensor participates in the MHD
-momentum and energy fluxes. In passive-Delta runs, AthenaK still evolves
-diagnostic CGL/LF pressures, but the flow follows the isothermal-MHD passive
-path. Active/passive pairs should therefore be interpreted as a total
-active-CGL model-path comparison, not as a perfectly isolated measurement of
-only one analytic stress term.
+momentum and energy fluxes. This rebuild rejects `mhd/passive = true` until
+the passive model is redesigned and qualified in piece 14. Historical passive
+inputs and arithmetic fixtures remain available as references.
 
 ## Turbulence Comparisons
 

@@ -78,18 +78,17 @@ reporting is independent of whether `backup_limiters` is enabled.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `eos` | required | Set to `cgl` for this feature. |
-| `passive` | `false` | When `true`, evolve CGL/LF pressures diagnostically while mass, momentum, and magnetic-field fluxes use the isothermal-MHD passive-Delta path. |
-| `iso_sound_speed` | required when `passive = true` | Isothermal sound speed used by passive-Delta momentum fluxes and signal speeds. |
+| `passive` | `false` | Must remain `false` during the surgical rebuild; passive evolution is rejected until its redesign and qualification in piece 14. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
-| `lf_k_parallel` | required | Positive closure wavenumber magnitude. |
+| `lf_k_parallel` | required | Finite positive closure wavenumber magnitude. |
 | `lf_coefficient_mode` | `local` | `local` or `background`. |
-| `lf_c_parallel0` | required in background mode | Positive fixed parallel thermal speed. |
-| `nu_coll` | `0.0` | Background anisotropy-relaxation frequency. |
+| `lf_c_parallel0` | required in background mode | Finite positive fixed parallel thermal speed. |
+| `nu_coll` | `0.0` | Finite nonnegative background anisotropy-relaxation frequency. |
 | `mirror_limiter` | `false` | Enable mirror-limiter relaxation. |
 | `firehose_limiter` | `false` | Enable firehose-limiter relaxation. |
 | `cgl_firehose_threshold` | `oblique` | `oblique` activates at `beta Delta <= -1.4`; `parallel` activates at `beta Delta <= -2`. |
-| `limiter_nu_coll` | `0.0` | Limiter relaxation frequency. |
+| `limiter_nu_coll` | `0.0` | Finite nonnegative limiter relaxation frequency; supplied values are checked even with limiters disabled. |
 | `limiter_hardwall` | `false` | With an enabled instability limiter, replace its pressure-relaxation update by an energy-preserving projection to the selected mirror/firehose threshold. |
 | `backup_limiters` | `false` | Apply rapid correction after an emergency bound is crossed. |
 | `cgl_lf_strict_admissibility` | `false` | Fail an LF split stage on unsafe state, LF floors, or hard-bound violations. |
@@ -99,6 +98,11 @@ reporting is independent of whether `backup_limiters` is enabled.
 | `cgl_lf_sts_flux` | `weighted` | `weighted` embeds STS weights in LF fluxes; `physical` writes physical fluxes and requires `cgl_lf_diagnostics = none` plus `cgl_lf_arithmetic = fast`. |
 | `cgl_lf_profile` | `false` | Enable coarse LF timing regions with Kokkos fences; for profiling only. |
 | `cgl_lf_profile_detail` | `false` | Add directional probe kernels for detailed profiling when `cgl_lf_profile = true`. |
+
+CGL requires finite positive `dfloor`, `pfloor`, `bfloor`, and `sigma_max`, and
+finite nonnegative `tfloor` and `sfloor`. Zero collision rates remain valid.
+These input guards do not qualify single-precision evolution or the numerical
+repairs planned in later rebuild pieces.
 
 The performance/safety switches can be overridden by
 `ATHENAK_CGL_LF_DIAGNOSTICS`, `ATHENAK_CGL_LF_ARITHMETIC`,
@@ -218,16 +222,14 @@ regressions also exercise analytic uniform collisional relaxation and both
 firehose threshold policies. The LF
 quantitative pgen is the built-in `src/pgen/tests/cgl_landau_fluid.cpp`.
 
-An active/passive-Delta reduced forced-turbulence initializer is registered as
-`pgen_name = cgl_lf_paper`; its smoke decks are
-`inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput` and
-`inputs/cgl_lf_paper/cgl_lf_paper_smoke_passive_beta10.athinput`. They
-initialize `rho0 = 1`, `B0` along `z`, and
-`p_parallel0 = p_perp0 = beta0 B0^2/2`, use the explicit MKS24
-`cgl_firehose_threshold = parallel` policy, and exercise the shared
-turbulence driver. Passive mode requires `mhd/passive = true` and
-`problem/passive_delta = true`; a routine regression verifies that changing
-stable diagnostic initial anisotropy does not change its driven flow fields.
+The reduced forced-turbulence initializer is registered as
+`pgen_name = cgl_lf_paper`; the supported active smoke deck is
+`inputs/cgl_lf_paper/cgl_lf_paper_smoke_active_beta10.athinput`. It
+initializes `rho0 = 1`, `B0` along `z`, and
+`p_parallel0 = p_perp0 = beta0 B0^2/2`, uses the explicit MKS24
+`cgl_firehose_threshold = parallel` policy, and exercises the shared
+turbulence driver. The retained passive smoke deck is rejected on this branch;
+its evolution regressions are deferred until rebuild piece 14.
 These are reduced smoke cases, not standard paper-resolution runs. Their
 forcing-orientation, seed-continuation, and multi-cycle OU/RK source-work checks
 qualify reduced mechanics, not paper-scale active/passive statistics or

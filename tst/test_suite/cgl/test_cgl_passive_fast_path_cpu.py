@@ -1,9 +1,12 @@
 """Focused regression for passive-CGL signal-speed, flux, and timestep isolation."""
 
 import math
+import os
 from pathlib import Path
 import re
 import subprocess
+
+import pytest
 
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
@@ -233,7 +236,15 @@ def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
     unit_result = _run([str(unit_executable)])
     assert "Passive CGL signal-speed and flux checks passed" in unit_result.stdout
 
-    build_dir = tmp_path / "integration-build"
+
+@pytest.fixture(scope="module")
+def executable(tmp_path_factory):
+    supplied = os.environ.get("ATHENAK_TEST_EXE")
+    if supplied:
+        binary = Path(supplied).absolute()
+        assert binary.is_file(), f"Supply a built_in_pgens executable: {binary}"
+        return binary
+    build_dir = tmp_path_factory.mktemp("integration-build")
     _run([
         "cmake",
         "-S",
@@ -246,8 +257,11 @@ def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
         "-DKokkos_ENABLE_SERIAL=ON",
     ])
     _run(["cmake", "--build", str(build_dir), "--target", "athena", "-j4"])
-    executable = build_dir / "src" / "athena"
+    return build_dir / "src" / "athena"
 
+
+@pytest.mark.skip(reason="Passive evolution is disabled until rebuild piece 14")
+def test_passive_cgl_flow_and_timestep_isolation(tmp_path, executable):
     initial_dir = tmp_path / "initial"
     initial_dir.mkdir()
     initial_input = initial_dir / "athinput.passive_fast_path"
@@ -289,6 +303,13 @@ def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
         for active_dt in active_dts
     )
 
+    for field in FLOW_FIELDS:
+        assert table_a[field] == table_b[field], field
+    assert table_a["eint"] != table_b["eint"]
+    assert table_a["p_perp"] != table_b["p_perp"]
+
+
+def test_active_cgl_oblique_timestep(tmp_path, executable):
     active_dir = tmp_path / "active-oblique"
     active_dir.mkdir()
     active_input = active_dir / "athinput.active_fast_path"
@@ -317,8 +338,3 @@ def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
     )
     assert math.isclose(active_initial_dt, expected_active_dt, rel_tol=2.0e-6)
     assert not math.isclose(active_initial_dt, legacy_active_dt, rel_tol=5.0e-3)
-
-    for field in FLOW_FIELDS:
-        assert table_a[field] == table_b[field], field
-    assert table_a["eint"] != table_b["eint"]
-    assert table_a["p_perp"] != table_b["p_perp"]

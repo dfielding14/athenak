@@ -6,6 +6,7 @@
 //! \file cgl_landau_fluid.cpp
 //! \brief CGL Landau-fluid heat-flux closure and parabolic timestep bound.
 
+#include <cmath>
 #include <cstddef>
 #include <cstdlib>
 #include <iomanip>
@@ -441,9 +442,9 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   lf_k_parallel = pin->GetReal("mhd", "lf_k_parallel");
-  if (lf_k_parallel <= 0.0) {
+  if (!std::isfinite(lf_k_parallel) || lf_k_parallel <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "<mhd>/lf_k_parallel must be positive." << std::endl;
+              << "<mhd>/lf_k_parallel must be finite and positive." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   const std::string coeff_mode =
@@ -451,9 +452,10 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
   if (coeff_mode == "background") {
     lf_coeff_local = false;
     lf_c_parallel0 = pin->GetReal("mhd", "lf_c_parallel0");
-    if (lf_c_parallel0 <= 0.0) {
+    if (!std::isfinite(lf_c_parallel0) || lf_c_parallel0 <= 0.0) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "<mhd>/lf_c_parallel0 must be positive." << std::endl;
+                << std::endl << "<mhd>/lf_c_parallel0 must be finite and positive."
+                << std::endl;
       std::exit(EXIT_FAILURE);
     }
   } else if (coeff_mode != "local") {
