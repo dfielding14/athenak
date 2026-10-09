@@ -238,6 +238,102 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
   std::cout << "CGL C2P " << case_name << " storage checks passed" << std::endl;
 }
 
+void CheckNonfiniteFOFC(MeshBlockPack *pack) {
+  auto *peos = pack->pmhd->peos;
+  const EOS_Data saved_eos = peos->eos_data;
+  const auto saved_fofc = pack->pmhd->fofc;
+  const int exponent = sizeof(Real) == sizeof(float) ? 80 : 600;
+  const Real large = std::ldexp(Real(1.0), exponent);
+  const Real small = std::ldexp(Real(1.0), -exponent);
+  peos->eos_data.dfloor = 0.25;
+  peos->eos_data.pfloor = small/16.0;
+  peos->eos_data.bfloor = 1.0e-10;
+  peos->eos_data.sigma_max = std::numeric_limits<Real>::max();
+
+  const int nmb = pack->nmb_thispack, nmhd = pack->pmhd->nmhd;
+  const int field_cases = 1 + 3*(nmhd + 3);
+  const int first_extreme = 2*field_cases;
+  const int overflow_case = first_extreme + 2;
+  const int ncases = overflow_case + 1;
+  DvceArray5D<Real> cons("nonfinite_cons", nmb, nmhd, 1, 1, ncases);
+  DvceArray5D<Real> prim("nonfinite_prim", nmb, nmhd, 1, 1, ncases);
+  DvceArray5D<Real> bcc("nonfinite_bcc", nmb, 3, 1, 1, ncases);
+  DvceFaceFld4D<Real> b("nonfinite_b", nmb, 1, 1, ncases);
+  pack->pmhd->fofc = DvceArray4D<bool>("nonfinite_fofc", nmb, 1, 1, ncases);
+  Kokkos::deep_copy(pack->pmhd->fofc, false);
+  Kokkos::deep_copy(prim, 0.125);
+  Kokkos::deep_copy(b.x1f, 0.0);
+  Kokkos::deep_copy(b.x2f, 0.0);
+  Kokkos::deep_copy(b.x3f, 1.0);
+  auto initial_cons = Kokkos::create_mirror(cons);
+  auto initial_bcc = Kokkos::create_mirror(bcc);
+  Kokkos::deep_copy(initial_cons, 0.0);
+  Kokkos::deep_copy(initial_bcc, 0.0);
+  const Real invalid[] = {std::numeric_limits<Real>::quiet_NaN(),
+                         std::numeric_limits<Real>::infinity(),
+                         -std::numeric_limits<Real>::infinity()};
+  for (int m = 0; m < nmb; ++m) {
+    for (int c = 0; c < ncases; ++c) {
+      initial_cons(m,IDN,0,0,c) = 1.0;
+      initial_cons(m,IEN,0,0,c) = 3.5;
+      initial_bcc(m,IBZ,0,0,c) = c >= field_cases && c < first_extreme ? 0.0 : 1.0;
+      if (c < first_extreme) {
+        // Repeat every injection at B=0, where the isotropic fallback can hide invalid A.
+        const int injection = c%field_cases - 1;
+        if (injection >= 0) {
+          const int field = injection/3;
+          if (field < nmhd) {
+            initial_cons(m,field,0,0,c) = invalid[injection%3];
+          } else {
+            initial_bcc(m,field-nmhd,0,0,c) = invalid[injection%3];
+          }
+        }
+      } else if (c < overflow_case) {
+        const Real parallel = c == first_extreme ? small : large;
+        const Real perp = c == first_extreme ? large : small;
+        initial_cons(m,IEN,0,0,c) = 0.5*parallel + perp + 0.5;
+        initial_cons(m,IAN,0,0,c) = std::log(perp) - std::log(parallel);
+      } else {
+        // Finite inputs can still overflow a recovered pressure without triggering floors.
+        initial_cons(m,IEN,0,0,c) = std::numeric_limits<Real>::max();
+        initial_cons(m,IAN,0,0,c) = -std::log(Real(4.0));
+      }
+    }
+  }
+  Kokkos::deep_copy(cons, initial_cons);
+  Kokkos::deep_copy(bcc, initial_bcc);
+  const auto initial_prim = Snapshot(prim);
+  auto &events = pack->pmesh->ecounter;
+  const int nfofc = events.nfofc, ndfloor = events.neos_dfloor;
+  const int nefloor = events.neos_efloor, ntfloor = events.neos_tfloor;
+  peos->ConsToPrim(cons, b, prim, bcc, true, 0, ncases-1, 0, 0, 0, 0);
+  const auto tested_cons = Snapshot(cons);
+  const auto tested_prim = Snapshot(prim);
+  const auto tested_bcc = Snapshot(bcc);
+  const auto flags = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pack->pmhd->fofc);
+  Require("nonfinite FOFC conserved state unchanged",
+          std::memcmp(initial_cons.data(), tested_cons.data(),
+                      initial_cons.size()*sizeof(Real)) == 0);
+  Require("nonfinite FOFC primitives unchanged",
+          std::memcmp(initial_prim.data(), tested_prim.data(),
+                      initial_prim.size()*sizeof(Real)) == 0);
+  Require("nonfinite FOFC magnetic field unchanged",
+          std::memcmp(initial_bcc.data(), tested_bcc.data(),
+                      initial_bcc.size()*sizeof(Real)) == 0);
+  for (int m = 0; m < nmb; ++m) {
+    for (int c = 0; c < ncases; ++c) {
+      const bool expected = c < first_extreme ? c%field_cases != 0 : c == overflow_case;
+      Require("nonfinite FOFC flag " + std::to_string(c), flags(m,0,0,c) == expected);
+    }
+  }
+  Require("nonfinite FOFC counters", events.nfofc == nfofc + nmb*(ncases-4) &&
+          events.neos_dfloor == ndfloor && events.neos_efloor == nefloor &&
+          events.neos_tfloor == ntfloor);
+  pack->pmhd->fofc = saved_fofc;
+  peos->eos_data = saved_eos;
+  std::cout << "CGL nonfinite FOFC checks passed (" << ncases << " cases)" << std::endl;
+}
+
 void CheckExtremeRatiosOnDevice() {
   const int exponent = sizeof(Real) == sizeof(float) ? 80 : 600;
   const Real large = std::ldexp(Real(1.0), exponent);
@@ -325,6 +421,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   CheckFloorStorage(pack, "unresolved-internal-energy", 2.0, 1.0, 1.0, 0.25,
                     max_sigma, 1.0, true);
   pmhd->nscalars = saved_nscalars;
+  CheckNonfiniteFOFC(pack);
   CheckExtremeRatiosOnDevice();
 
   // Normal zero-step startup still needs a finite live state after the isolated fixture.
