@@ -12,9 +12,9 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** piece 0 and requested throughput logging complete; solver repairs pending.
+**Status:** pieces 0–1 and throughput logging complete; numerical repairs begin at 2.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** piece 1 — guards and parameters.
+**Next:** piece 2 — EOS floor repairs and repaired-state persistence.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
@@ -47,7 +47,7 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   checkpoint cannot initialize active E/A. Stage frozen HIP tests outside the
   source tree using the plan's layout; avoid generic CUDA/rebuild runners.
 
-- [ ] **1 — Guards and parameters.** Reject passive mode pending redesign;
+- [x] **1 — Guards and parameters.** Reject passive mode pending redesign;
   preserve LF boundary guards and validate existing floors/rates. Gate: invalid
   inputs fail clearly and valid active inputs retain their behavior.
 
@@ -174,3 +174,4 @@ candidate. Keep commands/backend and evidence paths sufficient to resume the wor
 | 0 / timings | Frozen uniform 2-node and active 3D 1-node inputs; both controls unchanged | `analysis/timing.sbatch`, job `5640674`; warmup, three alternating pairs, separate detail-off profiles and transport checks | All 22 simulations passed; both active checks have nonzero LF work and zero repair/invalid events. Initial report parser failed on one-based history labels; corrected analysis passed without rerunning simulations | Mean zone-cycles/s/node pre→post: uniform 105.154M→116.708M (42 RHS/cycle); active 70.743M→73.712M (38 RHS/cycle). Startup cost only; full intervals, spreads, elapsed/physical-time and inferred whole-step s/RHS in workspace `README.md` and `runs/timing-5640674/summary.json` |
 | 0 / archive context | Historical scaling `f2d0a259`, job `4925508`, compared with fresh controls | Recomputed all three from timestamps 5→20 using the archived mean-per-cycle estimator | Archive 103.496M; fresh pre-WO1 105.151M; fresh post-WO1 116.712M zone-cycles/s/node. Runtime/compiler settings differ; no attribution of that gap to a single change | Workspace `analysis/scaling-comparison.json`; original `scaling/current_consistent_primary_f2d0a259` CSV, manifest, input, and log |
 | Logging | `82665ed37`; append interval `zone-cycles/s=` to periodic diagnostics using completed global block updates | `analysis/candidate-logging.sbatch`, job `5640730`; qualified HIP build/probe; two ranks, `ndiag=1/3`, cycle-5 restart | Probe and all 3 checks passed; rate covers all ranks and includes interval I/O/regridding. AMR accounting reviewed, evolving-AMR run not repeated | Workspace `build/candidate` and `runs/logging-5640730/`; source patch, commands, logs, and results retained |
+| 1 / startup domain | `ad8a420d1`; reject passive evolution; validate finite positive density/pressure/B floors, magnetization ceiling and LF scales, and finite nonnegative T/entropy floors and rates | Qualified candidate HIP build; `analysis/step1.sbatch` and `step1-startup-retry.sbatch`, jobs `5640759`/`5640764` | 54 startup + 12 active/boundary GPU checks and 1 Serial arithmetic check passed. Three passive evolution tests explicitly deferred; active/scalar coverage retained. Initial new fixtures failed on absent command-line keys, then passed after writing keys into the input; same executable throughout | Workspace `runs/step1-5640759/` and `runs/step1-5640764/`. Both immutable control hashes verified. No timing repeat for constructor-only guards; float representability and passive AMR remain unqualified |
