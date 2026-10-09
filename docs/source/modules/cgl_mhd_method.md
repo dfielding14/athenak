@@ -198,9 +198,13 @@ $$
 corresponding to $\Delta p=-B^2$. AthenaK also supports an oblique-firehose
 activation policy at $2\Delta p/B^2=-1.4$ for legacy or diagnostic studies.
 
-Finite-rate limiters relax the anisotropy when the selected threshold is
-crossed. Hard-wall limiters instead project the pressures to the selected
-threshold while preserving
+Background relaxation and finite-rate limiters act once per full cycle.
+Background relaxation first multiplies $\Delta p$ by $\exp(-\nu_{\rm coll}dt)$;
+beyond an enabled soft threshold $\Delta_*$, the limiter then applies
+$\Delta_*+(\Delta p-\Delta_*)/(1+\nu_{\rm limiter}dt)$.
+Scheduled wall checkpoints enforce the mandatory fluid-firehose bound and
+any explicitly enabled backup bounds. The old `limiter_hardwall=true` option
+is rejected. Both relaxation and walls preserve
 
 $$
 p_\perp + \frac{1}{2}p_\parallel .
