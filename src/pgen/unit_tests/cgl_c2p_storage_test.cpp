@@ -17,6 +17,7 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -192,6 +193,66 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
   std::cout << "CGL C2P " << case_name << " storage checks passed" << std::endl;
 }
 
+void CheckExtremeRatiosOnDevice() {
+  const int exponent = sizeof(Real) == sizeof(float) ? 80 : 600;
+  const Real large = std::ldexp(Real(1.0), exponent);
+  const Real small = std::ldexp(Real(1.0), -exponent);
+  const Real below_floor = std::ldexp(Real(1.0), -exponent-20);
+  EOS_Data base_eos{};
+  base_eos.is_cgl = base_eos.is_ideal = true;
+  base_eos.dfloor = base_eos.bfloor = 1.0e-12;
+  base_eos.sigma_max = std::numeric_limits<Real>::max();
+  DvceArray2D<Real> pressures("extreme_ratio_pressures", 4, 2);
+  DvceArray2D<int> checks("extreme_ratio_checks", 4, 4);
+  Kokkos::parallel_for("cgl_extreme_ratio_checks",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, 4), KOKKOS_LAMBDA(const int c) {
+    const bool floor_case = c >= 2;
+    const Real initial_small = floor_case ? below_floor : small;
+    const Real parallel = c%2 == 0 ? initial_small : large;
+    const Real perp = c%2 == 0 ? large : initial_small;
+    EOS_Data eos = base_eos;
+    eos.pfloor = floor_case ? small : small/16.0;
+    MHDCons1D u{};
+    u.d = u.bz = 1.0;
+    u.e = 0.5*parallel + perp + 0.5;
+    u.mu = log(perp) - log(parallel);
+    const Real initial_energy = u.e, initial_anisotropy = u.mu;
+    HydPrim1D w{};
+    bool df=false, ef=false, tf=false, bf=false;
+    SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
+    pressures(c,0) = w.e;
+    pressures(c,1) = w.pp;
+    checks(c,0) = !df && ef == floor_case && !tf && !bf;
+    checks(c,1) = floor_case || (u.e == initial_energy && u.mu == initial_anisotropy);
+    checks(c,2) = Kokkos::isfinite(u.e) && Kokkos::isfinite(u.mu);
+    const Real repaired_energy = u.e, repaired_anisotropy = u.mu;
+    const Real repaired_parallel = w.e, repaired_perp = w.pp;
+    df = ef = tf = bf = false;
+    SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
+    checks(c,3) = !df && !ef && !tf && !bf &&
+        u.e == repaired_energy && u.mu == repaired_anisotropy &&
+        w.e == repaired_parallel && w.pp == repaired_perp;
+  });
+  const auto host_p = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pressures);
+  const auto host_checks = Kokkos::create_mirror_view_and_copy(HostMemSpace(), checks);
+  const Real tolerance = 2048.0*std::numeric_limits<Real>::epsilon();
+  for (int c = 0; c < 4; ++c) {
+    const std::string label = "extreme ratio device case " + std::to_string(c);
+    const Real floor = c >= 2 ? small : small/16.0;
+    for (int p = 0; p < 2; ++p) {
+      const Real expected = p == c%2 ? small : large;
+      Require(label + " pressure bounds", std::isfinite(host_p(c,p)) && host_p(c,p) >= floor);
+      Require(label + " analytic pressure", std::abs(host_p(c,p) - expected) <=
+                                           tolerance*expected);
+    }
+    Require(label + " first floor flags", host_checks(c,0));
+    Require(label + " healthy E/A unchanged", host_checks(c,1));
+    Require(label + " finite stored E/A", host_checks(c,2));
+    Require(label + " exact second conversion", host_checks(c,3));
+  }
+  std::cout << "CGL C2P extreme-ratio device checks passed" << std::endl;
+}
+
 } // namespace
 
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
@@ -214,6 +275,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
                     max_sigma, rounding_b);
   CheckFloorStorage(pack, "unresolved-internal-energy", 2.0, 1.0, 1.0, 0.25,
                     max_sigma, 1.0, true);
+
+  CheckExtremeRatiosOnDevice();
 
   // Normal zero-step startup still needs a finite live state after the isolated fixture.
   Kokkos::deep_copy(pmhd->u0, 0.0);

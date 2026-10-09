@@ -325,6 +325,60 @@ void CheckWideDynamicRangeRoundTrip() {
                        0.5*recovered_parallel + recovered_perp, eint, tolerance);
 }
 
+void CheckPressureRatioUnderflowBoundaries() {
+  const int large_exponent = kSinglePrecision ? 80 : 600;
+  const Real large = std::ldexp(static_cast<Real>(1.0), large_exponent);
+  const int double_exponents[] = {1021, 1022, 1023, 1073, 1074, 1075, 1200};
+  const int float_exponents[] = {125, 126, 127, 148, 149, 150, 160};
+  const Real tolerance = 2048.0*std::numeric_limits<Real>::epsilon();
+  auto check = [&](const int exponent, const bool pressure_floor) {
+    const Real small = std::ldexp(static_cast<Real>(1.0), large_exponent - exponent);
+    EOS_Data eos = MakeCglEOS();
+    eos.pfloor = pressure_floor
+        ? std::ldexp(static_cast<Real>(1.0), -large_exponent) : small/16.0;
+    for (const bool perpendicular_large : {false, true}) {
+      const std::string label = "ratio 2^-" + std::to_string(exponent)
+          + (perpendicular_large ? " perpendicular-large" : " parallel-large")
+          + (pressure_floor ? " pressure-floor" : " healthy");
+      const Real initial_parallel = perpendicular_large ? small : large;
+      const Real initial_perp = perpendicular_large ? large : small;
+      MHDCons1D u{};
+      u.d = u.bx = 1.0;
+      u.mx = 0.125;
+      u.my = -0.25;
+      u.mz = 0.5;
+      u.e = 0.5*initial_parallel + initial_perp
+          + 0.5*(SQR(u.mx) + SQR(u.my) + SQR(u.mz)) + 0.5;
+      u.mu = (perpendicular_large ? exponent : -exponent)*std::log(2.0);
+      const MHDCons1D original = u;
+      HydPrim1D w{};
+      bool dfloor_used = false, efloor_used = false;
+      bool tfloor_used = false, bfloor_used = false;
+      SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+      Require(label + " pressure-floor flag", efloor_used == pressure_floor);
+      Require(label + " no other floors", !dfloor_used && !tfloor_used && !bfloor_used);
+      RequireRelativeClose(label + " p_parallel", w.e,
+                           std::max(initial_parallel, eos.pfloor), tolerance);
+      RequireRelativeClose(label + " p_perp", w.pp,
+                           std::max(initial_perp, eos.pfloor), tolerance);
+      Require(label + " admissible pressures", w.e >= eos.pfloor && w.pp >= eos.pfloor);
+      Require(label + " preserved primary fields",
+              u.d == original.d && u.mx == original.mx && u.my == original.my &&
+              u.mz == original.mz && u.bx == original.bx && u.by == original.by &&
+              u.bz == original.bz);
+      if (!pressure_floor) {
+        Require(label + " unchanged energy and anisotropy",
+                u.e == original.e && u.mu == original.mu);
+      }
+      CheckIdempotence(label, u, w, eos, false);
+    }
+  };
+  for (int i = 0; i < 7; ++i) {
+    check(kSinglePrecision ? float_exponents[i] : double_exponents[i], false);
+  }
+  check(kSinglePrecision ? 180 : 1220, true);
+}
+
 void CheckIsotropicExactRoundTrip() {
   constexpr Real density = 1.7;
   constexpr Real pressure = 2.0;
@@ -501,6 +555,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckFloorCase("moment perpendicular-only", 2.0, 0.25, 2.0, kPressureFloor, true);
   CheckFloorCase("moment both-pressure", 0.25, 0.5, kPressureFloor, kPressureFloor, true);
   CheckWideDynamicRangeRoundTrip();
+  CheckPressureRatioUnderflowBoundaries();
   CheckIsotropicExactRoundTrip();
   CheckExtremeLogRatioFloor("large-positive-log-ratio", 1000.0, 1.0e-11,
                             1.0e-12, 3.0);

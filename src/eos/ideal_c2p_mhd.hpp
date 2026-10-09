@@ -121,10 +121,19 @@ void CGLRecoverPressuresFromInternalEnergyAndAnisotropy(const Real rho,
     const Real inv_p_ratio = exp(-log_p_ratio);
     p_perp = eint/(1.0 + 0.5*inv_p_ratio);
     p_parallel = p_perp*inv_p_ratio;
+    if (inv_p_ratio < std::numeric_limits<Real>::min() && Kokkos::isfinite(p_perp)) {
+      // Split an underflowing ratio so representable small pressures retain precision.
+      const Real half_ratio = exp(static_cast<Real>(-0.5)*log_p_ratio);
+      p_parallel = (p_perp*half_ratio)*half_ratio;
+    }
   } else {
     const Real p_ratio = exp(log_p_ratio);
     p_parallel = eint/(0.5 + p_ratio);
     p_perp = p_parallel*p_ratio;
+    if (p_ratio < std::numeric_limits<Real>::min() && Kokkos::isfinite(p_parallel)) {
+      const Real half_ratio = exp(static_cast<Real>(0.5)*log_p_ratio);
+      p_perp = (p_parallel*half_ratio)*half_ratio;
+    }
   }
 }
 
