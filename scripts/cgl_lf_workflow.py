@@ -343,7 +343,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
         "pfloor": choice("mhd", "pfloor", "unspecified"),
         "tfloor": choice("mhd", "tfloor", "unspecified"),
         "bfloor": choice("mhd", "bfloor", "unspecified"),
-        "cgl_collision_split": "two_half_steps_after_lf_sweeps",
+        "cgl_collision_split": "full_dt_once_per_cycle_with_walls_at_checkpoints",
     }
     strict_admissibility = choice(
         "mhd", "cgl_lf_strict_admissibility", "false"

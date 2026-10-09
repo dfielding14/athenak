@@ -217,9 +217,36 @@ def install_lightweight_unit_restart_adapter(analyzer):
     analyzer.restart_loadability_evidence = restart_loadability_evidence
 
 
+def archived_figure_13_input(analyzer, case_id):
+    """Recover the pinned E03 deck from its current runnable descendant."""
+    contract = analyzer.FIGURE_13_CASE_CONTRACTS[case_id]
+    text = (REPO_ROOT / contract["input"]).read_text(encoding="utf-8")
+    if case_id in ("R03", "R07"):
+        text = text.replace("limiter_nu_coll = 1.0e10\n",
+                            "limiter_nu_coll = 1.0e10\nlimiter_hardwall = true\n")
+    assert hashlib.sha256(text.encode()).hexdigest() == contract["input_sha256"]
+    return text
+
+
 @pytest.fixture(scope="module")
-def analyzer():
+def analyzer(tmp_path_factory):
     module = load_module("analyze_cgl_lf_paper_firehose_test", ANALYZER_PATH)
+    # Exercise the real archive checks against E03 inputs, not migrated runnable decks.
+    archive = tmp_path_factory.mktemp("figure_13_source")
+    for case_id, contract in module.FIGURE_13_CASE_CONTRACTS.items():
+        destination = archive / contract["input"]
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        destination.write_text(archived_figure_13_input(module, case_id), encoding="utf-8")
+    (archive / module.FIGURE_13_MATRIX_PATH).symlink_to(
+        REPO_ROOT / module.FIGURE_13_MATRIX_PATH
+    )
+    (archive / "vis").symlink_to(REPO_ROOT / "vis", target_is_directory=True)
+    (archive / "scripts").mkdir()
+    (archive / "scripts" / "frontier").symlink_to(
+        REPO_ROOT / "scripts" / "frontier", target_is_directory=True
+    )
+    shutil.copyfile(ANALYZER_PATH, archive / "scripts" / ANALYZER_PATH.name)
+    module.ROOT_DIR = archive
     install_lightweight_unit_restart_adapter(module)
     return module
 
@@ -330,12 +357,14 @@ def figure_13_case(analyzer, workflow, bundle, case_id):
     """Create one exact archived case and execution-input copy."""
 
     contract = analyzer.FIGURE_13_CASE_CONTRACTS[case_id]
-    source = REPO_ROOT / contract["input"]
+    source = analyzer.ROOT_DIR / contract["input"]
     execution_name = f"inputs/{case_id}.athinput"
     execution = bundle / execution_name
     execution.parent.mkdir(parents=True, exist_ok=True)
     shutil.copyfile(source, execution)
     model = workflow.model_choices(source.read_text(encoding="utf-8"), [])
+    model["cgl_collision_split"] = "two_half_steps_after_lf_sweeps"
+    model["forcing_time_integration"] = "ou_once_per_cycle_rk_companion_source_work"
     assert analyzer.canonical_json_sha256(model) == contract["model_choices_sha256"]
     return {
         "case_id": case_id,
@@ -510,7 +539,7 @@ def complete_product_fixture(analyzer, workflow, tmp_path, salt=""):
         artifact_path.parent.mkdir(parents=True, exist_ok=True)
         submitted_input = artifact_path.parent / "submitted_input.athinput"
         shutil.copyfile(
-            REPO_ROOT / analyzer.FIGURE_13_CASE_CONTRACTS[case_id]["input"],
+            analyzer.ROOT_DIR / analyzer.FIGURE_13_CASE_CONTRACTS[case_id]["input"],
             submitted_input,
         )
         provenance = []
@@ -1087,7 +1116,8 @@ def test_comparison_ready_cases_accept_distinct_negligible_timestamp_noise(
 
 
 @pytest.mark.parametrize(
-    "tamper", ["identity", "model", "execution_input", "case_metadata"]
+    "tamper", ["identity", "model", "forcing_time_integration", "cgl_collision_split",
+               "execution_input", "case_metadata"]
 )
 def test_exact_case_identity_and_hash_tampering_fails_closed(
     analyzer, workflow, tmp_path, tamper,
@@ -1099,6 +1129,12 @@ def test_exact_case_identity_and_hash_tampering_fails_closed(
         match = "exact matrix identity"
     elif tamper == "model":
         case["model_choices"]["passive_delta"] = "true"
+        match = "model choices checksum"
+    elif tamper in ("forcing_time_integration", "cgl_collision_split"):
+        current_model = workflow.model_choices(
+            (bundle / case["execution_input"]).read_text(encoding="utf-8"), []
+        )
+        case["model_choices"][tamper] = current_model[tamper]
         match = "model choices checksum"
     elif tamper == "execution_input":
         (bundle / case["execution_input"]).write_text("tampered\n", encoding="utf-8")
@@ -1127,7 +1163,7 @@ def test_exact_case_rejects_checksum_valid_execution_input_outside_bundle(
     case = figure_13_case(analyzer, workflow, bundle, "R15")
     outside = tmp_path / "outside.athinput"
     shutil.copyfile(
-        REPO_ROOT / analyzer.FIGURE_13_CASE_CONTRACTS["R15"]["input"], outside
+        analyzer.ROOT_DIR / analyzer.FIGURE_13_CASE_CONTRACTS["R15"]["input"], outside
     )
     case["execution_input"] = str(outside)
     manifest = write_manifest(bundle, analyzer, [case], "R15")
@@ -1722,7 +1758,7 @@ def test_real_restart_contract_rejects_fabricated_payload_and_parameter_dump(
     }
     blocks = analyzer.stage_i_validator.parse_athinput(
         (
-            REPO_ROOT
+            analyzer.ROOT_DIR
             / analyzer.FIGURE_13_CASE_CONTRACTS["R03"]["input"]
         ).read_bytes(),
         "test R03 input",
@@ -2249,7 +2285,7 @@ def test_cli_atomic_named_product_update_failure_preservation_and_mode_withdrawa
     write_manifest(bundle, analyzer, [case], "R15")
     command = [
         sys.executable,
-        str(ANALYZER_PATH),
+        str(analyzer.ROOT_DIR / "scripts" / ANALYZER_PATH.name),
         "--bundle",
         str(bundle),
         "--output-dir",
@@ -2294,7 +2330,7 @@ def test_cli_atomic_named_product_update_failure_preservation_and_mode_withdrawa
     result = subprocess.run(
         [
             sys.executable,
-            str(ANALYZER_PATH),
+            str(analyzer.ROOT_DIR / "scripts" / ANALYZER_PATH.name),
             "--bundle",
             str(tmp_path / "missing_bundle"),
             "--output-dir",
@@ -2321,7 +2357,7 @@ def test_cli_atomic_named_product_update_failure_preservation_and_mode_withdrawa
     result = subprocess.run(
         [
             sys.executable,
-            str(ANALYZER_PATH),
+            str(analyzer.ROOT_DIR / "scripts" / ANALYZER_PATH.name),
             "--bundle",
             str(other_bundle),
             "--output-dir",
