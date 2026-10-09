@@ -244,7 +244,7 @@ void ProblemGenerator::Turb(ParameterInput *pin, const bool restart) {
   return;
 }
 
-#if USER_PROBLEM_ENABLED
+#ifdef TURB_USER_PROBLEM
 void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Turb(pin, restart);
 }
