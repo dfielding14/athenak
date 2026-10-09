@@ -44,13 +44,13 @@ auto Snapshot(const DvceArray5D<Real> &view) {
   return host;
 }
 
-void CheckDensityFloorStorage(MeshBlockPack *pack) {
+void CheckDensityFloorStorage(MeshBlockPack *pack, const bool sigma_floor) {
   auto *peos = pack->pmhd->peos;
   const EOS_Data saved_eos = peos->eos_data;
-  peos->eos_data.dfloor = 1.0;
+  peos->eos_data.dfloor = sigma_floor ? 0.25 : 1.0;
   peos->eos_data.pfloor = 1.0;
   peos->eos_data.bfloor = 1.0e-10;
-  peos->eos_data.sigma_max = std::numeric_limits<Real>::max();
+  peos->eos_data.sigma_max = sigma_floor ? 1.0 : std::numeric_limits<Real>::max();
   peos->eos_data.hardwall_lim = false;
 
   const int nmb = pack->nmb_thispack;
@@ -67,7 +67,8 @@ void CheckDensityFloorStorage(MeshBlockPack *pack) {
 
   const char *names[] = {"anisotropy", "magnetic moment", "moment refresh"};
   for (int mode = 0; mode < 3; ++mode) {
-    const std::string label = std::string(names[mode]) + " density floor";
+    const std::string label = std::string(names[mode]) +
+                              (sigma_floor ? " magnetization floor" : " density floor");
     auto initial = Kokkos::create_mirror(cons);
     Kokkos::deep_copy(initial, 0.0);
     // rho=1/2, mx=1/2, Bz=1, p_parallel=2, p_perp=4 give E=23/4.
@@ -88,7 +89,13 @@ void CheckDensityFloorStorage(MeshBlockPack *pack) {
         peos->CGLRefreshPrimFromMagneticMoment(cons, bcc, prim, 0, 0, 0, 0, 0, 0);
       }
     };
+    auto &events = pack->pmesh->ecounter;
+    const int density_events = events.neos_dfloor;
+    const int pressure_events = events.neos_efloor;
     convert();
+    Require(label + " one density repair per cell",
+            events.neos_dfloor == density_events + nmb);
+    Require(label + " no pressure repair", events.neos_efloor == pressure_events);
     const auto corrected = Snapshot(cons);
     const auto recovered = Snapshot(prim);
     // At rho=1, fixed E and momentum give U=41/8; A repair preserves p_perp/p_parallel.
@@ -115,6 +122,10 @@ void CheckDensityFloorStorage(MeshBlockPack *pack) {
     }
 
     convert();
+    Require(label + " no repeated density repair",
+            events.neos_dfloor == density_events + nmb);
+    Require(label + " no repeated pressure repair",
+            events.neos_efloor == pressure_events);
     const auto repeated_cons = Snapshot(cons);
     const auto repeated_prim = Snapshot(prim);
     Require(label + " exact stored fixed point",
@@ -125,7 +136,8 @@ void CheckDensityFloorStorage(MeshBlockPack *pack) {
                         recovered.size()*sizeof(Real)) == 0);
   }
   peos->eos_data = saved_eos;
-  std::cout << "CGL C2P density-floor storage checks passed" << std::endl;
+  std::cout << "CGL C2P " << (sigma_floor ? "magnetization" : "density")
+            << "-floor storage checks passed" << std::endl;
 }
 
 } // namespace
@@ -138,7 +150,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Require("active CGL without scalars", pmhd != nullptr &&
       pmhd->peos->eos_data.is_cgl && !pmhd->peos->eos_data.passive &&
       pmhd->nscalars == 0);
-  CheckDensityFloorStorage(pack);
+  CheckDensityFloorStorage(pack, false);
+  CheckDensityFloorStorage(pack, true);
 
   // Normal zero-step startup still needs a finite live state after the isolated fixture.
   Kokkos::deep_copy(pmhd->u0, 0.0);

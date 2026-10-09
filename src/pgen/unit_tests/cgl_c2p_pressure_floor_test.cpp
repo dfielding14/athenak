@@ -72,6 +72,7 @@ EOS_Data MakeCglEOS() {
   eos.dfloor = 1.0e-12;
   eos.pfloor = kPressureFloor;
   eos.bfloor = 1.0e-12;
+  eos.sigma_max = std::numeric_limits<float>::max();
   return eos;
 }
 
@@ -231,6 +232,24 @@ void CheckNonpositiveDensityFloor() {
     Require("nonpositive density preserved energy", u.e == 3.5);
     Require("nonpositive density canonical anisotropy", u.mu == 0.0);
     CheckIdempotence("nonpositive density", u, w, eos, false);
+  }
+}
+
+void CheckMagnetizationDensityFloor() {
+  EOS_Data eos = MakeCglEOS();
+  eos.pfloor = 1.0e-12;
+  eos.sigma_max = 2.0;
+  for (const bool magnetic_moment : {false, true}) {
+    MHDCons1D u{};
+    u.d = 0.25;
+    u.mx = 0.1;
+    u.bx = 2.0;
+    u.e = 2.5 + 0.5*SQR(u.mx)/u.d + 0.5*SQR(u.bx);
+    u.mu = magnetic_moment ? 1.0
+        : u.d*(std::log(2.0) + 2.0*std::log(u.d) - 3.0*std::log(u.bx));
+    CheckDensityRepair(magnetic_moment ? "moment magnetization floor"
+                                      : "anisotropy magnetization floor",
+                        u, eos, 2.0, 1.0, 2.0, magnetic_moment);
   }
 }
 
@@ -410,6 +429,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckDensityFloorRatios();
   CheckMagneticMomentDensityFloor();
   CheckNonpositiveDensityFloor();
+  CheckMagnetizationDensityFloor();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
 }
