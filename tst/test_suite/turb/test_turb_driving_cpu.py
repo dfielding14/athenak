@@ -416,3 +416,16 @@ def test_conservative_forcing_kick(tmp_path, hydro_eos, mhd_eos):
     result = run_athena(tmp_path / "run", path, "time/nlim=0")
     require_success(result)
     assert "max kick error=" in result.stdout
+
+
+@pytest.mark.parametrize("driving_type", [1, 2])
+def test_every_selected_mode_is_nonzero(tmp_path, driving_type):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {})
+    text = path.read_text().replace("pgen_name = turb", "pgen_name = turb_forcing")
+    # Power-law modes have no legitimate zero-amplitude shell endpoints.
+    text = text[:text.index("<output1>")]
+    text += f"\n<turb_driving>\ndriving_type = {driving_type}\nspectrum = power_law\n"
+    path.write_text(text)
+    result = run_athena(tmp_path / "run", path, "time/nlim=0")
+    require_success(result)
+    assert "nonzero modes" in result.stdout
