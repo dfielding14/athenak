@@ -6,9 +6,9 @@ accepted physical requirement does not justify copying its entire implementation
 
 Branch: `c/cgl-lf-surgical-rebuild`.
 Base: `8222de3aae4aaebd886653e7c61846e5f17987b4`.
-Status: source-reviewed implementation plan only. No solver/test implementation,
-builds, simulations, or numerical tests have been performed on this branch.
-Implementation and execution begin on the GPU system, not on this planning machine.
+Status: execution has begun on Frontier. Track completed checks, measurements,
+commits, and the next piece in the [work order](cgl_lf_surgical_rebuild_work_order.md).
+The numbered solver repairs remain pending until recorded there.
 
 The first deliverable is a correct active solver with attributable cost. The
 passive model is a separate scientific deliverable. Optimizations are candidates,
