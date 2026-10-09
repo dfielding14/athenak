@@ -401,9 +401,7 @@ void Driver::RefreshSTSCycleState(Mesh *pm) {
 
 void Driver::BeginSTSSweep(Mesh *pm, STSSweep sweep) {
   RefreshSTSCycleState(pm);
-  if (sts.enabled) {
-    sts.sweep = sweep;
-  }
+  sts.sweep = sweep;
 }
 
 //----------------------------------------------------------------------------------------
@@ -587,8 +585,13 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
             ExecuteTaskList(pmesh, "parabolic_stagen", sts_stage);
             ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
           }
-          EndSTSSweep();
+        } else if (pmesh->pmb_pack->pmhd != nullptr &&
+                   pmesh->pmb_pack->pmhd->has_cgl_lf_split) {
+          // A zero LF operator still owes the cycle's full rates and final walls.
+          pmesh->pmb_pack->pmhd->STSPostSweepCGLCollisions(this, 0);
+          pmesh->pmb_pack->pmhd->NewTimeStep(this, nexp_stages);
         }
+        EndSTSSweep();
       }
 
       // Work outside of TaskLists:

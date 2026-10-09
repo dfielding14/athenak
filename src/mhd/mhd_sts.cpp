@@ -254,6 +254,8 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
+  pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
+                              STSSweepName(pdrive), 0, pdrive->sts.nstages, true);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "pre",
                               STSSweepName(pdrive), "anisotropy", u0);
@@ -693,7 +695,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sweep_end_conversion);
-    peos->CGLMagneticMomentToAnisotropy(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
+    peos->CGLMagneticMomentToAnisotropy(u0, bcc0, w0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
   if (diagnose_nonfinite_rk_update) {
@@ -706,14 +708,13 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::STSPostSweepCGLCollisions()
-//! \brief Apply CGL relaxation after each split LF half-sweep.
+//! \brief Apply walls after the pre sweep, and rates then walls after the post sweep.
 //!
-//! The pre and post LF sweeps each advance dt_cycle/2. Use that same physical
-//! interval here so both source updates together advance exactly one cycle.
+//! Rates advance once per cycle after the final A-representation restoration.
 
 TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "begin", stage);
-  if (!has_cgl_lf_split || !peos->eos_data.coll || stage != pdrive->sts.nstages) {
+  if (!has_cgl_lf_split || stage != pdrive->sts.nstages) {
     TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "skip", stage);
     return TaskStatus::complete;
   }
@@ -729,9 +730,15 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::post_sweep_collisions);
-    peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_sweep,
+    const auto mode = (pdrive->sts.sweep == Driver::STSSweep::pre)
+        ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
+    peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_cycle, mode,
                      0, n1m1, 0, n2m1, 0, n3m1);
   }
+  // Synchronize the coarse representation with the final rates/wall update.
+  RestrictU(pdrive, stage);
+  pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
+                              STSSweepName(pdrive), stage, pdrive->sts.nstages, true);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "post",
                               STSSweepName(pdrive), "anisotropy", u0);

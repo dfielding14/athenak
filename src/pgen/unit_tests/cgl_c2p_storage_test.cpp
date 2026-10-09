@@ -100,7 +100,6 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
   peos->eos_data.pfloor = 1.0;
   peos->eos_data.bfloor = 1.0e-10;
   peos->eos_data.sigma_max = sigma_max;
-  peos->eos_data.hardwall_lim = false;
   const Real b_eff = std::max(bmag, peos->eos_data.bfloor);
   const bool low_b = bmag <= peos->eos_data.bfloor;
 

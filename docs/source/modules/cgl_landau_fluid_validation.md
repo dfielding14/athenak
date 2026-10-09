@@ -83,8 +83,8 @@ pre-cap face ratios above `10^4` in the extreme-cap cases, aligned thermal
 decay with mean fields directed along `x`, `y`, `z`, and a periodic oblique
 direction, and clean transport shutdown at `|B| <= bfloor`.
 
-Finite-collision LF cases use two collision source updates per cycle, each
-over the corresponding LF half-sweep duration. The routine
+Finite-collision LF cases apply rates once per cycle over the full cycle
+timestep, after the post-LF sweep. The routine
 `cgl_lf_collision_relaxation` regression independently checks the analytic
 law `Delta p(t) = Delta p(0) exp(-nu_coll t)`.
 
@@ -182,6 +182,11 @@ In CGL primitive snapshots, legacy `eint` is `p_parallel` and the dedicated
 anisotropy analysis.
 
 ## Stage I Production Execution
+
+These controllers and validators retain the historical E03 qualified source,
+executable, input hashes, and hardwall contract. Run them against their pinned
+source checkout and archived inputs; the migrated surgical-rebuild decks do not
+define an authorized Stage I campaign.
 
 Paper-production segments are managed separately from the debug qualification
 utility. The tracked controller `scripts/frontier/cgl_lf_stage_i.py`
@@ -792,17 +797,15 @@ With LF active, normal MHD history output appends cumulative counters:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
 `lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, `lf_qpewrk`, and
-`lf_hwproj`. Strict
-validation decks require zero floors, zero nonfinite/nonpositive states, and
-zero hard-bound violations; limiter and cap counts may be nonzero when
-intentionally exercised.
-`lf_mirror` and `lf_firehs` are physical threshold-occupancy counters
-evaluated with the selected policy. `lf_hardbd` is an emergency safety
-counter and is evaluated whether or not corrective `backup_limiters` are
-enabled. `lf_hwproj` is the cumulative number of primitive-refresh
-applications of `limiter_hardwall = true`, including refreshed support/ghost
-states; it records constraint activity rather than an admissibility failure
-and is not a normalized active-cell occupancy. The `lf_q*` columns record
+`lf_hwproj`. Strict checks reject floors and nonfinite/nonpositive states at
+each stage, and require admissible walls at operator checkpoints. Intermediate
+wall crossings are counted in `lf_hardbd`; these do not alone abort a sweep.
+`lf_mirror` and `lf_firehs` count soft-threshold occupancy with the configured
+numeric thresholds. The mandatory fluid-firehose wall is always checked;
+optional backup walls are checked only when enabled. `lf_hwproj` is retained
+for history/restart compatibility with the former C2P hardwall projection;
+the new scheduled collision/wall operator does not increment that legacy counter.
+The `lf_q*` columns record
 owned LF operator faces and parallel/perpendicular pre-cap flux ratios above
 `q_max` and `10*q_max`; shared MeshBlock faces are counted once and
 coarse/fine interfaces use the fine-side closure faces. Their interval
@@ -816,13 +819,13 @@ fine-side closure faces own the contraction because their fluxes are
 restricted into the coarse update. These are signed operator contractions,
 not a positivity or total-energy closure condition.
 
-The firehose policy is explicit for threshold-sensitive work:
-`cgl_firehose_threshold = parallel` selects the MKS24 production convention
-`beta Delta <= -2`, while `oblique` selects `beta Delta <= -1.4` for
-comparison studies and backward-compatible operator validation. MKS24
-hard-wall decks additionally set `limiter_hardwall = true`, which projects
-pressures to the selected threshold while preserving CGL internal energy and
-replaces finite-rate limiter pressure relaxation.
+Threshold-sensitive tests specify positive B^2/2 coefficients: firehose 2
+and mirror 1 by default. Legacy `parallel`/`oblique` map to 2/1.4 respectively.
+`limiter_hardwall=true` is rejected; migrated stiff-relaxation decks explicitly
+set their rate. Validate the finite-rate map and once-per-cycle cadence, then
+check wall encoding through a separate production C2P and an actual restart.
+The [rebuild work order](../../cgl_lf_surgical_rebuild_work_order.md) records
+current qualification; historical evidence below retains its original model.
 
 The pre-existing `aam-D` label is retained for compatibility. In ordinary
 output and restart state it denotes conserved CGL pressure anisotropy, not

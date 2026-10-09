@@ -33,7 +33,6 @@ constexpr Real kSqrtEightOverPi = 1.5957691216057308;
 constexpr Real kSqrtTwoPi = 2.5066282746310002;
 constexpr Real kSqrtEightPi = 5.013256549262000;
 constexpr Real kThreePiMinusEight = 1.4247779607693793;
-constexpr Real kCGLBackupCollisionRate = 1.0e10;
 
 enum class TestMode {
   parallel_decay,
@@ -311,38 +310,25 @@ Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp
                           const Real bx, const Real by, const Real bz) {
   const bool mlim = GetBooleanOrFalse(pin, "mhd", "mirror_limiter");
   const bool flim = GetBooleanOrFalse(pin, "mhd", "firehose_limiter");
-  const bool backup_lim = GetBooleanOrFalse(pin, "mhd", "backup_limiters");
-  const Real lim_coll = std::max(GetRealOrZero(pin, "mhd", "limiter_nu_coll"),
-                                 static_cast<Real>(0.0));
+  const bool backup = GetBooleanOrFalse(pin, "mhd", "backup_limiters");
+  const Real lim_coll = GetRealOrZero(pin, "mhd", "limiter_nu_coll");
   const Real paniso = pperp - ppar;
   const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  Real rate = 0.0;
-
-  if (flim && backup_lim) {
-    if ((paniso <= static_cast<Real>(-0.7)*bsqr) && (paniso > -bsqr)) {
-      rate = std::max(rate, lim_coll);
-    } else if (paniso <= -bsqr) {
-      rate = std::max(rate, kCGLBackupCollisionRate);
-    }
-  } else if (flim) {
-    if (paniso <= static_cast<Real>(-0.7)*bsqr) {
-      rate = std::max(rate, lim_coll);
-    }
-  }
-
-  if (mlim && backup_lim) {
-    if ((paniso >= static_cast<Real>(0.5)*bsqr) && (paniso < bsqr)) {
-      rate = std::max(rate, lim_coll);
-    } else if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      rate = std::max(rate, kCGLBackupCollisionRate);
-    }
-  } else if (mlim) {
-    if (paniso >= static_cast<Real>(0.5)*bsqr) {
-      rate = std::max(rate, lim_coll);
-    }
-  }
-
-  return rate;
+  Real firehose = 2.0;
+  if (pin->DoesParameterExist("mhd", "cgl_firehose_threshold") &&
+      pin->GetString("mhd", "cgl_firehose_threshold") == "oblique") firehose = 1.4;
+  firehose = pin->GetOrAddReal("mhd", "firehose_threshold", firehose);
+  const Real mirror = pin->GetOrAddReal("mhd", "mirror_threshold", 1.0);
+  const Real lower = -0.5*firehose*bsqr;
+  const Real upper = 0.5*mirror*bsqr;
+  const Real lower_wall = std::max(-bsqr, lower*
+      pin->GetOrAddReal("mhd", "firehose_backup_factor", 1.0));
+  const Real upper_wall = upper*
+      pin->GetOrAddReal("mhd", "mirror_backup_factor", 2.0);
+  const bool soft = (flim && paniso < lower) || (mlim && paniso > upper);
+  const bool hard = backup && (paniso < lower_wall || paniso > upper_wall);
+  return (soft ? lim_coll : 0.0) +
+         (hard ? pin->GetOrAddReal("mhd", "limiter_backup_nu", 1.0e10) : 0.0);
 }
 
 Real EffectiveCollisionFrequency(ParameterInput *pin, const Real ppar, const Real pperp,

@@ -258,9 +258,7 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
   const Real bsqr = (bmag <= sqrt_max) ? bmag*bmag
                                        : maximum;
   const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0)) +
-      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos.lim_coll,
-                                eos.mlim, eos.flim, eos.firehose_threshold,
-                                backup);
+      cgl::LimiterCollisionRate(face.ppar, face.pperp, bsqr, eos, backup);
   face.lf_k = lf_k;
   face.nu = nu;
   return true;
@@ -505,12 +503,6 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
   effective_backup_limiter = cgl::EffectiveBackupLimiter(
       configured_backup, true, instability_limiter_active,
       strict_admissibility);
-  if (effective_backup_limiter && !configured_backup &&
-      global_variable::my_rank == 0) {
-    std::cout << "CGL Landau-fluid relaxed admissibility enables the emergency "
-              << "hard-bound backup limiter; configured backup_limiters remains false."
-              << std::endl;
-  }
   profile_enabled_ =
       CGLProfileEnvValue("ATHENAK_CGL_LF_PROFILE",
                          pin->GetOrAddBoolean("mhd", "cgl_lf_profile", false));
@@ -1635,10 +1627,12 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const EOS_Data &eos_in,
                                          int dfloor_delta, int pfloor_delta,
                                          const char *sweep_name,
-                                         int stage, int nstages) {
+                                         int stage, int nstages, bool wall_checkpoint) {
+  if (wall_checkpoint && !strict_admissibility) return;
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;
-  if (profile_enabled_) {
+  const bool backup = effective_backup_limiter;
+  if (profile_enabled_ && !wall_checkpoint) {
     profile_last_nstages_ = nstages;
     if (nstages > profile_max_nstages_) {
       profile_max_nstages_ = nstages;
@@ -1678,38 +1672,37 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
                      + SQR(bcc(m,IBZ,k,j,i));
     const Real paniso = pperp - ppar;
-    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr)) {
-      ++nmirror;
-      if (cgl::MirrorHardBoundViolated(paniso, bsqr)) {
-        ++nhard;
-      }
-    }
-    if (eos.flim &&
-        cgl::FirehoseLimiterActive(paniso, bsqr, eos.firehose_threshold)) {
-      ++nfirehose;
-      if (cgl::FirehoseHardBoundViolated(paniso, bsqr)) {
-        ++nhard;
-      }
-    }
+    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr, eos)) ++nmirror;
+    if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr, eos)) ++nfirehose;
+    if (cgl::HardBoundViolated(paniso, bsqr, eos, backup)) ++nhard;
   }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
      Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
      Kokkos::Sum<int>(hard_bound));
 
-  diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
-  diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
-  diagnostics.pfloor += static_cast<std::uint64_t>(pfloor_delta);
-  diagnostics.nonfinite += static_cast<std::uint64_t>(nonfinite);
-  diagnostics.nonpositive += static_cast<std::uint64_t>(nonpositive);
-  diagnostics.mirror += static_cast<std::uint64_t>(mirror);
-  diagnostics.firehose += static_cast<std::uint64_t>(firehose);
-  diagnostics.hard_bound += static_cast<std::uint64_t>(hard_bound);
+  // Count every unprojected LF stage, including its hard-wall crossings. Entry
+  // and post-wall checks validate the split state without counting extra stages.
+  if (!wall_checkpoint) {
+    diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
+    diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
+    diagnostics.pfloor += static_cast<std::uint64_t>(pfloor_delta);
+    diagnostics.nonfinite += static_cast<std::uint64_t>(nonfinite);
+    diagnostics.nonpositive += static_cast<std::uint64_t>(nonpositive);
+    diagnostics.mirror += static_cast<std::uint64_t>(mirror);
+    diagnostics.firehose += static_cast<std::uint64_t>(firehose);
+    diagnostics.hard_bound += static_cast<std::uint64_t>(hard_bound);
+  }
 
+  // LF changes anisotropy while B is frozen and can cross a hard wall. The
+  // scheduled sweep-end projection must restore it before hyperbolic evolution;
+  // floors and invalid pressures remain fatal at every intermediate stage.
   if (strict_admissibility &&
       (dfloor_delta > 0 || pfloor_delta > 0 || nonfinite > 0 ||
-       nonpositive > 0 || hard_bound > 0)) {
+       nonpositive > 0 || (wall_checkpoint && hard_bound > 0))) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "CGL Landau-fluid strict admissibility failed after a split stage: "
+              << "CGL Landau-fluid strict admissibility failed "
+              << (wall_checkpoint ? "at a split-sweep wall checkpoint: "
+                                  : "after a split stage: ")
               << "sweep=" << sweep_name << " stage=" << stage << "/" << nstages
               << " dfloor=" << dfloor_delta << " pfloor=" << pfloor_delta
               << " nonfinite=" << nonfinite << " nonpositive=" << nonpositive

@@ -95,8 +95,7 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
     const Real piso = ONE_3RD*ppar + TWO_3RDS*pperp;
     const Real beta = 2.0*piso/fmax(bsqr, SQR(eos.bfloor));
     const Real nu_eff = eos.nu_coll +
-        cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos.lim_coll, eos.mlim,
-                                  eos.flim, eos.firehose_threshold, backup);
+        cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos, backup);
     array_sum::GlobalSum cell;
     cell.the_array[0] = vol;
     cell.the_array[1] = vol*ppar;
@@ -114,12 +113,11 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
     cell.the_array[12] = vol*paniso;
     cell.the_array[13] = vol*fabs(paniso);
     cell.the_array[14] = vol*beta;
-    cell.the_array[15] = cgl::MirrorLimiterActive(paniso, bsqr) ? vol : 0.0;
+    cell.the_array[15] = cgl::MirrorLimiterActive(paniso, bsqr, eos) ? vol : 0.0;
     cell.the_array[16] =
-        cgl::FirehoseLimiterActive(paniso, bsqr, eos.firehose_threshold) ? vol : 0.0;
+        cgl::FirehoseLimiterActive(paniso, bsqr, eos) ? vol : 0.0;
     cell.the_array[17] =
-        (cgl::MirrorHardBoundViolated(paniso, bsqr) ||
-         cgl::FirehoseHardBoundViolated(paniso, bsqr)) ? vol : 0.0;
+        cgl::HardBoundViolated(paniso, bsqr, eos, backup) ? vol : 0.0;
     cell.the_array[18] = vol*nu_eff;
     cell.the_array[19] = has_force ?
         vol*rho*(vx*force(m,0,k,j,i) + vy*force(m,1,k,j,i) +

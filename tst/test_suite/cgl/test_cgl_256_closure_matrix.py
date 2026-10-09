@@ -85,6 +85,7 @@ def test_cgl_256_closure_matrix_is_complete_and_matched():
             assert common == invariant
 
     assert invariant is not None
+    assert invariant.get("mhd/limiter_hardwall", "false") == "false"
     expected = {
         "mesh/nx1": "256",
         "mesh/nx2": "256",
@@ -96,7 +97,6 @@ def test_cgl_256_closure_matrix_is_complete_and_matched():
         "mhd/eos": "cgl",
         "mhd/passive": "false",
         "mhd/limiter_nu_coll": "1.0e10",
-        "mhd/limiter_hardwall": "true",
         "problem/beta0": "10.0",
         "problem/b0": "1.0",
         "turb_driving/projection_policy": "mks24_alfvenic_perpendicular",

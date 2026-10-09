@@ -15,6 +15,7 @@
 #include <fstream>
 #include <iomanip>
 #include <iostream>
+#include <limits>
 #include <sstream>
 #include <string>
 
@@ -27,6 +28,7 @@
 #include "globals.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "eos/cgl_physics.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
@@ -39,6 +41,7 @@ enum class TestMode {
   perp_decay,
   collision_relaxation,
   grad_b,
+  grad_b_wall,
   flux_limiter,
   limiter_heat_flux_suppression,
   limiter_stress,
@@ -46,7 +49,8 @@ enum class TestMode {
   paper_oblique_wave,
   paper_eigen_wave,
   rotated_decay,
-  low_field
+  low_field,
+  timestep_refresh
 };
 
 struct Projection {
@@ -129,6 +133,7 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "perp_decay") return TestMode::perp_decay;
   if (mode == "collision_relaxation") return TestMode::collision_relaxation;
   if (mode == "grad_b") return TestMode::grad_b;
+  if (mode == "grad_b_wall") return TestMode::grad_b_wall;
   if (mode == "flux_limiter") return TestMode::flux_limiter;
   if (mode == "limiter_heat_flux_suppression") {
     return TestMode::limiter_heat_flux_suppression;
@@ -138,12 +143,13 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "paper_oblique_wave") return TestMode::paper_oblique_wave;
   if (mode == "paper_eigen_wave") return TestMode::paper_eigen_wave;
   if (mode == "rotated_decay") return TestMode::rotated_decay;
+  if (mode == "timestep_refresh") return TestMode::timestep_refresh;
   if (mode == "low_field") return TestMode::low_field;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, "
-       "collision_relaxation, grad_b, flux_limiter, "
+       "collision_relaxation, grad_b, grad_b_wall, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "or low_field");
+       "low_field, or timestep_refresh");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -152,6 +158,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::perp_decay: return "perp_decay";
     case TestMode::collision_relaxation: return "collision_relaxation";
     case TestMode::grad_b: return "grad_b";
+    case TestMode::grad_b_wall: return "grad_b_wall";
     case TestMode::flux_limiter: return "flux_limiter";
     case TestMode::limiter_heat_flux_suppression: return "limiter_heat_flux_suppression";
     case TestMode::limiter_stress: return "limiter_stress";
@@ -159,6 +166,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::paper_oblique_wave: return "paper_oblique_wave";
     case TestMode::paper_eigen_wave: return "paper_eigen_wave";
     case TestMode::rotated_decay: return "rotated_decay";
+    case TestMode::timestep_refresh: return "timestep_refresh";
     case TestMode::low_field: return "low_field";
   }
   return "unknown";
@@ -424,32 +432,16 @@ Real BackgroundCollisionFrequency(ParameterInput *pin) {
   return GetRealOrZero(pin, "mhd", "nu_coll");
 }
 
-Real FirehoseThreshold(ParameterInput *pin) {
-  const std::string policy =
-      pin->GetOrAddString("mhd", "cgl_firehose_threshold", "oblique");
-  if (policy == "oblique") return cgl::kFirehoseObliqueThreshold;
-  if (policy == "parallel") return cgl::kFirehoseParallelThreshold;
-  Fail("<mhd>/cgl_firehose_threshold must be oblique or parallel");
-}
-
-Real LimiterCollisionRate(ParameterInput *pin, const Real ppar, const Real pperp,
-                          const Real bx, const Real by, const Real bz) {
-  const bool mlim = GetBooleanOrFalse(pin, "mhd", "mirror_limiter");
-  const bool flim = GetBooleanOrFalse(pin, "mhd", "firehose_limiter");
-  const bool backup_lim = cgl::EffectiveBackupLimiter(
-      GetBooleanOrFalse(pin, "mhd", "backup_limiters"), true, mlim || flim,
-      GetBooleanOrFalse(pin, "mhd", "cgl_lf_strict_admissibility"));
-  const Real lim_coll = std::max(GetRealOrZero(pin, "mhd", "limiter_nu_coll"),
-                                 static_cast<Real>(0.0));
-  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-  return cgl::LimiterCollisionRate(ppar, pperp, bsqr, lim_coll, mlim, flim,
-                                   FirehoseThreshold(pin), backup_lim);
-}
-
-Real EffectiveCollisionFrequency(ParameterInput *pin, const Real ppar, const Real pperp,
+Real EffectiveCollisionFrequency(ParameterInput *pin, Mesh *pm,
+                                 const Real ppar, const Real pperp,
                                  const Real bx, const Real by, const Real bz) {
-  return std::max(BackgroundCollisionFrequency(pin), static_cast<Real>(0.0)) +
-         LimiterCollisionRate(pin, ppar, pperp, bx, by, bz);
+  const EOS_Data &eos = pm->pmb_pack->pmhd->peos->eos_data;
+  const bool backup = cgl::EffectiveBackupLimiter(
+      eos.backup_lim, true, eos.mlim || eos.flim,
+      GetBooleanOrFalse(pin, "mhd", "cgl_lf_strict_admissibility"));
+  const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
+  return std::max(eos.nu_coll, static_cast<Real>(0.0)) +
+         cgl::LimiterCollisionRate(ppar, pperp, bsqr, eos, backup);
 }
 
 Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
@@ -493,7 +485,7 @@ Real GradBMomentFlux(ParameterInput *pin, Mesh *pm, const int face) {
   const Real pperp = pin->GetOrAddReal("problem", "pperp0", 1.2);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
   const Real cpar = FaceCParallel(pin, rho, ppar);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar, pperp, bx, by, bz);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar, pperp, bx, by, bz);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real qperp_l = -chi_perp*(-pperp*(1.0 - pperp/ppar)*gradpar_b/bmag_face);
   const Real qperp = LimitedHeatFlux(qperp_l, cgl::kSqrtTwoOverPi*cpar*pperp);
@@ -555,7 +547,7 @@ void CheckCollisionRelaxation(ParameterInput *pin, Mesh *pm) {
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real nu_coll = BackgroundCollisionFrequency(pin);
   const Real rel_tol = pin->GetOrAddReal("problem", "collision_rel_tol", 1.0e-12);
-  Require(nu_coll > 0.0, "collision_relaxation requires positive <mhd>/nu_coll");
+  Require(nu_coll >= 0.0, "collision_relaxation requires nonnegative <mhd>/nu_coll");
 
   Real measured_paniso = 0.0;
   Real measured_piso = 0.0;
@@ -601,7 +593,7 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar0, pperp0, bx0, by0, bz0);
   const Real chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
   const Real chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
   const DecayState expected_state =
@@ -665,7 +657,7 @@ void CheckRotatedDecay(ParameterInput *pin, Mesh *pm) {
   const RotatedWave wave = RotatedWavenumber(pin, pm);
   const Real k_parallel = (bx0*wave.kx + by0*wave.ky + bz0*wave.kz)/bmag;
   const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar0, pperp0, bx0, by0, bz0);
   const Real chi_parallel =
       ChiParallel(cpar0, pin->GetReal("mhd", "lf_k_parallel"), nu_eff);
   const Real initial_amp = (ppar0/rho0)*amp;
@@ -814,7 +806,7 @@ Real LimitedParallelHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
                                    static_cast<Real>(1.0e-30));
   const Real cpar = FaceCParallel(pin, rho0, ppar_face);
   const Real nu_eff = force_collisionless ? 0.0 :
-      EffectiveCollisionFrequency(pin, ppar_face, pperp_face, bx, by, bz);
+      EffectiveCollisionFrequency(pin, pm, ppar_face, pperp_face, bx, by, bz);
   const Real chi_parallel = ChiParallel(cpar, lf_k, nu_eff);
   const Real grad_tpar = (ppar_r/rho0 - ppar_l/rho0)/dx;
   q_unlimited = -chi_parallel*rho0*grad_tpar;
@@ -844,7 +836,7 @@ Real LimitedPerpHeatFlux(ParameterInput *pin, Mesh *pm, const int face,
                                    static_cast<Real>(1.0e-30));
   const Real cpar = FaceCParallel(pin, rho0, ppar_face);
   const Real nu_eff = force_collisionless ? 0.0 :
-      EffectiveCollisionFrequency(pin, ppar_face, pperp_face, bx, by, bz);
+      EffectiveCollisionFrequency(pin, pm, ppar_face, pperp_face, bx, by, bz);
   const Real chi_perp = ChiPerp(cpar, lf_k, nu_eff);
   const Real grad_tperp = (pperp_r/rho0 - pperp_l/rho0)/dx;
   q_unlimited = -chi_perp*rho0*grad_tperp;
@@ -952,7 +944,57 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
             << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
 }
 
+void CheckPrescribedCollisionRateFlux(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  auto *lf = pmhd->pcgl_lf;
+  Require(pm->ncycle == 0 && lf != nullptr && !lf->lf_coeff_local,
+          "prescribed-rate flux test requires nlim=0 and background LF coefficients");
+  const Real nu = pin->GetReal("problem", "expected_nu_eff");
+  const Real cpar = lf->lf_c_parallel0;
+  const Real pi = std::acos(static_cast<Real>(-1.0));
+  const Real chi_par = 8.0*SQR(cpar)/(std::sqrt(8.0*pi)*cpar*lf->lf_k_parallel +
+                                      (3.0*pi - 8.0)*nu);
+  const Real chi_perp = 2.0*SQR(cpar)/(std::sqrt(2.0*pi)*cpar*lf->lf_k_parallel +
+                                     nu);
+  const auto &indcs = pm->mb_indcs;
+  DvceFaceFld5D<Real> flux("prescribed_rate_flux", 1, pmhd->nmhd, 1, 1,
+                           indcs.nx1 + 2*indcs.ng);
+  lf->AddHeatFluxes(pmhd->w0, pmhd->bcc0, pmhd->peos->eos_data,
+                      1.0, 1.0, flux);
+  auto actual = HostCopy(flux.x1f);
+  auto w = HostCopy(pmhd->w0);
+  auto b = HostCopy(pmhd->bcc0);
+  const int js = indcs.js, ks = indcs.ks;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/indcs.nx1;
+  const Real tolerance = 256.0*std::numeric_limits<Real>::epsilon();
+  for (int i = indcs.is; i <= indcs.ie + 1; ++i) {
+    Require(b(0,IBX,ks,js,i) == 1.0 && b(0,IBY,ks,js,i) == 0.0 &&
+            b(0,IBZ,ks,js,i) == 0.0, "prescribed-rate test requires B=(1,0,0)");
+    const Real dl = w(0,IDN,ks,js,i-1), dr = w(0,IDN,ks,js,i);
+    const Real pl = w(0,IPR,ks,js,i-1), pr = w(0,IPR,ks,js,i);
+    const Real tl = w(0,IPP,ks,js,i-1), tr = w(0,IPP,ks,js,i);
+    const Real rho = 0.5*(dl + dr);
+    const Real qpar_l = -chi_par*rho*(pr/dr - pl/dl)/dx;
+    const Real qperp_l = -chi_perp*rho*(tr/dr - tl/dl)/dx;
+    const Real qpar_max = std::sqrt(8.0/pi)*cpar*0.5*(pl + pr);
+    const Real qperp_max = std::sqrt(2.0/pi)*cpar*0.5*(tl + tr);
+    const Real qpar = qpar_l/(1.0 + std::abs(qpar_l)/qpar_max);
+    const Real qperp = qperp_l/(1.0 + std::abs(qperp_l)/qperp_max);
+    const Real expected_energy = qperp + 0.5*qpar;
+    Require(std::abs(actual(0,IEN,ks,js,i) - expected_energy) <=
+                tolerance*std::max(static_cast<Real>(1.0), std::abs(expected_energy)),
+            "prescribed collision rate disagrees with production energy flux");
+    Require(std::abs(actual(0,IAN,ks,js,i) - qperp) <=
+                tolerance*std::max(static_cast<Real>(1.0), std::abs(qperp)),
+            "prescribed collision rate disagrees with production moment flux");
+  }
+  std::cout << "CGL LF prescribed collision-rate flux passed: nu_eff=" << nu << std::endl;
+}
+
 void CheckLimiterHeatFluxSuppression(ParameterInput *pin, Mesh *pm) {
+  if (pin->DoesParameterExist("problem", "expected_nu_eff")) {
+    CheckPrescribedCollisionRateFlux(pin, pm);
+  }
   auto *pmhd = pm->pmb_pack->pmhd;
   auto w = HostCopy(pmhd->w0);
   const int is = pm->mb_indcs.is;
@@ -1059,10 +1101,19 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
   const int js = pm->mb_indcs.js;
   const int ks = pm->mb_indcs.ks;
   const int nx1 = pm->mb_indcs.nx1;
-  const Real backup_tol = pin->GetOrAddReal("problem", "backup_bound_tol", 1.02);
+  const EOS_Data &eos = pmhd->peos->eos_data;
   const std::string limiter_kind =
       pin->GetOrAddString("problem", "limiter_kind", "mirror");
 
+  const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
+  const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
+  const bool has_lf = pin->DoesParameterExist("mhd", "cgl_heat_flux");
+  // This cellwise reference describes one cycle without spatial heat transport.
+  // Multi-cycle relaxation is checked independently from the per-cycle history.
+  const bool check_relaxation = (amp == 0.0 || !has_lf) && pm->ncycle == 1 &&
+      pin->GetString("mhd", "rsolver") == "advect";
+  Real max_relaxation_error = 0.0;
   for (int q = 0; q < nx1; ++q) {
     const int i = is + q;
     const Real rho = w(0,IDN,ks,js,i);
@@ -1076,15 +1127,41 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
             "limiter stress produced a nonfinite state");
     Require(rho > 0.0 && ppar > 0.0 && pperp > 0.0,
             "limiter stress produced a nonpositive primitive state");
-    if (limiter_kind == "mirror") {
-      Require(paniso <= backup_tol*bsqr, "mirror stress exceeded the backup bound");
-    } else if (limiter_kind == "firehose") {
-      Require(paniso >= -backup_tol*bsqr, "firehose stress exceeded the backup bound");
-    } else {
-      Fail("<problem>/limiter_kind must be mirror or firehose");
+    Require(!cgl::HardBoundViolated(paniso, bsqr, eos, eos.backup_lim),
+            "limiter stress exceeded a configured hard wall");
+    if (check_relaxation) {
+      const Real phase = Wavenumber(pin, pm)*(XCenter(pm, q) - pm->mesh_size.x1min);
+      const Real seed = (limiter_kind == "mirror" ? 1.0 : -1.0)*0.25*amp*std::sin(phase);
+      const Real initial_ppar = ppar0*(1.0 + seed);
+      const Real initial_pperp = pperp0*(1.0 - seed);
+      const Real initial_piso = (initial_ppar + 2.0*initial_pperp)/3.0;
+      const Real mirror = 0.5*eos.mirror_threshold*bsqr;
+      const Real firehose = -0.5*eos.firehose_threshold*bsqr;
+      const Real lower = eos.backup_lim ?
+          std::max(-bsqr, eos.firehose_backup_factor*firehose) : -bsqr;
+      const Real upper = eos.backup_lim ? eos.mirror_backup_factor*mirror :
+          std::numeric_limits<Real>::max();
+      Real expected = initial_pperp - initial_ppar;
+      // The LF pre sweep and RK boundary apply walls before the final rates.
+      if (has_lf) expected = std::min(upper, std::max(lower, expected));
+      expected *= std::exp(-eos.nu_coll*pm->time);
+      if (eos.mlim && expected > mirror) {
+        expected = mirror + (expected - mirror)/(1.0 + eos.lim_coll*pm->time);
+      } else if (eos.flim && expected < firehose) {
+        expected = firehose + (expected - firehose)/(1.0 + eos.lim_coll*pm->time);
+      }
+      expected = std::min(upper, std::max(lower, expected));
+      const Real error = std::abs(paniso - expected)/initial_piso;
+      max_relaxation_error = std::max(max_relaxation_error, error);
+      Require(error <= 1.0e-12,
+              "limiter stress disagrees with one full-step analytic relaxation");
+      RequireRelative("limiter stress conserved isotropic pressure",
+                      (ppar + 2.0*pperp)/3.0, initial_piso, 1.0e-12);
     }
   }
-  std::cout << "CGL LF limiter_stress passed for " << limiter_kind << std::endl;
+  std::cout << "CGL LF limiter_stress passed for " << limiter_kind
+            << " analytic_relaxation=" << check_relaxation
+            << " max_relaxation_error=" << max_relaxation_error << std::endl;
 }
 
 struct WaveState {
@@ -1123,7 +1200,7 @@ WaveState IntegrateWaveReference(ParameterInput *pin, Mesh *pm) {
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real cpar0 = FaceCParallel(pin, rho0, ppar0);
   const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-  const Real nu_eff = EffectiveCollisionFrequency(pin, ppar0, pperp0, bx0, by0, bz0);
+  const Real nu_eff = EffectiveCollisionFrequency(pin, pm, ppar0, pperp0, bx0, by0, bz0);
   const Real chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
   const Real c_cgl = std::sqrt(3.0*ppar0/rho0);
 
@@ -1277,7 +1354,7 @@ PaperWaveState IntegratePaperWaveReference(ParameterInput *pin, Mesh *pm) {
   if (pin->DoesParameterExist("mhd", "cgl_heat_flux")) {
     const Real cpar0 = FaceCParallel(pin, rho0, p0);
     const Real lf_k = pin->GetReal("mhd", "lf_k_parallel");
-    const Real nu_eff = EffectiveCollisionFrequency(pin, p0, p0, bx0, by0, bz0);
+    const Real nu_eff = EffectiveCollisionFrequency(pin, pm, p0, p0, bx0, by0, bz0);
     chi_parallel = ChiParallel(cpar0, lf_k, nu_eff);
     chi_perp = ChiPerp(cpar0, lf_k, nu_eff);
   }
@@ -1456,6 +1533,74 @@ void CheckPaperEigenWave(ParameterInput *pin, Mesh *pm) {
             << " zero_abs_tol=" << zero_abs_tol << std::endl;
 }
 
+// A uniform RK source isolates post-sweep timestep refresh from spatial transport.
+Real refresh_heating_rate = 0.0;
+Real refresh_pre_dt = 0.0;
+int refresh_pre_stages = 0;
+
+void HeatTimestepRefresh(Mesh *pm, const Real beta_dt) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto &indcs = pm->mb_indcs;
+  const int nmb = pm->pmb_pack->nmb_thispack;
+  const int ncell = nmb*indcs.nx1*indcs.nx2*indcs.nx3;
+  if (refresh_pre_stages == 0) {
+    refresh_pre_stages = pmhd->pcgl_lf->diagnostics.nstage/ncell;
+    refresh_pre_dt = pmhd->pcgl_lf->dtnew;
+  }
+  auto u = pmhd->u0;
+  const Real de = refresh_heating_rate*beta_dt;
+  par_for("cgl_lf_refresh_heating", DevExeSpace(), 0, nmb - 1,
+          indcs.ks, indcs.ke, indcs.js, indcs.je, indcs.is, indcs.ie,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    u(m,IEN,k,j,i) += de;
+  });
+}
+
+void CheckTimestepRefresh(ParameterInput *pin, Mesh *pm) {
+  auto *lf = pm->pmb_pack->pmhd->pcgl_lf;
+  const auto &indcs = pm->mb_indcs;
+  const int nmb = pm->pmb_pack->nmb_thispack;
+  const int ncell = nmb*indcs.nx1*indcs.nx2*indcs.nx3;
+  const int post_stages = lf->diagnostics.nstage/ncell - refresh_pre_stages;
+  int stages_min[2] = {refresh_pre_stages, post_stages};
+  int stages_max[2] = {refresh_pre_stages, post_stages};
+#if MPI_PARALLEL_ENABLED
+  MPI_Allreduce(MPI_IN_PLACE, stages_min, 2, MPI_INT, MPI_MIN, MPI_COMM_WORLD);
+  MPI_Allreduce(MPI_IN_PLACE, stages_max, 2, MPI_INT, MPI_MAX, MPI_COMM_WORLD);
+#endif
+  Require(stages_min[0] == stages_max[0] && stages_min[1] == stages_max[1],
+          "pre/post stage counts differ across MPI ranks");
+  Require(pm->ncycle == 1 && refresh_pre_stages > 0,
+          "timestep refresh requires one cycle with an active pre sweep");
+  Require(refresh_heating_rate > 0.0 ? post_stages > refresh_pre_stages :
+                                      post_stages == refresh_pre_stages,
+          "post-sweep stages did not respond to the RK heating");
+  const Real pressure = 1.0 + (2.0/3.0)*refresh_heating_rate*pm->dt_last_completed;
+  const Real dx = (pm->mesh_size.x1max - pm->mesh_size.x1min)/pm->mesh_indcs.nx1;
+  const Real chi0 = std::sqrt(8.0/M_PI)/lf->lf_k_parallel;
+  const Real dt0 = 0.5*dx*dx/chi0;
+  RequireRelative("initial uniform LF timestep", refresh_pre_dt, dt0, 2.0e-12);
+  RequireRelative("heated uniform LF timestep", lf->dtnew, dt0/std::sqrt(pressure),
+                  2.0e-12);
+  RequireRelative("refreshed mesh LF timestep", pm->dt_parabolic_sts,
+                  pm->cfl_no*dt0/std::sqrt(pressure), 2.0e-12);
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  for (int m=0; m<nmb; ++m) {
+    for (int i=indcs.is; i<=indcs.ie; ++i) {
+      RequireRelative("heated parallel pressure", w(m,IPR,indcs.ks,indcs.js,i),
+                      pressure, 2.0e-12);
+      RequireRelative("heated perpendicular pressure", w(m,IPP,indcs.ks,indcs.js,i),
+                      pressure, 2.0e-12);
+    }
+  }
+  if (global_variable::my_rank == 0) {
+    std::cout << "CGL LF timestep_refresh: pre_stages=" << stages_min[0]
+              << " post_stages=" << stages_min[1] << " ranks_agree=true"
+              << " final_pressure=" << pressure << " dt_parabolic="
+              << pm->dt_parabolic_sts << std::endl;
+  }
+}
+
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
@@ -1465,7 +1610,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
-             mode == TestMode::paper_eigen_wave) {
+             mode == TestMode::paper_eigen_wave ||
+             mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pm);
   } else {
     RequireOneDimensionalSingleBlock(pm);
@@ -1476,6 +1622,12 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckCollisionRelaxation(pin, pm);
   } else if (mode == TestMode::grad_b) {
     CheckGradB(pin, pm);
+  } else if (mode == TestMode::grad_b_wall) {
+    Require(pm->ncycle == 1 && pmhd->pcgl_lf != nullptr &&
+            pmhd->pcgl_lf->diagnostics.hard_bound > 0,
+            "grad_b_wall requires one cycle with intermediate LF wall crossings");
+    std::cout << "CGL LF grad_b_wall passed: hard_bound="
+              << pmhd->pcgl_lf->diagnostics.hard_bound << std::endl;
   } else if (mode == TestMode::flux_limiter) {
     CheckFluxLimiter(pin, pm);
   } else if (mode == TestMode::limiter_heat_flux_suppression) {
@@ -1490,6 +1642,8 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckPaperEigenWave(pin, pm);
   } else if (mode == TestMode::rotated_decay) {
     CheckRotatedDecay(pin, pm);
+  } else if (mode == TestMode::timestep_refresh) {
+    CheckTimestepRefresh(pin, pm);
   } else if (mode == TestMode::low_field) {
     CheckLowField(pin, pm);
   }
@@ -1511,7 +1665,8 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
-             mode == TestMode::paper_eigen_wave) {
+             mode == TestMode::paper_eigen_wave ||
+             mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pmy_mesh_);
   } else {
     RequireOneDimensionalSingleBlock(pmy_mesh_);
@@ -1520,6 +1675,18 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  if (mode == TestMode::timestep_refresh) {
+    Require(user_srcs && rho0 == 1.0 && ppar0 == 1.0 && pperp0 == 1.0 &&
+            pmhd->pcgl_lf != nullptr && pmhd->pcgl_lf->lf_coeff_local &&
+            pmhd->peos->eos_data.nu_coll == 0.0,
+            "timestep refresh requires unit uniform state, local closure, "
+            "and no collisions");
+    refresh_heating_rate = pin->GetOrAddReal("problem", "heating_rate", 3000.0);
+    Require(refresh_heating_rate >= 0.0, "timestep refresh requires nonnegative heating");
+    refresh_pre_stages = 0;
+    refresh_pre_dt = 0.0;
+    user_srcs_func = HeatTimestepRefresh;
+  }
   const Real bx0 = pin->GetOrAddReal("problem", "b0", 1.0);
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
@@ -1590,7 +1757,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real vz = 0.0;
     Real ppar = ppar0;
     Real pperp = pperp0;
-    Real by = (mode == TestMode::grad_b) ? by_amp*s : by0;
+    Real by = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s : by0;
     Real bz = bz0;
 
     if (mode == TestMode::parallel_decay || mode == TestMode::rotated_decay) {
@@ -1652,7 +1819,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     const Real x = CellCenterX(q, indcs.nx1, block_size.x1min, block_size.x1max);
     const Real s = sin(k_wave*(x - xmin));
     const Real c = cos(k_wave*(x - xmin));
-    b0.x2f(m,k,j,i) = (mode == TestMode::grad_b) ? by_amp*s :
+    b0.x2f(m,k,j,i) = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s :
         by0 + ((mode == TestMode::paper_eigen_wave) ?
                EigenRealSpacePerturbation(amp, eig_by_re, eig_by_im, c, s) : 0.0);
   });

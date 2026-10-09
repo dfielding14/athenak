@@ -3,6 +3,7 @@
 from pathlib import Path
 
 import numpy as np
+import pytest
 
 import test_suite.testutils as testutils
 
@@ -107,3 +108,26 @@ def test_cgl_lf_quantitative_projection_is_global_across_mpi_ranks():
         ["job/basename=cgl_mpi_projection_four", *flags],
         threads=4,
     )
+
+
+@pytest.mark.parametrize("heating_rate", (0, 3000))
+def test_cgl_lf_post_sweep_refresh_agrees_across_mpi_ranks(heating_rate):
+    histories = []
+    try:
+        for ranks in (1, 4):
+            basename = f"cgl_mpi_heated_{ranks}"
+            # Four MeshBlocks exercise both local and distributed post-RK refresh.
+            # The pgen checks pressure, analytic LF bounds, and rank stage agreement.
+            testutils.mpi_run(
+                "../../../inputs/unit_tests/cgl_lf_timestep_refresh.athinput",
+                [f"job/basename={basename}", f"problem/heating_rate={heating_rate}"],
+                threads=ranks,
+            )
+            histories.append(testutils.athena_read.hst(f"{basename}.mhd.hst"))
+        for column in ("time", "dt", "tot-E", "lf_nstage"):
+            np.testing.assert_allclose(histories[0][column], histories[1][column],
+                                       rtol=2.0e-12, atol=0.0)
+    finally:
+        for path in Path(".").glob("cgl_mpi_heated_*.hst"):
+            path.unlink()
+        testutils.cleanup()

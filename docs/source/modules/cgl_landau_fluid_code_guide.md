@@ -83,11 +83,21 @@ For STS LF transport, MHD owns the split lifecycle:
 5. `CGLRefreshPrimFromMagneticMoment` rebuilds CGL primitives between stages.
 6. `RecordAdmissibility` updates LF health counters and optionally aborts in
    strict mode.
-7. `EndCGLLandauFluidSTSSweep` converts `IAN` back to conserved anisotropy.
+7. `EndCGLLandauFluidSTSSweep` converts `IAN` back to conserved anisotropy
+   and refreshes both cached pressures from the stored E/A state.
 
-When LF and CGL collisions or limiter scattering are active, the driver applies
-collision updates after each LF half-sweep. This gives the chronological split
-`L(dt/2) C(dt/2) H(dt) L(dt/2) C(dt/2)`.
+`CGLCollisions` applies walls after RK for every CGL configuration. Without
+split LF it also applies rates with the full cycle timestep. With split LF,
+`STSPostSweepCGLCollisions` applies walls after the pre-sweep and full-step
+rates plus walls after the post-sweep, after A has been restored. The driver
+also invokes the post checkpoint when the post-sweep has no stages. Coarse
+state is refreshed after these updates. The post-RK hook refreshes the local
+timestep from the corrected state before the driver's global minimum.
+
+`RecordAdmissibility` counts each unprojected LF stage. Intermediate wall
+crossings are diagnostic; invalid pressures and floors remain fatal in strict
+mode. Separate entry/post-wall checks enforce walls without incrementing stage
+counts. After AMR, walls run after the final field refresh.
 
 ## LF Face Closure
 
@@ -190,9 +200,10 @@ appends LF columns when the closure is active:
   `cgl_lf_record_pressure_work = true`.
 
 Strict admissibility is controlled by `cgl_lf_strict_admissibility`. In strict
-mode, floors, non-finite or non-positive thermodynamic state, or emergency hard
-bound violations abort the run during LF primitive refresh. In relaxed mode,
-the emergency backup limiter is enabled when instability limiters are active.
+mode, floors and non-finite or non-positive thermodynamic state are fatal at
+every LF stage; hard-bound violations are fatal at split-sweep checkpoints.
+Backup walls and scattering require an explicit `backup_limiters = true` in
+both strict and relaxed modes.
 
 ## Active And Passive CGL
 

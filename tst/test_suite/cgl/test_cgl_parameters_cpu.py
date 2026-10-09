@@ -19,11 +19,13 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
     [
         pytest.param(True, (f"{name}={value}",), name, id=f"{name}-{value}")
         for name in ("dfloor", "pfloor", "bfloor", "sigma_max",
-                     "lf_k_parallel", "lf_c_parallel0")
+                     "lf_k_parallel", "lf_c_parallel0", "firehose_threshold",
+                     "mirror_threshold")
         for value in ("0", "-1", "nan", "inf")
     ] + [
         pytest.param(True, (f"{name}={value}",), name, id=f"{name}-{value}")
-        for name in ("tfloor", "sfloor", "nu_coll", "limiter_nu_coll")
+        for name in ("tfloor", "sfloor", "nu_coll", "limiter_nu_coll",
+                     "limiter_backup_nu")
         for value in ("-1", "nan", "inf")
     ] + [
         pytest.param(True, (f"{limiter}=true", f"limiter_nu_coll={value}"),
@@ -36,14 +38,39 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
         for lf in (False, True)
         for sound_speed in ((), ("iso_sound_speed=1",))
     ] + [
+        pytest.param(True, (f"{name}={value}",), name, id=f"{name}-{value}")
+        for name in ("firehose_backup_factor", "mirror_backup_factor")
+        for value in ("0.99", "nan", "inf")
+    ] + [
+        pytest.param(True, (f"{limiter}=true",),
+                     ("Parameter name 'limiter_nu_coll' not found",),
+                     id=f"{limiter}-missing-rate")
+        for limiter in ("mirror_limiter", "firehose_limiter")
+    ] + [
+        pytest.param(True, ("limiter_hardwall=true",),
+                     ("limiter_hardwall=true is no longer supported", "limiter_nu_coll=1e10"),
+                     id="legacy-hardwall-rejected"),
+        pytest.param(True, ("backup_limiters=true",),
+                     ("<mhd>/backup_limiters requires",), id="backup-needs-limiter"),
+        pytest.param(True, ("cgl_firehose_threshold=oblique", "firehose_threshold=2"),
+                     ("<mhd>/firehose_threshold conflicts",), id="conflicting-legacy"),
+        pytest.param(True, ("cgl_firehose_threshold=invalid",),
+                     ("<mhd>/cgl_firehose_threshold must be",), id="invalid-legacy"),
         pytest.param(True, (), None, id="active-default"),
         pytest.param(False, ("passive=false",), None, id="active-no-lf"),
         pytest.param(True, ("tfloor=0", "sfloor=0", "nu_coll=0",
                            "limiter_nu_coll=0"), None, id="zero-floors-and-rates"),
         pytest.param(True, ("limiter_nu_coll=7",), None, id="disabled-rate"),
         pytest.param(True, ("nu_coll=3",), None, id="background-rate"),
-        pytest.param(True, ("mirror_limiter=true",), None,
-                     id="mirror-default-rate"),
+        pytest.param(True, ("firehose_threshold=2", "mirror_threshold=1",
+                           "firehose_backup_factor=1", "mirror_backup_factor=1",
+                           "limiter_backup_nu=0"), None, id="numeric-wall-boundaries"),
+        pytest.param(True, ("cgl_firehose_threshold=parallel", "firehose_threshold=2"),
+                     None, id="matching-parallel"),
+        pytest.param(True, ("cgl_firehose_threshold=oblique", "firehose_threshold=1.4"),
+                     None, id="matching-oblique"),
+        pytest.param(True, ("backup_limiters=true", "mirror_limiter=true",
+                           "limiter_nu_coll=0"), None, id="backup-with-zero-soft-rate"),
         pytest.param(True, ("firehose_limiter=true", "limiter_nu_coll=0"), None,
                      id="firehose-zero-rate"),
         pytest.param(True, ("mirror_limiter=true", "limiter_nu_coll=3"), None,
@@ -74,10 +101,14 @@ def test_cgl_constructor_parameters(tmp_path, lf, parameters, error):
     if error:
         assert result.returncode != 0, output
         assert "FATAL ERROR" in output, output
-        assert f"<mhd>/{error}" in output, output
-        if error == "passive":
+        if isinstance(error, tuple):
+            for marker in error:
+                assert marker in output, output
+        elif error == "passive":
+            assert f"<mhd>/{error}" in output, output
             assert "not supported" in output, output
         else:
+            assert f"<mhd>/{error}" in output, output
             assert "must be finite" in output, output
     else:
         assert result.returncode == 0, output
