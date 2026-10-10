@@ -1,0 +1,114 @@
+# Frozen-flow LF conservation at same-level faces adjoining refinement corners.
+# Smooth density and divergence-free magnetic field exercise transverse stencils.
+
+<job>
+basename = cgl_lf_smr_conservation
+
+<mesh>
+nghost = 2
+nx1 = 32
+x1min = 0.0
+x1max = 1.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2 = 32
+x2min = 0.0
+x2max = 1.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3 = 1
+x3min = 0.0
+x3max = 1.0
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 8
+nx2 = 8
+nx3 = 1
+
+<mesh_refinement>
+refinement = static
+num_levels = 2
+ncycle_check = 1
+refinement_interval = 1
+prolong_primitives = true
+max_nmb_per_rank = 256
+
+<refined_region1>
+level = 1
+x1min = 0
+x1max = 0.5
+x2min = 0.25
+x2max = 0.50
+x3min = 0.0
+x3max = 1.0
+
+<refined_region2>
+level = 1
+x1min = 0.25
+x1max = 0.5
+x2min = 0.50
+x2max = 0.75
+x3min = 0.0
+x3max = 1.0
+
+<time>
+evolution = kinematic
+integrator = rk2
+sts_integrator = rkl2
+sts_max_dt_ratio = 10.0
+cfl_number = 0.4
+nlim = -1
+tlim = 0.002
+ndiag = 100000
+
+<mhd>
+eos = cgl
+nscalars = 1
+passive = false
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+cgl_lf_strict_admissibility = true
+cgl_lf_record_pressure_work = false
+lf_k_parallel = 4.0
+lf_coefficient_mode = local
+reconstruct = plm
+rsolver = advect
+gamma = 1.666666666666667
+dfloor = 1.0e-12
+pfloor = 1.0e-12
+tfloor = 1.0e-12
+sfloor = 1.0e-12
+bfloor = 1.0e-10
+cgl_lf_profile = false
+cgl_lf_profile_detail = false
+
+<problem>
+pgen_name = divb_amr
+user_hist = true
+refine_levels = 1
+rho0 = 1.0
+density_amp = 0.2
+scalar0 = 0.5
+scalar_amp = 0.1
+ppar0 = 1.0
+pperp0 = 1.01
+vx0 = 0.0
+vy0 = 0.0
+vz0 = 0.0
+guide_b1 = 0.7
+guide_b2 = 0.2
+guide_b3 = -0.15
+field_amp = 0.02
+field_k = 2.0
+validation_output = false
+
+<output1>
+file_type = hst
+data_format = %24.16e
+dcycle = 1
+
+<output2>
+file_type = rst
+dcycle = 1000000
