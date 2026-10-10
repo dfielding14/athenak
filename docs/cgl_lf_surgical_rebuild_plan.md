@@ -301,6 +301,9 @@ both the face flux and bound; they must describe the same admitted state.
 Match the flux's grad-B arithmetic: divide coordinate differences by spacing
 before projection, then sum x/y/z in the same order. Anisotropy can amplify a
 rounding residual lost by an algebraically equivalent grouping of the bound.
+The exceptional logarithmic path must cover both its absolute-gradient estimate
+and the represented flux gradient. Preserve subnormal background scattering in
+the shared parallel response; the bound and flux must retain the same term.
 Include background collisions. Do not first port WO1's provisional D5 bound merely to
 replace it, and do not loosen unrelated conduction bounds.
 Gate: independent frozen-stencil rows/eigenvalues, staggered checkerboard,
@@ -334,6 +337,8 @@ accepting a larger factor such as 0.9. Attribute changes in stage count separate
 from kernel speed. Do not alter RKL coefficients or its odd-stage rule.
 Both budget loops serve all registered STS processes: include an ordinary
 conduction or viscosity budget check, not only LF, and retain explicit budgets.
+Check zero-operator sentinels before and after safety scaling in both precisions;
+the float reduction identity must not become an active finite budget after CFL scaling.
 Do not adopt a larger default merely because the parameter exists. Complete the
 unforced finite-rate threshold-crossing refinement below before accepting it.
 Use the accepted Piece 9 executable and Tier 2 measurements as the immediate
