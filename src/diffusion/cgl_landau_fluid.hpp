@@ -122,6 +122,10 @@ class CGLLandauFluid {
   }
 
  private:
+  template<int DIR, bool CollectQ>
+  void AddHeatFluxesDirection(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
+                              const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
+                              Real dt_sweep, Real rkl_weight, DvceFaceFld5D<Real> &f);
   void AccumulateHeatFluxDiagnostics(const array_sum::GlobalSum &stats);
 
   MeshBlockPack *pmy_pack;
