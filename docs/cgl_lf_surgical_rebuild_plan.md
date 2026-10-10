@@ -266,12 +266,14 @@ Document that model distinction. The retained parallel 3+1 response is unchanged
 this is not a claim of exact full Braginskii transport.
 Gate: collisionless identity, strong-collision limit
 $\chi_\perp\nu/c_\parallel^2\to1$, intermediate collisionality, and resolved
-coupled decay over an e-folding. Check both signed Fourier channels against the
-independent matrix exponential, controlling spatial and splitting errors with
-refinement. Preserve both thermal and magnetic-gradient drivers. Exercise normal
-and logarithmic paths, including subnormal intermediates that can yield a wrong
-finite result and thus evade a nonfinite-result fallback. Do not form an
-overflowing literal $2\nu$ when the complete response is representable.
+coupled decay over an e-folding. Check both full pressure profiles and signed
+Fourier channels against the independent matrix exponential, controlling spatial
+and splitting errors with refinement. Preserve both thermal and magnetic-gradient
+drivers. Exercise normal and logarithmic paths, including subnormal intermediates
+that can yield a wrong finite result and thus evade a nonfinite-result fallback.
+Do not form an overflowing literal $2\nu$ when the complete response is representable.
+Retain a representable near-canceling flux when doubling the collision term
+newly overflows the normalized response denominator.
 Keep pieces 6-8 at a common conservative reference timestep until piece 9
 qualifies the final controller. For their timing screen, enlarge the existing
 kinematic `cgl_lf_rotated_decay.athinput` with an oblique field and background
