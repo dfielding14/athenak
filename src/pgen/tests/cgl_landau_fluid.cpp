@@ -2150,7 +2150,7 @@ void CheckLocalSpeed(Mesh *pm) {
   const Real h = (pm->mesh_size.x1max-pm->mesh_size.x1min)/ind.nx1;
   const Real rho = std::numeric_limits<Real>::max()*std::numeric_limits<Real>::epsilon();
   const Real pressure = 0.25*(std::numeric_limits<Real>::denorm_min()*rho);
-  const Real bscale = 0.01*std::sqrt(pressure);
+  const Real bscale = std::sqrt(pressure);
   Require(pressure > 0.0 && pressure/rho == 0.0,
           "local_speed fixture must underflow the temperature division");
   EOS_Data eos = mhd->peos->eos_data;
@@ -2175,8 +2175,10 @@ void CheckLocalSpeed(Mesh *pm) {
         Require(std::isfinite(encoded.e) && std::isfinite(encoded.mu) &&
                 !dfloor && !efloor && !tfloor && !bfloor && recovered.d == rho &&
                 std::abs(recovered.e/pressure-1.0) < 1.0e-11 &&
-                std::abs(recovered.pp/(0.5*pressure)-1.0) < 1.0e-11,
-                "local_speed state did not survive active E/A recovery");
+                std::abs(recovered.pp/(0.5*pressure)-1.0) < 1.0e-11 &&
+                !cgl::HardBoundViolated(recovered.pp-recovered.e,
+                    bscale*bscale+tangent*tangent,eos,lf->effective_backup_limiter),
+                "local_speed state failed active E/A or hard-wall admission");
         w(0,IDN,k,j,i) = recovered.d;
         w(0,IPR,k,j,i) = recovered.e;
         w(0,IPP,k,j,i) = recovered.pp;
