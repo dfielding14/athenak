@@ -7,7 +7,7 @@ import numpy as np
 import pytest
 
 from test_suite import testutils
-from test_suite.cgl.test_cgl_lf_geometry_cpu import INPUTS, _run
+from test_suite.cgl.test_cgl_lf_geometry_cpu import INPUTS, _run, _work
 
 
 END_TIME = 0.2972165436900063  # One e-fold of the slow coupled mode.
@@ -18,6 +18,47 @@ def test_cgl_lf_closure_device_endpoints(tmp_path):
     output = _run(tmp_path / "device", "cgl_lf_geometry.athinput",
                   "problem/test_mode=closure_response")
     assert "closure_response passed" in output
+
+
+@pytest.mark.parametrize("seed", [0, 1], ids=["parallel", "perpendicular"])
+def test_cgl_lf_sts_collisionless_efold(tmp_path, seed):
+    """Resolve a full damping time in each channel with the actual STS driver."""
+    name = f"cgl_lf_quant_{('parallel', 'perp')[seed]}.athinput"
+    chi = (np.sqrt(8/np.pi), np.sqrt(2/np.pi))[seed]/(2*np.pi)
+    end_time = 1/(chi*(2*np.pi)**2)
+    source = (INPUTS / name).read_text()
+    source += ("\n<time>\nsts_safety = 0.3\n"
+               "\n<mhd>\nnu_coll = 0\nmirror_limiter = false\n"
+               "firehose_limiter = false\nbackup_limiters = false\n"
+               "\n<output1>\nfile_type = hst\ndcycle = 1\ndata_format = %24.16e\n"
+               "\n<output2>\nfile_type = tab\nvariable = mhd_w_bcc\n"
+               "dcycle = 1000000\ndata_format = %24.16e\n")
+    case = tmp_path / "efold"
+    output = _run(
+        case, name, "mesh/nx1=128", "meshblock/nx1=128", "time/nlim=-1",
+        f"time/tlim={end_time:.17g}", "time/sts_max_dt_ratio=8",
+        "problem/decay_rel_tol=0.003", "problem/validation_output=true",
+        "problem/validation_output_dir=validation", source=source,
+    )
+    history, steps = _work(case, output, 128, False)
+    assert len(steps) >= 100
+    np.testing.assert_allclose(history["time"][-1], end_time, rtol=0, atol=1e-14)
+    np.testing.assert_allclose(history["tot-E"], history["tot-E"][0],
+                               rtol=5e-12, atol=0)
+    paths = sorted((case / "tab").glob("*.mhd_w_bcc.*.tab"))
+    assert len(paths) == 2
+    initial, final = (np.loadtxt(path) for path in paths)
+    assert initial.shape == final.shape == (128, 12)
+    assert np.all(np.isfinite(final)) and np.min(final[:, [3, 7, 8]]) > 0
+    np.testing.assert_array_equal(final[:, 3:7], initial[:, 3:7])
+    np.testing.assert_array_equal(final[:, 9:12], initial[:, 9:12])
+    expected = AMPLITUDE*np.exp(-1)*np.sin(2*np.pi*final[:, 2])
+    measured = final[:, 7+seed]/final[:, 3] - 1
+    error = np.sqrt(2*np.mean((measured-expected)**2))/(AMPLITUDE*np.exp(-1))
+    assert error < 0.003, error
+    np.testing.assert_allclose(final[:, 8-seed], initial[:, 8-seed],
+                               rtol=0, atol=1e-10)
+    print(f"collisionless seed={seed}: one e-fold, full-field relative error={error:.17g}")
 
 
 def _continuum(seed):

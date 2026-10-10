@@ -2055,6 +2055,24 @@ void HotSpotHistory(HistoryData *pdata, Mesh *pm) {
   pdata->hdata[4] = hotspot_moment_error;
 }
 
+void WriteHotSpotState(ParameterInput *pin, Mesh *pm, const std::string &suffix) {
+  auto out = OpenValidationDataFile(pin, suffix);
+  if (!out.is_open()) return;
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  const auto u = HostCopy(pm->pmb_pack->pmhd->u0);
+  const auto b = HostCopy(pm->pmb_pack->pmhd->bcc0);
+  const auto &ind = pm->mb_indcs;
+  out << "time,cycle,i,j,dens,velx,vely,velz,ppar,pperp,bcc1,bcc2,bcc3,energy,A\n";
+  for (int j=ind.js; j<=ind.je; ++j) {
+    for (int i=ind.is; i<=ind.ie; ++i) {
+      out << pm->time << ',' << pm->ncycle << ',' << i-ind.is << ',' << j-ind.js;
+      for (int n=0; n<6; ++n) out << ',' << w(0,n,ind.ks,j,i);
+      for (int n=0; n<3; ++n) out << ',' << b(0,n,ind.ks,j,i);
+      out << ',' << u(0,IEN,ind.ks,j,i) << ',' << u(0,IAN,ind.ks,j,i) << '\n';
+    }
+  }
+}
+
 void CheckHotSpot(ParameterInput *pin, Mesh *pm) {
   MonitorHotSpot(pm, 0.0);
   const Real width = pin->GetReal("problem", "hotspot_width");
@@ -2079,6 +2097,7 @@ void CheckHotSpot(ParameterInput *pin, Mesh *pm) {
                     hotspot_thermal_error*hotspot_thermal0/hotspot_initial_energy})
               <= 5.0e-13,
           "hotspot did not conserve energy and perpendicular moment");
+  WriteHotSpotState(pin, pm, "hotspot_final");
 }
 
 HostArray5D<Real> reversal_initial_w, reversal_initial_b;
@@ -2445,9 +2464,9 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   if (mode == TestMode::hotspot) {
     Require(pmy_mesh_->multi_d && !pmy_mesh_->three_d && user_srcs && user_hist &&
             hotspot_width > 0.0 && pmhd->pcgl_lf != nullptr &&
-            !pmhd->pcgl_lf->lf_coeff_local && pmhd->peos->eos_data.nu_coll == 0.0 &&
+            pmhd->peos->eos_data.nu_coll == 0.0 &&
             !pmhd->peos->eos_data.mlim && !pmhd->peos->eos_data.flim,
-            "hotspot requires 2D, user monitors, background closure and no collisions");
+            "hotspot requires 2D, user monitors and no collisions");
     user_srcs_func = MonitorHotSpot;
     user_hist_func = HotSpotHistory;
     hotspot_min_parallel = hotspot_min_perp = std::numeric_limits<Real>::max();
@@ -2686,6 +2705,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     MonitorHotSpot(pmy_mesh_, 0.0);
     hotspot_initial_parallel = hotspot_min_parallel;
     hotspot_initial_perp = hotspot_min_perp;
+    WriteHotSpotState(pin, pmy_mesh_, "hotspot_initial");
   }
   if (mode == TestMode::field_reversal) {
     reversal_initial_w = Kokkos::create_mirror(w0);
