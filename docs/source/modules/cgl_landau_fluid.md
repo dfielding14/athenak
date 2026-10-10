@@ -194,11 +194,12 @@ diagnostic columns are preserved through CGL-LF restart files so interval
 analysis remains continuous across segments. `lf_hwproj` is retained for history
 and restart compatibility; the scheduled collision/wall operator does not
 increment this legacy primitive-refresh counter.
-`lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-applied owned-face
+`lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-weighted owned-face
 contractions of the capped heat fluxes with their corresponding temperature
-jumps. They characterize the closure-generated face fluxes; shearing-box
-radial flux reconciliation occurs afterward, so these two channel diagnostics
-are not exact seam-applied contractions. On refined meshes, each coarse/fine
+jumps. They characterize the closure-generated face fluxes before shearing-seam or
+refined-mesh shared-face reconciliation. The cap counts likewise describe the
+owned local closure estimate. These diagnostics are not exact contractions of
+the reconciled fluxes applied at those faces. On refined meshes, each coarse/fine
 interface uses the same fine-side ownership convention as the face-count
 columns because those fluxes are restricted into the coarse update.
 These are signed operator contractions; they are not required to be positive,
@@ -237,7 +238,12 @@ pressures are not applied to flow momentum.
   boundaries and active block creation/deletion rebuild the CGL thermodynamic
   state instead of treating `IAN` as a passive scalar. During LF STS stages the
   AMR path is explicit about the temporary magnetic-moment representation
-  `IAN = p_perp/|B|`.
+  `IAN = p_perp/|B|`. Physical corners are refilled after prolongation. Same-level
+  LF face estimates are averaged before either adjacent block updates, while
+  coarse/fine flux restriction retains conservation. The timestep bound covers
+  the local frozen stencil; it does not compose derivatives through prolongation
+  and shared-face reconciliation. Finite convergence checks qualify tested AMR
+  states, not a general nonlinear AMR stability envelope.
 - CGL LF pressure-work recording remains disabled with AMR primitive
   prolongation because that diagnostic flux-communication path has not been
   separately audited. Keep `<mhd>/cgl_lf_record_pressure_work = false` for
