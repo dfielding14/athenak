@@ -265,6 +265,225 @@ def test_cgl_lf_profile_detail_reports_directional_probe_buckets():
         _cleanup()
 
 
+@pytest.mark.parametrize("cpar,kpar,nu", (
+    (1.0, 2.0*np.pi, 0.0),
+    (1.0, 2.0*np.pi, 10.0),
+    (1.0, 2.0*np.pi, 100.0),
+    (1.4e308, 1.4e308, 0.0),
+    (1.0e154, 1.0e-154, 1.4e308),
+))
+def test_cgl_lf_uniform_collisional_timestep(cpar, kpar, nu):
+    from decimal import Decimal, localcontext
+
+    basename = "cgl_ci_uniform_timestep"
+    try:
+        _run_unit(
+            "cgl_lf_uniform_timestep.athinput", basename,
+            f"mhd/lf_c_parallel0={cpar:.17g}", f"mhd/lf_k_parallel={kpar:.17g}",
+            f"mhd/nu_coll={nu:.17g}",
+        )
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        # Independent coefficient evaluation; Decimal avoids reference overflow
+        # in cases that have a finite diffusivity but overflowing intermediates.
+        with localcontext() as context:
+            context.prec = 80
+            pi = Decimal("3.14159265358979323846264338327950288419716939937510")
+            c, k, frequency = (Decimal(str(value)) for value in (cpar, kpar, nu))
+            chi = 8*c*c / ((8*pi).sqrt()*c*k + (3*pi - 8)*frequency)
+            expected_dt = float(Decimal(20)*Decimal("0.4")*Decimal("0.5")
+                                / (Decimal(16)**2 * chi))
+        np.testing.assert_allclose(history["dt"][0], expected_dt, rtol=2.0e-12, atol=0.0)
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("contrast", (10, 50, 200, 1000))
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+def test_cgl_lf_density_contact_stability(contrast, arithmetic):
+    try:
+        samples = []
+        for seed in (0.0, 1.0e-6):
+            basename = f"cgl_ci_contact_{contrast}_{arithmetic}_{seed:g}"
+            _run_unit(
+                "cgl_lf_density_contact.athinput", basename,
+                f"problem/density_contrast={contrast}", f"problem/amp={seed:.17g}",
+                f"mhd/cgl_lf_arithmetic={arithmetic}",
+            )
+            by_cycle = {}
+            for path in sorted(Path("tab").glob(f"{basename}.mhd_w.*.tab")):
+                data = testutils.athena_read.tab(str(path))
+                by_cycle[data["cycle"]] = data
+            assert set(by_cycle) == {0, 1, 2, 3}
+            history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+            assert history["lf_nstage"][-1] == 64 * 3 * 2 * 7
+            chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+            expected_dt = 40.0*0.4/(64**2 * chi * (contrast + 3.0))
+            np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                       rtol=2.0e-12, atol=0.0)
+            for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
+                         "lf_hwproj"):
+                assert np.all(history[name] == 0.0)
+            for name in ("tot-E", "aam-D"):
+                np.testing.assert_allclose(history[name], history[name][0], rtol=2e-12, atol=0)
+            for cycle in range(1, 4):
+                for name in ("dens", "velx", "vely", "velz"):
+                    np.testing.assert_array_equal(by_cycle[cycle][name], by_cycle[0][name])
+            samples.append(by_cycle)
+        growth = []
+        for cycle in range(4):
+            control, seeded = (sample[cycle] for sample in samples)
+            assert control["time"] == seeded["time"]
+            error = max(
+                np.max(np.abs(seeded[name]/seeded["dens"]
+                              - control[name]/control["dens"]))
+                for name in ("eint", "p_perp"))
+            growth.append(error / 1.0e-6)
+        print(f"density contrast={contrast} arithmetic={arithmetic}: growth={growth}, "
+              "stages_per_half_sweep=7, repair_counts=0")
+        assert max(growth) < 10.0
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("dimension", (2, 3))
+@pytest.mark.parametrize("guide", (0.1, 0.01))
+def test_cgl_lf_staggered_checkerboard_timestep_and_stability(dimension, guide):
+    basename = f"cgl_ci_staggered_checkerboard_{dimension}_{guide:g}"
+    try:
+        flags = [f"problem/bz0={guide:.17g}"]
+        if dimension == 3:
+            flags += ["mesh/nx3=8", "meshblock/nx3=8"]
+        _run_unit("cgl_lf_staggered_checkerboard.athinput", basename, *flags)
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
+        # Bcc=(0,0,guide), but the x/y face fields have magnitude one.
+        # The checkerboard seed turns off all transverse limiter derivatives.
+        radius = 4.0*chi*8**2*(2.0/guide**2 + (dimension == 3))
+        expected_initial_dt = 20.0*0.4*2.0/radius
+        np.testing.assert_allclose(history["dt"][0], expected_initial_dt,
+                                   rtol=2.0e-12, atol=0.0)
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos",
+                     "lf_hardbd", "lf_hwproj"):
+            assert np.all(history[name] == 0.0)
+        assert history["lf_nstage"][-1] > 0
+        # The existing pgen final callback separately checks discrete divB,
+        # face-to-cell consistency, positive temperatures, and seed growth<10.
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("cpar,kpar,nu,bx,bz,length", (
+    (1.0e-200, 1.0, 1.0, 1.0, 0.0, 1.6e-199),
+    (1.0e200, 1.0e-200, 0.0, 1.0e-100, 1.0, 1.0),
+    (2*np.nextafter(0.0, 1.0), 1.0, 0.0, 1.0, 0.0, 1.6e-159),
+))
+def test_cgl_lf_scaled_face_row_timestep(cpar, kpar, nu, bx, bz, length):
+    from decimal import Decimal, localcontext
+
+    basename = "cgl_ci_scaled_row"
+    try:
+        _run_unit("cgl_lf_uniform_timestep.athinput", basename,
+                      f"mhd/lf_c_parallel0={cpar:.17g}", f"mhd/lf_k_parallel={kpar:.17g}",
+                      f"mhd/nu_coll={nu:.17g}", f"problem/b0={bx:.17g}",
+                      f"problem/bz0={bz:.17g}", f"mesh/x1max={length:.17g}")
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        with localcontext() as context:
+            context.prec = 80
+            pi = Decimal("3.14159265358979323846264338327950288419716939937510")
+            c, k, frequency, b1, b3, domain = (
+                Decimal.from_float(float(v)) for v in (cpar, kpar, nu, bx, bz, length))
+            chi = 8*c*c / ((8*pi).sqrt()*c*k + (3*pi-8)*frequency)
+            projected_chi = chi*b1*b1/(b1*b1+b3*b3)
+            expected_dt = float(Decimal(20)*Decimal("0.4")*(domain/16)**2 /
+                                (2*projected_chi))
+        np.testing.assert_allclose(history["dt"][0], expected_dt,
+                                   rtol=3.0e-12, atol=0.0)
+    finally:
+        _cleanup()
+
+@pytest.mark.parametrize("dimension", (2, 3))
+@pytest.mark.parametrize("local", (False, True))
+def test_cgl_lf_timestep_matches_independent_stencil(dimension, local):
+    from test_suite.cgl.test_cgl_lf_bound_cpu import _FrozenStencil
+
+    basename = "cgl_ci_stencil_bound"
+    shape = (8,)+(4,)*(dimension-1)
+    coordinates = np.meshgrid(*[(np.arange(n)+0.5)/n for n in shape], indexing="ij")
+    px, py = (2*np.pi*x for x in coordinates[:2])
+    pz = 2*np.pi*coordinates[2] if dimension == 3 else np.zeros(shape)
+    rho = np.where(coordinates[0] < 0.5, 1.0, 7.0)
+    state = np.array([
+        1+0.08*np.sin(px+0.13)+0.05*np.cos(py+0.37)+0.03*np.sin(pz+0.21),
+        0.7*(1+0.04*np.cos(px+0.31)+0.03*np.sin(py+0.17)+0.02*np.cos(pz+0.29)),
+    ])
+    # Each component is independent of its own coordinate: face and cell values
+    # agree, and the prescribed field has exactly zero discrete divergence.
+    field = 4*np.array([1+0.2*np.sin(py)+0.1*np.cos(pz),
+                       0.4+0.15*np.cos(px)+0.05*np.sin(pz),
+                       0.3+0.1*np.sin(px)+0.05*np.cos(py)])
+    grid = _FrozenStencil(rho, field, state, np.arange(1, dimension+1)/shape,
+                          local=local, nu=0.13)
+    _, bound = grid.matrix_and_bound()
+    try:
+        flags = ["problem/test_mode=timestep_stencil", "time/nlim=0",
+                 "time/tlim=1e30", "mesh/nx1=8",
+                 "mesh/nx2=4", "meshblock/nx2=4", "mesh/x2max=2",
+                 "mhd/nu_coll=0.13",
+                 f"mhd/lf_coefficient_mode={'local' if local else 'background'}"]
+        if dimension == 3:
+            flags += ["mesh/nx3=4", "meshblock/nx3=4", "mesh/x3max=3"]
+        # Put the density jump on an internal block face in the split layout.
+        for block_nx1 in (8, 4):
+            _run_unit("cgl_lf_staggered_checkerboard.athinput", basename,
+                      *flags, f"meshblock/nx1={block_nx1}")
+            history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+            np.testing.assert_allclose(history["dt"][0], 20*0.4*2/np.max(bound),
+                                       rtol=3e-12, atol=0)
+            assert history["lf_nstage"][-1] == 0
+            _cleanup()
+    finally:
+        _cleanup()
+
+
+@pytest.mark.parametrize("arithmetic", ("safe", "fast"))
+def test_cgl_lf_local_speed_in_bound_and_face_flux(arithmetic):
+    try:
+        _run_unit("cgl_lf_density_contact.athinput", "cgl_ci_local_speed",
+                  "problem/test_mode=local_speed", "time/nlim=0", f"mhd/cgl_lf_arithmetic={arithmetic}")
+    finally:
+        _cleanup()
+
+
+def test_cgl_lf_local_speed_overflow_timestep(tmp_path):
+    from decimal import Decimal, localcontext
+
+    basename = "cgl_ci_speed_overflow"
+    # Powers of two keep pressure recovery exact while p/rho overflows.
+    pressure, rho = np.ldexp(1.0, 996), np.ldexp(1.0, -996)
+    source = Path(f"{UNIT_INPUT_ROOT}/cgl_lf_uniform_timestep.athinput").read_text()
+    staged = tmp_path / "local_speed_overflow.athinput"
+    # Admit the prescribed density without the independent B²/sigma_max floor.
+    staged.write_text(source.replace("<mhd>", "<mhd>\nsigma_max = 1e305", 1))
+    try:
+        testutils.run(str(staged), [f"job/basename={basename}",
+                      "mhd/lf_coefficient_mode=local", "mhd/nu_coll=0",
+                      "mhd/dfloor=1e-320", "mhd/pfloor=1e-320", "mhd/tfloor=0",
+                      f"problem/rho0={rho:.17g}", f"problem/ppar0={pressure:.17g}",
+                      f"problem/pperp0={pressure:.17g}"])
+        history = testutils.athena_read.hst(f"{basename}.mhd.hst")
+        np.testing.assert_allclose(history["mass"][0], rho, rtol=2e-12, atol=0)
+        with localcontext() as context:
+            context.prec = 80
+            pi = Decimal("3.14159265358979323846264338327950288419716939937510")
+            speed = (Decimal.from_float(pressure)/Decimal.from_float(rho)).sqrt()
+            chi = (8/pi).sqrt()*speed/Decimal.from_float(2*np.pi)
+            expected = float(Decimal(20)*Decimal("0.4")/(2*16**2*chi))
+        np.testing.assert_allclose(history["dt"][0], expected, rtol=3e-12, atol=0)
+        assert history["lf_nstage"][-1] == 0
+    finally:
+        _cleanup()
+
+
 def test_cgl_lf_quantitative_decay_and_diagnostics():
     try:
         _run("cgl_lf_decay.athinput", "cgl_ci_decay")
@@ -547,9 +766,13 @@ def test_cgl_lf_heat_flux_cap_fractions_are_meshblock_layout_independent():
 
 
 def test_cgl_lf_final_refresh_is_meshblock_layout_independent():
+    # Dyadic coordinates give both layouts the same initialized field; thirds
+    # can perturb flat temperature slopes across different VL4 branches.
     common_flags = (
         "mesh_refinement/refinement=none",
         "problem/refine_levels=0",
+        "mesh/nx1=32",
+        "mesh/nx2=32",
         "time/nlim=1",
         "time/tlim=1.0",
     )
@@ -558,8 +781,8 @@ def test_cgl_lf_final_refresh_is_meshblock_layout_independent():
             "cgl_lf_amr_2d.athinput",
             "cgl_ci_final_refresh_single",
             *common_flags,
-            "meshblock/nx1=24",
-            "meshblock/nx2=24",
+            "meshblock/nx1=32",
+            "meshblock/nx2=32",
         )
         _run(
             "cgl_lf_amr_2d.athinput",
@@ -574,6 +797,14 @@ def test_cgl_lf_final_refresh_is_meshblock_layout_independent():
         )
         _assert_clean_lf_history(single)
         _assert_clean_lf_history(split)
+        assert len(single["time"]) == len(split["time"]) == 2
+        assert single["time"][0] == split["time"][0] == 0.0
+        assert single["time"][-1] > 0.0
+        for column in ("time", "dt"):
+            np.testing.assert_allclose(
+                single[column], split[column], rtol=5.0e-13, atol=0.0,
+                err_msg=f"LF controller depends on MeshBlock layout for {column}",
+            )
         for column in (
             "mass",
             "1-mom",
@@ -607,7 +838,8 @@ def test_cgl_lf_low_field_faces_disable_transport_cleanly():
             "problem/amp=0.5",
         )
         history = testutils.athena_read.hst("cgl_ci_low_field.mhd.hst")
-        assert history["lf_nstage"][-1] > 0.0
+        # No conducting faces means no parabolic budget and no LF stages.
+        assert history["lf_nstage"][-1] == 0.0
         assert history["lf_qface"][-1] == 0.0
         assert history["lf_qprwrk"][-1] == 0.0
         assert history["lf_qpewrk"][-1] == 0.0

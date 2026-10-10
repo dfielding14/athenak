@@ -100,9 +100,11 @@ def _coupled(case, seed, nx, cfl):
 @pytest.mark.parametrize("seed", [0, 1], ids=["parallel_seed", "perpendicular_seed"])
 def test_cgl_lf_coupled_decay(tmp_path, seed):
     expected = _continuum(seed)
-    coarse, coarse_dt, coarse_field = _coupled(tmp_path / "nx16", seed, 16, 0.1)
-    fine, fine_dt, fine_field = _coupled(tmp_path / "nx32", seed, 32, 0.1)
-    half, half_dt, half_field = _coupled(tmp_path / "half_dt", seed, 32, 0.05)
+    # The collision-aware bound permits larger steps; keep collision-splitting
+    # contamination below the spatial error with a conservative reference CFL.
+    coarse, coarse_dt, coarse_field = _coupled(tmp_path / "nx16", seed, 16, 0.05)
+    fine, fine_dt, fine_field = _coupled(tmp_path / "nx32", seed, 32, 0.05)
+    half, half_dt, half_field = _coupled(tmp_path / "half_dt", seed, 32, 0.025)
     errors = np.abs(np.array([coarse, fine, half])-expected)/np.abs(expected)
     field_errors = np.array([coarse_field, fine_field, half_field])
     print(f"coupled continuum amplitudes={expected}; relative channel errors={errors}; "

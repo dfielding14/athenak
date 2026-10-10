@@ -93,8 +93,10 @@ def test_cgl_lf_oblique_convergence(tmp_path):
     assert np.all(errors > 1e-7)
     assert np.all(errors[1:] < 0.45*errors[:-1]), errors
     assert errors[-1] < 0.01
-    np.testing.assert_allclose(steps[1:], 0.25*steps[:-1], rtol=1e-11, atol=1e-16)
+    # Spatial refinement also changes the slope-dependent row envelope.
+    assert np.all(steps[1:] < 0.5*steps[:-1]), steps
     # Independently check that time truncation is small compared with spatial error.
     finer, expected, finer_step = _oblique(tmp_path / "half_dt", 32, 0.025)
-    np.testing.assert_allclose(finer_step, 0.5*steps[1], rtol=1e-11, atol=1e-16)
+    # The evolving VL4 derivative changes the bound slightly between trajectories.
+    assert 0.45 < finer_step/steps[1] < 0.55
     assert abs(finer-amplitudes[1]) < 0.1*abs(amplitudes[1]-expected)

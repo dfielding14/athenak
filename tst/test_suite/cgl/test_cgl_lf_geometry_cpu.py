@@ -43,9 +43,6 @@ def _work(case, output, cells, explicit):
     assert rhs == int(rhs) and rhs >= 2*cycles
     if explicit:
         assert rhs == 2*cycles
-    # Fixed density and background coefficients keep the pre-piece-9 budget fixed.
-    if len(steps) > 2:
-        np.testing.assert_allclose(steps[:-1], steps[0], rtol=1e-11, atol=1e-16)
     for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd",
                  "lf_hwproj"):
         assert np.all(history[name] == 0.0), (name, history[name])
@@ -82,7 +79,7 @@ def test_cgl_lf_reversal_stability(tmp_path, dimension, integrator):
     if dimension == 2:
         flags += ["mesh/nx2=16", "meshblock/nx2=16"]
     if integrator == "sts":
-        flags += ["time/sts_integrator=rkl2", "time/cfl_number=0.4"]
+        flags += ["time/sts_integrator=rkl2", "time/cfl_number=0.4", "time/tlim=1000"]
     output = _run(case, "cgl_lf_field_reversal.athinput", *flags)
     assert "field_reversal" in output
     cells = 64 if dimension == 1 else 64*16
@@ -98,18 +95,22 @@ def test_cgl_lf_reversal_stability(tmp_path, dimension, integrator):
         assert history["lf_nstage"][-1] > cells*20*2
 
 
-def _resolved_reversal(case, nx, cfl):
+def _resolved_reversal(case, nx, cfl, sts_ratio=None):
     source = (INPUTS / "cgl_lf_field_reversal.athinput").read_text()
     for number, variable in ((2, "mhd_w_bcc"), (3, "mhd_u")):
         source += (f"\n<output{number}>\nfile_type = tab\nvariable = {variable}\n"
                    "data_format = %24.16e\ndcycle = 100000\n")
+    flags = [] if sts_ratio is None else [
+        "mhd/cgl_heat_flux_integrator=sts", "time/sts_integrator=rkl2",
+        f"time/sts_max_dt_ratio={sts_ratio}"]
     output = _run(
         case, "cgl_lf_field_reversal.athinput", f"mesh/nx1={nx}",
         f"meshblock/nx1={nx}", "mesh/ix1_bc=periodic", "mesh/ox1_bc=periodic",
         "problem/reversal_width=0.1", "problem/b0=0.5", "problem/amp=1.0e-4",
-        "time/nlim=100000", "time/tlim=0.002", f"time/cfl_number={cfl}", source=source,
+        "time/nlim=100000", "time/tlim=0.002", f"time/cfl_number={cfl}",
+        *flags, source=source,
     )
-    history, steps = _work(case, output, nx, True)
+    history, steps = _work(case, output, nx, sts_ratio is None)
     assert abs(history["time"][-1] - 0.002) < 1e-15
     paths = sorted((case / "tab").glob("*.mhd_w_bcc.*.tab"))
     assert len(paths) == 2
@@ -149,14 +150,34 @@ def test_cgl_lf_resolved_reversal_converges(tmp_path):
         state, step = _resolved_reversal(tmp_path / f"dt{cfl}", 128, cfl)
         temporal.append(state)
         steps.append(step)
-    np.testing.assert_allclose(steps[1:], 0.5*np.asarray(steps[:-1]),
-                               rtol=1e-11, atol=1e-16)
+    # The slope-dependent bound evolves, so compare attained step refinement.
+    ratios = np.asarray(steps[1:]) / steps[:-1]
+    assert np.all((ratios > 0.45) & (ratios < 0.55)), ratios
     errors = np.array([np.mean(np.abs(coarse - fine), axis=0)
                        for coarse, fine in zip(temporal[:-1], temporal[1:])])
     print(f"resolved reversal temporal ppar/pperp errors: {errors}")
     assert np.all(errors > 1e-14)
     # The explicit reference uses two forward-Euler half-sweeps per fluid cycle.
     assert np.all(errors[1] < 0.7*errors[0]), errors
+
+
+def test_cgl_lf_sts_reversal_converges_to_explicit(tmp_path):
+    """At fixed spatial resolution, compare complete profiles at a common time."""
+    reference, _ = _resolved_reversal(tmp_path / "explicit", 64, 0.0005)
+    fine_reference, _ = _resolved_reversal(tmp_path / "explicit_half", 64, 0.00025)
+    reference_error = np.mean(np.abs(fine_reference-reference), axis=0)
+    states, steps = [], []
+    for ratio in (8, 4, 2):
+        state, step = _resolved_reversal(tmp_path / f"sts{ratio}", 64, 0.3, ratio)
+        states.append(state)
+        steps.append(step)
+    errors = np.mean(np.abs(np.asarray(states)-fine_reference), axis=1)
+    print(f"STS reversal errors: {errors}; explicit reference refinement: {reference_error}; "
+          f"maximum steps: {steps}")
+    assert np.all(np.asarray(steps[1:]) < 0.6*np.asarray(steps[:-1])), steps
+    assert np.all(errors[1:] < 0.7*errors[:-1]), errors
+    assert np.all(reference_error < 0.1*errors[-1]), (reference_error, errors)
+    assert np.all(errors[-1] < 0.01*1e-4), errors  # Relative to the prescribed seed.
 
 
 @pytest.mark.parametrize("axis,field", [

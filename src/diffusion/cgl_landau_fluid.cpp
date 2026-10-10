@@ -219,6 +219,61 @@ Real ScaledMagneticMagnitude(const Real bx, const Real by, const Real bz) {
              : scale*scaled_magnitude;
 }
 
+// Coefficient one-norm of the transverse VL4 gradient derivative, before
+// division by the transverse cell width. Closure coefficients are frozen.
+KOKKOS_INLINE_FUNCTION
+Real CGLLFVL4DerivativeNorm(const Real a, const Real b, const Real c, const Real d) {
+  if (!Kokkos::isfinite(a) || !Kokkos::isfinite(b) ||
+      !Kokkos::isfinite(c) || !Kokkos::isfinite(d)) {
+    return std::numeric_limits<Real>::infinity();
+  }
+  const bool nonnegative = a >= 0.0 && b >= 0.0 && c >= 0.0 && d >= 0.0;
+  const bool nonpositive = a <= 0.0 && b <= 0.0 && c <= 0.0 && d <= 0.0;
+  if (!nonnegative && !nonpositive) return 0.0;
+  // VL4 has no unique derivative at zero slopes; cover every adjacent branch.
+  const Real minimum = fmin(fmin(fabs(a),fabs(b)),fmin(fabs(c),fabs(d)));
+  if (minimum == 0.0) return 8.0;
+  // h_r = dVL4/da_r = 4 (w_r/sum w)^2, w_r=min|a|/|a_r|.
+  // Scaling avoids squared slopes and overflowing harmonic-mean intermediates.
+  const Real wa=minimum/fabs(a), wb=minimum/fabs(b);
+  const Real wc=minimum/fabs(c), wd=minimum/fabs(d);
+  const Real sum=wa+wb+wc+wd;
+  return 8.0*(SQR(fmax(wa,wb)/sum)+SQR(fmax(wc,wd)/sum));
+}
+
+// Positive sums represented in log2 space. Used only when direct face-row
+// arithmetic loses a finite contribution through overflow or underflow.
+KOKKOS_INLINE_FUNCTION
+Real CGLLFLogAbs(const Real value) {
+  return (value == 0.0) ? -std::numeric_limits<Real>::infinity() :
+                          Kokkos::log2(fabs(value));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real CGLLFLogAdd(const Real a, const Real b) {
+  if (Kokkos::isnan(a) || Kokkos::isnan(b)) {
+    return std::numeric_limits<Real>::quiet_NaN();
+  }
+  const Real larger = fmax(a,b), smaller = fmin(a,b);
+  if (Kokkos::isinf(larger)) return larger;
+  return larger + Kokkos::log2(1.0+Kokkos::exp2(smaller-larger));
+}
+
+KOKKOS_INLINE_FUNCTION
+Real CGLLFLogScale(const Real logarithm, const Real factor) {
+  return (factor == 0.0) ? -std::numeric_limits<Real>::infinity() :
+                           logarithm + CGLLFLogAbs(factor);
+}
+
+KOKKOS_INLINE_FUNCTION
+Real CGLLFLogDiffusivity(const Real speed, const Real kpar, const Real nu,
+                         const Real numerator, const Real collision) {
+  const Real log_speed = CGLLFLogAbs(speed);
+  return CGLLFLogAbs(numerator) + 2.0*log_speed -
+      CGLLFLogAdd(CGLLFLogAbs(kpar)+log_speed,
+                  CGLLFLogAbs(collision)+CGLLFLogAbs(nu));
+}
+
 KOKKOS_INLINE_FUNCTION
 bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                          const Real ppar_l, const Real ppar_r,
@@ -244,8 +299,16 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
   face.bhy = by/bbar;
   face.bhz = bz/bbar;
   face.bhdir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
-  face.cparallel =
-      coeff_local ? sqrt(fmax(face.ppar/face.rho, eos.tfloor)) : cparallel0;
+  face.cparallel = cparallel0;
+  if (coeff_local) {
+    const Real temperature = face.ppar/face.rho;
+    face.cparallel = sqrt(fmax(temperature, eos.tfloor));
+    if (!Kokkos::isfinite(temperature) || temperature < std::numeric_limits<Real>::min()) {
+      // The quotient can lose precision or range although its root is representable.
+      face.cparallel = fmax(sqrt(face.ppar)/sqrt(face.rho),
+                             sqrt(fmax(eos.tfloor,static_cast<Real>(0.0))));
+    }
+  }
   const Real maximum = std::numeric_limits<Real>::max();
   const Real sqrt_max = sqrt(maximum);
   const Real bsqr = (bbar <= sqrt_max) ? bbar*bbar : maximum;
@@ -1685,41 +1748,266 @@ void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Rea
       + beta_dt*anisotropic_power;
 }
 
-void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w, const EOS_Data &eos_in) {
+void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
+                                 const DvceArray5D<Real> &bcc,
+                                 const DvceFaceFld4D<Real> &b,
+                                 const EOS_Data &eos_in) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::timestep_reduction);
   const EOS_Data eos = eos_in;
+  // Freeze closure coefficients and cap scales before differentiating. Omitting
+  // limiter scattering and cap suppression then enlarges this local row envelope.
+  EOS_Data bound_eos = eos;
+  bound_eos.mlim = bound_eos.flim = bound_eos.backup_lim = false;
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   const int is = indcs.is, nx1 = indcs.nx1;
   const int js = indcs.js, nx2 = indcs.nx2;
   const int ks = indcs.ks, nx3 = indcs.nx3;
-  const int nmkji = pmy_pack->nmb_thispack*nx3*nx2*nx1;
-  const int nkji = nx3*nx2*nx1;
-  const int nji = nx2*nx1;
-  const bool multi_d = pmy_pack->pmesh->multi_d;
-  const bool three_d = pmy_pack->pmesh->three_d;
+  const int nmb = pmy_pack->nmb_thispack;
+  const int n1 = nx1 + 2*indcs.ng;
+  const int n2 = (nx2 > 1) ? nx2 + 2*indcs.ng : 1;
+  const int n3 = (nx3 > 1) ? nx3 + 2*indcs.ng : 1;
+  if (bmag_.extent(0) != static_cast<std::size_t>(nmb) ||
+      bmag_.extent(1) != static_cast<std::size_t>(n3) ||
+      bmag_.extent(2) != static_cast<std::size_t>(n2) ||
+      bmag_.extent(3) != static_cast<std::size_t>(n1)) {
+    Kokkos::realloc(bmag_, nmb, n3, n2, n1);
+    Kokkos::realloc(tpar_, nmb, n3, n2, n1);
+    Kokkos::realloc(tperp_, nmb, n3, n2, n1);
+  }
+  auto bmag = bmag_;
+  auto tpar = tpar_, tperp = tperp_;
+  // The first bound precedes any flux call; refill the one-halo stencil after
+  // every primitive refresh rather than depending on an earlier sweep.
+  const int jl = (nx2 > 1) ? js-1 : 0, ju = (nx2 > 1) ? js+nx2 : 0;
+  const int kl = (nx3 > 1) ? ks-1 : 0, ku = (nx3 > 1) ? ks+nx3 : 0;
+  par_for("cgl_lf_timestep_precompute", DevExeSpace(), 0, nmb-1, kl, ku,
+          jl, ju, is-1, is+nx1,
+  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    bmag(m,k,j,i) = ScaledMagneticMagnitude(
+        bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
+    const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
+    tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
+    tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
+  });
+  const int nkji = nx3*nx2*nx1, nji = nx2*nx1;
+  const int ndim = pmy_pack->pmesh->three_d ? 3 :
+                   (pmy_pack->pmesh->multi_d ? 2 : 1);
   const Real kpar = lf_k_parallel;
   const bool local = lf_coeff_local;
   const Real cpar0 = lf_c_parallel0;
   auto size = pmy_pack->pmb->mb_size;
   dtnew = static_cast<Real>(std::numeric_limits<float>::max());
-  Kokkos::parallel_reduce("cgl_lf_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  Kokkos::parallel_reduce("cgl_lf_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
   KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
     const int m = idx/nkji;
-    int k = (idx - m*nkji)/nji + ks;
-    int j = (idx - m*nkji - (k - ks)*nji)/nx1 + js;
-    const int i = idx - m*nkji - (k - ks)*nji - (j - js)*nx1 + is;
+    const int k = (idx - m*nkji)/nji + ks;
+    const int j = (idx - m*nkji - (k-ks)*nji)/nx1 + js;
+    const int i = idx - m*nkji - (k-ks)*nji - (j-js)*nx1 + is;
     const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
-    const Real cpar = local ? sqrt(fmax(w(m,IPR,k,j,i)/rho, eos.tfloor)) : cpar0;
-    const Real chi = cgl::kSqrtEightOverPi*cpar/kpar;
-    if (chi > 0.0) {
-      min_dt = fmin(min_dt, SQR(size.d_view(m).dx1)/chi);
-      if (multi_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx2)/chi);
-      if (three_d) min_dt = fmin(min_dt, SQR(size.d_view(m).dx3)/chi);
+    const Real bi = bmag(m,k,j,i);
+    const Real dx[3] = {size.d_view(m).dx1, size.d_view(m).dx2,
+                        size.d_view(m).dx3};
+    Real row_parallel = 0.0, row_perp = 0.0;
+    Real log_row_parallel = -std::numeric_limits<Real>::infinity();
+    Real log_row_perp = log_row_parallel;
+    bool scaled_rows = false;
+    bool invalid_state = false;
+    for (int dir=0; dir<ndim; ++dir) {
+      for (int side=-1; side<=1; side+=2) {
+        // l/r always follow the positive coordinate direction.
+        const int il = i + ((dir == 0 && side < 0) ? -1 : 0);
+        const int jl = j + ((dir == 1 && side < 0) ? -1 : 0);
+        const int kl = k + ((dir == 2 && side < 0) ? -1 : 0);
+        const int ir = il + (dir == 0), jr = jl + (dir == 1);
+        const int kr = kl + (dir == 2);
+        Real bv[3] = {
+            0.5*bcc(m,IBX,kl,jl,il) + 0.5*bcc(m,IBX,kr,jr,ir),
+            0.5*bcc(m,IBY,kl,jl,il) + 0.5*bcc(m,IBY,kr,jr,ir),
+            0.5*bcc(m,IBZ,kl,jl,il) + 0.5*bcc(m,IBZ,kr,jr,ir)};
+        // The actual staggered normal field may exceed Bbar by any factor;
+        // replacing this with a cell-centered average misses checkerboards.
+        bv[dir] = (dir == 0) ? b.x1f(m,kr,jr,ir) :
+                  ((dir == 1) ? b.x2f(m,kr,jr,ir) : b.x3f(m,kr,jr,ir));
+        const Real bbar = 0.5*bmag(m,kl,jl,il) + 0.5*bmag(m,kr,jr,ir);
+        CGLLFFaceState face;
+        if (!BuildCGLLFFaceState(
+            w(m,IDN,kl,jl,il), w(m,IDN,kr,jr,ir),
+            w(m,IPR,kl,jl,il), w(m,IPR,kr,jr,ir),
+            w(m,IPP,kl,jl,il), w(m,IPP,kr,jr,ir),
+            bv[0], bv[1], bv[2], bbar, dir, kpar, local, cpar0,
+            false, bound_eos, face)) continue;
+        if (!(face.cparallel > 0.0) || !Kokkos::isfinite(face.cparallel)) {
+          invalid_state = true;
+          continue;
+        }
+        const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0));
+        if (nu == std::numeric_limits<Real>::infinity()) continue;
+        const Real bn = fabs(face.bhdir);
+        if (bv[dir] == 0.0) continue;
+        const Real bh[3] = {face.bhx, face.bhy, face.bhz};
+        // Each transverse VL4 derivative has six coefficients, including the
+        // unequal-slope central coefficients. Its row norm can approach 8/h_t;
+        // the secant theta<=1 representation does not bound this Jacobian.
+        Real grad_parallel = 2.0*bn/dx[dir];
+        Real grad_perp = grad_parallel;
+        Real derivative_parallel[3] = {0.0,0.0,0.0};
+        Real derivative_perp[3] = {0.0,0.0,0.0};
+        const Real minimum = std::numeric_limits<Real>::min();
+        const Real delta_b = bmag(m,kr,jr,ir)-bmag(m,kl,jl,il);
+        const Real normal_b = face.bhdir*delta_b;
+        Real grad_b = normal_b/dx[dir];
+        bool normal_gradients = delta_b == 0.0 ||
+            (fabs(normal_b) >= minimum && fabs(grad_b) >= minimum);
+        for (int t=0; t<ndim; ++t) {
+          if (t == dir || bv[t] == 0.0) continue;
+          const int di = (t == 0), dj = (t == 1), dk = (t == 2);
+          derivative_parallel[t] = CGLLFVL4DerivativeNorm(
+              tpar(m,kr+dk,jr+dj,ir+di)-tpar(m,kr,jr,ir),
+              tpar(m,kr,jr,ir)-tpar(m,kr-dk,jr-dj,ir-di),
+              tpar(m,kl+dk,jl+dj,il+di)-tpar(m,kl,jl,il),
+              tpar(m,kl,jl,il)-tpar(m,kl-dk,jl-dj,il-di));
+          derivative_perp[t] = CGLLFVL4DerivativeNorm(
+              tperp(m,kr+dk,jr+dj,ir+di)-tperp(m,kr,jr,ir),
+              tperp(m,kr,jr,ir)-tperp(m,kr-dk,jr-dj,ir-di),
+              tperp(m,kl+dk,jl+dj,il+di)-tperp(m,kl,jl,il),
+              tperp(m,kl,jl,il)-tperp(m,kl-dk,jl-dj,il-di));
+          const Real transverse_parallel = fabs(bh[t])*derivative_parallel[t];
+          const Real transverse_perp = fabs(bh[t])*derivative_perp[t];
+          grad_parallel += transverse_parallel/dx[t];
+          grad_perp += transverse_perp/dx[t];
+          const Real transverse_b =
+              bmag(m,kr+dk,jr+dj,ir+di)-bmag(m,kr-dk,jr-dj,ir-di) +
+              bmag(m,kl+dk,jl+dj,il+di)-bmag(m,kl-dk,jl-dj,il-di);
+          const Real gb = 0.25*transverse_b/dx[t];
+          grad_b += bh[t]*gb;
+          normal_gradients = normal_gradients &&
+              (derivative_parallel[t] == 0.0 ||
+               (transverse_parallel >= minimum && transverse_parallel/dx[t] >= minimum)) &&
+              (derivative_perp[t] == 0.0 ||
+               (transverse_perp >= minimum && transverse_perp/dx[t] >= minimum)) &&
+              (transverse_b == 0.0 || (fabs(0.25*transverse_b) >= minimum &&
+                                      fabs(gb) >= minimum && fabs(bh[t]*gb) >= minimum));
+        }
+        const Real pressure_ratio = face.pperp/face.ppar;
+        // Differentiate Tperp_f*(1-Tperp_f/Tpar_f), including its
+        // reverse coupling to Tpar. Both density-weighted face means
+        // have nonnegative weights whose sum is one.
+        const Real drift_numerator = (fabs(1.0-2.0*pressure_ratio) +
+                                      pressure_ratio*pressure_ratio)*fabs(grad_b);
+        const Real drift = drift_numerator/bbar;
+        const Real cp = face.cparallel;
+        const Real collision_parallel = (cgl::kThreePiMinusEight*nu/cgl::kSqrtEightPi)/cp;
+        const Real collision_perp = (nu/(0.5*cgl::kSqrtTwoPi))/cp;
+        Real chi_parallel = cgl::kSqrtEightOverPi*cp/(kpar + collision_parallel);
+        Real chi_perp = cgl::kSqrtTwoOverPi*cp/(kpar + collision_perp);
+        if (!Kokkos::isfinite(chi_parallel) || (chi_parallel == 0.0 && cp > 0.0)) {
+          const Real response = -cgl::ParallelHeatFluxRatio(cp,1.0,1.0,kpar,nu,1.0);
+          chi_parallel = cgl::PositiveProduct4(cgl::kSqrtEightOverPi,cp,response,1.0);
+        }
+        if (!Kokkos::isfinite(chi_perp) || (chi_perp == 0.0 && cp > 0.0)) {
+          const Real response = -cgl::PerpendicularHeatFluxRatio(
+              cp,1.0,1.0,1.0,0.0,kpar,nu,1.0,0.0);
+          chi_perp = cgl::PositiveProduct4(cgl::kSqrtTwoOverPi,cp,response,1.0);
+        }
+        const Real para_face = cgl::PositiveProduct4(chi_parallel,bn,grad_parallel,1.0);
+        const Real perp_face = cgl::PositiveProduct4(chi_perp,bn,grad_perp+drift,1.0);
+        const Real beta = bi/bbar;
+        const Real density_ratio = face.rho/rho;
+        const Real factor = density_ratio/dx[dir];
+        const Real face_parallel = factor*(para_face + 2.0*fabs(1.0-beta)*perp_face);
+        const Real perp_factor = factor*beta;
+        const Real face_perp = perp_factor*perp_face;
+        // Rounded subnormal intermediates can recover to a finite but too-small
+        // row. Keep these exceptional products together in the log path.
+        const bool normal_coefficients = cp >= minimum/cgl::kSqrtTwoOverPi &&
+            kpar >= minimum && chi_parallel >= minimum && chi_perp >= minimum &&
+            (nu == 0.0 || (nu >= minimum*cgl::kSqrtEightPi/cgl::kThreePiMinusEight &&
+                          collision_parallel >= minimum && collision_perp >= minimum &&
+                          Kokkos::isfinite(collision_parallel) &&
+                          Kokkos::isfinite(collision_perp)));
+        const bool direct_face = normal_coefficients && normal_gradients && bn >= minimum &&
+            grad_parallel >= minimum && grad_perp >= minimum &&
+            (grad_b == 0.0 || (drift_numerator >= minimum && drift >= minimum)) &&
+            density_ratio >= minimum && factor >= minimum &&
+            ((beta >= minimum && perp_factor >= minimum) || bi == 0.0) &&
+            Kokkos::isfinite(para_face) && para_face >= minimum &&
+            Kokkos::isfinite(perp_face) && perp_face >= minimum &&
+            Kokkos::isfinite(factor) &&
+            Kokkos::isfinite(face_parallel) && face_parallel >= minimum &&
+            Kokkos::isfinite(face_perp) && (face_perp >= minimum || bi == 0.0);
+        if (!scaled_rows && direct_face &&
+            Kokkos::isfinite(row_parallel+face_parallel) &&
+            Kokkos::isfinite(row_perp+face_perp)) {
+          row_parallel += face_parallel;
+          row_perp += face_perp;
+          continue;
+        }
+        if (!scaled_rows) {
+          log_row_parallel = CGLLFLogAbs(row_parallel);
+          log_row_perp = CGLLFLogAbs(row_perp);
+          scaled_rows = true;
+        }
+        Real log_face_parallel, log_face_perp;
+        if (direct_face) {
+          log_face_parallel = CGLLFLogAbs(face_parallel);
+          log_face_perp = CGLLFLogAbs(face_perp);
+        } else {
+          // Keep conductivity, normalization, density and spacing together;
+          // a finite row need not have a representable intermediate chi or b_n.
+          const Real log_bar = CGLLFLogAbs(bbar);
+          const Real log_bn = CGLLFLogAbs(bv[dir])-log_bar;
+          Real log_grad_parallel = 1.0+log_bn-CGLLFLogAbs(dx[dir]);
+          Real log_grad_perp = log_grad_parallel;
+          Real log_grad_b = log_bn +
+              CGLLFLogAbs(bmag(m,kr,jr,ir)-bmag(m,kl,jl,il))-CGLLFLogAbs(dx[dir]);
+          for (int t=0; t<ndim; ++t) {
+            if (t == dir || bv[t] == 0.0) continue;
+            const int di=(t==0), dj=(t==1), dk=(t==2);
+            const Real log_bt = CGLLFLogAbs(bv[t])-log_bar;
+            const Real log_h = CGLLFLogAbs(dx[t]);
+            log_grad_parallel = CGLLFLogAdd(log_grad_parallel,
+                log_bt+CGLLFLogAbs(derivative_parallel[t])-log_h);
+            log_grad_perp = CGLLFLogAdd(log_grad_perp,
+                log_bt+CGLLFLogAbs(derivative_perp[t])-log_h);
+            // Absolute magnetic-gradient sums remain an upper bound when
+            // individual centered differences overflow or cancel.
+            const Real log_gbt = CGLLFLogAdd(
+                CGLLFLogAbs(bmag(m,kr+dk,jr+dj,ir+di)-bmag(m,kr-dk,jr-dj,ir-di)),
+                CGLLFLogAbs(bmag(m,kl+dk,jl+dj,il+di)-bmag(m,kl-dk,jl-dj,il-di)))
+                -2.0-log_h;
+            log_grad_b = CGLLFLogAdd(log_grad_b,log_bt+log_gbt);
+          }
+          // The cold-path factor (1+r)^2 bounds |1-2r|+r^2 without
+          // materializing an overflowing pressure ratio or squaring it.
+          const Real log_ratio = CGLLFLogAbs(face.pperp)-CGLLFLogAbs(face.ppar);
+          const Real log_drift = 2.0*CGLLFLogAdd(0.0,log_ratio)+log_grad_b-log_bar;
+          const Real log_factor = CGLLFLogAbs(face.rho)-CGLLFLogAbs(rho)-CGLLFLogAbs(dx[dir]);
+          const Real log_para = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtEightOverPi,
+              cgl::kThreePiMinusEight/cgl::kSqrtEightPi)+log_bn+log_grad_parallel+log_factor;
+          const Real log_perp = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtTwoOverPi,
+              2.0/cgl::kSqrtTwoPi)+log_bn+CGLLFLogAdd(log_grad_perp,log_drift)+log_factor;
+          log_face_parallel = CGLLFLogAdd(log_para,
+              CGLLFLogScale(log_perp,2.0*fabs(1.0-beta)));
+          log_face_perp = (bi == 0.0) ? -std::numeric_limits<Real>::infinity() :
+              log_perp + CGLLFLogAbs(bi) - log_bar;
+        }
+        log_row_parallel = CGLLFLogAdd(log_row_parallel,log_face_parallel);
+        log_row_perp = CGLLFLogAdd(log_row_perp,log_face_perp);
+      }
+    }
+    // A Gershgorin/row-sum bound for the local temperature Jacobian with
+    // density, magnetic field, closure coefficients and cap scales frozen.
+    // It is not a proof of nonlinear or composite-AMR RKL2 stability.
+    if (invalid_state || Kokkos::isnan(log_row_parallel) || Kokkos::isnan(log_row_perp)) {
+      min_dt = 0.0;
+    } else if (scaled_rows) {
+      const Real log_bound = fmax(log_row_parallel,log_row_perp);
+      min_dt = fmin(min_dt,Kokkos::exp2(1.0-log_bound));
+    } else {
+      const Real bound = fmax(row_parallel,row_perp);
+      if (bound > 0.0) min_dt = fmin(min_dt,2.0/bound);
     }
   }, Kokkos::Min<Real>(dtnew));
-  const Real fac = three_d ? static_cast<Real>(1.0/6.0) :
-                   (multi_d ? static_cast<Real>(0.25) : static_cast<Real>(0.5));
-  dtnew *= fac;
 }
 
 void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,

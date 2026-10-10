@@ -56,6 +56,10 @@ enum class TestMode {
   closure_response,
   hotspot,
   field_reversal,
+  density_contact,
+  staggered_checkerboard,
+  timestep_stencil,
+  local_speed,
   low_field,
   timestep_refresh
 };
@@ -155,6 +159,10 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "closure_response") return TestMode::closure_response;
   if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "field_reversal") return TestMode::field_reversal;
+  if (mode == "density_contact") return TestMode::density_contact;
+  if (mode == "staggered_checkerboard") return TestMode::staggered_checkerboard;
+  if (mode == "timestep_stencil") return TestMode::timestep_stencil;
+  if (mode == "local_speed") return TestMode::local_speed;
   if (mode == "timestep_refresh") return TestMode::timestep_refresh;
   if (mode == "low_field") return TestMode::low_field;
   Fail("<problem>/test_mode must be parallel_decay, perp_decay, "
@@ -162,7 +170,8 @@ TestMode ParseMode(ParameterInput *pin) {
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
        "transverse_flux, closure_response, hotspot, "
-       "face_geometry, field_reversal, low_field, or timestep_refresh");
+       "face_geometry, field_reversal, density_contact, staggered_checkerboard, "
+       "timestep_stencil, local_speed, low_field, or timestep_refresh");
 }
 
 const char *ModeName(const TestMode mode) {
@@ -184,6 +193,10 @@ const char *ModeName(const TestMode mode) {
     case TestMode::closure_response: return "closure_response";
     case TestMode::hotspot: return "hotspot";
     case TestMode::field_reversal: return "field_reversal";
+    case TestMode::density_contact: return "density_contact";
+    case TestMode::staggered_checkerboard: return "staggered_checkerboard";
+    case TestMode::timestep_stencil: return "timestep_stencil";
+    case TestMode::local_speed: return "local_speed";
     case TestMode::timestep_refresh: return "timestep_refresh";
     case TestMode::low_field: return "low_field";
   }
@@ -2111,6 +2124,161 @@ void CheckFieldReversal(ParameterInput *pin, Mesh *pm) {
   }
 }
 
+// Underflow of p/rho must not erase a representable local speed or grad-B flux.
+void CheckLocalSpeed(Mesh *pm) {
+  auto *mhd = pm->pmb_pack->pmhd;
+  auto *lf = mhd->pcgl_lf;
+  Require(pm->ncycle == 0 && !pm->multi_d && lf != nullptr,
+          "local_speed requires a one-dimensional zero-cycle LF fixture");
+  const auto &ind = pm->mb_indcs;
+  const int face = ind.is+ind.nx1/2;
+  const Real h = (pm->mesh_size.x1max-pm->mesh_size.x1min)/ind.nx1;
+  const Real rho = 0.25*std::numeric_limits<Real>::max();
+  const Real pressure = 0.25*(std::numeric_limits<Real>::denorm_min()*rho);
+  Require(pressure > 0.0 && pressure/rho == 0.0,
+          "local_speed fixture must underflow the temperature division");
+  auto w = HostCopy(mhd->w0), bcc = HostCopy(mhd->bcc0);
+  auto by = HostCopy(mhd->b0.x2f);
+  for (int k=0; k<w.extent_int(2); ++k) {
+    for (int j=0; j<w.extent_int(3); ++j) {
+      for (int i=0; i<w.extent_int(4); ++i) {
+        w(0,IDN,k,j,i) = rho;
+        w(0,IPR,k,j,i) = pressure;
+        w(0,IPP,k,j,i) = 0.5*pressure;
+        bcc(0,IBX,k,j,i) = 1.0;
+        bcc(0,IBY,k,j,i) = 1.0+0.2*(i-face+0.5)*h;
+        bcc(0,IBZ,k,j,i) = 0.0;
+      }
+    }
+  }
+  for (int k=0; k<by.extent_int(1); ++k) {
+    for (int j=0; j<by.extent_int(2); ++j) {
+      for (int i=0; i<by.extent_int(3); ++i) by(0,k,j,i) = 1.0+0.2*(i-face+0.5)*h;
+    }
+  }
+  Kokkos::deep_copy(mhd->w0,w);
+  Kokkos::deep_copy(mhd->bcc0,bcc);
+  Kokkos::deep_copy(mhd->b0.x1f,1.0);
+  Kokkos::deep_copy(mhd->b0.x2f,by);
+  Kokkos::deep_copy(mhd->b0.x3f,0.0);
+  Kokkos::deep_copy(mhd->uflx.x1f,0.0);
+  EOS_Data eos = mhd->peos->eos_data;
+  eos.dfloor = eos.pfloor = std::numeric_limits<Real>::denorm_min();
+  eos.tfloor = eos.nu_coll = 0.0;
+  eos.mlim = eos.flim = false;
+  lf->lf_coeff_local = true;
+  lf->NewTimeStep(mhd->w0,mhd->bcc0,mhd->b0,eos);
+  const long double speed = std::sqrt(static_cast<long double>(pressure)/rho);
+  const long double chi = std::sqrt(8.0L/std::acos(-1.0L))*speed/lf->lf_k_parallel;
+  auto magnitude = [&](int i) {
+    const long double tangent = bcc(0,IBY,ind.ks,ind.js,i);
+    return std::sqrt(1.0L+tangent*tangent);
+  };
+  long double maximum = 0.0L;
+  for (int i=ind.is; i<=ind.ie; ++i) {
+    long double parallel=0.0L, perpendicular=0.0L;
+    for (int offset : {-1,1}) {
+      const long double bi=magnitude(i), bj=magnitude(i+offset), bar=0.5L*(bi+bj);
+      const long double shape=2.0L/(bar*h), beta=bi/bar;
+      const long double drift=0.25L*std::abs(bj-bi)/(h*bar*bar);
+      const long double fp=chi*shape/bar, ft=0.5L*chi*(shape+drift)/bar;
+      parallel += (fp+2.0L*std::abs(1.0L-beta)*ft)/h;
+      perpendicular += beta*ft/h;
+    }
+    maximum=std::max({maximum,parallel,perpendicular});
+  }
+  const Real expected_dt = static_cast<Real>(2.0L/maximum);
+  Require(std::isfinite(lf->dtnew) && std::abs(lf->dtnew/expected_dt-1.0) < 1.0e-11,
+          "local_speed bound lost the representable sound speed");
+  lf->AddHeatFluxes(mhd->w0,mhd->bcc0,mhd->b0,eos,1.0,1.0,mhd->uflx);
+  const long double left=magnitude(face-1), right=magnitude(face), bar=0.5L*(left+right);
+  const long double ratio=0.5L*(right-left)/(h*bar*bar*lf->lf_k_parallel);
+  const long double q=std::sqrt(2.0L/std::acos(-1.0L))*speed*(0.5L*pressure)*ratio/
+                      (1.0L+std::abs(ratio));
+  const auto flux = HostCopy(mhd->uflx.x1f);
+  for (const int variable : {IEN,IAN}) {
+    const Real expected = static_cast<Real>(q/(variable == IEN ? bar : bar*bar));
+    const Real actual = flux(0,variable,ind.ks,ind.js,face);
+    Require(std::isfinite(actual) && expected != 0.0 &&
+            std::abs(actual/expected-1.0) < 1.0e-11,
+            "local_speed face flux lost the representable grad-B response");
+  }
+  std::cout << "CGL LF local_speed passed: bound and nonzero grad-B flux" << std::endl;
+}
+
+void CheckDensityContact(ParameterInput *pin, Mesh *pm) {
+  const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
+  const auto &indcs = pm->mb_indcs;
+  const Real tpar0 = pin->GetReal("problem", "ppar0")/pin->GetReal("problem", "rho0");
+  const Real tperp0 = pin->GetReal("problem", "pperp0")/pin->GetReal("problem", "rho0");
+  Real deviation = 0.0;
+  for (int i=indcs.is; i<=indcs.ie; ++i) {
+    const Real rho = w(0,IDN,indcs.ks,indcs.js,i);
+    const Real tpar = w(0,IPR,indcs.ks,indcs.js,i)/rho;
+    const Real tperp = w(0,IPP,indcs.ks,indcs.js,i)/rho;
+    Require(std::isfinite(tpar) && std::isfinite(tperp) && tpar > 0.0 && tperp > 0.0,
+            "density contact developed invalid temperatures");
+    deviation = std::max(deviation,
+        std::max(std::abs(tpar/tpar0 - 1.0), std::abs(tperp/tperp0 - 1.0)));
+  }
+  std::cout << "CGL LF density_contact: contrast="
+            << pin->GetReal("problem", "density_contrast")
+            << " cycles=" << pm->ncycle << " max_delta_T=" << deviation
+            << " sweep_ratio=" << 0.5*pm->dt/pm->dt_parabolic_sts << std::endl;
+  Require(pm->ncycle >= 3, "density contact requires at least three cycles");
+  Require(0.5*pm->dt/pm->dt_parabolic_sts >= 10.0 - 1.0e-12,
+          "density contact requires sweep ratio >= 10");
+  // The regression also compares seeded/unseeded runs at every cycle.
+  const Real amp = pin->GetReal("problem", "amp");
+  Require(deviation < 10.0*std::max(amp, static_cast<Real>(1.0e-12)),
+          "density contact amplified its temperature seed");
+}
+
+// This divergence-free staggered mode cancels in the x/y cell averages.
+// It directly checks the face-normal-field stiffness in the LF timestep.
+void CheckStaggeredCheckerboard(ParameterInput *pin, Mesh *pm) {
+  auto *pmhd = pm->pmb_pack->pmhd;
+  const auto w = HostCopy(pmhd->w0);
+  const auto bx = HostCopy(pmhd->b0.x1f);
+  const auto by = HostCopy(pmhd->b0.x2f);
+  const auto bz = HostCopy(pmhd->b0.x3f);
+  const auto &ind = pm->mb_indcs;
+  const Real hx = (pm->mesh_size.x1max-pm->mesh_size.x1min)/pm->mesh_indcs.nx1;
+  const Real hy = (pm->mesh_size.x2max-pm->mesh_size.x2min)/pm->mesh_indcs.nx2;
+  const Real hz = (pm->mesh_size.x3max-pm->mesh_size.x3min)/pm->mesh_indcs.nx3;
+  const Real rho0 = pin->GetReal("problem","rho0");
+  const Real tp0 = pin->GetReal("problem","ppar0")/rho0;
+  const Real tt0 = pin->GetReal("problem","pperp0")/rho0;
+  const Real guide = pin->GetReal("problem","bz0");
+  const Real amplitude = pin->GetReal("problem","b0");
+  Real divmax=0.0, bcc_error=0.0, deviation=0.0;
+  for (int k=ind.ks;k<=ind.ke;++k) {
+    for (int j=ind.js;j<=ind.je;++j) {
+      for (int i=ind.is;i<=ind.ie;++i) {
+        Real div=(bx(0,k,j,i+1)-bx(0,k,j,i))/hx +
+                 (by(0,k,j+1,i)-by(0,k,j,i))/hy;
+        if (pm->three_d) div += (bz(0,k+1,j,i)-bz(0,k,j,i))/hz;
+        divmax=std::max(divmax,std::abs(div));
+        bcc_error=std::max(bcc_error,std::abs(0.5*(bx(0,k,j,i+1)+bx(0,k,j,i))));
+        bcc_error=std::max(bcc_error,std::abs(0.5*(by(0,k,j+1,i)+by(0,k,j,i))));
+        bcc_error=std::max(bcc_error,std::abs(0.5*(bz(0,k+1,j,i)+bz(0,k,j,i))-guide));
+        const Real tp=w(0,IPR,k,j,i)/w(0,IDN,k,j,i);
+        const Real tt=w(0,IPP,k,j,i)/w(0,IDN,k,j,i);
+        Require(std::isfinite(tp) && std::isfinite(tt) && tp>0.0 && tt>0.0,
+                "staggered checkerboard produced invalid temperatures");
+        deviation=std::max(deviation,std::max(std::abs(tp/tp0-1.0),std::abs(tt/tt0-1.0)));
+      }
+    }
+  }
+  Require(divmax <= 1.e-12*amplitude/hx && bcc_error <= 1.e-12*guide,
+          "staggered checkerboard magnetic initialization is inconsistent");
+  Require(deviation < 10.0*pin->GetReal("problem","amp"),
+          "staggered checkerboard amplified its seed");
+  std::cout << "CGL LF staggered_checkerboard: divB=" << divmax
+            << " bcc_error=" << bcc_error << " max_delta_T=" << deviation
+            << " dt_explicit=" << pmhd->pcgl_lf->dtnew << std::endl;
+}
+
 void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   auto *pmhd = pm->pmb_pack->pmhd;
   Require(pmhd != nullptr && pmhd->peos->eos_data.is_cgl,
@@ -2118,14 +2286,15 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
       mode == TestMode::field_reversal || mode == TestMode::transverse_flux ||
-      mode == TestMode::hotspot || mode == TestMode::closure_response) {
+      mode == TestMode::hotspot || mode == TestMode::closure_response ||
+      mode == TestMode::staggered_checkerboard) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
              mode == TestMode::paper_eigen_wave ||
              mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pm);
-  } else {
+  } else if (mode != TestMode::timestep_stencil) {
     RequireOneDimensionalSingleBlock(pm);
   }
   if (mode == TestMode::parallel_decay || mode == TestMode::perp_decay) {
@@ -2165,6 +2334,12 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckHotSpot(pin, pm);
   } else if (mode == TestMode::field_reversal) {
     CheckFieldReversal(pin, pm);
+  } else if (mode == TestMode::local_speed) {
+    CheckLocalSpeed(pm);
+  } else if (mode == TestMode::density_contact) {
+    CheckDensityContact(pin, pm);
+  } else if (mode == TestMode::staggered_checkerboard) {
+    CheckStaggeredCheckerboard(pin, pm);
   } else if (mode == TestMode::timestep_refresh) {
     CheckTimestepRefresh(pin, pm);
   } else if (mode == TestMode::low_field) {
@@ -2186,20 +2361,27 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
       mode == TestMode::field_reversal || mode == TestMode::transverse_flux ||
-      mode == TestMode::hotspot || mode == TestMode::closure_response) {
+      mode == TestMode::hotspot || mode == TestMode::closure_response ||
+      mode == TestMode::staggered_checkerboard) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
              mode == TestMode::paper_eigen_wave ||
              mode == TestMode::timestep_refresh) {
     RequireOneDimensionalMesh(pmy_mesh_);
-  } else {
+  } else if (mode != TestMode::timestep_stencil) {
     RequireOneDimensionalSingleBlock(pmy_mesh_);
   }
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real ppar0 = pin->GetOrAddReal("problem", "ppar0", 1.0);
   const Real pperp0 = pin->GetOrAddReal("problem", "pperp0", 1.0);
   const Real amp = pin->GetOrAddReal("problem", "amp", 1.0e-4);
+  const Real density_contrast = (mode == TestMode::density_contact) ?
+      pin->GetOrAddReal("problem", "density_contrast", 200.0) : 1.0;
+  if (mode == TestMode::density_contact) {
+    Require(std::isfinite(density_contrast) && density_contrast >= 1.0,
+            "density contact requires finite contrast >= 1");
+  }
   const Real reversal_width = pin->GetOrAddReal("problem", "reversal_width", 0.0);
   if (mode == TestMode::field_reversal) {
     Require(user_srcs && std::isfinite(reversal_width) && reversal_width >= 0.0 &&
@@ -2241,6 +2423,14 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const Real by0 = pin->GetOrAddReal("problem", "by0", 0.0);
   const Real bz0 = pin->GetOrAddReal("problem", "bz0", 0.0);
   const Real by_amp = pin->GetOrAddReal("problem", "by_amp", 0.0);
+  if (mode == TestMode::staggered_checkerboard) {
+    Require(pmy_mesh_->multi_d, "staggered checkerboard requires 2D or 3D");
+    Require(pmy_mesh_->mesh_indcs.nx1%2 == 0 && pmy_mesh_->mesh_indcs.nx2%2 == 0 &&
+            (!pmy_mesh_->three_d || pmy_mesh_->mesh_indcs.nx3%2 == 0),
+            "staggered checkerboard requires even periodic grid dimensions");
+    Require(bz0 > pmhd->peos->eos_data.bfloor && bx0 > 0.0,
+            "staggered checkerboard requires positive amplitude and resolved guide field");
+  }
   const Real eig_rho_re = pin->GetOrAddReal("problem", "eigen_rho_re", 0.0);
   const Real eig_rho_im = pin->GetOrAddReal("problem", "eigen_rho_im", 0.0);
   const Real eig_vx_re = pin->GetOrAddReal("problem", "eigen_vx_re", 0.0);
@@ -2263,12 +2453,14 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     rotated_wave = RotatedWavenumber(pin, pmy_mesh_);
   }
   const Real xmin = pmy_mesh_->mesh_size.x1min;
+  const Real xlength = pmy_mesh_->mesh_size.x1max-xmin;
   const Real reversal_center = 0.5*(xmin+pmy_mesh_->mesh_size.x1max);
   const Real ymin = pmy_mesh_->mesh_size.x2min;
   const Real ymax = pmy_mesh_->mesh_size.x2max;
   const Real hotspot_x = 0.5*(xmin+pmy_mesh_->mesh_size.x1max) +
       0.5*(pmy_mesh_->mesh_size.x1max-xmin)/pmy_mesh_->mesh_indcs.nx1;
   const Real hotspot_y = 0.5*(ymin+ymax) + 0.5*(ymax-ymin)/pmy_mesh_->mesh_indcs.nx2;
+  const bool three_d = pmy_mesh_->three_d;
   const Real zmin = pmy_mesh_->mesh_size.x3min;
   const Real zmax = pmy_mesh_->mesh_size.x3max;
   const std::string limiter_kind =
@@ -2314,7 +2506,27 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     Real by = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s : by0;
     Real bz = bz0;
 
-    if (mode == TestMode::hotspot) {
+    if (mode == TestMode::timestep_stencil) {
+      const Real px = 2.0*M_PI*(x-xmin)/xlength;
+      const Real py = 2.0*M_PI*(y-ymin)/(ymax-ymin);
+      const Real pz = three_d ? 2.0*M_PI*(z-zmin)/(zmax-zmin) : 0.0;
+      rho = x < xmin+0.5*xlength ? 1.0 : 7.0;
+      ppar = rho*(1.0+0.08*sin(px+0.13)+0.05*cos(py+0.37)+0.03*sin(pz+0.21));
+      pperp = 0.7*rho*(1.0+0.04*cos(px+0.31)+0.03*sin(py+0.17)+0.02*cos(pz+0.29));
+      by = 4.0*(0.4+0.15*cos(px)+0.05*sin(pz));
+      bz = 4.0*(0.3+0.1*sin(px)+0.05*cos(py));
+    } else if (mode == TestMode::staggered_checkerboard) {
+      const Real seed = amp*(((i-is+j-js+k-ks)%2 == 0) ? 1.0 : -1.0);
+      ppar = ppar0*(1.0+seed);
+      pperp = pperp0*(1.0+seed);
+      by = 0.0;
+    } else if (mode == TestMode::density_contact) {
+      // Two one-face density jumps, with uniform temperatures plus a small seed.
+      if (x >= xmin + 0.25*xlength && x < xmin + 0.75*xlength) rho *= density_contrast;
+      const Real seed = amp*((q%2 == 0) ? 1.0 : -1.0);
+      ppar = ppar0*(rho/rho0)*(1.0 + seed);
+      pperp = pperp0*(rho/rho0)*(1.0 + seed);
+    } else if (mode == TestMode::hotspot) {
       const Real gaussian = exp(-(SQR(x-hotspot_x)+SQR(y-hotspot_y))/
                                   (2.0*SQR(hotspot_width)));
       ppar = ppar0*(1.0+99.0*gaussian);
@@ -2369,14 +2581,28 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     w0(m,IVZ,k,j,i) = vz;
     w0(m,IPR,k,j,i) = ppar;
     w0(m,IPP,k,j,i) = pperp;
-    bcc0(m,IBX,k,j,i) = bx0;
+    bcc0(m,IBX,k,j,i) = (mode == TestMode::staggered_checkerboard) ? 0.0 : bx0;
+    if (mode == TestMode::timestep_stencil) {
+      const Real py = 2.0*M_PI*(y-ymin)/(ymax-ymin);
+      const Real pz = three_d ? 2.0*M_PI*(z-zmin)/(zmax-zmin) : 0.0;
+      bcc0(m,IBX,k,j,i) = 4.0*(1.0+0.2*sin(py)+0.1*cos(pz));
+    }
     bcc0(m,IBY,k,j,i) = by;
     bcc0(m,IBZ,k,j,i) = bz;
   });
 
   par_for("cgl_lf_quant_init_b1", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie + 1,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    b0.x1f(m,k,j,i) = bx0;
+    b0.x1f(m,k,j,i) = (mode == TestMode::staggered_checkerboard) ?
+        bx0*(((i-is+j-js)%2 == 0) ? 1.0 : -1.0) : bx0;
+    if (mode == TestMode::timestep_stencil) {
+      const RegionSize block = size.d_view(m);
+      const Real py = 2.0*M_PI*(CellCenterX(j-js,indcs.nx2,block.x2min,block.x2max)
+                               -ymin)/(ymax-ymin);
+      const Real pz = three_d ? 2.0*M_PI*
+          (CellCenterX(k-ks,indcs.nx3,block.x3min,block.x3max)-zmin)/(zmax-zmin) : 0.0;
+      b0.x1f(m,k,j,i) = 4.0*(1.0+0.2*sin(py)+0.1*cos(pz));
+    }
   });
   par_for("cgl_lf_quant_init_b2", DevExeSpace(), 0, nmb - 1, ks, ke, js, je + 1, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -2388,7 +2614,15 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     b0.x2f(m,k,j,i) = (mode == TestMode::grad_b || mode == TestMode::grad_b_wall) ? by_amp*s :
         by0 + ((mode == TestMode::paper_eigen_wave) ?
                EigenRealSpacePerturbation(amp, eig_by_re, eig_by_im, c, s) : 0.0);
-    if (mode == TestMode::field_reversal) {
+    if (mode == TestMode::timestep_stencil) {
+      const Real px = 2.0*M_PI*(x-xmin)/xlength;
+      const Real pz = three_d ? 2.0*M_PI*
+          (CellCenterX(k-ks,indcs.nx3,block_size.x3min,block_size.x3max)-zmin)/(zmax-zmin) : 0.0;
+      b0.x2f(m,k,j,i) = 4.0*(0.4+0.15*cos(px)+0.05*sin(pz));
+    } else if (mode == TestMode::staggered_checkerboard) {
+      b0.x2f(m,k,j,i) = -bx0*(block_size.dx2/block_size.dx1)*
+          (((i-is+j-js)%2 == 0) ? 1.0 : -1.0);
+    } else if (mode == TestMode::field_reversal) {
       b0.x2f(m,k,j,i) = reversal_width > 0.0
           ? tanh(sin(k_wave*(x-reversal_center))/(k_wave*reversal_width))
           : tanh((x-reversal_center)/block_size.dx1);
@@ -2404,6 +2638,12 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
     b0.x3f(m,k,j,i) = bz0 + ((mode == TestMode::paper_eigen_wave) ?
                              EigenRealSpacePerturbation(amp, eig_bz_re, eig_bz_im,
                                                         c, s) : 0.0);
+    if (mode == TestMode::timestep_stencil) {
+      const Real px = 2.0*M_PI*(x-xmin)/xlength;
+      const Real py = 2.0*M_PI*
+          (CellCenterX(j-js,indcs.nx2,block_size.x2min,block_size.x2max)-ymin)/(ymax-ymin);
+      b0.x3f(m,k,j,i) = 4.0*(0.3+0.1*sin(px)+0.05*cos(py));
+    }
   });
 
   pmhd->peos->PrimToCons(w0, bcc0, pmhd->u0, is, ie, js, je, ks, ke);
