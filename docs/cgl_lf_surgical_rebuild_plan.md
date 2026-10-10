@@ -488,6 +488,13 @@ deferred: it must not bypass the current rejection of invalid face sound speeds.
 
 ## Testing cadence
 
+`lf_hardbd` counts unprojected LF-stage hard-bound crossings. The retained
+`lf_hwproj` field is for history/restart compatibility with the removed
+`limiter_hardwall` mode; current evolution never increments it. Its zero value
+does not establish absence of scheduled fluid-wall projection or wall work.
+Use strict wall checkpoints and completed-state hard-bound measurements for
+admissibility; an LF-only control also requires zero intermediate crossings.
+
 Reuse `tst/test_suite/`, `tst/scripts/cgl/`, `test_suite.testutils`, existing
 inputs and production pgen fixtures. A gate is evidence for the changed behavior,
 not a required new test file. Do not import whole multi-thousand-line test modules
@@ -533,14 +540,21 @@ representation conversions; it does not certify turbulent threshold switching.
 
 The initial 1-to-0.125 ladder is retained as a precision stress study after
 finer steps failed the inherited minimum gate in the barely represented Gaussian
-tail. One follow-up convergence window, 8, 4, 2, 1, is prescribed before its runs;
+tail, and the finest rung also failed energy/moment conservation. Full-pressure
+differences still decrease near second order; these are tighter invariant and
+minimum failures, not a plateau in the pressure norms. One follow-up convergence
+window, 8, 4, 2, 1, is prescribed before its runs;
 it keeps every original tolerance and is pending qualification. Report the
 five-to-three-stage transition separately from the fixed-stage 4, 2, 1 trend.
 Require the 0.25-to-0.125 pressure difference to be at most 10% of the 2-to-1
 difference in each retained norm, as a reference-sensitivity check, not an error
 bound. Preserve every finer failure and stop if this window fails; do not keep
 moving the window. These checks follow the full fine-ladder and field-magnitude
-conditioning diagnosis.
+conditioning diagnosis. The first B=1 conditioning control is invalid because
+it activates the unconditional fluid-firehose wall even with optional limiters
+off. One separately prescribed B=5 replacement keeps the same endpoint, ratios
+and tolerances, and requires zero crossings at every LF stage. Retain the B=1
+failure; stop qualification if this single replacement fails.
 
 Before accepting a larger STS safety, also use the existing `limiter_stress`
 fixture for one smooth, unforced, finite-rate threshold-crossing case. Keep the
