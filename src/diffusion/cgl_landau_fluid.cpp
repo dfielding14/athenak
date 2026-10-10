@@ -809,7 +809,7 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
       ty = (tpar(m,k,j,i) - tpar(m,kl,jl,il))/size.d_view(m).dx2;
       py = (tperp(m,k,j,i) - tperp(m,kl,jl,il))/size.d_view(m).dx2;
       byg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx2;
-    } else if (multi_d) {
+    } else if (DIR == 2 || multi_d) {
       ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
                       tpar(m,k,j,i) - tpar(m,k,j-1,i),
                       tpar(m,kl,jl+1,il) - tpar(m,kl,jl,il),
