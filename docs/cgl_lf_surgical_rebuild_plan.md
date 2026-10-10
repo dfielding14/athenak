@@ -386,7 +386,8 @@ areas in 3D and is insufficient. Cache both original estimates before the
 identically ordered symmetric mean. No new completion framework is needed.
 
 **13. Apply only measured, equivalent optimizations.**
-Try separately: redundant LF flux-clear removal (`15e7ff619`); fused primitive/
+LF-only flux-clear removal is accepted (`718901fa2`, measurements below).
+Remaining candidates: fused primitive/
 temperature refresh with valid frozen-B reuse (`d02bb714d`); upwind-only HLLE
 logarithm (`31b739890`); compact IEN/IAN messages (`6539bfbbc`); then any proven
 redundant timestep refresh. Keep full shearing exchange and required magnetic
@@ -602,6 +603,15 @@ the smallest discriminating check. Keep existing acceptance tolerances and
 required health checks; consolidation itself needs no new simulation campaign.
 Leave the active milestone open until the remaining results are reviewed; mesh,
 passive and optional optimization work remain separate.
+
+**Authorized code cleanup completed (2026-10-10):** dead-code and environment-override/
+replay removal, directional consolidation and LF-only flux-clear removal are accepted.
+The work order records gates and separate paired costs: consolidation retains a
+3.29% uniform penalty with neutral developed-state cost; clear removal improves
+Tier 1/2 throughput by 4.10%/2.95%, with identical native endpoints and work counts.
+It also records the existing shearing restart-counter failure for mesh work.
+The frozen Tier 3 executable and analysis dependencies remain intact and its jobs
+remain queued. Defer workspace deletion and additional physics/mode changes.
 
 **Mesh milestone:** after 12, cover both physical-corner cases, all six retained
 conservation parameters, actual regrid/restart, repair accounting and shearing.

@@ -15,7 +15,8 @@ archive uses a third revision, `f2d0a259`.
 **Status:** pieces 0–11 complete; the active physical suite and bounded reference
 comparison are accepted. The active milestone remains open.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** external workflow consolidation and Tier 1 are complete. Tier 3 job
+**Next:** external workflow consolidation, Tier 1 and the authorized code cleanup
+are complete. Tier 3 job
 `5647225` is queued in `extended` (one node, fresh to t=14, safety 0.3); existing
 [6,14] analysis job `5647226` depends on its successful completion. Follow the
 [three-step workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
@@ -166,6 +167,37 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   mesh correctness. Gate each retained change on full-precision primary, ghost,
   coarse, scalar, and restart/RNG equivalence plus paired GPU timing. A simple
   deletion may stand within timing noise; larger machinery needs repeatable benefit.
+
+  **Authorized cleanup (2026-10-10):** dead code `e763f1d10` passes three host and
+  seven HIP checks (`5647261`); environment-override/replay removal `1e8c02c37`
+  passes 20 HIP checks (`5647272`). Directional consolidation
+  `7f5c7a83f` + `a60e9586b` removes 279 net lines and passes 20 HIP checks (`5647286`).
+  Tier 1 `5647287`: parent/candidate 138.080→133.536M zone-cycles/s/node
+  (−3.29%), both 26 RHS/cycle, no-LF unchanged. Tier 2 `5647288`:
+  52.0043→52.0795M (+0.145%, within variation), both 50.4 RHS/cycle;
+  native conserved/CT/ghost state, RNG and ledgers are bitwise identical, and
+  both full-q qualification checks pass. Retain consolidation for maintenance
+  and neutral developed-state cost, explicitly accepting the uniform penalty.
+  First-draft Tier 1 `5647277` (−2.50%) is superseded evidence; `5647278` was cancelled.
+  LF-only clear removal `718901fa2` removes 42 net lines. Gate `5647316` exposed
+  a stale zero-intermediate-crossing assertion, reproduced on its parent (`5647337`);
+  `6c36d9fc4` replaces it with the actual endpoint wall check. Gate `5647341`
+  passes 16 HIP checks and the shearing field/magnetic/endpoint comparisons, but
+  the shearing restart still reports 1520 versus 1522 LF RHS evaluations. Parent
+  `5647358` and the pre-consolidation binary (`5647376`) reproduce that exact
+  failure; retain the assertion and defer its repair to mesh/restart work.
+  Accept this documented existing failure for the clear
+  comparison; raw failed records remain intact. Clear Tier 1 `5647364` passes all
+  18 invocations: 132.362→137.793M zone-cycles/s/node (+4.10%), both 26 RHS/cycle;
+  no-LF changes by −0.043%. Tier 2 `5647365` has identical native endpoints,
+  RNG/ledgers and 50.4 RHS/cycle; both full-q qualifications pass with nonzero
+  transport and zero floor/invalid events. Three timing pairs give
+  51.5675→53.0907M zone-cycles/s/node (+2.95%, repeat spans below 0.13%).
+  Retain the clear removal. Earlier dependent timings were cancelled without
+  running. Artifacts are in workspace
+  `analysis/cleanup/`. Frozen Tier 3 binary `5fa3c0df…`, jobs `5647225`/`5647226`,
+  shared helpers and analysis dependencies remain unchanged. No workspace cleanup,
+  physics changes, exceptional-arithmetic fallback removal or fast-mode removal.
 
 - [ ] **14 — Passive model.** Complete J/A outside LF and U/moment inside LF,
   including EOS, fluxes, forcing, initialization, outputs, restart encoding, and
