@@ -375,6 +375,25 @@ void CheckParallelClosureOrdinaryAgreement() {
 void CheckParallelClosureOverflowEndpoints() {
   const Real maximum = std::numeric_limits<Real>::max();
 
+  // A tiny rate still matters when c*k is equally small.
+  const Real subnormal = std::numeric_limits<Real>::denorm_min();
+  const Real speed = std::sqrt(subnormal);
+  for (const Real sign : {Real(-1.0), Real(1.0)}) {
+    const Real gradient = sign*speed/4.0;
+    const long double c=speed, k=speed, nu=subnormal;
+    const long double pi=std::acos(-1.0L);
+    const long double chi=8*c*c/(std::sqrt(8*pi)*c*k+(3*pi-8)*nu);
+    const long double qmax=std::sqrt(8/pi)*c;
+    const long double expected_ratio=-chi*gradient/qmax;
+    Real ratio=0.0;
+    const Real flux=cgl::LimitedParallelHeatFlux(
+        speed, 1.0, 1.0, speed, subnormal, gradient, ratio);
+    RequireRelativeClose("parallel subnormal collision ratio", ratio,
+                         static_cast<Real>(expected_ratio));
+    RequireRelativeClose("parallel subnormal collision flux", flux,
+                         static_cast<Real>(qmax*expected_ratio/(1+std::abs(expected_ratio))));
+  }
+
   {
     const Real tiny = std::numeric_limits<Real>::denorm_min();
     Real ratio = 0.0;

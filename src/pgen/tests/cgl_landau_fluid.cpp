@@ -31,6 +31,7 @@
 #include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/limiters.hpp"
 #include "eos/cgl_physics.hpp"
+#include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
@@ -997,8 +998,9 @@ void CheckDeviceClosureResponse() {
   const Real minimum = std::numeric_limits<Real>::min();
   const Real subnormal = std::numeric_limits<Real>::denorm_min();
   const Real large_gradient = std::sqrt(maximum);
-  // c, rho, ppar, pperp, inverse B, k, nu, grad(Tperp), grad(B).
-  // The final cases must retain cancellation when the response denominator overflows.
+  const Real small_speed = std::sqrt(subnormal);
+  // c, rho, ppar, pperp, inverse B, k, nu, grad(T), grad(B).
+  // The last case checks the parallel channel with subnormal scattering.
   const Real cases[][9] = {
       {0.75, 3.0, 6.0, 6.0, 1.0, 3.0,
        Real(2.25)*std::sqrt(Real(M_PI/2.0)), 2.0, 0.0},
@@ -1012,7 +1014,9 @@ void CheckDeviceClosureResponse() {
        std::nextafter(-large_gradient, -std::numeric_limits<Real>::infinity())},
       {Real(0.7)/maximum, maximum/Real(4.0), maximum/Real(8.0), maximum/Real(4.0),
        1.0, 1.0, 1.0, large_gradient,
-       std::nextafter(-large_gradient, -std::numeric_limits<Real>::infinity())}};
+       std::nextafter(-large_gradient, -std::numeric_limits<Real>::infinity())},
+      {small_speed, 1.0, 1.0, 1.0, 1.0, small_speed, subnormal,
+       small_speed/4.0, 0.0}};
   constexpr int count = sizeof(cases)/sizeof(cases[0]);
   DvceArray2D<Real> arguments("closure_arguments", 2*count, 9);
   DvceArray2D<Real> answers("closure_answers", 2*count, 2);
@@ -1028,22 +1032,33 @@ void CheckDeviceClosureResponse() {
   Kokkos::parallel_for("closure_response", Kokkos::RangePolicy<>(DevExeSpace(), 0, 2*count),
   KOKKOS_LAMBDA(const int i) {
     Real ratio;
-    answers(i,1) = cgl::LimitedPerpendicularHeatFlux(
-        arguments(i,0), arguments(i,1), arguments(i,2), arguments(i,3),
-        arguments(i,4), arguments(i,5), arguments(i,6), arguments(i,7),
-        arguments(i,8), ratio);
+    if (i%count == count-1) {
+      answers(i,1) = cgl::LimitedParallelHeatFlux(
+          arguments(i,0), arguments(i,1), arguments(i,2), arguments(i,5),
+          arguments(i,6), arguments(i,7), ratio);
+    } else {
+      answers(i,1) = cgl::LimitedPerpendicularHeatFlux(
+          arguments(i,0), arguments(i,1), arguments(i,2), arguments(i,3),
+          arguments(i,4), arguments(i,5), arguments(i,6), arguments(i,7),
+          arguments(i,8), ratio);
+    }
     answers(i,0) = ratio;
   });
   const auto result = HostCopy(answers);
   for (int i=0; i<2*count; ++i) {
     // Normalize before cancellation; subtracting huge physical products would
     // discard the reference residual even in extended precision.
+    const bool parallel = i%count == count-1;
     const long double c=host(i,0), rho=host(i,1), ppar=host(i,2), pperp=host(i,3);
-    const long double driver = (rho/pperp)*host(i,7)-
+    const long double pressure = parallel ? ppar : pperp;
+    const long double driver = parallel ? (rho/ppar)*host(i,7) : (rho/pperp)*host(i,7)-
         ((ppar-pperp)/ppar)*host(i,8)*host(i,4);
-    const long double chi = c*c/(std::sqrt(0.5L*acosl(-1.0L))*c*host(i,5)+host(i,6));
-    const long double qmax = std::sqrt(2.0L/acosl(-1.0L))*c*pperp;
-    const long double ratio = -chi*pperp*driver/qmax;
+    const long double pi=acosl(-1.0L);
+    const long double chi = parallel ?
+        8*c*c/(std::sqrt(8*pi)*c*host(i,5)+(3*pi-8)*host(i,6)) :
+        c*c/(std::sqrt(0.5L*pi)*c*host(i,5)+host(i,6));
+    const long double qmax = std::sqrt((parallel ? 8.0L : 2.0L)/pi)*c*pressure;
+    const long double ratio = -chi*pressure*driver/qmax;
     const Real expected[] = {static_cast<Real>(ratio),
         static_cast<Real>(qmax*ratio/(1.0L+std::abs(ratio)))};
     for (int j=0; j<2; ++j) {
@@ -2133,45 +2148,63 @@ void CheckLocalSpeed(Mesh *pm) {
   const auto &ind = pm->mb_indcs;
   const int face = ind.is+ind.nx1/2;
   const Real h = (pm->mesh_size.x1max-pm->mesh_size.x1min)/ind.nx1;
-  const Real rho = 0.25*std::numeric_limits<Real>::max();
+  const Real rho = std::numeric_limits<Real>::max()*std::numeric_limits<Real>::epsilon();
   const Real pressure = 0.25*(std::numeric_limits<Real>::denorm_min()*rho);
+  const Real bscale = 0.01*std::sqrt(pressure);
   Require(pressure > 0.0 && pressure/rho == 0.0,
           "local_speed fixture must underflow the temperature division");
+  EOS_Data eos = mhd->peos->eos_data;
+  eos.dfloor = eos.pfloor = std::numeric_limits<Real>::denorm_min();
+  eos.bfloor = 0.1*bscale;
+  eos.tfloor = eos.nu_coll = 0.0;
+  eos.mlim = eos.flim = false;
   auto w = HostCopy(mhd->w0), bcc = HostCopy(mhd->bcc0);
   auto by = HostCopy(mhd->b0.x2f);
   for (int k=0; k<w.extent_int(2); ++k) {
     for (int j=0; j<w.extent_int(3); ++j) {
       for (int i=0; i<w.extent_int(4); ++i) {
-        w(0,IDN,k,j,i) = rho;
-        w(0,IPR,k,j,i) = pressure;
-        w(0,IPP,k,j,i) = 0.5*pressure;
-        bcc(0,IBX,k,j,i) = 1.0;
-        bcc(0,IBY,k,j,i) = 1.0+0.2*(i-face+0.5)*h;
+        const Real tangent = bscale*(1.0+0.2*(i-face+0.5)*h);
+        const MHDPrim1D primitive{rho,0.0,0.0,0.0,pressure,0.5*pressure,bscale,tangent,0.0};
+        HydCons1D encoded{};
+        SingleP2C_CGLMHD(primitive,eos.bfloor,encoded);
+        MHDCons1D conserved{encoded.d,encoded.mx,encoded.my,encoded.mz,encoded.e,
+                            encoded.mu,bscale,tangent,0.0};
+        HydPrim1D recovered{};
+        bool dfloor=false, efloor=false, tfloor=false, bfloor=false;
+        SingleC2P_CGLMHD(conserved,eos,recovered,dfloor,efloor,tfloor,bfloor);
+        Require(std::isfinite(encoded.e) && std::isfinite(encoded.mu) &&
+                !dfloor && !efloor && !tfloor && !bfloor && recovered.d == rho &&
+                std::abs(recovered.e/pressure-1.0) < 1.0e-11 &&
+                std::abs(recovered.pp/(0.5*pressure)-1.0) < 1.0e-11,
+                "local_speed state did not survive active E/A recovery");
+        w(0,IDN,k,j,i) = recovered.d;
+        w(0,IPR,k,j,i) = recovered.e;
+        w(0,IPP,k,j,i) = recovered.pp;
+        bcc(0,IBX,k,j,i) = bscale;
+        bcc(0,IBY,k,j,i) = tangent;
         bcc(0,IBZ,k,j,i) = 0.0;
       }
     }
   }
   for (int k=0; k<by.extent_int(1); ++k) {
     for (int j=0; j<by.extent_int(2); ++j) {
-      for (int i=0; i<by.extent_int(3); ++i) by(0,k,j,i) = 1.0+0.2*(i-face+0.5)*h;
+      for (int i=0; i<by.extent_int(3); ++i) {
+        by(0,k,j,i) = bscale*(1.0+0.2*(i-face+0.5)*h);
+      }
     }
   }
   Kokkos::deep_copy(mhd->w0,w);
   Kokkos::deep_copy(mhd->bcc0,bcc);
-  Kokkos::deep_copy(mhd->b0.x1f,1.0);
+  Kokkos::deep_copy(mhd->b0.x1f,bscale);
   Kokkos::deep_copy(mhd->b0.x2f,by);
   Kokkos::deep_copy(mhd->b0.x3f,0.0);
   Kokkos::deep_copy(mhd->uflx.x1f,0.0);
-  EOS_Data eos = mhd->peos->eos_data;
-  eos.dfloor = eos.pfloor = std::numeric_limits<Real>::denorm_min();
-  eos.tfloor = eos.nu_coll = 0.0;
-  eos.mlim = eos.flim = false;
   lf->lf_coeff_local = true;
   lf->NewTimeStep(mhd->w0,mhd->bcc0,mhd->b0,eos);
   const long double speed = std::sqrt(static_cast<long double>(pressure)/rho);
   const long double chi = std::sqrt(8.0L/std::acos(-1.0L))*speed/lf->lf_k_parallel;
   auto magnitude = [&](int i) {
-    const long double tangent = bcc(0,IBY,ind.ks,ind.js,i);
+    const long double tangent = bcc(0,IBY,ind.ks,ind.js,i)/bscale;
     return std::sqrt(1.0L+tangent*tangent);
   };
   long double maximum = 0.0L;
@@ -2197,7 +2230,7 @@ void CheckLocalSpeed(Mesh *pm) {
                       (1.0L+std::abs(ratio));
   const auto flux = HostCopy(mhd->uflx.x1f);
   for (const int variable : {IEN,IAN}) {
-    const Real expected = static_cast<Real>(q/(variable == IEN ? bar : bar*bar));
+    const Real expected = static_cast<Real>(q/(variable == IEN ? bar : bscale*bar*bar));
     const Real actual = flux(0,variable,ind.ks,ind.js,face);
     Require(std::isfinite(actual) && expected != 0.0 &&
             std::abs(actual/expected-1.0) < 1.0e-11,

@@ -231,8 +231,11 @@ Real ParallelHeatFluxRatio(const Real cparallel, const Real rho,
   if (nu == std::numeric_limits<Real>::infinity()) {
     return -0.0*grad_tpar;
   }
+  // Divide before scaling when the collision rate itself is subnormal.
   const Real collision_over_speed =
-      (kThreePiMinusEight*nu/kSqrtEightPi)/cparallel;
+      (nu > 0.0 && nu < std::numeric_limits<Real>::min())
+          ? (nu/cparallel)*(kThreePiMinusEight/kSqrtEightPi)
+          : (kThreePiMinusEight*nu/kSqrtEightPi)/cparallel;
   const Real response = 1.0/(lf_k + collision_over_speed);
   const Real temperature_term = rho*grad_tpar/ppar;
   const Real ratio = -response*temperature_term;
