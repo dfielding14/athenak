@@ -171,9 +171,16 @@ def test_cgl_lf_sts_reversal_converges_to_explicit(tmp_path, safety):
     reference_error = np.mean(np.abs(fine_reference-reference), axis=0)
     states, steps = [], []
     for ratio in (8, 4, 2):
-        state, step = _resolved_reversal(tmp_path / f"sts{ratio}", 64, 0.3, ratio, safety)
+        # Keep the physical outer budget fixed while changing stage safety.
+        case = tmp_path / f"sts{ratio}"
+        state, step = _resolved_reversal(case, 64, 0.3, ratio*0.3/safety, safety)
         states.append(state)
         steps.append(step)
+        if ratio == 8:
+            history = testutils.athena_read.hst(str(next(case.glob("*.mhd.hst"))))
+            first_rhs = (history["lf_nstage"][1]-history["lf_nstage"][0])/64
+            # Initial half-sweep ratios 4 and 4/3 select five and three stages.
+            assert first_rhs == (10 if safety == 0.3 else 6), first_rhs
     errors = np.mean(np.abs(np.asarray(states)-fine_reference), axis=1)
     print(f"STS safety={safety} reversal errors: {errors}; "
           f"explicit reference refinement: {reference_error}; "
