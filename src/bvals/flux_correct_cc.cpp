@@ -16,6 +16,35 @@
 #include "mesh/mesh.hpp"
 #include "bvals.hpp"
 
+namespace {
+// Same-level neighbors occupy the first buffer of each oriented face.
+KOKKOS_INLINE_FUNCTION
+int SameLevelFaceSize(const int n, const RegionIndcs &ind) {
+  if (n == 0 || n == 4) return ind.nx2*ind.nx3;
+  if (n == 8 || n == 12) return ind.nx1*ind.nx3;
+  if (n == 24 || n == 28) return ind.nx1*ind.nx2;
+  return 0;
+}
+
+KOKKOS_INLINE_FUNCTION
+void SameLevelFaceCell(const int n, const int idx, const RegionIndcs &ind,
+                       int &i, int &j, int &k) {
+  if (n < 8) {
+    i = n == 0 ? ind.is : ind.ie+1;
+    j = ind.js + idx%ind.nx2;
+    k = ind.ks + idx/ind.nx2;
+  } else if (n < 16) {
+    i = ind.is + idx%ind.nx1;
+    j = n == 8 ? ind.js : ind.je+1;
+    k = ind.ks + idx/ind.nx1;
+  } else {
+    i = ind.is + idx%ind.nx1;
+    j = ind.js + idx/ind.nx1;
+    k = n == 24 ? ind.ks : ind.ke+1;
+  }
+}
+}  // namespace
+
 //----------------------------------------------------------------------------------------
 //! \fn void MeshBoundaryValuesCC::PackAndSendFlux()
 //! \brief Pack restricted fluxes of cell-centered variables at fine/coarse boundaries
@@ -26,7 +55,8 @@
 //! MeshBlocks. Buffer data are then sent (via MPI) or copied directly for periodic or
 //! block boundaries.
 
-TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
+TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(
+    DvceFaceFld5D<Real> &flx, int same_offset, int same_count) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -152,15 +182,50 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
     tmember.team_barrier();
   });  // end par_for_outer
 
+  // Cache both original estimates before either side forms the common flux.
+  // Transverse prolongation can give different estimates at refinement corners.
+  if (same_count > 0) {
+    const auto ind = pmy_pack->pmesh->mb_indcs;
+    Kokkos::TeamPolicy<> same_policy(DevExeSpace(), nmb*nnghbr*same_count,
+                                     Kokkos::AUTO);
+    Kokkos::parallel_for("SendSameLevelFlux", same_policy,
+                        KOKKOS_LAMBDA(TeamMember_t team) {
+      const int q = team.league_rank()%same_count;
+      const int n = (team.league_rank()/same_count)%nnghbr;
+      const int m = team.league_rank()/(same_count*nnghbr);
+      const int count = SameLevelFaceSize(n, ind);
+      if (count > 0 && nghbr.d_view(m,n).gid >= 0 &&
+          nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+        const int dm = nghbr.d_view(m,n).gid - mbgid.d_view(0);
+        const int dn = nghbr.d_view(m,n).dest;
+        const int v = same_offset + q;
+        Kokkos::parallel_for(Kokkos::TeamThreadRange<>(team, count), [&](int idx) {
+          int i, j, k;
+          SameLevelFaceCell(n, idx, ind, i, j, k);
+          const Real value = n < 8 ? flx.x1f(m,v,k,j,i) :
+              (n < 16 ? flx.x2f(m,v,k,j,i) : flx.x3f(m,v,k,j,i));
+          if (nghbr.d_view(m,n).rank == my_rank) {
+            rbuf[dn].flux(dm, q*count + idx) = value;
+          } else {
+            sbuf[n].flux(m, q*count + idx) = value;
+          }
+        });
+      }
+    });
+  }
+
 #if MPI_PARALLEL_ENABLED
   // Send boundary buffer to neighboring MeshBlocks using MPI
-  // Sends only occur to neighbors on FACES at a COARSER level
+  // Send restricted coarse/fine fluxes and any requested same-level face fluxes.
   Kokkos::fence();
   bool no_errors=true;
   for (int m=0; m<nmb; ++m) {
     for (int n=0; n<nnghbr; ++n) {
+      const bool same = same_count > 0 &&
+          SameLevelFaceSize(n, pmy_pack->pmesh->mb_indcs) > 0 &&
+          nghbr.h_view(m,n).lev == mblev.h_view(m);
       if ( (nghbr.h_view(m,n).gid >=0) &&
-           (nghbr.h_view(m,n).lev < mblev.h_view(m)) &&
+           (nghbr.h_view(m,n).lev < mblev.h_view(m) || same) &&
            ((n<16) || ((n>=24) && (n<32))) ) {
         // index and rank of destination Neighbor
         int dn = nghbr.h_view(m,n).dest;
@@ -172,7 +237,9 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
           int tag = CreateBvals_MPI_Tag(lid, dn);
 
           // get ptr to send buffer for fluxes
-          int data_size = nvar*(sendbuf[n].iflxc_ndat);
+          int data_size = same ?
+              same_count*SameLevelFaceSize(n, pmy_pack->pmesh->mb_indcs) :
+              nvar*(sendbuf[n].iflxc_ndat);
           auto send_ptr = Kokkos::subview(sendbuf[n].flux, m, Kokkos::ALL);
 
           int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
@@ -196,7 +263,8 @@ TaskStatus MeshBoundaryValuesCC::PackAndSendFluxCC(DvceFaceFld5D<Real> &flx) {
 //! \fn void RecvBuffers()
 //! \brief Unpack boundary buffers for flux correction of CC variables.
 
-TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
+TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(
+    DvceFaceFld5D<Real> &flx, int same_offset, int same_count) {
   // create local references for variables in kernel
   int nmb = pmy_pack->nmb_thispack;
   int nnghbr = pmy_pack->pmb->nnghbr;
@@ -205,14 +273,17 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
   auto &rbuf = recvbuf;
 #if MPI_PARALLEL_ENABLED
   //----- STEP 1: check that recv boundary buffer communications have all completed
-  // receives only occur for neighbors on faces at a FINER level
+  // Receive restricted coarse/fine fluxes and any requested same-level face fluxes.
 
   bool bflag = false;
   bool no_errors=true;
   for (int m=0; m<nmb; ++m) {
     for (int n=0; n<nnghbr; ++n) {
+      const bool same = same_count > 0 &&
+          SameLevelFaceSize(n, pmy_pack->pmesh->mb_indcs) > 0 &&
+          nghbr.h_view(m,n).lev == mblev.h_view(m);
       if ( (nghbr.h_view(m,n).gid >=0) &&
-           (nghbr.h_view(m,n).lev > mblev.h_view(m)) &&
+           (nghbr.h_view(m,n).lev > mblev.h_view(m) || same) &&
            ((n<16) || ((n>=24) && (n<32))) ) {
         if (nghbr.h_view(m,n).rank != global_variable::my_rank) {
           int test;
@@ -292,16 +363,63 @@ TaskStatus MeshBoundaryValuesCC::RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx) {
     tmember.team_barrier();
   });  // end par_for_outer
 
+  if (same_count > 0) {
+    const auto ind = pmy_pack->pmesh->mb_indcs;
+    Kokkos::TeamPolicy<> same_policy(DevExeSpace(), nmb*nnghbr*same_count,
+                                     Kokkos::AUTO);
+    Kokkos::parallel_for("RecvSameLevelFlux", same_policy,
+                        KOKKOS_LAMBDA(TeamMember_t team) {
+      const int q = team.league_rank()%same_count;
+      const int n = (team.league_rank()/same_count)%nnghbr;
+      const int m = team.league_rank()/(same_count*nnghbr);
+      const int count = SameLevelFaceSize(n, ind);
+      if (count > 0 && nghbr.d_view(m,n).gid >= 0 &&
+          nghbr.d_view(m,n).lev == mblev.d_view(m)) {
+        const int v = same_offset + q;
+        Kokkos::parallel_for(Kokkos::TeamThreadRange<>(team, count), [&](int idx) {
+          int i, j, k;
+          SameLevelFaceCell(n, idx, ind, i, j, k);
+          Real &local = n < 8 ? flx.x1f(m,v,k,j,i) :
+              (n < 16 ? flx.x2f(m,v,k,j,i) : flx.x3f(m,v,k,j,i));
+          const Real remote = rbuf[n].flux(m, q*count + idx);
+          // Preserve equal inputs; identical operand order also covers FMA contraction.
+          if (local != remote) {
+            const Real lo = local < remote ? local : remote;
+            const Real hi = local < remote ? remote : local;
+            local = 0.5*lo + 0.5*hi;
+          }
+        });
+      }
+    });
+  }
+
   return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
 //! \fn  void BoundaryValuesCC::InitRecvFlux
 //! \brief Posts non-blocking receives (with MPI) for boundary communication of fluxes of
-//! cell-centered variables, which are communicated at FACES of MeshBlocks at the SAME
-//! levels.  This is different than for fluxes of face-centered vars.
+//! cell-centered variables at FINER levels, plus requested SAME-level faces.
 
 TaskStatus MeshBoundaryValuesCC::InitFluxRecv(const int nvars) {
+  return InitFluxRecv(nvars, 0);
+}
+
+TaskStatus MeshBoundaryValuesCC::InitFluxRecv(const int nvars, const int same_count) {
+  // Six coarse-face variables occupy only 1.5 full faces in 3D. Grow both buffers
+  // before receives, retaining their capacity for future blocks and coarse/fine fluxes.
+  if (same_count > 0) {
+    for (int n=0; n<pmy_pack->pmb->nnghbr; ++n) {
+      const int size = same_count*SameLevelFaceSize(n, pmy_pack->pmesh->mb_indcs);
+      if (sendbuf[n].flux.extent_int(1) < size) {
+        Kokkos::realloc(sendbuf[n].flux, sendbuf[n].flux.extent_int(0), size);
+      }
+      if (recvbuf[n].flux.extent_int(1) < size) {
+        Kokkos::realloc(recvbuf[n].flux, recvbuf[n].flux.extent_int(0), size);
+      }
+    }
+  }
+
 #if MPI_PARALLEL_ENABLED
   int &nmb = pmy_pack->nmb_thispack;
   int &nnghbr = pmy_pack->pmb->nnghbr;
@@ -311,10 +429,11 @@ TaskStatus MeshBoundaryValuesCC::InitFluxRecv(const int nvars) {
   bool no_errors=true;
   for (int m=0; m<nmb; ++m) {
     for (int n=0; n<nnghbr; ++n) {
-      // only post receives for neighbors on FACES at FINER level
-      // this is the only thing different from BoundaryValuesFC::InitRecvFlux()
+      const bool same = same_count > 0 &&
+          SameLevelFaceSize(n, pmy_pack->pmesh->mb_indcs) > 0 &&
+          nghbr.h_view(m,n).lev == pmy_pack->pmb->mb_lev.h_view(m);
       if ( (nghbr.h_view(m,n).gid >=0) &&
-           (nghbr.h_view(m,n).lev > pmy_pack->pmb->mb_lev.h_view(m)) &&
+           (nghbr.h_view(m,n).lev > pmy_pack->pmb->mb_lev.h_view(m) || same) &&
            ((n<16) || ((n>=24) && (n<32))) ) {
         // rank of destination buffer
         int drank = nghbr.h_view(m,n).rank;
@@ -325,7 +444,9 @@ TaskStatus MeshBoundaryValuesCC::InitFluxRecv(const int nvars) {
           int tag = CreateBvals_MPI_Tag(m, n);
 
           // calculate amount of data to be passed, get pointer to variables
-          int data_size = nvars*(recvbuf[n].iflxc_ndat);
+          int data_size = same ?
+              same_count*SameLevelFaceSize(n, pmy_pack->pmesh->mb_indcs) :
+              nvars*(recvbuf[n].iflxc_ndat);
           auto recv_ptr = Kokkos::subview(recvbuf[n].flux, m, Kokkos::ALL);
 
           // Post non-blocking receive for this buffer on this MeshBlock

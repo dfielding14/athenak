@@ -162,13 +162,16 @@ class MeshBoundaryValuesCC : public MeshBoundaryValues {
   void InitSendIndices(MeshBoundaryBuffer &b,int o1,int o2,int o3,int f1,int f2) override;
   void InitRecvIndices(MeshBoundaryBuffer &b,int o1,int o2,int o3,int f1,int f2) override;
   TaskStatus InitFluxRecv(const int nvar) override;
+  TaskStatus InitFluxRecv(const int nvar, const int same_count);
 
   // functions to communicate CC data
   TaskStatus PackAndSendCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
   TaskStatus RecvAndUnpackCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca);
   // functions to communicate fluxes of CC data
-  TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx);
-  TaskStatus RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx);
+  TaskStatus PackAndSendFluxCC(DvceFaceFld5D<Real> &flx,
+                             int same_offset=0, int same_count=0);
+  TaskStatus RecvAndUnpackFluxCC(DvceFaceFld5D<Real> &flx,
+                               int same_offset=0, int same_count=0);
 
   // functions to prolongate conserved and primitive CC variables
   void FillCoarseInBndryCC(DvceArray5D<Real> &a, DvceArray5D<Real> &ca,
