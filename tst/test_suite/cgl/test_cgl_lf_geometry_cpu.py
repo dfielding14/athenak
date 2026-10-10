@@ -95,8 +95,10 @@ def test_cgl_lf_reversal_stability(tmp_path, dimension, integrator):
         assert history["lf_nstage"][-1] > cells*20*2
 
 
-def _resolved_reversal(case, nx, cfl, sts_ratio=None):
+def _resolved_reversal(case, nx, cfl, sts_ratio=None, sts_safety=None):
     source = (INPUTS / "cgl_lf_field_reversal.athinput").read_text()
+    if sts_safety is not None:
+        source += f"\n<time>\nsts_safety = {sts_safety:.17g}\n"
     for number, variable in ((2, "mhd_w_bcc"), (3, "mhd_u")):
         source += (f"\n<output{number}>\nfile_type = tab\nvariable = {variable}\n"
                    "data_format = %24.16e\ndcycle = 100000\n")
@@ -161,18 +163,20 @@ def test_cgl_lf_resolved_reversal_converges(tmp_path):
     assert np.all(errors[1] < 0.7*errors[0]), errors
 
 
-def test_cgl_lf_sts_reversal_converges_to_explicit(tmp_path):
+@pytest.mark.parametrize("safety", [0.3, 0.9])
+def test_cgl_lf_sts_reversal_converges_to_explicit(tmp_path, safety):
     """At fixed spatial resolution, compare complete profiles at a common time."""
     reference, _ = _resolved_reversal(tmp_path / "explicit", 64, 0.0005)
     fine_reference, _ = _resolved_reversal(tmp_path / "explicit_half", 64, 0.00025)
     reference_error = np.mean(np.abs(fine_reference-reference), axis=0)
     states, steps = [], []
     for ratio in (8, 4, 2):
-        state, step = _resolved_reversal(tmp_path / f"sts{ratio}", 64, 0.3, ratio)
+        state, step = _resolved_reversal(tmp_path / f"sts{ratio}", 64, 0.3, ratio, safety)
         states.append(state)
         steps.append(step)
     errors = np.mean(np.abs(np.asarray(states)-fine_reference), axis=1)
-    print(f"STS reversal errors: {errors}; explicit reference refinement: {reference_error}; "
+    print(f"STS safety={safety} reversal errors: {errors}; "
+          f"explicit reference refinement: {reference_error}; "
           f"maximum steps: {steps}")
     assert np.all(np.asarray(steps[1:]) < 0.6*np.asarray(steps[:-1])), steps
     assert np.all(errors[1:] < 0.7*errors[:-1]), errors

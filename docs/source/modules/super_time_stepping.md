@@ -138,7 +138,17 @@ All non-STS stability limits continue to restrict the cycle as usual.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `<time>/sts_integrator` | `none` | `none` or `rkl2` global STS controller |
+| `<time>/sts_safety` | Current `cfl_number` | Optional finite factor in `(0, 1]` applied only to STS diffusion budgets |
 | `<time>/sts_max_dt_ratio` | `-1.0` | Optional positive limit `dt <= ratio * dt_diff`; `-1.0` disables the cap |
+
+An absent `sts_safety` retains the legacy CFL multiplier, including on restart;
+it is not inserted into the parameter record. An explicit value is retained by
+restarts independently of changes to `cfl_number`. Declare the key in the original
+input to override it later from the command line. Explicit diffusion and
+advective budgets still use `cfl_number`. Inactive diffusion remains inactive
+after scaling. The ratio cap uses the safety-scaled `dt_diff`, so increasing
+`sts_safety` can increase the outer step as well as reduce STS work. A larger
+value requires accuracy checks for the chosen problem; it is not a new default.
 
 The optional ratio cap is useful for validation and for runs where operator
 splitting accuracy, rather than explicit stability, should limit large STS

@@ -1985,7 +1985,7 @@ void CheckTimestepRefresh(ParameterInput *pin, Mesh *pm) {
   RequireRelative("heated uniform LF timestep", lf->dtnew, dt0/std::sqrt(pressure),
                   2.0e-12);
   RequireRelative("refreshed mesh LF timestep", pm->dt_parabolic_sts,
-                  pm->cfl_no*dt0/std::sqrt(pressure), 2.0e-12);
+                  pm->sts_safety*dt0/std::sqrt(pressure), 2.0e-12);
   const auto w = HostCopy(pm->pmb_pack->pmhd->w0);
   for (int m=0; m<nmb; ++m) {
     for (int i=indcs.is; i<=indcs.ie; ++i) {

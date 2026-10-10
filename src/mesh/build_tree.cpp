@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <cinttypes>
+#include <cmath>
 #include <cstdlib>
 #include <limits> // numeric_limits<>
 #include <memory> // make_unique<>
@@ -43,6 +44,18 @@ parabolic::STSIntegrator ParseSTSIntegrator(ParameterInput *pin) {
 
 void LoadSTSConfig(Mesh *pmesh, ParameterInput *pin) {
   pmesh->sts_integrator = ParseSTSIntegrator(pin);
+  // Keep an absent override tied to CFL, including its exact restart value.
+  pmesh->sts_safety = pmesh->cfl_no;
+  if (pin->DoesParameterExist("time", "sts_safety")) {
+    pmesh->sts_safety = pin->GetReal("time", "sts_safety");
+    if (!std::isfinite(pmesh->sts_safety) || pmesh->sts_safety <= 0.0 ||
+        pmesh->sts_safety > 1.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<time>/sts_safety must be finite and in (0, 1]"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
   pmesh->sts_max_dt_ratio = pin->GetOrAddReal("time", "sts_max_dt_ratio", -1.0);
   if (pmesh->sts_max_dt_ratio != -1.0 && pmesh->sts_max_dt_ratio <= 0.0) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
@@ -335,8 +348,8 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
   time = pin->GetOrAddReal("time", "start_time", 0.0);
   dt   = std::numeric_limits<float>::max();
   dt_parabolic_sts = std::numeric_limits<float>::max();
-  LoadSTSConfig(this, pin);
   cfl_no = pin->GetReal("time", "cfl_number");
+  LoadSTSConfig(this, pin);
   ncycle = 0;
   if (global_variable::my_rank == 0) {PrintMeshDiagnostics();}
 

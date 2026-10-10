@@ -343,7 +343,11 @@ Do not adopt a larger default merely because the parameter exists. Complete the
 unforced finite-rate threshold-crossing refinement below before accepting it.
 Use the accepted Piece 9 executable and Tier 2 measurements as the immediate
 parent. Preserve current-CFL behavior when the new safety is absent; 0.9 is not
-an accepted default. Adding a restart-loaded parameter requires regenerating
+an accepted default. Leave an absent key absent in restart parameters, so its
+fallback follows the exact current CFL without serializing a rounded default;
+validate an explicit override as finite and in `(0, 1]`. The ratio cap uses the
+scaled STS budget and can change the outer step, so hold outer steps fixed when
+isolating stage-safety effects. Adding a restart-loaded parameter requires regenerating
 and relabeling the Tier 2 checkpoint. Keep paired binaries on the same compatible
 checkpoint and report each binary's own work count and physical advance.
 

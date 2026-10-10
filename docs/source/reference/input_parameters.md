@@ -418,6 +418,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `nlim` | int | -1 | driver.cpp:L94 |
 | `start_time` | Real | 0.0 | build_tree.cpp:L304 |
 | `sts_integrator` | string | none | build_tree.cpp |
+| `sts_safety` | Real | current `cfl_number` when absent; explicit values in `(0, 1]` | build_tree.cpp |
 | `sts_max_dt_ratio` | Real | -1.0 | build_tree.cpp |
 | `tlim` | Real | required | driver.cpp:L93 |
 

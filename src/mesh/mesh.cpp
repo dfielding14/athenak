@@ -611,10 +611,13 @@ void Mesh::NewTimeStep(const Real tlim) {
 
   // Parabolic-process timestep budgets
   for (const auto &process : pmb_pack->parabolic_processes) {
-    Real process_dt = (cfl_no)*(process.ExplicitDt());
+    const Real raw_dt = process.ExplicitDt();
+    // Scaling the inactive sentinel can otherwise enable a zero-operator sweep.
+    if (raw_dt >= std::numeric_limits<float>::max()) continue;
+    Real process_dt = (cfl_no)*raw_dt;
     dt_legacy = std::min(dt_legacy, process_dt);
     if (process.UsesSTS()) {
-      dt_parabolic_sts = std::min(dt_parabolic_sts, process_dt);
+      dt_parabolic_sts = std::min(dt_parabolic_sts, sts_safety*raw_dt);
     } else {
       dt_cycle_candidate = std::min(dt_cycle_candidate, process_dt);
     }
@@ -680,6 +683,7 @@ void Mesh::NewTimeStep(const Real tlim) {
               << " dt_parabolic_sts=" << dt_parabolic_sts
               << " cfl_number=" << cfl_no
               << " sts_integrator=" << static_cast<int>(sts_integrator)
+              << " sts_safety=" << sts_safety
               << " sts_max_dt_ratio=" << sts_max_dt_ratio
               << std::endl;
     std::exit(EXIT_FAILURE);
@@ -695,8 +699,10 @@ void Mesh::NewTimeStep(const Real tlim) {
 void Mesh::RefreshSTSParabolicTimeStep() {
   dt_parabolic_sts = std::numeric_limits<float>::max();
   for (const auto &process : pmb_pack->parabolic_processes) {
+    const Real raw_dt = process.ExplicitDt();
+    if (raw_dt >= std::numeric_limits<float>::max()) continue;
     if (process.UsesSTS()) {
-      dt_parabolic_sts = std::min(dt_parabolic_sts, (cfl_no)*(process.ExplicitDt()));
+      dt_parabolic_sts = std::min(dt_parabolic_sts, sts_safety*raw_dt);
     }
   }
 
