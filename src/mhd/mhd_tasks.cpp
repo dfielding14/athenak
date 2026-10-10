@@ -1051,6 +1051,12 @@ TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
       pbval_u->ProlongateCC(u0, coarse_u0);
       pbval_b->ProlongateFC(b0, coarse_b0);
     }
+    // Prolongation changes transverse donors used to fill physical-corner ghosts.
+    if (peos->eos_data.is_cgl && pcgl_lf != nullptr &&
+        !pmy_pack->pmesh->strictly_periodic) {
+      pbval_u->HydroBCs(pmy_pack, pbval_u->u_in, u0);
+      pbval_b->BFieldBCs(pmy_pack, pbval_b->b_in, b0);
+    }
     TraceCGLLFTaskList(pmy_pack, "Prolongate", "end", stage);
   }
   return TaskStatus::complete;
