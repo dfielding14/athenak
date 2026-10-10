@@ -69,6 +69,85 @@ int main() {
         assert result.returncode == 0, result.stdout+result.stderr
 
 
+def test_grad_b_arithmetic_matches_flux(tmp_path):
+    # At large anisotropy an ULP of canceled grad-B can dominate the row.
+    source = (Path(__file__).resolve().parents[3] / "src/diffusion/cgl_landau_fluid.cpp").read_text()
+    start = source.index("Real ScaledMagneticMagnitude(")
+    magnitude = source[start:source.index("// Coefficient one-norm", start)]
+    start = source.index("Real CGLLFVL4DerivativeNorm(")
+    derivative = source[start:source.index("// Positive sums", start)]
+    timestep = source[source.index("void CGLLandauFluid::NewTimeStep("):]
+    start = timestep.index("const Real delta_b =")
+    bound = timestep[start:timestep.index("const Real pressure_ratio =", start)]
+    start = source.index("const Real grad_b =", source.index("void CGLLFFlux("))
+    flux = source[start:source.index(";", start)+1]
+    unit = tmp_path / "grad_b.cpp"
+    unit.write_text("""
+#include <cmath>
+#include <limits>
+#include <iostream>
+#define KOKKOS_INLINE_FUNCTION
+#define SQR(x) ((x)*(x))
+using Real=double;
+namespace Kokkos { using std::isfinite; }
+struct Face { Real bhx,bhy,bhz,bhdir; };
+"""+magnitude+derivative+"""
+Real field(Real x,Real y) { return 1+.24*(x-y); }
+Real bcc(int i,int j,int d) {
+  return d==0 ? .5*field(i-.5,j)+.5*field(i+.5,j) :
+                .5*field(i,j-.5)+.5*field(i,j+.5);
+}
+Real magnitude(int i,int j) {
+  return ScaledMagneticMagnitude(bcc(i,j,0),bcc(i,j,1),0);
+}
+int main() {
+  int failed=0;
+  for (int scenario=0;scenario<2;++scenario) {
+    // First case: divergence-free affine CT field; second isolates 3D sum order.
+    const int ndim=scenario==0 ? 2 : 3, dir=scenario==0 ? 0 : 2;
+    const int m=0,il=0,jl=0,kl=0,ir=dir==0,jr=0,kr=dir==2;
+    const Real bar=.5*magnitude(0,0)+.5*magnitude(1,0);
+    const Real bhx=field(.5,0)/bar, bhy=(.5*bcc(0,0,1)+.5*bcc(1,0,1))/bar;
+    const Face face=scenario==0 ? Face{bhx,bhy,0,bhx} : Face{1,1,1,1};
+    const Real dx[3]={scenario==0 ? .09 : 1, scenario==0 ? .09 : 1,4};
+    const Real bh[3]={face.bhx,face.bhy,face.bhz}, bv[3]={bh[0],bh[1],bh[2]};
+    const Real minimum=std::numeric_limits<Real>::min();
+    Real grad_parallel=0,grad_perp=0,derivative_parallel[3]={},derivative_perp[3]={};
+    auto bmag=[&](int,int k,int j,int i) {
+      return scenario==0 ? magnitude(i,j) : 3e16+1e16*i-1e16*j+4*k;
+    };
+    auto tpar=[](int,int,int,int) { return Real(1); };
+    auto tperp=tpar;
+    const Real selected=[&]() {
+"""+bound+"""
+      return grad_b;
+    }();
+    Real gradient[3]={};
+    for (int t=0;t<ndim;++t) {
+      const int di=t==0,dj=t==1,dk=t==2;
+      gradient[t]=t==dir ? (bmag(m,kr,jr,ir)-bmag(m,kl,jl,il))/dx[t] :
+          .25*(bmag(m,kr+dk,jr+dj,ir+di)-bmag(m,kr-dk,jr-dj,ir-di)+
+               bmag(m,kl+dk,jl+dj,il+di)-bmag(m,kl-dk,jl-dj,il-di))/dx[t];
+    }
+    const Real gb_x=gradient[0],gb_y=gradient[1],gb_z=gradient[2];
+"""+flux+"""
+    if (selected!=grad_b || grad_b==0) {
+      std::cerr << "scenario " <<scenario<< ": bound " <<selected
+                << ", flux " <<grad_b<<'\\n';
+      failed |= 1<<scenario;
+    }
+  }
+  return failed;
+}
+""")
+    executable = tmp_path / "grad_b"
+    compiler = shlex.split(os.environ.get("CXX", "c++"))
+    for command in [compiler+["-std=c++17", "-O2", "-ffp-contract=off", str(unit), "-o", str(executable)],
+                    [str(executable)]]:
+        result = subprocess.run(command, capture_output=True, text=True)
+        assert result.returncode == 0, result.stdout+result.stderr
+
+
 class _FrozenStencil:
     def __init__(self, rho, face_b, state, spacing, nu=0.0, kpar=2*np.pi,
                  local=False, cap=True):

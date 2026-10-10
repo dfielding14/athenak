@@ -1854,10 +1854,11 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
         Real derivative_perp[3] = {0.0,0.0,0.0};
         const Real minimum = std::numeric_limits<Real>::min();
         const Real delta_b = bmag(m,kr,jr,ir)-bmag(m,kl,jl,il);
-        const Real normal_b = face.bhdir*delta_b;
-        Real grad_b = normal_b/dx[dir];
+        Real gradient_b[3] = {0.0,0.0,0.0};
+        gradient_b[dir] = delta_b/dx[dir];
+        const Real normal_b = face.bhdir*gradient_b[dir];
         bool normal_gradients = delta_b == 0.0 ||
-            (fabs(normal_b) >= minimum && fabs(grad_b) >= minimum);
+            (fabs(gradient_b[dir]) >= minimum && fabs(normal_b) >= minimum);
         for (int t=0; t<ndim; ++t) {
           if (t == dir || bv[t] == 0.0) continue;
           const int di = (t == 0), dj = (t == 1), dk = (t == 2);
@@ -1879,7 +1880,7 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
               bmag(m,kr+dk,jr+dj,ir+di)-bmag(m,kr-dk,jr-dj,ir-di) +
               bmag(m,kl+dk,jl+dj,il+di)-bmag(m,kl-dk,jl-dj,il-di);
           const Real gb = 0.25*transverse_b/dx[t];
-          grad_b += bh[t]*gb;
+          gradient_b[t] = gb;
           normal_gradients = normal_gradients &&
               (derivative_parallel[t] == 0.0 ||
                (transverse_parallel >= minimum && transverse_parallel/dx[t] >= minimum)) &&
@@ -1888,6 +1889,9 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
               (transverse_b == 0.0 || (fabs(0.25*transverse_b) >= minimum &&
                                       fabs(gb) >= minimum && fabs(bh[t]*gb) >= minimum));
         }
+        // Match the flux's grouping: anisotropy can amplify a canceled residual.
+        const Real grad_b = face.bhx*gradient_b[0] + face.bhy*gradient_b[1]
+                           + face.bhz*gradient_b[2];
         const Real pressure_ratio = face.pperp/face.ppar;
         // Differentiate Tperp_f*(1-Tperp_f/Tpar_f), including its
         // reverse coupling to Tpar. Both density-weighted face means
