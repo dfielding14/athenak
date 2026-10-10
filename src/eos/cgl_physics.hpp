@@ -309,7 +309,11 @@ Real PerpendicularHeatFluxRatio(const Real cparallel, const Real rho,
       (nu > 0.0 && nu < std::numeric_limits<Real>::min())
           ? (nu/cparallel)/(0.5*kSqrtTwoPi)
           : (nu/(0.5*kSqrtTwoPi))/cparallel;
-  const Real response = 1.0/(lf_k + collision_over_speed);
+  Real response = 1.0/(lf_k + collision_over_speed);
+  // Halve an overflowing denominator before logarithms can erase driver cancellation.
+  if (response == 0.0) {
+    response = 0.5/(0.5*lf_k + (nu/kSqrtTwoPi)/cparallel);
+  }
   const Real temperature_term = rho*grad_tperp/pperp;
   const Real magnetic_term =
       (1.0 - pperp/ppar)*grad_b*bmag_inv;

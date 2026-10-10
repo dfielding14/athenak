@@ -87,21 +87,30 @@ def _coupled(case, seed, nx, cfl):
     assert np.all(np.isfinite(final)) and np.min(final[:, [3, 7, 8]]) > 0
     np.testing.assert_array_equal(final[:, 3:7], initial[:, 3:7])
     np.testing.assert_array_equal(final[:, 9:12], initial[:, 9:12])
+    expected = _continuum(seed)
+    reference = np.sin(2*np.pi*final[:, 2, None])*expected
+    temperature = final[:, 7:9]/final[:, 3, None]
+    # Normalize to the wave's RMS, so the unit background cannot hide artifacts.
+    field_error = np.sqrt(2*np.mean((temperature-1.0-reference)**2, axis=0))/abs(expected)
     print(f"{case.name}: t={values['time']:.17g}, cycles={cycles}, dt={step:.17g}, "
           f"RHS={2*cycles}, signed amplitudes={measured}")
-    return measured, step
+    return measured, step, field_error
 
 
 @pytest.mark.parametrize("seed", [0, 1], ids=["parallel_seed", "perpendicular_seed"])
 def test_cgl_lf_coupled_decay(tmp_path, seed):
     expected = _continuum(seed)
-    coarse, coarse_dt = _coupled(tmp_path / "nx16", seed, 16, 0.1)
-    fine, fine_dt = _coupled(tmp_path / "nx32", seed, 32, 0.1)
-    half, half_dt = _coupled(tmp_path / "half_dt", seed, 32, 0.05)
+    coarse, coarse_dt, coarse_field = _coupled(tmp_path / "nx16", seed, 16, 0.1)
+    fine, fine_dt, fine_field = _coupled(tmp_path / "nx32", seed, 32, 0.1)
+    half, half_dt, half_field = _coupled(tmp_path / "half_dt", seed, 32, 0.05)
     errors = np.abs(np.array([coarse, fine, half])-expected)/np.abs(expected)
-    print(f"coupled continuum amplitudes={expected}; relative channel errors={errors}")
-    assert np.all(np.isfinite(errors)) and np.all(errors[1:] < 0.01), errors
-    assert np.all(errors[1] < 0.4*errors[0]), errors
+    field_errors = np.array([coarse_field, fine_field, half_field])
+    print(f"coupled continuum amplitudes={expected}; relative channel errors={errors}; "
+          f"relative full-field errors={field_errors}")
+    for relative_errors in (errors, field_errors):
+        assert np.all(np.isfinite(relative_errors)), relative_errors
+        assert np.all(relative_errors[1:] < 0.01), relative_errors
+        assert np.all(relative_errors[1] < 0.4*relative_errors[0]), relative_errors
     np.testing.assert_allclose([fine_dt, half_dt], [0.25*coarse_dt, 0.5*fine_dt],
                                rtol=1e-12, atol=0)
     # This bounds temporal contamination, not temporal convergence order: the

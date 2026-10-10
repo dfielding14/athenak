@@ -564,6 +564,30 @@ void CheckPerpendicularBGKResponse() {
                            ratio, expected);
     }
   }
+
+  for (const bool overflowing_sum : {true, false}) {
+    const Real speed = overflowing_sum ? Real(1.0) : Real(0.7)/maximum;
+    const Real k = overflowing_sum ? Real(0.6)*maximum : Real(1.0);
+    const Real nu = overflowing_sum ? maximum : Real(1.0);
+    const Real gt = std::sqrt(maximum);
+    for (const Real direction : {-std::numeric_limits<Real>::infinity(),
+                                 std::numeric_limits<Real>::infinity()}) {
+      const Real gb = std::nextafter(-gt, direction);
+      // Form the finite normalized cancellation before the overflowing response.
+      const long double driver = static_cast<long double>(gt)+gb;
+      const long double exact = -driver/(static_cast<long double>(k)+
+          nu/(std::sqrt(pi/2.0L)*speed));
+      const long double cap = std::sqrt(2.0L/pi)*speed*(maximum/Real(4.0));
+      Real ratio = 0.0;
+      const Real flux = cgl::LimitedPerpendicularHeatFlux(
+          speed, maximum/Real(4.0), maximum/Real(8.0), maximum/Real(4.0),
+          1.0, k, nu, gt, gb, ratio);
+      RequireOverflowClose("perpendicular overflowing response near cancellation ratio",
+                           ratio, static_cast<Real>(exact));
+      RequireOverflowClose("perpendicular overflowing response near cancellation flux",
+                           flux, static_cast<Real>(cap*exact/(1.0L+std::abs(exact))));
+    }
+  }
 }
 
 void CheckPerpendicularClosureOverflowEndpoints() {

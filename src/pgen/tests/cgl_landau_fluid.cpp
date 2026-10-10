@@ -983,39 +983,54 @@ void CheckDeviceClosureResponse() {
   const Real maximum = std::numeric_limits<Real>::max();
   const Real minimum = std::numeric_limits<Real>::min();
   const Real subnormal = std::numeric_limits<Real>::denorm_min();
-  // c, rho, isotropic pressure, k, nu, grad(Tperp). The last case forces the
-  // logarithmic response while both the physical ratio and flux remain nonzero.
-  const Real cases[][6] = {
-      {0.75, 3.0, 6.0, 3.0, Real(2.25)*std::sqrt(Real(M_PI/2.0)), 2.0},
-      {subnormal, maximum, maximum, 1.0, subnormal, 1.0},
-      {1.0, 1.0, 1.0, 1.0, Real(0.75)*maximum, -Real(0.75)*maximum},
-      {Real(0.25)*minimum, Real(0.25)*maximum, Real(0.25)*maximum, 1.0,
-       Real(0.25)*maximum, -Real(0.25)*maximum}};
+  const Real large_gradient = std::sqrt(maximum);
+  // c, rho, ppar, pperp, inverse B, k, nu, grad(Tperp), grad(B).
+  // The final cases must retain cancellation when the response denominator overflows.
+  const Real cases[][9] = {
+      {0.75, 3.0, 6.0, 6.0, 1.0, 3.0,
+       Real(2.25)*std::sqrt(Real(M_PI/2.0)), 2.0, 0.0},
+      {subnormal, maximum, maximum, maximum, 1.0, 1.0, subnormal, 1.0, 0.0},
+      {1.0, 1.0, 1.0, 1.0, 1.0, 1.0,
+       Real(0.75)*maximum, -Real(0.75)*maximum, 0.0},
+      {Real(0.25)*minimum, Real(0.25)*maximum, Real(0.25)*maximum,
+       Real(0.25)*maximum, 1.0, 1.0, Real(0.25)*maximum, -Real(0.25)*maximum, 0.0},
+      {1.0, maximum/Real(4.0), maximum/Real(8.0), maximum/Real(4.0), 1.0,
+       Real(0.6)*maximum, maximum, large_gradient,
+       std::nextafter(-large_gradient, -std::numeric_limits<Real>::infinity())},
+      {Real(0.7)/maximum, maximum/Real(4.0), maximum/Real(8.0), maximum/Real(4.0),
+       1.0, 1.0, 1.0, large_gradient,
+       std::nextafter(-large_gradient, -std::numeric_limits<Real>::infinity())}};
   constexpr int count = sizeof(cases)/sizeof(cases[0]);
-  DvceArray2D<Real> arguments("closure_arguments", 2*count, 6);
+  DvceArray2D<Real> arguments("closure_arguments", 2*count, 9);
   DvceArray2D<Real> answers("closure_answers", 2*count, 2);
   auto host = Kokkos::create_mirror_view(arguments);
   for (int i=0; i<2*count; ++i) {
-    for (int j=0; j<6; ++j) host(i,j) = cases[i%count][j];
-    if (i >= count) host(i,5) = -host(i,5);
+    for (int j=0; j<9; ++j) host(i,j) = cases[i%count][j];
+    if (i >= count) {
+      host(i,7) = -host(i,7);
+      host(i,8) = -host(i,8);
+    }
   }
   Kokkos::deep_copy(arguments, host);
   Kokkos::parallel_for("closure_response", Kokkos::RangePolicy<>(DevExeSpace(), 0, 2*count),
   KOKKOS_LAMBDA(const int i) {
     Real ratio;
     answers(i,1) = cgl::LimitedPerpendicularHeatFlux(
-        arguments(i,0), arguments(i,1), arguments(i,2), arguments(i,2),
-        1.0, arguments(i,3), arguments(i,4), arguments(i,5), 0.0, ratio);
+        arguments(i,0), arguments(i,1), arguments(i,2), arguments(i,3),
+        arguments(i,4), arguments(i,5), arguments(i,6), arguments(i,7),
+        arguments(i,8), ratio);
     answers(i,0) = ratio;
   });
   const auto result = HostCopy(answers);
   for (int i=0; i<2*count; ++i) {
-    // Extended precision evaluates the physical coefficient and cap independently
-    // of production's normalized response and exceptional arithmetic branches.
-    const long double c=host(i,0), rho=host(i,1), pressure=host(i,2);
-    const long double chi = c*c/(std::sqrt(0.5L*acosl(-1.0L))*c*host(i,3)+host(i,4));
-    const long double qmax = std::sqrt(2.0L/acosl(-1.0L))*c*pressure;
-    const long double ratio = -chi*rho*host(i,5)/qmax;
+    // Normalize before cancellation; subtracting huge physical products would
+    // discard the reference residual even in extended precision.
+    const long double c=host(i,0), rho=host(i,1), ppar=host(i,2), pperp=host(i,3);
+    const long double driver = (rho/pperp)*host(i,7)-
+        ((ppar-pperp)/ppar)*host(i,8)*host(i,4);
+    const long double chi = c*c/(std::sqrt(0.5L*acosl(-1.0L))*c*host(i,5)+host(i,6));
+    const long double qmax = std::sqrt(2.0L/acosl(-1.0L))*c*pperp;
+    const long double ratio = -chi*pperp*driver/qmax;
     const Real expected[] = {static_cast<Real>(ratio),
         static_cast<Real>(qmax*ratio/(1.0L+std::abs(ratio)))};
     for (int j=0; j<2; ++j) {
