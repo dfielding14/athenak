@@ -298,6 +298,9 @@ reusing its valid values is a later optimization, not a dependency here.
 Allocate and fill that scratch on the first initialization/restart call, before
 any heat-flux evaluation. Exercise the representable-sound-speed fallback in
 both the face flux and bound; they must describe the same admitted state.
+Match the flux's grad-B arithmetic: divide coordinate differences by spacing
+before projection, then sum x/y/z in the same order. Anisotropy can amplify a
+rounding residual lost by an algebraically equivalent grouping of the bound.
 Include background collisions. Do not first port WO1's provisional D5 bound merely to
 replace it, and do not loosen unrelated conduction bounds.
 Gate: independent frozen-stencil rows/eigenvalues, staggered checkerboard,
@@ -314,6 +317,13 @@ In that same checker, retain real/imaginary eigenvalues and RKL amplification
 at the selected step, not just spectral radius versus row norm. Interpret growth
 against the explicit reference; a positive or nonnormal frozen operator is not
 automatically a timestep bug. Do not turn this into another parameter campaign.
+Eigenmode amplification checks do not bound nonnormal transient growth.
+The rerunnable checker is `test_cgl_lf_bound_cpu.py`; runtime row checks in
+`test_cgl_landau_fluid_cpu.py` cover 2D/3D single/split layouts. Compare layout
+checks at identical initial data and physical times. This temperature Jacobian
+freezes density, field geometry, closure coefficients and cap scales; at zero
+VL4 slopes its envelope covers neighboring branches without assuming a unique
+derivative. Retain the resolved reversal, closure, hotspot and oblique gates.
 
 **10. Separate STS safety from advective CFL.**
 Only after piece 9 passes, add the parameter in `mesh.hpp`, its fresh/restart
@@ -326,6 +336,11 @@ Both budget loops serve all registered STS processes: include an ordinary
 conduction or viscosity budget check, not only LF, and retain explicit budgets.
 Do not adopt a larger default merely because the parameter exists. Complete the
 unforced finite-rate threshold-crossing refinement below before accepting it.
+Use the accepted Piece 9 executable and Tier 2 measurements as the immediate
+parent. Preserve current-CFL behavior when the new safety is absent; 0.9 is not
+an accepted default. Adding a restart-loaded parameter requires regenerating
+and relabeling the Tier 2 checkpoint. Keep paired binaries on the same compatible
+checkpoint and report each binary's own work count and physical advance.
 
 **11. Restore forcing corrections one at a time.**
 Scope: shared turbulence driver, task placement, primitive/ghost refresh and
