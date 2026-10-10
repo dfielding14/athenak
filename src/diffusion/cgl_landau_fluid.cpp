@@ -1981,6 +1981,9 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
                 -2.0-log_h;
             log_grad_b = CGLLFLogAdd(log_grad_b,log_bt+log_gbt);
           }
+          // Flux grouping can round above the separate-difference envelope.
+          log_grad_b = Kokkos::isnan(grad_b) ? grad_b :
+              fmax(log_grad_b,CGLLFLogAbs(grad_b));
           // The cold-path factor (1+r)^2 bounds |1-2r|+r^2 without
           // materializing an overflowing pressure ratio or squaring it.
           const Real log_ratio = CGLLFLogAbs(face.pperp)-CGLLFLogAbs(face.ppar);
