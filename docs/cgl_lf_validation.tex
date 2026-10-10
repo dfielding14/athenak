@@ -151,11 +151,11 @@ The implemented closure uses the Snyder--Hammett--Dorland 3+1 heat fluxes,
         \frac{\nabla_\parallel |B|}{|B|}
     \right],
 \end{align}
-with the finite-collision Squire et al. coefficients
+with the collisionally modified Snyder--Hammett--Dorland coefficients
 \begin{equation}
   \chi_\perp =
     \frac{2c_\parallel^2}
-      {\sqrt{2\pi}\,c_\parallel |k_\parallel| + \nu_{\rm eff}},
+      {\sqrt{2\pi}\,c_\parallel |k_\parallel| + 2\nu_{\rm eff}},
   \qquad
   \chi_\parallel =
     \frac{8c_\parallel^2}
@@ -167,6 +167,16 @@ mirror/firehose limiter scattering at the face.  In the collisionless limit,
 these reduce to
 \(\chi_\perp=\sqrt{2/\pi}\,c_\parallel/|k_\parallel|\) and
 \(\chi_\parallel=\sqrt{8/\pi}\,c_\parallel/|k_\parallel|\).
+The perpendicular coefficient follows equation 49 of
+Snyder, Hammett, and Dorland (1997) and equation 35 of
+Sharma, Hammett, and Quataert (2003)\cite{Snyder1997,Sharma2003}.
+Their collision convention gives
+\(\partial_t(p_\perp-p_\parallel)=-\nu_{\rm coll}(p_\perp-p_\parallel)\).
+This deliberately differs from the single \(\nu_{\rm eff}\) printed in the
+denominator of Squire et al. (2023), equation 2.7, under the same convention.
+It gives \(\chi_\perp\nu_{\rm eff}/c_\parallel^2\to1\) at strong collisionality;
+the unchanged parallel coefficient remains an approximate 3+1 closure, so
+this is not an exact Braginskii transport model.
 Here \texttt{lf\_k\_parallel} is the closure wavenumber \(|k_\parallel|\), not a
 conductivity.  In local mode, \(c_\parallel=\sqrt{p_\parallel/\rho}\) is computed
 from the live face state.  In background mode, only this prefactor is frozen to
@@ -306,6 +316,10 @@ result bundle containing a manifest, readable summary, logs, histories,
 machine-readable validation CSV files, and figures.  The five method figures
 included below were regenerated from the retained passing bundle
 \texttt{build-cgl-implementation/cgl\_lf\_runs/20260524-final-full-v2}.
+These retained figures and numerical results describe that historical source
+epoch.  They do not qualify the later collision schedule or perpendicular
+coefficient corrections; current rebuild evidence is tracked in
+\path{docs/cgl_lf_surgical_rebuild_work_order.md}.
 
 Each test prints the measured value, reference value or error norm, tolerance,
 and pass/fail status.  The plotted points are read from the same diagnostic CSV
@@ -726,6 +740,16 @@ comparison gates remain open until the required corrected-epoch output bundles a
 analyzed against admitted references.
 
 \begin{thebibliography}{9}
+\bibitem{Snyder1997}
+P. B. Snyder, G. W. Hammett, and W. Dorland,
+\emph{Landau fluid models of collisionless magnetohydrodynamics},
+\href{https://w3.pppl.gov/~hammett/gyrofluid/papers/snyder_pop97.pdf}{Physics of Plasmas 4, 3974--3985}, 1997.
+
+\bibitem{Sharma2003}
+P. Sharma, G. W. Hammett, and E. Quataert,
+\emph{Transition from Collisionless to Collisional Magnetorotational Instability},
+\href{https://w3.pppl.gov/~hammett/gyrofluid/papers/2003/sharma03.pdf}{The Astrophysical Journal 596, 1121--1130}, 2003.
+
 \bibitem{Squire2023}
 J. Squire et al.,
 \emph{Pressure anisotropy and viscous heating in weakly collisional plasma

@@ -12,10 +12,15 @@ density, magnetic-field gradients, and anisotropy state still come from the live
 solution.
 
 CGL Landau-fluid heat flux requires `<mhd>/eos = cgl` and
-`<mhd>/conductivity_integrator = sts`.
+`<mhd>/cgl_heat_flux = landau_fluid`. Select `cgl_heat_flux_integrator = sts`
+with `<time>/sts_integrator = rkl2`, or `explicit` with `sts_integrator = none`.
 
-The LF face fluxes use the finite-collision Squire et al. (2023) coefficients
-when `<mhd>/nu_coll` or active mirror/firehose limiter scattering is present.
+The perpendicular LF coefficient follows the SHD97/Sharma03 BGK convention:
+`chi_perp = 2*c_parallel^2/(sqrt(2*pi)*c_parallel*lf_k_parallel + 2*nu_eff)`.
+Here background collisions decay `p_perp-p_parallel` at rate `nu_coll`, and
+`nu_eff` also includes the applicable configured limiter scattering. This
+deliberately differs from the single collision frequency printed in Squire
+et al. (2023), equation 2.7. The collisionless coefficient is unchanged.
 The resulting unlimited flux is then capped with the equation 3.2 form,
 `q = q_L*q_max/(q_max + abs(q_L))`.
 

@@ -11,9 +11,14 @@ for an isotropic pressure in code units. The heat-flux coefficients and caps are
 unchanged because they depend on `c_parallel`, pressure, `lf_k_parallel`, and
 collision frequency, not directly on the magnetic pressure normalization.
 
-## Local Runs Already Completed
+## Historical Local Runs
 
-The current quantitative pgen already contains a Squire Figure 17-style oblique
+These results predate the surgical rebuild's collision schedule and perpendicular
+coefficient corrections. Preserve them as historical evidence; current equations
+and qualification are recorded in the [LF module](source/modules/cgl_landau_fluid.md)
+and [rebuild work order](cgl_lf_surgical_rebuild_work_order.md).
+
+The quantitative pgen contains a Squire Figure 17-style oblique
 linear initial-value setup. It seeds a transverse velocity perturbation on the
 Figure 17 background and compares the result with an offline integration of the
 same linearized initial-value problem; it is not an eigenmode initialization.

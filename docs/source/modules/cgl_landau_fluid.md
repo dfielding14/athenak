@@ -40,6 +40,25 @@ Set `lf_coefficient_mode = background` with a positive `lf_c_parallel0` to
 hold the closure speed fixed while gradients and evolved variables remain
 local.
 
+The perpendicular coefficient uses the collisionally modified 3+1 closure of
+[Snyder, Hammett & Dorland (1997), equation 49](https://w3.pppl.gov/~hammett/gyrofluid/papers/snyder_pop97.pdf),
+also given by [Sharma, Hammett & Quataert (2003), equation 35](https://w3.pppl.gov/~hammett/gyrofluid/papers/2003/sharma03.pdf):
+
+$$
+\chi_\perp=\frac{c_\parallel^2}{\sqrt{\pi/2}\,c_\parallel k_L+\nu_{\rm eff}}
+=\frac{2c_\parallel^2}{\sqrt{2\pi}\,c_\parallel k_L+2\nu_{\rm eff}}.
+$$
+
+Here $c_\parallel=\sqrt{p_\parallel/\rho}$ in local mode, and the background
+collision frequency satisfies $\partial_t(p_\perp-p_\parallel)
+=-\nu_{\rm coll}(p_\perp-p_\parallel)$ without other sources. This deliberately
+differs from the single $\nu_{\rm eff}$ printed in the perpendicular denominator
+of [Squire et al. (2023), equation 2.7](https://arxiv.org/html/2303.00468v2#S2.E7),
+which uses the same pressure-relaxation convention. The collisionless coefficient
+is unchanged, while $\chi_\perp\nu_{\rm eff}/c_\parallel^2\to1$ at strong
+collisionality. The parallel coefficient and heat-flux caps are unchanged;
+this choice does not make the complete closure an exact Braginskii transport model.
+
 ## State And Update
 
 CGL evolves density, momentum, total energy, and a sixth MHD state storing

@@ -53,6 +53,7 @@ enum class TestMode {
   rotated_decay,
   face_geometry,
   transverse_flux,
+  closure_response,
   hotspot,
   field_reversal,
   low_field,
@@ -151,6 +152,7 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "rotated_decay") return TestMode::rotated_decay;
   if (mode == "face_geometry") return TestMode::face_geometry;
   if (mode == "transverse_flux") return TestMode::transverse_flux;
+  if (mode == "closure_response") return TestMode::closure_response;
   if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "field_reversal") return TestMode::field_reversal;
   if (mode == "timestep_refresh") return TestMode::timestep_refresh;
@@ -159,7 +161,7 @@ TestMode ParseMode(ParameterInput *pin) {
        "collision_relaxation, grad_b, grad_b_wall, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "transverse_flux, hotspot, "
+       "transverse_flux, closure_response, hotspot, "
        "face_geometry, field_reversal, low_field, or timestep_refresh");
 }
 
@@ -179,6 +181,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::rotated_decay: return "rotated_decay";
     case TestMode::face_geometry: return "face_geometry";
     case TestMode::transverse_flux: return "transverse_flux";
+    case TestMode::closure_response: return "closure_response";
     case TestMode::hotspot: return "hotspot";
     case TestMode::field_reversal: return "field_reversal";
     case TestMode::timestep_refresh: return "timestep_refresh";
@@ -474,7 +477,7 @@ Real FaceCParallel(ParameterInput *pin, const Real rho, const Real ppar) {
 }
 
 Real ChiPerp(const Real cpar, const Real lf_k, const Real nu_eff) {
-  const Real denom = cgl::kSqrtTwoPi*cpar*lf_k + nu_eff;
+  const Real denom = cgl::kSqrtTwoPi*cpar*lf_k + 2.0*nu_eff;
   return (denom > 0.0) ? static_cast<Real>(2.0)*SQR(cpar)/denom : 0.0;
 }
 
@@ -529,27 +532,25 @@ DecayState IntegrateDecayReference(ParameterInput *pin, Mesh *pm, const TestMode
     s.tperp = (pperp0/rho0)*amp;
   }
 
-  const auto apply_heat_flux = [=](DecayState state, const Real dt) {
-    state.tpar *= std::exp(-chi_parallel*SQR(k_wave)*dt);
-    state.tperp *= std::exp(-chi_perp*SQR(k_wave)*dt);
-    return state;
-  };
-  const auto apply_collision = [=](DecayState state, const Real dt) {
-    const Real piso = ONE_3RD*state.tpar + TWO_3RDS*state.tperp;
-    Real paniso = state.tperp - state.tpar;
-    paniso *= std::exp(-nu_coll*dt);
-    state.tpar = piso - TWO_3RDS*paniso;
-    state.tperp = piso + ONE_3RD*paniso;
-    return state;
-  };
-
-  // Each LF half-sweep is followed by a collision source update over the same
-  // half-cycle duration, so the two updates cover one physical cycle in total.
-  s = apply_heat_flux(s, 0.5*pm->time);
-  s = apply_collision(s, 0.5*pm->time);
-  s = apply_heat_flux(s, 0.5*pm->time);
-  s = apply_collision(s, 0.5*pm->time);
-  return s;
+  // Continuum temperature amplitudes: heat transport plus BGK exchange with
+  // conserved Tpar/2+Tperp and anisotropy decaying at nu_coll.
+  if (nu_coll == 0.0) {
+    return {s.tpar*std::exp(-chi_parallel*SQR(k_wave)*pm->time),
+            s.tperp*std::exp(-chi_perp*SQR(k_wave)*pm->time)};
+  }
+  const Real a = -chi_parallel*SQR(k_wave) - TWO_3RDS*nu_coll;
+  const Real d = -chi_perp*SQR(k_wave) - ONE_3RD*nu_coll;
+  const Real trace_half = 0.5*(a+d);
+  const Real difference_half = 0.5*(a-d);
+  const Real delta = std::sqrt(SQR(difference_half) + 2.0*SQR(nu_coll)/9.0);
+  const Real slow = std::exp((trace_half+delta)*pm->time);
+  const Real fast = std::exp((trace_half-delta)*pm->time);
+  const Real diagonal = 0.5*(slow+fast);
+  const Real off_diagonal = 0.5*(slow-fast)/delta;
+  return {diagonal*s.tpar + off_diagonal*
+              (difference_half*s.tpar + TWO_3RDS*nu_coll*s.tperp),
+          diagonal*s.tperp + off_diagonal*
+              (ONE_3RD*nu_coll*s.tpar - difference_half*s.tperp)};
 }
 
 void CheckCollisionRelaxation(ParameterInput *pin, Mesh *pm) {
@@ -591,8 +592,9 @@ void CheckCollisionRelaxation(ParameterInput *pin, Mesh *pm) {
 void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
   auto *pmhd = pm->pmb_pack->pmhd;
   auto w = HostCopy(pmhd->w0);
-  const int pidx = (mode == TestMode::parallel_decay) ? IPR : IPP;
-  const Projection projection = ProjectTemperature(w, pin, pm, pidx);
+  const Projection parallel = ProjectTemperature(w, pin, pm, IPR);
+  const Projection perpendicular = ProjectTemperature(w, pin, pm, IPP);
+  const Projection projection = (mode == TestMode::parallel_decay) ? parallel : perpendicular;
 
   const Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   const Real p0 = (mode == TestMode::parallel_decay) ?
@@ -617,15 +619,26 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
   const Real expected_mode_amp = (mode == TestMode::parallel_decay) ?
                                  expected_state.tpar : expected_state.tperp;
   const Real initial_amp = (p0/rho0)*amp;
-  const Real expected_amp = std::abs(expected_mode_amp);
-  const Real measured_amp = std::abs(projection.sin_amp);
+  const Real expected_amp = expected_mode_amp;
+  const Real measured_amp = projection.sin_amp;
   const Real rel_err = RelativeError(measured_amp, expected_amp);
   const Real cos_limit = phase_tol*std::abs(initial_amp);
 
-  RequireRelative(std::string(ModeName(mode)) + " Fourier amplitude",
-                  measured_amp, expected_amp, rel_tol);
-  Require(std::abs(projection.cos_amp) <= cos_limit,
-          std::string(ModeName(mode)) + " developed an unexpected cosine component");
+  const Projection channels[] = {parallel, perpendicular};
+  const Real expected_channels[] = {expected_state.tpar, expected_state.tperp};
+  for (int channel=0; channel<2; ++channel) {
+    const std::string label = std::string(ModeName(mode)) +
+        (channel == 0 ? " parallel" : " perpendicular");
+    if (expected_channels[channel] != 0.0) {
+      RequireRelative(label+" signed Fourier amplitude", channels[channel].sin_amp,
+                      expected_channels[channel], rel_tol);
+    } else {
+      Require(std::abs(channels[channel].sin_amp) <= rel_tol*std::abs(initial_amp),
+              label+" generated an unforced Fourier amplitude");
+    }
+    Require(std::abs(channels[channel].cos_amp) <= cos_limit,
+            label+" developed an unexpected cosine component");
+  }
 
   auto out = OpenValidationDataFile(pin, "decay");
   if (out) {
@@ -638,6 +651,12 @@ void CheckDecay(ParameterInput *pin, Mesh *pm, const TestMode mode) {
         << "expected_amp," << expected_amp << "\n"
         << "expected_tpar_amp," << expected_state.tpar << "\n"
         << "expected_tperp_amp," << expected_state.tperp << "\n"
+        << "measured_tpar_amp," << parallel.sin_amp << "\n"
+        << "measured_tperp_amp," << perpendicular.sin_amp << "\n"
+        << "measured_tpar_cos," << parallel.cos_amp << "\n"
+        << "measured_tperp_cos," << perpendicular.cos_amp << "\n"
+        << "mean_tpar," << parallel.mean << "\n"
+        << "mean_tperp," << perpendicular.mean << "\n"
         << "chi_parallel," << chi_parallel << "\n"
         << "chi_perp," << chi_perp << "\n"
         << "nu_eff," << nu_eff << "\n"
@@ -960,6 +979,56 @@ void CheckFluxLimiter(ParameterInput *pin, Mesh *pm) {
             << " min_unlimited_over_qmax=" << min_unlimited_ratio << std::endl;
 }
 
+void CheckDeviceClosureResponse() {
+  const Real maximum = std::numeric_limits<Real>::max();
+  const Real minimum = std::numeric_limits<Real>::min();
+  const Real subnormal = std::numeric_limits<Real>::denorm_min();
+  // c, rho, isotropic pressure, k, nu, grad(Tperp). The last case forces the
+  // logarithmic response while both the physical ratio and flux remain nonzero.
+  const Real cases[][6] = {
+      {0.75, 3.0, 6.0, 3.0, Real(2.25)*std::sqrt(Real(M_PI/2.0)), 2.0},
+      {subnormal, maximum, maximum, 1.0, subnormal, 1.0},
+      {1.0, 1.0, 1.0, 1.0, Real(0.75)*maximum, -Real(0.75)*maximum},
+      {Real(0.25)*minimum, Real(0.25)*maximum, Real(0.25)*maximum, 1.0,
+       Real(0.25)*maximum, -Real(0.25)*maximum}};
+  constexpr int count = sizeof(cases)/sizeof(cases[0]);
+  DvceArray2D<Real> arguments("closure_arguments", 2*count, 6);
+  DvceArray2D<Real> answers("closure_answers", 2*count, 2);
+  auto host = Kokkos::create_mirror_view(arguments);
+  for (int i=0; i<2*count; ++i) {
+    for (int j=0; j<6; ++j) host(i,j) = cases[i%count][j];
+    if (i >= count) host(i,5) = -host(i,5);
+  }
+  Kokkos::deep_copy(arguments, host);
+  Kokkos::parallel_for("closure_response", Kokkos::RangePolicy<>(DevExeSpace(), 0, 2*count),
+  KOKKOS_LAMBDA(const int i) {
+    Real ratio;
+    answers(i,1) = cgl::LimitedPerpendicularHeatFlux(
+        arguments(i,0), arguments(i,1), arguments(i,2), arguments(i,2),
+        1.0, arguments(i,3), arguments(i,4), arguments(i,5), 0.0, ratio);
+    answers(i,0) = ratio;
+  });
+  const auto result = HostCopy(answers);
+  for (int i=0; i<2*count; ++i) {
+    // Extended precision evaluates the physical coefficient and cap independently
+    // of production's normalized response and exceptional arithmetic branches.
+    const long double c=host(i,0), rho=host(i,1), pressure=host(i,2);
+    const long double chi = c*c/(std::sqrt(0.5L*acosl(-1.0L))*c*host(i,3)+host(i,4));
+    const long double qmax = std::sqrt(2.0L/acosl(-1.0L))*c*pressure;
+    const long double ratio = -chi*rho*host(i,5)/qmax;
+    const Real expected[] = {static_cast<Real>(ratio),
+        static_cast<Real>(qmax*ratio/(1.0L+std::abs(ratio)))};
+    for (int j=0; j<2; ++j) {
+      Require(expected[j] != 0.0 && std::isfinite(result(i,j)) && result(i,j) != 0.0,
+              "device closure lost a representable response");
+      RequireRelative("device closure case="+std::to_string(i)+" value="+
+                      std::to_string(j), result(i,j)/expected[j], 1.0,
+                      4096.0*std::numeric_limits<Real>::epsilon());
+    }
+  }
+  std::cout << "CGL LF closure_response passed: checks=" << 2*count << std::endl;
+}
+
 void CheckDeviceSlopeMeans() {
   const Real large = 0.75*std::numeric_limits<Real>::max();
   const Real small = std::numeric_limits<Real>::min();
@@ -1208,7 +1277,7 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
           const Real nu = kind == 7 && pperp-1.0 > 0.5*bbar*bbar ? 7.0 : 0.0;
           const Real c = lf->lf_c_parallel0, k = lf->lf_k_parallel;
           const Real chi_par = 8.0*c*c/(std::sqrt(8.0*M_PI)*c*k+(3.0*M_PI-8.0)*nu);
-          const Real chi_perp = 2.0*c*c/(std::sqrt(2.0*M_PI)*c*k+nu);
+          const Real chi_perp = 2.0*c*c/(std::sqrt(2.0*M_PI)*c*k+2.0*nu);
           const Real qpar_l = -chi_par*direction*gradient;
           const Real qperp_l = -chi_perp*direction*
               (perp_gradient-pperp*(1.0-pperp)*db/bbar);
@@ -1245,7 +1314,7 @@ void CheckPrescribedCollisionRateFlux(ParameterInput *pin, Mesh *pm) {
   const Real chi_par = 8.0*SQR(cpar)/(std::sqrt(8.0*pi)*cpar*lf->lf_k_parallel +
                                       (3.0*pi - 8.0)*nu);
   const Real chi_perp = 2.0*SQR(cpar)/(std::sqrt(2.0*pi)*cpar*lf->lf_k_parallel +
-                                     nu);
+                                     2.0*nu);
   const auto &indcs = pm->mb_indcs;
   DvceFaceFld5D<Real> flux("prescribed_rate_flux", 1, pmhd->nmhd, 1, 1,
                            indcs.nx1 + 2*indcs.ng);
@@ -2034,7 +2103,7 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
       mode == TestMode::field_reversal || mode == TestMode::transverse_flux ||
-      mode == TestMode::hotspot) {
+      mode == TestMode::hotspot || mode == TestMode::closure_response) {
     RequireSingleBlock(pm);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||
@@ -2072,6 +2141,9 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
     CheckRotatedDecay(pin, pm);
   } else if (mode == TestMode::face_geometry) {
     CheckFaceGeometry(pin, pm);
+  } else if (mode == TestMode::closure_response) {
+    Require(pm->ncycle == 0, "closure_response requires nlim=0");
+    CheckDeviceClosureResponse();
   } else if (mode == TestMode::transverse_flux) {
     CheckTransverseFlux(pm);
   } else if (mode == TestMode::hotspot) {
@@ -2099,7 +2171,7 @@ void ProblemGenerator::CGLLandauFluid(ParameterInput *pin, const bool restart) {
   const TestMode mode = ParseMode(pin);
   if (mode == TestMode::rotated_decay || mode == TestMode::face_geometry ||
       mode == TestMode::field_reversal || mode == TestMode::transverse_flux ||
-      mode == TestMode::hotspot) {
+      mode == TestMode::hotspot || mode == TestMode::closure_response) {
     RequireSingleBlock(pmy_mesh_);
   } else if (mode == TestMode::field_aligned_wave ||
              mode == TestMode::paper_oblique_wave ||

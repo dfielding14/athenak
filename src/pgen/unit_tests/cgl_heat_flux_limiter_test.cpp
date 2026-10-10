@@ -333,7 +333,7 @@ Real ReferencePerpendicularHeatFlux(
     const Real cparallel, const Real rho, const Real ppar,
     const Real pperp, const Real bmag, const Real lf_k,
     const Real nu, const Real grad_tperp, const Real grad_b) {
-  const Real denominator = cgl::kSqrtTwoPi*cparallel*lf_k + nu;
+  const Real denominator = cgl::kSqrtTwoPi*cparallel*lf_k + 2.0*nu;
   const Real chi_perp = static_cast<Real>(2.0)*cparallel*cparallel/denominator;
   const Real q_unlimited = -chi_perp*(
       rho*grad_tperp -
@@ -486,6 +486,84 @@ void CheckPerpendicularClosureOrdinaryAgreement() {
   RequireRelativeClose("perpendicular ordinary agreement", got, expected);
   Require("perpendicular ordinary ratio finite", std::isfinite(ratio));
   Require("perpendicular ordinary sign preserved", got*ratio > 0.0);
+}
+
+void CheckPerpendicularBGKResponse() {
+  const long double pi = std::acos(-1.0L);
+  const auto check = [pi](const std::string &label, const Real speed, const Real rho,
+                          const Real ppar, const Real pperp, const Real inverse_b,
+                          const Real k, const Real nu, const Real gt, const Real gb,
+                          const bool logarithmic = false) {
+    // SHD97 Eq.49 in extended precision, independent of the production ratio/cap.
+    const long double c = speed;
+    const long double chi = c*c/(std::sqrt(pi/2.0L)*c*k + nu);
+    const long double driver = static_cast<long double>(rho)*gt -
+        pperp*(1.0L-static_cast<long double>(pperp)/ppar)*gb*inverse_b;
+    const long double unlimited = -chi*driver;
+    const long double cap = std::sqrt(2.0L/pi)*c*pperp;
+    const Real expected_ratio = static_cast<Real>(unlimited/cap);
+    const Real expected_flux = static_cast<Real>(
+        unlimited/(1.0L+std::abs(unlimited/cap)));
+    Real ratio = 0.0;
+    const Real flux = cgl::LimitedPerpendicularHeatFlux(
+        speed, rho, ppar, pperp, inverse_b, k, nu, gt, gb, ratio);
+    if (logarithmic) {
+      RequireOverflowClose(label+" ratio", ratio, expected_ratio);
+      RequireOverflowClose(label+" flux", flux, expected_flux);
+    } else {
+      RequireRelativeClose(label+" ratio", ratio, expected_ratio);
+      RequireRelativeClose(label+" flux", flux, expected_flux);
+    }
+  };
+  for (const Real nu : {Real(0.0), Real(0.25), Real(4.0), Real(64.0)}) {
+    for (const Real sign : {Real(-1.0), Real(1.0)}) {
+      check("perpendicular BGK thermal driver", 2.0, 3.0, 5.0, 4.0,
+            0.5, 0.7, nu, sign*Real(0.4), 0.0);
+      check("perpendicular BGK magnetic driver", 2.0, 3.0, 5.0, 4.0,
+            0.5, 0.7, nu, 0.0, sign*Real(0.2));
+    }
+  }
+
+  const Real stiff_nu = Real(1.0)/std::numeric_limits<Real>::epsilon();
+  const Real stiff_ratio = cgl::PerpendicularHeatFluxRatio(
+      1.0, 1.0, 1.0, 1.0, 1.0, 1.0, stiff_nu, 1.0, 0.0);
+  RequireRelativeClose("perpendicular BGK strong-collision limit",
+                       -stiff_ratio*cgl::kSqrtTwoOverPi*stiff_nu, 1.0);
+
+  const Real maximum = std::numeric_limits<Real>::max();
+  check("perpendicular finite nu with overflowing twice-nu", std::sqrt(maximum),
+        1.0, 1.0, 1.0, 1.0, 1.0, Real(0.75)*maximum, 1.0, 0.0);
+  const Real large = std::ldexp(Real(1.0), std::numeric_limits<Real>::max_exponent-2);
+  for (const Real gb : {Real(-12.0), Real(-20.0)}) {
+    // Both drivers overflow in Real; their signed difference and capped flux are finite.
+    check("perpendicular collisional log cancellation", 1.0, large, Real(1.0)/large,
+          1.0, 1.0, 1.0, large, 16.0, gb, true);
+  }
+  const Real tiny = std::numeric_limits<Real>::denorm_min();
+  for (const Real sign : {Real(-1.0), Real(1.0)}) {
+    // nu/c=1: scaling nu before division must not round it to zero or to one ulp.
+    check("perpendicular equal subnormal collision rate and speed", tiny,
+          maximum, maximum, maximum, 1.0, 1.0, tiny, sign, 0.0);
+  }
+  const Real cancellation_cases[][2] = {{1.0, tiny}, {Real(0.9)/maximum, 1.0}};
+  for (const auto &test : cancellation_cases) {
+    for (const Real direction : {-std::numeric_limits<Real>::infinity(),
+                                 std::numeric_limits<Real>::infinity()}) {
+      const Real gb = std::nextafter(Real(-16.0), direction);
+      // rho=pperp=2*ppar leaves the exact normalized driver 16+gb. Form it
+      // before scaling: subtracting two huge long-double products loses accuracy.
+      const long double driver = 16.0L+gb;
+      const Real expected = static_cast<Real>(
+          -driver/(1.0L+test[1]/(std::sqrt(pi/2.0L)*test[0])));
+      const Real ratio = cgl::PerpendicularHeatFluxRatio(
+          test[0], maximum/Real(4.0), maximum/Real(8.0), maximum/Real(4.0),
+          1.0, 1.0, test[1], 16.0, gb);
+      // The scaled-speed case has nu/c overflowing but a finite collision term,
+      // and a ratio only a few subnormal ulps from zero. Rejecting zero matters.
+      RequireRelativeClose("perpendicular finite collisional near cancellation",
+                           ratio, expected);
+    }
+  }
 }
 
 void CheckPerpendicularClosureOverflowEndpoints() {
@@ -814,6 +892,7 @@ void RunCglHeatFluxLimiterChecks() {
   CheckParallelClosureOrdinaryAgreement();
   CheckParallelClosureOverflowEndpoints();
   CheckPerpendicularClosureOrdinaryAgreement();
+  CheckPerpendicularBGKResponse();
   CheckPerpendicularClosureOverflowEndpoints();
   CheckPerpendicularClosureCancellationSigns();
   CheckWeightedFluxArithmetic();

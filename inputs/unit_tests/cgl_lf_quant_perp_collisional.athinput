@@ -1,5 +1,5 @@
 # Quantitative CGL Landau-fluid STS test with finite background collisionality.
-# Verifies the Squire et al. perpendicular LF coefficient denominator.
+# Checks the SHD/BGK perpendicular coefficient with coupled pressure relaxation.
 
 <job>
 basename = cgl_lf_quant_perp_collisional
