@@ -135,6 +135,17 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   Require decreasing temporal errors.
   Compare once with qualified `2afaa0fa1` at matched active physics, merging and
   chunking off. This qualifies the first usable deliverable within tested limits.
+  In progress: `73e2769fc` adds the missing resolved-wave/e-fold checks and
+  full-precision local-hotspot refinement. Eight gates pass in HIP job `5646879`;
+  corrected hotspot setup `00364263f` in job `5646924` reaches evolution but fails
+  the inherited minimum-temperature gate at the second refinement. Its running
+  minimum parallel temperature is `1 - 1.097e-12`, beyond the `1e-12` allowance;
+  energy/moment checks pass. Diagnosis is pending, with tolerances unchanged and
+  later jobs held. Production evolution is unchanged from the qualified Piece 10 solver.
+  The corrected-reference comparison uses one common developed checkpoint and
+  short common-time endpoints; the candidate alone supplies this milestone's
+  fresh Tier 3 trajectory. Cross-solver differences are descriptive, not an
+  equal-accuracy speedup gate. Safety remains 0.3.
 
 - [ ] **12 — Mesh support.** Separately repair physical corners after prolongation
   and synchronize shared LF face fluxes. Grow both buffers before receives, with

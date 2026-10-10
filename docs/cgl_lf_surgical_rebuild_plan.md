@@ -531,6 +531,17 @@ norms, and require decreasing temporal error. This adds an assertion to the
 existing fixture, not a new pgen or chunk feature. It checks nonlinear LF and
 representation conversions; it does not certify turbulent threshold switching.
 
+The initial 1-to-0.125 ladder is retained as a precision stress study after
+finer steps failed the inherited minimum gate in the barely represented Gaussian
+tail. One follow-up convergence window, 8, 4, 2, 1, is prescribed before its runs;
+it keeps every original tolerance and is pending qualification. Report the
+five-to-three-stage transition separately from the fixed-stage 4, 2, 1 trend.
+Require the 0.25-to-0.125 pressure difference to be at most 10% of the 2-to-1
+difference in each retained norm, as a reference-sensitivity check, not an error
+bound. Preserve every finer failure and stop if this window fails; do not keep
+moving the window. These checks follow the full fine-ladder and field-magnitude
+conditioning diagnosis.
+
 Before accepting a larger STS safety, also use the existing `limiter_stress`
 fixture for one smooth, unforced, finite-rate threshold-crossing case. Keep the
 grid, endpoint, physical rates and walls fixed across at least three decreasing
@@ -589,7 +600,8 @@ do not copy a cap blindly or weaken a criterion just to recover a pass.
 
 ## Concrete test map
 
-All selectors below were verified in Git source, not executed here. Paths are
+The original selectors below were verified in Git source; completion records
+identify the imported checks and actual runs. Paths are
 relative to `tst/test_suite/`. `L` means `cgl/test_cgl_landau_fluid_cpu.py`,
 `LM` means `cgl/test_cgl_landau_fluid_mpicpu.py`, and `A` means
 `cgl/test_cgl_lf_acceptance_cpu.py`. Expand a selection as `path::function`.
@@ -614,6 +626,7 @@ from the base and needed for the current piece.
 | 10 | `diffusion/test_sts_safety_cpu.py`; `diffusion/test_parabolic_budget_cpu.py` | Explicit parameter bounds, exact absent-CFL fallback, initial/refreshed STS versus explicit/advective budgets, real restart, ordinary viscosity and inactive sentinels in both precisions |
 | 10 | `cgl/test_cgl_lf_safety_refinement_cpu.py`; `cgl/test_cgl_lf_geometry_cpu.py::test_cgl_lf_sts_reversal_converges_to_explicit` | Full pressure fields at safety 0.3/0.9; finite-rate soft-threshold crossing and reversal against refined references. Scale the ratio cap inversely with safety to match nominal outer-step ladders; verify actual steps and work |
 | 11 | In `turb/test_turb_driving_cpu.py`: `test_type_two_has_nonzero_force`, `test_conservative_forcing_kick`, `test_once_per_step_power`; `L::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks` | Existing `tst/inputs/turb_driving_edot.athinput`; register the retained `turb_forcing` pgen for direct production tests |
+| Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Current imported wave/e-fold checks and the prospective local-hotspot window 8, 4, 2, 1; fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Keep the finer 1-to-0.125 precision stress failures and reference-sensitivity check; no rung is an exact oracle |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
 | 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Existing groups: identity, heating, linear, advection, restart, fences; `passive_acceptance.py` and `cgl_passive_validation` pgen |
 | 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_limiter_cadence`, `test_smooth_lf_temporal_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted_run`, `test_invalid_chunk_configurations_fail_before_evolution` | Prebuilt executable; small fixture dependency extraction required; failing passive checkpoint is an additional accuracy check |

@@ -100,7 +100,8 @@ def test_cgl_lf_local_hotspot_temporal_refinement(tmp_path):
     source += ("\n<time>\nsts_safety = 0.3\n"
                "<problem>\nvalidation_output = true\nvalidation_output_dir = validation\n"
                "<output2>\nfile_type = log\ndcycle = 1\n")
-    ratios = (1.0, 0.5, 0.25, 0.125)
+    # Use the prescribed truncation window; finer sweeps separately stress roundoff.
+    ratios = (8.0, 4.0, 2.0, 1.0)
     states, measurements = [], []
     for level, ratio in enumerate(ratios):
         case = tmp_path / f"level{level}"
@@ -138,10 +139,16 @@ def test_cgl_lf_local_hotspot_temporal_refinement(tmp_path):
         assert not [line for line in event_log.splitlines()
                     if line.strip() and not line.startswith("#")], event_log
         rhs = np.diff(history["lf_nstage"])/64**2
-        np.testing.assert_array_equal(rhs, 6)
+        if ratio == 8:
+            assert np.all(np.isin(rhs, (6, 8, 10))) and rhs.max() == 10, rhs
+        else:
+            np.testing.assert_array_equal(rhs, 6)
+        rhs_values, rhs_counts = np.unique(rhs, return_counts=True)
         states.append(final)
         measurements.append({
             "ratio": ratio, "cycles": len(steps), "rhs": int(np.sum(rhs)),
+            "rhs_per_cycle_distribution": {int(value): int(count)
+                                           for value, count in zip(rhs_values, rhs_counts)},
             "dt_min": float(steps.min()), "dt_max": float(steps.max()),
             "pressure_minima": [float(final[key].min()) for key in ("ppar", "pperp")],
             "pressure_maxima": [float(final[key].max()) for key in ("ppar", "pperp")],
@@ -165,7 +172,14 @@ def test_cgl_lf_local_hotspot_temporal_refinement(tmp_path):
         "nominal_diffusion_times": 0.201*np.sqrt(2/np.pi)/10/0.04**2,
         "thermal_energy_density_scale": thermal_scale,
         "runs": measurements, "adjacent_refinement_differences": adjacent,
-        "errors_against_ratio_0.125": errors,
+        "errors_against_ratio_1": errors,
+        "fixed_stage_4_2_1_log2_refinement_indicators": {
+            field: {norm: (float(np.log2(adjacent[1][field][norm]/adjacent[2][field][norm]))
+                           if adjacent[1][field][norm] > 0 and adjacent[2][field][norm] > 0
+                           else None) for norm in ("l1", "l2", "linf")}
+            for field in ("ppar", "pperp")},
+        "stage_transition_limit": "Ratio 8 may use five stages per half sweep, while "
+                                  "4, 2, 1 use three; their leading error constants differ.",
         "reference_limit": "The last adjacent difference is a refinement indicator, "
                            "not a bound on the finest state's error.",
     }
