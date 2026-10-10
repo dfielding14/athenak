@@ -56,17 +56,8 @@ enum class CGLLFProfileBucket {
   heat_flux_total = 0,
   heat_flux_precompute,
   heat_flux_flux1,
-  heat_flux_flux1_gradients,
-  heat_flux_flux1_face_state,
-  heat_flux_flux1_closure,
   heat_flux_flux2,
-  heat_flux_flux2_gradients,
-  heat_flux_flux2_face_state,
-  heat_flux_flux2_closure,
   heat_flux_flux3,
-  heat_flux_flux3_gradients,
-  heat_flux_flux3_face_state,
-  heat_flux_flux3_closure,
   heat_flux_work_diagnostics,
   timestep_reduction,
   sweep_begin_conversion,
@@ -135,12 +126,10 @@ class CGLLandauFluid {
 
   MeshBlockPack *pmy_pack;
   bool profile_enabled_ = false;
-  bool profile_detail_enabled_ = false;
   int profile_last_nstages_ = 0;
   int profile_max_nstages_ = 0;
   Real profile_seconds_[kCGLLFProfileBucketCount] = {};
   std::uint64_t profile_counts_[kCGLLFProfileBucketCount] = {};
-  Real profile_detail_sink_ = 0.0;
   DvceArray4D<Real> tpar_, tperp_, bmag_;
   Real stage_qpar_work_ = 0.0;
   Real stage_qperp_work_ = 0.0;

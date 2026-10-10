@@ -58,7 +58,7 @@ def test_cgl_lf_face_geometry(tmp_path, arithmetic, diagnostics):
         tmp_path / "faces", "cgl_lf_geometry.athinput",
         f"mhd/cgl_lf_arithmetic={arithmetic}",
         f"mhd/cgl_lf_diagnostics={diagnostics}",
-        "mhd/cgl_lf_profile=true", "mhd/cgl_lf_profile_detail=true",
+        "mhd/cgl_lf_profile=true",
     )
     assert "face_geometry passed" in output
 

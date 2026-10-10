@@ -133,27 +133,26 @@ by `backup_limiters`; relaxed admissibility does not enable it implicitly.
 | `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |
 | `cgl_lf_sts_flux` | `weighted` | `weighted` embeds STS weights in LF fluxes; `physical` writes physical fluxes and requires `cgl_lf_diagnostics = none` plus `cgl_lf_arithmetic = fast`. |
 | `cgl_lf_profile` | `false` | Enable coarse LF timing regions with Kokkos fences; for profiling only. |
-| `cgl_lf_profile_detail` | `false` | Add directional probe kernels for detailed profiling when `cgl_lf_profile = true`. |
+| `cgl_lf_profile_detail` | `false` | Compatibility key: `false` is accepted; the removed replay mode (`true`) is rejected. |
 
 CGL requires finite positive `dfloor`, `pfloor`, `bfloor`, and `sigma_max`, and
 finite nonnegative `tfloor` and `sfloor`. Zero collision rates remain valid.
 These input guards do not qualify single-precision evolution or the numerical
 repairs planned in later rebuild pieces.
 
-The performance/safety switches can be overridden by
-`ATHENAK_CGL_LF_DIAGNOSTICS`, `ATHENAK_CGL_LF_ARITHMETIC`,
-`ATHENAK_CGL_LF_STS_FLUX`, `ATHENAK_CGL_LF_PROFILE`, and
-`ATHENAK_CGL_LF_PROFILE_DETAIL`. Production wall-time measurements should keep
-profiling disabled. The current fastest production mode is:
+Select runtime modes through the input parameters; LF mode environment overrides
+have been removed. The active rebuild's production timing configuration is:
 
 ```ini
 <mhd>
 cgl_lf_diagnostics = none
-cgl_lf_arithmetic = fast
-cgl_lf_sts_flux = physical
+cgl_lf_arithmetic = safe
+cgl_lf_sts_flux = weighted
+cgl_lf_strict_admissibility = true
 cgl_lf_profile = false
-cgl_lf_profile_detail = false
 ```
+
+Fast/physical mode remains available for separately labeled historical controls.
 
 LF faces use the CT normal field and arithmetic means of the adjacent
 cell-centered tangential components. They divide this vector by

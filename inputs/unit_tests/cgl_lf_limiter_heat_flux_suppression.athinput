@@ -45,6 +45,7 @@ backup_limiters = false
 limiter_nu_coll = 10.0
 cgl_heat_flux = landau_fluid
 cgl_heat_flux_integrator = sts
+cgl_lf_arithmetic = safe
 lf_k_parallel = 1.0e-2
 lf_coefficient_mode = background
 lf_c_parallel0 = 1.0

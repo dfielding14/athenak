@@ -196,9 +196,10 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
                 "job/basename=cgl_ci_profile",
                 "time/nlim=1",
                 "time/tlim=1.0e-5",
+                "mhd/cgl_lf_profile=true",
             ],
             capture_output=True,
-            env={**os.environ, "ATHENAK_CGL_LF_PROFILE": "1"},
+            env=_lf_mode_env(),
             text=True,
             check=False,
         )
@@ -206,6 +207,7 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
         assert result.returncode == 0, output
         assert "CGL Landau-fluid profiling enabled" in output
         assert "CGL Landau-fluid profile summary (shutdown)" in output
+        assert "profile_detail=false" in output
         for bucket in (
             "heat_flux_precompute",
             "heat_flux_flux1",
@@ -219,48 +221,24 @@ def test_cgl_lf_profile_summary_reports_core_buckets():
         _cleanup()
 
 
-def test_cgl_lf_profile_detail_reports_directional_probe_buckets():
+def test_cgl_lf_profile_detail_rejects_removed_replay_mode():
     try:
         result = subprocess.run(
             [
                 "./athena",
                 "-i",
-                PAPER_INPUT,
+                f"{UNIT_INPUT_ROOT}/cgl_lf_sts_parallel.athinput",
                 "job/basename=cgl_ci_profile_detail",
-                "time/nlim=1",
-                "time/tlim=1.0e-5",
-                "mesh/nx1=8",
-                "mesh/nx2=8",
-                "mesh/nx3=8",
-                "meshblock/nx1=8",
-                "meshblock/nx2=8",
-                "meshblock/nx3=8",
+                "mhd/cgl_lf_profile_detail=true",
             ],
             capture_output=True,
-            env={
-                **os.environ,
-                "ATHENAK_CGL_LF_PROFILE": "1",
-                "ATHENAK_CGL_LF_PROFILE_DETAIL": "1",
-            },
+            env=_lf_mode_env(),
             text=True,
             check=False,
         )
         output = result.stdout + result.stderr
-        assert result.returncode == 0, output
-        assert "CGL Landau-fluid detailed profiling enabled" in output
-        assert "profile_detail=true" in output
-        for bucket in (
-            "heat_flux_flux1_gradients",
-            "heat_flux_flux1_face_state",
-            "heat_flux_flux1_closure",
-            "heat_flux_flux2_gradients",
-            "heat_flux_flux2_face_state",
-            "heat_flux_flux2_closure",
-            "heat_flux_flux3_gradients",
-            "heat_flux_flux3_face_state",
-            "heat_flux_flux3_closure",
-        ):
-            assert bucket in output
+        assert result.returncode != 0, output
+        assert "cgl_lf_profile_detail=true is no longer supported" in output
     finally:
         _cleanup()
 
@@ -545,20 +523,20 @@ def test_cgl_lf_runtime_mode_matrix_preserves_short_decay_state():
 def test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths():
     try:
         cases = {
-            "safe_full": {},
-            "safe_none": {"ATHENAK_CGL_LF_DIAGNOSTICS": "none"},
-            "fast_full": {"ATHENAK_CGL_LF_ARITHMETIC": "fast"},
-            "fast_none": {
-                "ATHENAK_CGL_LF_ARITHMETIC": "fast",
-                "ATHENAK_CGL_LF_DIAGNOSTICS": "none",
-            },
-            "fast_none_physical": {
-                "ATHENAK_CGL_LF_ARITHMETIC": "fast",
-                "ATHENAK_CGL_LF_DIAGNOSTICS": "none",
-                "ATHENAK_CGL_LF_STS_FLUX": "physical",
-            },
+            "safe_full": (),
+            "safe_none": ("mhd/cgl_lf_diagnostics=none",),
+            "fast_full": ("mhd/cgl_lf_arithmetic=fast",),
+            "fast_none": (
+                "mhd/cgl_lf_arithmetic=fast",
+                "mhd/cgl_lf_diagnostics=none",
+            ),
+            "fast_none_physical": (
+                "mhd/cgl_lf_arithmetic=fast",
+                "mhd/cgl_lf_diagnostics=none",
+                "mhd/cgl_lf_sts_flux=physical",
+            ),
         }
-        for suffix, env_updates in cases.items():
+        for suffix, flags in cases.items():
             result = subprocess.run(
                 [
                     "./athena",
@@ -567,9 +545,10 @@ def test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths():
                     f"job/basename=cgl_ci_3d_modes_{suffix}",
                     "time/nlim=1",
                     "time/tlim=1.0e-5",
+                    *flags,
                 ],
                 capture_output=True,
-                env=_lf_mode_env(**env_updates),
+                env=_lf_mode_env(),
                 text=True,
                 check=False,
             )
@@ -638,7 +617,7 @@ slice_x3 = 0
     result = subprocess.run(
         [str(Path("athena").resolve()), "-i", str(input_file)], cwd=tmp_path,
         capture_output=True, text=True, check=False,
-        env=_lf_mode_env(ATHENAK_CGL_LF_PROFILE="1"),
+        env=_lf_mode_env(),
     )
     output = result.stdout + result.stderr
     (tmp_path / "run.log").write_text(output)
@@ -1053,9 +1032,10 @@ def test_cgl_lf_face_collision_rates_add(tmp_path, arithmetic, backup, expected_
     staged.write_text(source)
     try:
         result = subprocess.run(
-            ["./athena", "-i", str(staged), "job/basename=cgl_ci_additive_rates"],
+            ["./athena", "-i", str(staged), "job/basename=cgl_ci_additive_rates",
+             f"mhd/cgl_lf_arithmetic={arithmetic}"],
             capture_output=True, text=True, check=False,
-            env=_lf_mode_env(ATHENAK_CGL_LF_ARITHMETIC=arithmetic),
+            env=_lf_mode_env(),
         )
         assert result.returncode == 0, result.stdout + result.stderr
         marker = f"prescribed collision-rate flux passed: nu_eff={expected_rate}"
@@ -1256,9 +1236,9 @@ def test_cgl_lf_relaxed_mode_requires_explicit_backup(arithmetic):
                  f"job/basename={basename}",
                  "mhd/cgl_lf_strict_admissibility=false",
                  "problem/pperp0=2.5", "problem/amp=0.1",
-                 f"mhd/backup_limiters={backup}"],
+                 f"mhd/backup_limiters={backup}", f"mhd/cgl_lf_arithmetic={arithmetic}"],
                 capture_output=True, text=True, check=False,
-                env={**os.environ, "ATHENAK_CGL_LF_ARITHMETIC": arithmetic})
+                env=_lf_mode_env())
             assert result.returncode == 0, result.stdout + result.stderr
         unbounded = _final_tab("cgl_ci_no_backup")
         bounded = _final_tab("cgl_ci_explicit_backup")

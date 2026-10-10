@@ -142,22 +142,22 @@ The current implementation exposes three LF performance/safety switches:
 | Parameter | Choices | Default | Notes |
 | --- | --- | --- | --- |
 | `cgl_lf_diagnostics` | `full`, `none` | `full` | `full` collects q-face, cap, and q-work diagnostics with reductions. `none` skips those reductions and leaves heat-flux diagnostic columns inactive while preserving admissibility counters. |
-| `cgl_lf_arithmetic` | `safe`, `fast` | `safe` | `safe` uses overflow-protected scaled arithmetic. `fast` uses direct `Real` arithmetic for normal states and is the production performance path. |
+| `cgl_lf_arithmetic` | `safe`, `fast` | `safe` | `safe` uses overflow-protected scaled arithmetic. `fast` uses direct `Real` arithmetic for normal states and remains available for historical comparisons. |
 | `cgl_lf_sts_flux` | `weighted`, `physical` | `weighted` | `weighted` embeds STS weights in LF face fluxes. `physical` writes physical fluxes and lets `STSUpdateU` apply RKL2 weights. |
 
 `cgl_lf_sts_flux = physical` requires both
 `cgl_lf_diagnostics = none` and `cgl_lf_arithmetic = fast`; construction
 aborts otherwise.
 
-For production performance timing, use:
+For active rebuild production timing, use:
 
 ```ini
 <mhd>
 cgl_lf_diagnostics = none
-cgl_lf_arithmetic = fast
-cgl_lf_sts_flux = physical
+cgl_lf_arithmetic = safe
+cgl_lf_sts_flux = weighted
+cgl_lf_strict_admissibility = true
 cgl_lf_profile = false
-cgl_lf_profile_detail = false
 ```
 
 For conservative debugging or reproducing the original protected path, use the
@@ -170,19 +170,11 @@ cgl_lf_arithmetic = safe
 cgl_lf_sts_flux = weighted
 ```
 
-The runtime modes can also be overridden by environment variables:
-
-```bash
-ATHENAK_CGL_LF_DIAGNOSTICS=none
-ATHENAK_CGL_LF_ARITHMETIC=fast
-ATHENAK_CGL_LF_STS_FLUX=physical
-ATHENAK_CGL_LF_PROFILE=0
-ATHENAK_CGL_LF_PROFILE_DETAIL=0
-```
-
-Profiling mode intentionally adds Kokkos fences, and detailed profiling launches
-extra probe kernels. It should be used for attribution, not for production wall
-time.
+Runtime modes come from the input parameters; LF mode environment overrides have
+been removed. Profiling adds Kokkos fences and retains whole-direction timings.
+The replay sub-kernels are removed: `cgl_lf_profile_detail=false` remains accepted
+for old inputs, while `true` is rejected. Use profiling for attribution and the
+ordinary elapsed interval for production timing.
 
 ## STS Fast Paths
 

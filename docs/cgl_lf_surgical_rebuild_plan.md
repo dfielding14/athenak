@@ -836,7 +836,8 @@ t=14. A short developed-state interval does not fix the cost of the trajectory.
 
 Default production timing configuration: safe arithmetic, diagnostics none,
 weighted STS fluxes, strict checks on. Explicitly put these keys in the timing
-input; account for `ATHENAK_CGL_LF_*` environment overrides. Hold reconstruction,
+input. LF mode environment overrides are removed; clear them when comparing
+older binaries. Hold reconstruction,
 CFL, limits, forcing, block shape and ranks/nodes fixed unless they are the
 explicit change under study. Historical fast/physical/non-strict runs remain
 separately labeled historical controls. Do not optimize full q diagnostics.
@@ -867,8 +868,9 @@ accuracy. Profile separately because profiling fences perturb timing: start with
 one short `cgl_lf_profile=true`,
 `cgl_lf_profile_detail=false` run, using bucket call counts and `rank_max_s` to
 locate expensive work or imbalance. Do not sum nested buckets or maxima from
-different ranks. Detailed profiling replays arithmetic and, on the newer reference,
-selects different directional kernels; it is not production kernel timing.
+different ranks. Detailed replay profiling is removed from the rebuilt solver;
+`cgl_lf_profile_detail=false` remains accepted for existing decks. Historical
+replay timings are not production kernel timings.
 Use the ordinary elapsed interval as the speed authority. Compare bound cost
 and LF work together: schematically, step cost is refresh/reduction overhead
 plus RHS count times stage cost plus RK/forcing work. Profile only far enough

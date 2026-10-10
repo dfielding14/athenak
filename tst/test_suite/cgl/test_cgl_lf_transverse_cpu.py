@@ -18,7 +18,6 @@ def test_cgl_lf_transverse_face_flux(tmp_path, arithmetic, diagnostics):
         "problem/test_mode=transverse_flux", "mesh/x2max=2", "mesh/x3max=3",
         f"mhd/cgl_lf_arithmetic={arithmetic}",
         f"mhd/cgl_lf_diagnostics={diagnostics}", "mhd/cgl_lf_profile=true",
-        "mhd/cgl_lf_profile_detail=true",
     )
     assert "transverse_flux passed" in output
 
@@ -33,7 +32,6 @@ def test_cgl_lf_hotspot(tmp_path, angle, arithmetic, diagnostics):
         case, "cgl_lf_hotspot.athinput", f"problem/b0={10*np.cos(theta):.17g}",
         f"problem/by0={10*np.sin(theta):.17g}", f"mhd/cgl_lf_arithmetic={arithmetic}",
         f"mhd/cgl_lf_diagnostics={diagnostics}", "mhd/cgl_lf_profile=true",
-        "mhd/cgl_lf_profile_detail=true",
     )
     assert "CGL LF hotspot:" in output
     _hotspot_checks(case, output)
