@@ -248,8 +248,8 @@ class MHD {
   TaskStatus ConToPrim(Driver *d, int stage);
   TaskStatus NewTimeStep(Driver *d, int stage);
   TaskStatus CGLCollisions(Driver *d, int stage);
-  bool NeedsCGLLFShearingRefresh() const;
-  void RefreshCGLLFShearingState(Driver *d, Real boundary_time);
+  bool NeedsCGLLFBoundaryRefresh() const;
+  void RefreshCGLLFBoundaryState(Driver *d, Real boundary_time);
   TaskStatus ClearSTSFlux(Driver *d, int stage);
   TaskStatus ClearSTSEField(Driver *d, int stage);
   TaskStatus STSFluxes(Driver *d, int stage);

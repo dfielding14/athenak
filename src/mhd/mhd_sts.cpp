@@ -227,6 +227,9 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     peos->CGLAnisotropyToMagneticMoment(u0, bcc0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::magnetic_moment;
+  const Real boundary_time = pmy_pack->pmesh->time +
+      (pdrive->sts.sweep == Driver::STSSweep::post ? pmy_pack->pmesh->dt : 0.0);
+  RefreshCGLLFBoundaryState(pdrive, boundary_time);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "anisotropy-to-magnetic-moment", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);
@@ -590,9 +593,8 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
   const int n1m1 = indcs.nx1 + 2*ng - 1;
   const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
   const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
-  // Intermediate LF stages need only their one-cell stencil.  The final stage must
-  // refresh every ghost consumed by the next hyperbolic reconstruction or collision.
-  const bool final_stage = (stage == pdrive->sts.nstages);
+  // Entry and final refreshes cover all ghosts; intermediate RHSs need one halo.
+  const bool final_stage = (stage == 0 || stage == pdrive->sts.nstages);
   const int il = final_stage ? 0 : ((indcs.is > 0) ? indcs.is - 1 : 0);
   const int iu = final_stage ? n1m1 :
       ((indcs.ie < n1m1) ? indcs.ie + 1 : n1m1);
@@ -620,7 +622,7 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
       pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before,
       pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before,
       pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
-      stage, pdrive->sts.nstages);
+      stage, pdrive->sts.nstages, stage == 0);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);
@@ -716,7 +718,7 @@ TaskStatus MHD::STSRefreshTimeStep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages &&
-      !NeedsCGLLFShearingRefresh()) {
+      !NeedsCGLLFBoundaryRefresh()) {
     RecomputeTimeStepFromCurrentState(pdrive);
   }
   TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "end", stage);

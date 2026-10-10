@@ -143,12 +143,12 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
       tl["after_stagen"]->AddTask(&MHD::ClearCGLPressureFlux, this, id.crecv);
 
   if (has_any_parabolic_split) {
-    TaskID pinit =
-        tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, none);
+    TaskID pbegin = none;
     if (has_cgl_lf_split) {
-      (void) tl["before_parabolic_stagen"]->AddTask(
-          &MHD::BeginCGLLandauFluidSTSSweep, this, pinit);
+      pbegin = tl["before_parabolic_stagen"]->AddTask(
+          &MHD::BeginCGLLandauFluidSTSSweep, this, none);
     }
+    (void) tl["before_parabolic_stagen"]->AddTask(&MHD::InitRecvParabolic, this, pbegin);
 
     // LF assigns both evolved fluxes on every face consumed by its update.
     TaskID pclearf = none;
@@ -782,7 +782,7 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
           pcgl_lf->RecordAdmissibility(
               u0, w0, bcc0, peos->eos_data, dfloor_delta, pfloor_delta,
               pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
-              stage, pdrive->sts.nstages);
+              stage, pdrive->sts.nstages, stage == 0);
         }
       } else {
         RequireCGLAnisotropyRepresentation("CGL AMR primitive restriction");
@@ -1105,36 +1105,45 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
                    0, n1m1, 0, n2m1, 0, n3m1);
   // Rates and walls change fine-cell anisotropy after the last restriction.
   RestrictU(pdrive, stage);
-  if (!NeedsCGLLFShearingRefresh()) {
+  if (!NeedsCGLLFBoundaryRefresh()) {
     RecomputeTimeStepFromCurrentState(pdrive);
   }
   return TaskStatus::complete;
 }
 
 //----------------------------------------------------------------------------------------
-//! \brief Restore sheared A halos after local moment conversion and walls.
+//! \brief Fill LF boundaries in the current conserved representation.
 
-bool MHD::NeedsCGLLFShearingRefresh() const {
-  return has_cgl_lf_split && psbox_u != nullptr &&
-      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi);
+bool MHD::NeedsCGLLFBoundaryRefresh() const {
+  return has_cgl_lf_split &&
+      (pmy_pack->pmesh->multilevel || (psbox_u != nullptr &&
+       (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)));
 }
 
-void MHD::RefreshCGLLFShearingState(Driver *pdrive, Real boundary_time) {
-  if (!NeedsCGLLFShearingRefresh()) return;
-  RequireCGLAnisotropyRepresentation("CGL LF shearing boundary refresh");
-  // Called after stage sends/receives clear; shear interpolation must act on final A.
+void MHD::RefreshCGLLFBoundaryState(Driver *pdrive, Real boundary_time) {
+  if (!NeedsCGLLFBoundaryRefresh()) return;
+  // Called with no pending messages; interpolation must follow slot conversion.
+  (void) RestrictU(pdrive, 0);
   (void) pbval_u->InitRecv(nmhd+nscalars);
   (void) pbval_u->PackAndSendCC(u0, coarse_u0);
   (void) pbval_u->ClearSend();
   (void) pbval_u->ClearRecv();
   (void) pbval_u->RecvAndUnpackCC(u0, coarse_u0);
-  (void) psbox_u->InitRecv(boundary_time);
-  (void) psbox_u->PackAndSendCC(u0, recon_method);
-  (void) psbox_u->ClearSend();
-  (void) psbox_u->ClearRecv();
-  (void) psbox_u->RecvAndUnpackCC(u0);
+  if (psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi)) {
+    (void) psbox_u->InitRecv(boundary_time);
+    (void) psbox_u->PackAndSendCC(u0, recon_method);
+    (void) psbox_u->ClearSend();
+    (void) psbox_u->ClearRecv();
+    (void) psbox_u->RecvAndUnpackCC(u0);
+  }
   (void) ApplyPhysicalBCs(pdrive, 0);
-  (void) ConToPrim(pdrive, 0);
+  (void) Prolongate(pdrive, 0);
+  if (cgl_slot_representation == CGLSlotRepresentation::magnetic_moment) {
+    (void) CGLLandauFluidPrimitiveRefresh(pdrive, 0);
+  } else {
+    (void) ConToPrim(pdrive, 0);
+  }
 }
 
 //----------------------------------------------------------------------------------------
