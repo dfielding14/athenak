@@ -12,11 +12,13 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–11 complete; the active physical suite and bounded reference
+**Status:** pieces 0–12 complete; the active physical suite and bounded reference
 comparison are accepted. The active milestone remains open.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
 **Next:** external workflow consolidation, Tier 1 and the authorized code cleanup
-are complete. Tier 3 job
+are complete, as is Piece 12 mesh qualification. Piece 13 is a profile-driven
+decision, not a requirement to implement every listed optimization; then proceed
+to the separately qualified passive model (14). Tier 3 job
 `5647225` is queued in `extended` (one node, fresh to t=14, safety 0.3); existing
 [6,14] analysis job `5647226` depends on its successful completion. Follow the
 [three-step workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
@@ -155,12 +157,19 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   completed physics and reference work unless a relevant change or concrete
   failure requires a rerun. Later pieces remain separate.
 
-- [ ] **12 — Mesh support.** Separately repair physical corners after prolongation
+- [x] **12 — Mesh support.** Separately repair physical corners after prolongation
   and synchronize shared LF face fluxes. Grow both buffers before receives, with
   sufficient 3D full-face capacity and existing request completion preserved.
   Gate: energy/moment conservation, both prolongation modes, 2D/3D explicit/STS,
   CPU/HIP, one/four ranks, actual regrid/restart, repair accounting, and shearing.
-  Reserve two-node churn for final mesh qualification.
+  Rebuild moment halos before the first LF RHS and anisotropy halos after split
+  checkpoints; conversion and prolongation do not commute. Require fixed-mesh
+  STS/explicit pressure convergence without extra diagnostic RHS counts.
+  Two-node churn and native shear restart qualification are complete. CPU/HIP
+  each pass 25 checks; the final MPI gate passes both checks. All native shear
+  fields/ghosts and integer counters match exactly; one q-work sum differs by
+  one ulp after restart regrouping. See the completion record and workspace
+  [Piece 12 report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece12/README.md).
 
 - [ ] **13 — Optional optimizations.** Profile the corrected target and select
   the smallest useful removal/fusion/message change. Compact communication follows
@@ -185,7 +194,8 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   passes 16 HIP checks and the shearing field/magnetic/endpoint comparisons, but
   the shearing restart still reports 1520 versus 1522 LF RHS evaluations. Parent
   `5647358` and the pre-consolidation binary (`5647376`) reproduce that exact
-  failure; retain the assertion and defer its repair to mesh/restart work.
+  failure; the assertion was retained and Piece 12 subsequently repaired the
+  boundary lifecycle. Both restart paths now perform 1522 LF evaluations.
   Accept this documented existing failure for the clear
   comparison; raw failed records remain intact. Clear Tier 1 `5647364` passes all
   18 invocations: 132.362→137.793M zone-cycles/s/node (+4.10%), both 26 RHS/cycle;
@@ -326,3 +336,4 @@ candidate. Keep commands/backend and evidence paths sufficient to resume the wor
 | 10 / independent STS safety | `28d748f49`; preserve absent-key current-CFL behavior, load/validate explicit safety on fresh starts and restarts, scale only STS budgets and retain inactive sentinels. Final source `ad99fad72` | Qualification `5646694`: all 50 tests pass across eight gates, including host double/float budgets, actual HIP startup/restart/refresh, ordinary diffusion, MPI, closure and hotspots. Exact binary frozen as `build/piece10-final` | Safety 0.3/0.9 reversal and finite-rate mirror-crossing full pressure fields converge at matched nominal outer budgets. Larger safety reduces coarse reversal RHS 20→12 but raises coarse pressure error about 42–45%; both pass unchanged tolerances. Threshold reference differences are 33.35–34.72% of finest reported errors: coarse first-order evidence, not turbulent accuracy | Workspace `analysis/piece10/physics-5646694-independent-review.json`, runtime review and seven-matrix RKL probe retain raw reconciliation and limits. Exploratory `5646678` fixture/provenance issues are retained; final source archive matches all 926 application and 1,455 Kokkos files. Tier 2 generation `5646710`, same-safety comparison `5646841` and separate 0.3/0.9 cost screen `5646854` pass. No larger default adopted |
 | 10 / checkpoint and paired cost | New canonical producer with explicit safety 0.3; frozen t=6.000305031020128, cycle 19315, SHA `bb475c16…`; old checkpoint and timings retained | Generation `5646710` reaches t=6.05 in 1.371 node-hours including I/O. Comparisons `5646841`/`5646854` each pass 14 invocations with three alternating measured pairs and separate profiles | Parent/candidate at 0.3 match native conserved/CT/ghost state, forcing/live RNG, ledgers and all q-off history columns exactly. Rates 52.053→51.934M zone-cycles/s/node (−0.229%, within observed variation), both 50.4 RHS/cycle. Safety 0.3→0.9 reduces work 50.4→30 RHS/cycle, rates 51.723→75.130M (+45.255%), and s/physical-time 866.138→596.288 using each history | Both safeties pass q-mode identity, nonzero transport, positivity and zero new LF floor/invalid or EOS repair checks. Intermediate hard-bound crossings remain nonzero; strict checkpoints and completed-state hard-bound volume are clean. The legacy `lf_hwproj` value stays zero and is not a projection measurement. Safety screen cost/RHS rises 5.43027→6.28058 ms as fewer RHS share outer-step work; separate heat-flux ms/RHS 1.70897→1.70781. Workspace completion/review records retain raw reconciliation, spreads and profile scopes. No equal-accuracy turbulent speedup claim; explicit 0.3 remains the active-milestone setting. Tier 1 unnecessary without recurring full-domain changes; active milestone remains next |
 | 10 follow-up / independent review | Production source and frozen executable unchanged (`ad99fad72`) | Fresh connected-code review; all 50 retained JUnit results and 12 output-free timing invocations independently reconciled; no new simulations | No solver defect found. Raw threshold snapshots give successive-difference temporal orders 0.963–1.039, independent of the shared fine reference; reversal errors and stage/work changes reproduce. Restart, generic diffusion and zero-LF collision paths reviewed | Corrected only the completion record's warmup wording: five completed updates, then 35 measured updates, then one guard (41 total). Timing arithmetic was already correct. Original report retained as `analysis/piece10-completion-original.json`; `analysis/piece10-reaudit.json` binds this review and correction. Previous qualification limits and explicit 0.3 milestone setting remain |
+| 12 / mesh and boundary consistency | `de75846b9` corner refill; `76ca6cb4f` shared LF fluxes; `af2aa9480` boundary lifecycle; final source `c8d57ea61` | CPU `5647453` and HIP `5647452`: 25/25 each. Final MPI `5647477`: 2/2, including two-node/16-rank AMR churn. External instrumented CPU `5647461`: 230 refreshes preserve active E/B/CT bitwise | Both prolongation modes show decreasing STS/explicit pressure errors; native energy/moment drift <7e-16. Shear restart primary/CT/ghost state and all integer counters are exact, with 1522 RHS on both paths. One qpar-work sum differs by 1 ulp from MPI accumulator regrouping; the extra bitwise-all-diagnostics assertion failed, and that job status is retained | Workspace `analysis/piece12/README.md` and `qualification-summary.json` retain parent negatives, intermediate failures and final evidence. Local row bounds do not establish composed nonlinear AMR stability; face q-work diagnostics precede reconciliation. No performance claim or new uniform-periodic device work; frozen Tier 3 executable/dependencies remain intact |

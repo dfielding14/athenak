@@ -73,13 +73,17 @@ incompatible fast-path combinations.
 For STS LF transport, MHD owns the split lifecycle:
 
 1. `BeginCGLLandauFluidSTSSweep` converts `IAN` from conserved anisotropy to
-   magnetic moment.
+   magnetic moment. On refined/shearing meshes, `RefreshCGLLFBoundaryState`
+   rebuilds halos in that representation before stage receives are posted.
+   This makes the first and subsequent RHSs use the same boundary operator.
 2. Each STS stage calls `CGLLandauFluid::AddHeatFluxes`; LF-only stages skip
    flux clearing because the face kernels overwrite every consumed `IEN`/`IAN` face.
 3. `AddHeatFluxes` precomputes `T_parallel`, `T_perp`, and `|B|`, constructs
    x1/x2/x3 face states using the supplied CT face field, evaluates capped
    parallel and perpendicular LF heat
-   fluxes, and writes only `IEN` and `IAN` face fluxes.
+   fluxes, and writes only `IEN` and `IAN` face fluxes. On refined meshes,
+   existing coarse/fine restriction and a symmetric mean of cached same-level
+   estimates give adjacent cells one shared LF flux before the update.
 4. `STSUpdateU` applies the RKL2 update to energy and magnetic moment.
 5. `CGLRefreshPrimFromMagneticMoment` rebuilds CGL primitives between stages.
 6. `RecordAdmissibility` updates LF health counters and optionally aborts in
@@ -97,10 +101,12 @@ before walls. The driver also invokes that LF post checkpoint when the
 post-sweep has no stages. Each sweep checkpoint follows the final field and
 primitive refresh. Both collision hooks refresh coarse state after their
 updates, and the post-sweep timestep estimate uses the corrected state.
-The post-RK hook refreshes the local
-timestep from the corrected state before the driver's global minimum.
-It is the sole post-RK CGL timestep owner; ordinary MHD retains its last-stage
-`NewTimeStep` task. Initialization, regridding, and post-parabolic refreshes remain.
+On refined/shearing LF meshes, the driver completes pending communication and
+rebuilds anisotropy halos after each split checkpoint; it computes the post-RK
+and post-LF bounds only afterward. Other CGL runs refresh the post-RK bound
+inside the collision hook. Entry boundary refreshes use stage zero and do not
+increment `lf_nstage`. Ordinary MHD retains its last-stage `NewTimeStep` task.
+Initialization and regridding retain their existing boundary refreshes.
 
 The scalar rate map retains both the target anisotropy and its pressure exchange.
 `expm1` preserves tiny background kicks; the initially smaller pressure receives

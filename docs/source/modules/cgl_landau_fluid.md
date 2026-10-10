@@ -238,7 +238,10 @@ pressures are not applied to flow momentum.
   boundaries and active block creation/deletion rebuild the CGL thermodynamic
   state instead of treating `IAN` as a passive scalar. During LF STS stages the
   AMR path is explicit about the temporary magnetic-moment representation
-  `IAN = p_perp/|B|`. Physical corners are refilled after prolongation. Same-level
+  `IAN = p_perp/|B|`. Halos are rebuilt in magnetic moment before the first LF
+  evaluation and in anisotropy after split checkpoints, so interpolation and
+  nonlinear slot conversion occur in a consistent order. Physical corners are
+  refilled after prolongation. Same-level
   LF face estimates are averaged before either adjacent block updates, while
   coarse/fine flux restriction retains conservation. The timestep bound covers
   the local frozen stencil; it does not compose derivatives through prolongation

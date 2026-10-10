@@ -368,8 +368,8 @@ physical full-kick expectation. Register the small retained `turb_forcing` pgen
 only if needed for the direct work/cadence fixture; do not add a forcing framework.
 
 **12. Repair refinement/boundary correctness before compact communication.**
-Two separate fixes: refill physical corners after prolongation (`e1b2ecd00`),
-then synchronize shared LF face fluxes near refinement (`a6eef6406`). Reuse the
+Refill physical corners after prolongation (`e1b2ecd00`), then synchronize shared
+LF face fluxes near refinement (`a6eef6406`) as separate fixes. Reuse the
 existing buffers and A/magnetic-moment-aware prolongation; retain magnetic BCs.
 Gate: uniform anisotropic oblique-field SMR/outflow state, the original nonuniform
 fixture, periodic E and integrated magnetic-moment conservation, both prolongation
@@ -384,6 +384,15 @@ buffers if needed to `max(existing capacity, 2 * full face area)`, preserving
 their block capacity. Six-variable coarse-face storage provides only 1.5 face
 areas in 3D and is insufficient. Cache both original estimates before the
 identically ordered symmetric mean. No new completion framework is needed.
+Qualification also requires one boundary operator throughout each sweep: rebuild
+magnetic-moment halos before the first LF RHS, then rebuild anisotropy halos
+after conversion/walls before the next operator or timestep bound. Conservative
+prolongation and the nonlinear slot conversion do not commute; mixing their
+order produces an STS/explicit error plateau even as the timestep shrinks.
+Reuse the existing exchanges at completed communication boundaries and do not
+count entry refreshes as RHS evaluations. Add fixed-mesh STS-to-explicit pressure
+convergence for both prolongation modes, plus exact shearing restart checks.
+These finite checks do not prove a composed nonlinear AMR stability bound.
 
 **13. Apply only measured, equivalent optimizations.**
 LF-only flux-clear removal is accepted (`718901fa2`, measurements below).
@@ -609,7 +618,8 @@ replay removal, directional consolidation and LF-only flux-clear removal are acc
 The work order records gates and separate paired costs: consolidation retains a
 3.29% uniform penalty with neutral developed-state cost; clear removal improves
 Tier 1/2 throughput by 4.10%/2.95%, with identical native endpoints and work counts.
-It also records the existing shearing restart-counter failure for mesh work.
+It records the then-existing shearing restart-counter failure, subsequently
+resolved by Piece 12's boundary lifecycle repair.
 The frozen Tier 3 executable and analysis dependencies remain intact and its jobs
 remain queued. Defer workspace deletion and additional physics/mode changes.
 
@@ -619,6 +629,19 @@ One/four ranks are the default comparison. Use two-node/16-rank 3D churn only at
 final qualification when the allocation supports it, not as a prerequisite to
 every local fix. These checks gate multilevel/communication acceptance; they do
 not prevent independent uniform-grid work while an unrelated mesh issue is diagnosed.
+
+**Piece 12 completed (2026-10-10):** final source `c8d57ea61` passes 25 checks on
+each of CPU/HIP (`5647453`/`5647452`) and both final MPI checks (`5647477`, including
+two-node/16-rank churn). Physical-corner refill, shared-face flux reconciliation
+and consistent A/moment boundary ordering are qualified together. Both
+prolongation modes converge toward refined explicit pressure solutions; native
+periodic energy/moment drift is below `7e-16`. The native shear restart matches
+all conserved/CT/ghost values and integer counters exactly, including 1522 RHS
+evaluations. Its parallel q-work sum differs by one ulp because restart restores
+the global accumulator on rank zero; the extra all-floating-bitwise assertion
+failed and is retained as such. No solver change is needed for that diagnostic
+regrouping. The work order and workspace `analysis/piece12/README.md` retain
+evidence and limits. The frozen Tier 3 artifacts remain unchanged.
 
 **Passive milestone:** start with identity and independent thermal evolution;
 then run the six existing groups once on HIP, including all supported
