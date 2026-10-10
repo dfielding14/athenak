@@ -30,6 +30,15 @@ def analyzer():
     return load_module("analyze_cgl_lf_paper_mechanism_test", ANALYZER_PATH)
 
 
+@pytest.fixture
+def current_model():
+    workflow = load_module(
+        "cgl_lf_workflow_proxy_test", REPO_ROOT / "scripts/cgl_lf_workflow.py"
+    )
+    source = (REPO_ROOT / "inputs/tests/cgl_lf_decay.athinput").read_text()
+    return workflow.model_choices(source, [])
+
+
 def mechanism_fields(amplitude=1.0):
     """Return a periodic field with nonzero mechanism and transfer diagnostics."""
 
@@ -51,6 +60,77 @@ def mechanism_fields(amplitude=1.0):
         "bcc3": np.ones(shape),
     }
     return fields, lengths
+
+
+def test_heat_flux_proxy_excludes_current_model_from_ensemble(analyzer, current_model):
+    fields, lengths = mechanism_fields()
+    record = analyzer.analyze_fields(
+        fields, lengths, 0.0, 16, [1], model_choices=current_model
+    )
+    proxy = record["heat_flux_transport_proxy"]
+    assert proxy["available"] is False
+    assert "current or unidentified models are unsupported" in proxy["reason"]
+    assert "regularized_total_power" not in proxy
+    ensemble = analyzer.average_snapshot_records({"initial": record})
+    assert ensemble["heat_flux_transport_proxy"] == {
+        "available": False, "snapshot_count": 0, "reason": proxy["reason"],
+    }
+
+
+@pytest.mark.parametrize("cadence", (None, "unknown"))
+def test_heat_flux_proxy_requires_identified_legacy_model(
+    analyzer, current_model, cadence,
+):
+    fields, lengths = mechanism_fields()
+    current_model.pop("cgl_collision_split")
+    if cadence is not None:
+        current_model["cgl_collision_split"] = cadence
+    proxy = analyzer.heat_flux_transport_proxy(
+        fields, lengths, current_model, include_local_fields=True
+    )
+    assert proxy["available"] is False
+    assert "cgl_collision_split=two_half_steps_after_lf_sweeps" in proxy["reason"]
+    assert "local_fields" not in proxy
+
+
+@pytest.mark.parametrize("strict,backup,rate", (
+    (True, False, 3.0), (True, True, 1.0e10), (False, False, 1.0e10),
+))
+def test_heat_flux_proxy_preserves_legacy_closure_and_scattering(
+    analyzer, current_model, strict, backup, rate,
+):
+    fields, lengths = mechanism_fields()
+    fields["p_perp"] += 2.0  # Above the legacy mirror backup wall everywhere.
+    current_model.update({
+        "cgl_collision_split": "two_half_steps_after_lf_sweeps",
+        "nu_coll": "10", "mirror_limiter": "true", "limiter_nu_coll": "3",
+        "backup_limiters": str(backup).lower(),
+        "cgl_lf_strict_admissibility": str(strict).lower(),
+    })
+    proxy = analyzer.heat_flux_transport_proxy(
+        fields, lengths, current_model, include_local_fields=True
+    )
+    assert proxy["available"] is True
+    local = proxy["local_fields"]
+    assert np.all(local["limiter_collision_rate"] == rate)
+    # Independent centered derivative of the sampled cosine; retain +nu and
+    # replacement (not additive) backup scattering in this legacy product.
+    dz = lengths[2] / fields["p_perp"].shape[0]
+    z = (np.arange(fields["p_perp"].shape[0]) + 0.5) * dz
+    gradient = -0.1 * np.sin(math.pi * z) * math.sin(math.pi * dz) / dz
+    chi = 2.0 / (math.sqrt(2.0 * math.pi) * 32.0 + 10.0 + rate)
+    unlimited = chi * np.abs(gradient[:, None, None])
+    qmax = math.sqrt(2.0 / math.pi) * fields["p_perp"]
+    np.testing.assert_allclose(
+        local["normalized_perpendicular_flux"], unlimited / (qmax + unlimited),
+        rtol=1.0e-12, atol=0.0,
+    )
+    # Equality still activates the legacy soft threshold.
+    fields["p_perp"].fill(1.5)
+    equal = analyzer.heat_flux_transport_proxy(
+        fields, lengths, current_model, include_local_fields=True
+    )
+    assert np.all(equal["local_fields"]["limiter_collision_rate"] == 3.0)
 
 
 def common_joint_ranges():

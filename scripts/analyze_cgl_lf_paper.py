@@ -622,11 +622,11 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
                               model: dict[str, object] | None,
                               include_local_fields: bool = False,
                               ) -> dict[str, object]:
-    """Reconstruct a cell-centered LF temperature-smoothing power proxy.
+    """Reconstruct the legacy cell-centered LF temperature-smoothing proxy.
 
-    This follows the implemented closure and algebraic heat-flux cap, but it
-    evaluates cell-centered periodic gradients from retained snapshots. It is
-    not the discrete face flux applied during time integration. When requested,
+    Retain the archived +nu closure and legacy limiter-scattering semantics;
+    current rebuild models require a separately qualified reconstruction.
+    Cell-centered periodic gradients are not the applied face flux. When requested,
     the returned local fields expose arrays already used by this reconstruction;
     the default scalar-only product remains JSON serializable.
     """
@@ -635,6 +635,15 @@ def heat_flux_transport_proxy(fields: dict[str, np.ndarray],
         return {
             "available": False,
             "reason": "archived LF model choices are required",
+        }
+    if model.get("cgl_collision_split") != "two_half_steps_after_lf_sweeps":
+        return {
+            "available": False,
+            "reason": (
+                "legacy heat-flux proxy requires "
+                "cgl_collision_split=two_half_steps_after_lf_sweeps; "
+                "current or unidentified models are unsupported"
+            ),
         }
     required_choices = (
         "lf_k_parallel",
@@ -3267,6 +3276,11 @@ def average_snapshot_records(records: dict[str, dict[str, object]]) -> dict[str,
         "available": bool(heat_flux),
         "snapshot_count": len(heat_flux),
     }
+    if not heat_flux:
+        heat_flux_ensemble["reason"] = "; ".join(sorted({
+            sample["heat_flux_transport_proxy"].get("reason", "proxy unavailable")
+            for sample in samples
+        }))
     if heat_flux:
         heat_flux_ensemble.update({
             "definition": heat_flux[0]["definition"],
@@ -3818,6 +3832,7 @@ def synthetic_test() -> dict[str, object]:
         "limiter_nu_coll": "0.0",
         "backup_limiters": "false",
         "cgl_lf_strict_admissibility": "true",
+        "cgl_collision_split": "two_half_steps_after_lf_sweeps",
         "dfloor": "1.0e-12",
         "pfloor": "1.0e-12",
         "tfloor": "1.0e-12",
