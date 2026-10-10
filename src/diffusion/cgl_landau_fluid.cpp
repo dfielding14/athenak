@@ -91,8 +91,6 @@ const char *CGLLFProfileBucketName(CGLLFProfileBucket bucket) {
       return "timestep_reduction";
     case CGLLFProfileBucket::sweep_begin_conversion:
       return "sweep_begin_conversion";
-    case CGLLFProfileBucket::sts_clear_flux:
-      return "sts_clear_flux";
     case CGLLFProfileBucket::sts_update_copies:
       return "sts_update_copies";
     case CGLLFProfileBucket::sts_update_kernel:

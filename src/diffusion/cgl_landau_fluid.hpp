@@ -61,7 +61,6 @@ enum class CGLLFProfileBucket {
   heat_flux_work_diagnostics,
   timestep_reduction,
   sweep_begin_conversion,
-  sts_clear_flux,
   sts_update_copies,
   sts_update_kernel,
   primitive_refresh,
