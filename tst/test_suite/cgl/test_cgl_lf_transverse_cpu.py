@@ -98,6 +98,7 @@ def test_cgl_lf_local_hotspot_temporal_refinement(tmp_path):
     """Refine nonlinear LF at fixed geometry; the finest state is not an exact oracle."""
     source = (INPUTS / "cgl_lf_hotspot.athinput").read_text()
     source += ("\n<time>\nsts_safety = 0.3\n"
+               "<problem>\nvalidation_output = true\nvalidation_output_dir = validation\n"
                "<output2>\nfile_type = log\ndcycle = 1\n")
     ratios = (1.0, 0.5, 0.25, 0.125)
     states, measurements = [], []
@@ -106,7 +107,6 @@ def test_cgl_lf_local_hotspot_temporal_refinement(tmp_path):
         output = _run(
             case, "cgl_lf_hotspot.athinput", f"time/sts_max_dt_ratio={ratio}",
             "mhd/lf_coefficient_mode=local", "mhd/cgl_lf_diagnostics=none",
-            "problem/validation_output=true", "problem/validation_output_dir=validation",
             source=source,
         )
         assert "CGL LF hotspot:" in output
