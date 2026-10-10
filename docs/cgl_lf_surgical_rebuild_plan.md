@@ -500,6 +500,11 @@ inputs and production pgen fixtures. A gate is evidence for the changed behavior
 not a required new test file. Do not import whole multi-thousand-line test modules
 to obtain one regression. Add their needed functions/fixtures to the existing
 structure with the owning patch. No whole-repository cleanup or new test framework.
+Keep validation proportional to the change: reuse accepted evidence unless a
+relevant source/configuration change or concrete failure invalidates it. New
+diagnostics need a specific unanswered question and a stopping condition; retire
+them from the routine workflow once answered. Do not add repeated audit layers,
+duplicate readers or new provenance machinery merely to increase confidence.
 
 | Change | Immediate check | Broader check or timing trigger |
 | --- | --- | --- |
@@ -525,36 +530,29 @@ and the Tier 3 matched active run to t=14 with nonzero LF work. Run an actual HI
 wall-encoding fixture; CPU scalar helpers cannot substitute for it. Run the
 small safe/fast and diagnostic/profile branch checks once after all face changes,
 not after each constant edit. Production timings keep detailed q diagnostics off.
-Add one short nonlinear temporal-refinement comparison using the existing
-64-by-64 hotspot with `lf_coefficient_mode=local`, kinematic/advect evolution,
-zero velocity and no forcing/collisions. Compare full-precision parallel and
-perpendicular pressures on the same grid and physical endpoint across at least
-three decreasing `sts_max_dt_ratio` values; 1, 0.5, 0.25, with 0.125 as a finer
-reference if needed, is a starting ladder, not prevalidated accuracy. Confirm the
-actual steps and RHS counts, preserve the existing minima/conservation checks
-and its at-least-five nominal diffusion-time duration (`tlim=0.201` in the input).
-Report worst-cell absolute/relative and thermal-energy-scaled errors as well as
-norms, and require decreasing temporal error. This adds an assertion to the
-existing fixture, not a new pgen or chunk feature. It checks nonlinear LF and
-representation conversions; it does not certify turbulent threshold switching.
+Use the existing 64-by-64 hotspot with `lf_coefficient_mode=local`,
+kinematic/advect evolution, zero velocity and no forcing/collisions. Its accepted
+temporal window is `sts_max_dt_ratio=8,4,2,1` at fixed grid and `tlim=0.201`.
+Preserve the original minima/conservation checks and at-least-five nominal
+diffusion-time duration. Compare both full-precision pressure fields; report
+actual steps/RHS counts, norms and worst-cell absolute/relative and
+thermal-energy-scaled differences. Distinguish the five-to-three-stage transition
+from the fixed-stage 4,2,1 trend. This checks nonlinear LF and representation
+conversions; it does not certify turbulent threshold switching.
 
 The initial 1-to-0.125 ladder is retained as a precision stress study after
 finer steps failed the inherited minimum gate in the barely represented Gaussian
 tail, and the finest rung also failed energy/moment conservation. Full-pressure
 differences still decrease near second order; these are tighter invariant and
-minimum failures, not a plateau in the pressure norms. One follow-up convergence
-window, 8, 4, 2, 1, is prescribed before its runs;
-it keeps every original tolerance and is pending qualification. Report the
-five-to-three-stage transition separately from the fixed-stage 4, 2, 1 trend.
-Require the 0.25-to-0.125 pressure difference to be at most 10% of the 2-to-1
-difference in each retained norm, as a reference-sensitivity check, not an error
-bound. Preserve every finer failure and stop if this window fails; do not keep
-moving the window. These checks follow the full fine-ladder and field-magnitude
-conditioning diagnosis. The first B=1 conditioning control is invalid because
-it activates the unconditional fluid-firehose wall even with optional limiters
-off. One separately prescribed B=5 replacement keeps the same endpoint, ratios
-and tolerances, and requires zero crossings at every LF stage. Retain the B=1
-failure; stop qualification if this single replacement fails.
+minimum failures, not a plateau in the pressure norms. The prospectively fixed
+8,4,2,1 window passed every original gate in job `5647113`; fixed-stage indicators
+are 1.946–1.992. The 0.25-to-0.125 differences are 1.56–1.66% of the 2-to-1
+differences in all retained norms, below the prescribed 10% reference-sensitivity
+limit. This is bounded convergence, not a rigorous error bound or a resolution
+of the finer failures. The B=1 conditioning control activated the unconditional
+fluid-firehose wall and remains invalid; the single B=5 replacement (`5647008`)
+passed its diagnostic comparison. Retain both controls and the failed finer
+ladder as evidence; no further conditioning sweep is planned.
 
 Before accepting a larger STS safety, also use the existing `limiter_stress`
 fixture for one smooth, unforced, finite-rate threshold-crossing case. Keep the
@@ -573,6 +571,37 @@ pre-WO1 controls locate historical costs; this corrected reference answers
 whether the smaller reconstruction improves on the newer solver. Use physical
 endpoint checks for intentional arithmetic differences. Exact equivalence of
 each optimization remains a comparison with its immediate rebuilt parent.
+
+**Remaining active-milestone work (revised 2026-10-10):** the physical suite is
+frozen in `build/active-milestone-final` with 33 passes and two known B4 expected
+failures. The bounded corrected-reference comparison (`5647118`) is complete;
+its near-threshold pressure differences remain descriptive, not an accuracy
+oracle. Reuse these results and keep STS safety 0.3.
+
+1. External workflow consolidation is complete. The workspace's
+   [workflow README](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
+   lists the existing Tier 1, Tier 3 and analysis entrypoints and required helpers;
+   the work order links the concise milestone report. Other diagnostic/setup/review
+   scripts are archived in place. Essential regressions, optional endpoint export,
+   frozen inputs/binaries, raw results and failed cases remain intact. Preserve
+   provenance paths and reuse working tools; no further consolidation is needed.
+2. Tier 1 is complete: job `5647205` passed all 14 invocations in one two-node
+   allocation, including three LF/no-LF pairs and the historical control. The
+   milestone report records rates, spread and work/cost per RHS. Cancelled job
+   `5647148` remains separate partial evidence.
+3. Canonical Tier 3 job `5647225` is queued, fresh to t=14 at safety 0.3; existing
+   [6,14] analysis job `5647226` depends on its successful completion. The
+   eight-hour one-node simulation uses `extended` because `batch` limits this
+   node count to two hours; analysis uses `batch`/normal. Results remain pending.
+   Record cost, work, energy budget, numerical health, required figure groups
+   and tested limits in the milestone report after completion.
+
+Do not repeat completed physical/reference checks or add another review layer
+without a relevant change or concrete failure. Investigate a new failure with
+the smallest discriminating check. Keep existing acceptance tolerances and
+required health checks; consolidation itself needs no new simulation campaign.
+Leave the active milestone open until the remaining results are reviewed; mesh,
+passive and optional optimization work remain separate.
 
 **Mesh milestone:** after 12, cover both physical-corner cases, all six retained
 conservation parameters, actual regrid/restart, repair accounting and shearing.
@@ -640,7 +669,7 @@ from the base and needed for the current piece.
 | 10 | `diffusion/test_sts_safety_cpu.py`; `diffusion/test_parabolic_budget_cpu.py` | Explicit parameter bounds, exact absent-CFL fallback, initial/refreshed STS versus explicit/advective budgets, real restart, ordinary viscosity and inactive sentinels in both precisions |
 | 10 | `cgl/test_cgl_lf_safety_refinement_cpu.py`; `cgl/test_cgl_lf_geometry_cpu.py::test_cgl_lf_sts_reversal_converges_to_explicit` | Full pressure fields at safety 0.3/0.9; finite-rate soft-threshold crossing and reversal against refined references. Scale the ratio cap inversely with safety to match nominal outer-step ladders; verify actual steps and work |
 | 11 | In `turb/test_turb_driving_cpu.py`: `test_type_two_has_nonzero_force`, `test_conservative_forcing_kick`, `test_once_per_step_power`; `L::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks` | Existing `tst/inputs/turb_driving_edot.athinput`; register the retained `turb_forcing` pgen for direct production tests |
-| Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Current imported wave/e-fold checks and the prospective local-hotspot window 8, 4, 2, 1; fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Keep the finer 1-to-0.125 precision stress failures and reference-sensitivity check; no rung is an exact oracle |
+| Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Qualified wave/e-fold checks and local-hotspot window 8, 4, 2, 1 (`5647113`); fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Retain the finer 1-to-0.125 precision stress failures and reference-sensitivity evidence; no rung is an exact oracle |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
 | 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Existing groups: identity, heating, linear, advection, restart, fences; `passive_acceptance.py` and `cgl_passive_validation` pgen |
 | 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_limiter_cadence`, `test_smooth_lf_temporal_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted_run`, `test_invalid_chunk_configurations_fail_before_evolution` | Prebuilt executable; small fixture dependency extraction required; failing passive checkpoint is an additional accuracy check |

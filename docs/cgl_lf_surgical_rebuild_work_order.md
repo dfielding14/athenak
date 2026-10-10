@@ -12,16 +12,16 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–11 complete.
+**Status:** pieces 0–11 complete; the active physical suite and bounded reference
+comparison are accepted. The active milestone remains open.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** the active milestone, using qualified Piece 10 source `ad99fad72`
-(`build/piece10-final`) and explicit STS safety 0.3. All 50 focused tests and
-regenerated Tier 2 qualification/comparisons pass. The new checkpoint is
-`t=6.000305031020128`, cycle 19315; old checkpoints and timings remain retained.
-Safety 0.9 passes the small refinement examples and short cost screen, but has
-not been selected for turbulent accuracy. The absent-key default still follows
-CFL. Workspace `analysis/piece10-completion.json` binds the final evidence and
-supersedes the earlier focused-qualification record's pending Tier 2 tasks.
+**Next:** external workflow consolidation and Tier 1 are complete. Tier 3 job
+`5647225` is queued in `extended` (one node, fresh to t=14, safety 0.3); existing
+[6,14] analysis job `5647226` depends on its successful completion. Follow the
+[three-step workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
+to review the results and update the concise completion record when available.
+Reuse accepted physics and reference evidence unless a relevant change or concrete
+failure requires repeating it.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
@@ -126,32 +126,33 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   crossing case: require full-pressure-field convergence under outer-step
   refinement before accepting a larger safety. Preserve first-order split semantics.
 
-- [ ] **Active milestone.** Run the plan's selected physical suite once, including
-  resolved waves/decay, finite-rate relaxation, forcing/restart, HIP wall encoding,
-  and the Tier 3 matched active run to t=14. Extend the local-coefficient
-  `64 x 64` hotspot to at least three temporal refinements at the same grid/endpoint,
-  preserving duration and conservation checks. Report worst-cell absolute/relative
-  and thermal-energy-scaled pressure errors, norms, extrema, and repair activity.
-  Require decreasing temporal errors.
-  Compare once with qualified `2afaa0fa1` at matched active physics, merging and
-  chunking off. This qualifies the first usable deliverable within tested limits.
-  In progress: `73e2769fc` adds the missing resolved-wave/e-fold checks and
-  full-precision local-hotspot refinement. Eight gates pass in HIP job `5646879`;
-  corrected hotspot setup `00364263f` in job `5646924` reaches evolution but fails
-  the inherited minimum-temperature gate at the second refinement. Its running
-  minimum parallel temperature is `1 - 1.097e-12`, beyond the `1e-12` allowance;
-  energy/moment checks pass. Diagnostic job `5646938` completes the finer ladder:
-  full-pressure norms decrease near second order, but the finest rung also exceeds
-  the energy/moment budgets. The first field-strength control (`5646989`, B=1)
-  activates the unconditional fluid-firehose wall and is invalid for comparing
-  conditioning. A single B=5 replacement is prescribed with unchanged thresholds
-  and zero intermediate hard-bound crossings required. The fixed 8, 4, 2, 1
-  convergence window remains pending; later jobs are held. Production evolution
-  is unchanged from the qualified Piece 10 solver.
-  The corrected-reference comparison uses one common developed checkpoint and
-  short common-time endpoints; the candidate alone supplies this milestone's
-  fresh Tier 3 trajectory. Cross-solver differences are descriptive, not an
-  equal-accuracy speedup gate. Safety remains 0.3.
+- [ ] **Active milestone.** The physical suite is frozen in
+  `build/active-milestone-final`: source `73e2769fc`, selected test source
+  `08189c1e2`, 33 passes and two known B4 expected failures. The fixed 8, 4, 2, 1
+  local-hotspot window (`5647113`) passes the original physical gates and
+  convergence checks. Retain the finer ladder's minimum/conservation failures
+  (`5646938`) and invalid B=1 control (`5646989`); B=5 conditioning control
+  `5647008` passes its diagnostic criteria. Corrected-reference comparison
+  `5647118` is accepted as a bounded descriptive comparison, with localized
+  near-threshold differences retained and no equal-accuracy speedup claim.
+  Tier 1 job `5647205` completed all 14 invocations on two nodes: production
+  LF/no-LF rates 135.512/557.546M zone-cycles/s/node (ratio 0.243051), 26 LF
+  RHS/cycle, and rate spans below 0.04%. The historical control is separately
+  labeled in the report. Cancelled job `5647148` remains partial evidence.
+  Tier 3 job `5647225` is queued; analysis job `5647226` waits for successful
+  completion. No Tier 3 results are available yet.
+
+  External workflow consolidation is complete: three existing entrypoints and
+  their required helpers are listed in the workflow above. One-off and duplicate
+  audit/setup scripts are archived in place, preserving evidence and provenance
+  paths. The [milestone report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/active-milestone-report.md)
+  is the concise record of completed evidence, remaining results and limits.
+
+  Complete the queued fresh canonical matched active run to t=14 at
+  safety 0.3, followed by the dependent [6,14] analysis and report. Keep the plan's
+  physical, energy-budget, work-count and I/O-inclusive cost reporting. Reuse the
+  completed physics and reference work unless a relevant change or concrete
+  failure requires a rerun. Later pieces remain separate.
 
 - [ ] **12 — Mesh support.** Separately repair physical corners after prolongation
   and synchronize shared LF face fluxes. Grow both buffers before receives, with
