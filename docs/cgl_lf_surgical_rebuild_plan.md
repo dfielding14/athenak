@@ -115,9 +115,29 @@ not narrate the loop. Keep physical-oracle tests independent of shared code.
 
 ## Implementation sequence
 
-All implementation pieces are pending. Run each piece's focused gate before
+Completion is recorded in the work order. Run each piece's focused gate before
 stacking dependent changes; batch broader integration at the milestones below.
 Record existing failures rather than changing tolerances or weakening fixtures.
+
+**Reassessment after piece 7.** Independent review of the current source and
+retained evidence supports the completed production fixes; old reference commits
+remain implementation clues, not scientific oracles. The collisional decay
+references still compose obsolete collision maps over the entire endpoint and
+check only one unsigned amplitude. Replace them in 8 with the continuum coupled
+two-pressure solution and check both signed channels. The collisionless oblique
+screen cannot detect this coefficient error; Tier 2 mainly samples zero or very
+strong scattering. Include an intermediate-rate physical check. Retain the
+piece-6 checkpoint for paired cost attribution, without treating it as a
+qualified trajectory of the final model. Piece 7 established sampled minima,
+conservation and fundamental-mode convergence, not full-field turbulent accuracy.
+
+The snapshot heat-flux proxy still contains older scattering semantics. Do not
+silently relabel historical proxy products as the rebuilt operator by changing
+one denominator. Either reconcile its model provenance and rate conventions or
+exclude it explicitly from rebuilt-model acceptance; applied-face diagnostics
+remain the transport qualification. Before accepting a larger STS safety, add
+the unforced finite-rate threshold-crossing refinement below. Later imports must
+preserve the current initialization, collision and weak-field arithmetic fixes.
 
 **0. Establish the baseline before changing production source.**
 Build the exact base and post-WO1 reference with identical qualified compiler,
@@ -238,8 +258,20 @@ Scope: `cgl::PerpendicularHeatFluxRatio` in `src/eos/cgl_physics.hpp`, its norma
 and logarithmic paths, `ChiPerp` reference consumers and associated method docs
 (`d2ab32f58`). Both safe and fast fluxes use that shared helper. Additive scattering
 was completed in 4; do not reimplement it here. Use the intended $2\nu_{\rm eff}$
-perpendicular response. Gate: collisionless identity, strong-collision limit
-$\chi_\perp\nu/c_\parallel^2\to1$, and resolved coupled decay over an e-folding.
+perpendicular response. With $\dot\Delta=-\nu\Delta$, this follows
+[SHD97, equation 49](https://w3.pppl.gov/~hammett/gyrofluid/papers/snyder_pop97.pdf)
+and differs from the printed one-$\nu$ coefficient in
+[Squire et al., equation 2.7](https://arxiv.org/html/2303.00468v2#S3.SS1.SSS1).
+Document that model distinction. The retained parallel 3+1 response is unchanged;
+this is not a claim of exact full Braginskii transport.
+Gate: collisionless identity, strong-collision limit
+$\chi_\perp\nu/c_\parallel^2\to1$, intermediate collisionality, and resolved
+coupled decay over an e-folding. Check both signed Fourier channels against the
+independent matrix exponential, controlling spatial and splitting errors with
+refinement. Preserve both thermal and magnetic-gradient drivers. Exercise normal
+and logarithmic paths, including subnormal intermediates that can yield a wrong
+finite result and thus evade a nonfinite-result fallback. Do not form an
+overflowing literal $2\nu$ when the complete response is representable.
 Keep pieces 6-8 at a common conservative reference timestep until piece 9
 qualifies the final controller. For their timing screen, enlarge the existing
 kinematic `cgl_lf_rotated_decay.athinput` with an oblique field and background
@@ -261,6 +293,9 @@ coupling. The initial bound reuses existing `tpar_`, `tperp_`, `bmag_` storage
 with an explicit fresh one-halo fill: no three new timestep arrays and no new
 cache-validity framework. Fused primitive refresh does not exist until 13;
 reusing its valid values is a later optimization, not a dependency here.
+Allocate and fill that scratch on the first initialization/restart call, before
+any heat-flux evaluation. Exercise the representable-sound-speed fallback in
+both the face flux and bound; they must describe the same admitted state.
 Include background collisions. Do not first port WO1's provisional D5 bound merely to
 replace it, and do not loosen unrelated conduction bounds.
 Gate: independent frozen-stencil rows/eigenvalues, staggered checkerboard,
@@ -285,6 +320,10 @@ explicit diffusion keeps its CFL multiplier. Gate: parameter bounds, analytic
 stage selection, existing stability tests, and temporal convergence before
 accepting a larger factor such as 0.9. Attribute changes in stage count separately
 from kernel speed. Do not alter RKL coefficients or its odd-stage rule.
+Both budget loops serve all registered STS processes: include an ordinary
+conduction or viscosity budget check, not only LF, and retain explicit budgets.
+Do not adopt a larger default merely because the parameter exists. Complete the
+unforced finite-rate threshold-crossing refinement below before accepting it.
 
 **11. Restore forcing corrections one at a time.**
 Scope: shared turbulence driver, task placement, primitive/ghost refresh and
@@ -340,6 +379,9 @@ Start with the existing non-detailed profile of the corrected target. Optimize
 the dominant recurring work; do not implement every historical optimization in
 the listed order. In particular, reducing bound cost at the expense of extra LF
 evaluations can make the whole calculation slower.
+The historical upwind-log patch predates piece 5's stable weak-field
+`2*log(rho)-3*log(Bref)` arithmetic. Adapt only the selection logic; do not restore
+the old product/log expression. Preserve the neighboring-field rule as well.
 
 **14. Add passive thermodynamics as a separate model series.**
 Reuse the physical design of `a2d994a3a` and the later decoding correction
@@ -370,6 +412,9 @@ at a fixed outer step, use `4af7c9a55` as a small implementation reference;
 the retained passive depleted-pressure failure is the known motivating case.
 Hold the outer step, forcing and collision cadence fixed; change only LF substeps
 within each sweep.
+Preserve the current zero-operator driver fallback, which still owes the full
+collision/wall update when STS is disabled. The historical driver also contains
+excluded half-sweep merging; do not import that context.
 Gate: actual failing-state reproduction and timestep refinement, worst-cell
 pressure differences as well as norms, energy and smooth temporal order. Recorded
 positive chunked runs still differed locally by about 14%; cap 4 is not an
@@ -459,6 +504,16 @@ Report worst-cell absolute/relative and thermal-energy-scaled errors as well as
 norms, and require decreasing temporal error. This adds an assertion to the
 existing fixture, not a new pgen or chunk feature. It checks nonlinear LF and
 representation conversions; it does not certify turbulent threshold switching.
+
+Before accepting a larger STS safety, also use the existing `limiter_stress`
+fixture for one smooth, unforced, finite-rate threshold-crossing case. Keep the
+grid, endpoint, physical rates and walls fixed across at least three decreasing
+outer steps; compare both full pressure fields, means/energy and repair activity.
+Verify that face-averaged states actually cross an enabled soft threshold during
+the run. Require decreasing errors rather than second order: the once-per-cycle
+collision composition is not symmetric. This small full-model test complements
+the LF-only hotspot; it does not qualify a forced turbulent trajectory. If an
+LF-only refinement at fixed outer step is needed, bring forward conditional 15.
 
 At this milestone, compare once against a qualified executable from `2afaa0fa1`
 with the same active physics/settings, merging and chunking off. Reuse a verified

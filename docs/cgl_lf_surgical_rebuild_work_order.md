@@ -96,8 +96,11 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   separate paired timing of the added arithmetic.
 
 - [ ] **8 — Perpendicular closure.** Correct the `2*nu_eff` response in normal
-  and logarithmic paths and reference consumers. Gate: collisionless identity,
-  strong-collision limit, and resolved coupled decay. Across 6–8 use the common
+  and logarithmic paths and reference consumers, explicitly identifying the
+  SHD/BGK convention. Replace stale whole-endpoint collision-map references with
+  the independent coupled solution and both signed amplitudes. Gate: collisionless
+  identity, intermediate/strong-collision limits, subnormal intermediates and
+  resolved coupled decay. Across 6–8 use the common
   conservative reference step and oblique background-coefficient kinematic screen;
   verify actual dt/RHS counts instead of assuming explicit integration fixes dt.
   Repeat Tier 2 afterward to set the work-count and cost baseline for 9 and 10.
@@ -112,6 +115,9 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   including restart loading and both budget selections. Gate: parameter bounds,
   analytic odd-stage counts, stability, and temporal convergence before accepting
   a larger factor. Record work-count changes separately from evaluation cost.
+  Include an ordinary STS consumer and the unforced finite-rate soft-threshold
+  crossing case: require full-pressure-field convergence under outer-step
+  refinement before accepting a larger safety. Preserve first-order split semantics.
 
 - [ ] **Active milestone.** Run the plan's selected physical suite once, including
   resolved waves/decay, finite-rate relaxation, forcing/restart, HIP wall encoding,
