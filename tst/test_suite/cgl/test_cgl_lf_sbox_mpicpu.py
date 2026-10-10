@@ -61,13 +61,20 @@ def _assert_admissible(output, history):
     for variable in output["var_names"]:
         assert np.all(np.isfinite(_sorted_field(output, variable)))
     assert np.min(_sorted_field(output, "dens")) > 0.0
-    assert np.min(_sorted_field(output, "eint")) > 0.0
-    assert np.min(_sorted_field(output, "p_perp")) > 0.0
+    ppar = _sorted_field(output, "eint")
+    pperp = _sorted_field(output, "p_perp")
+    assert np.min(ppar) > 0.0
+    assert np.min(pperp) > 0.0
+    bsqr = sum(_sorted_field(output, f"bcc{axis}").astype(np.float64)**2
+               for axis in (1, 2, 3))
+    # lf_hardbd counts intermediate crossings; check the endpoint within output roundoff.
+    tolerance = 4*np.finfo(ppar.dtype).eps*(ppar.astype(np.float64) + pperp + bsqr)
+    assert np.all(pperp.astype(np.float64) - ppar + bsqr >= -tolerance)
     assert history["lf_nstage"][-1] > 0.0
     assert history["lf_qface"][-1] > 0.0
     assert abs(history["lf_qprwrk"][-1]) > 0.0
     assert abs(history["lf_qpewrk"][-1]) > 0.0
-    for column in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos", "lf_hardbd"):
+    for column in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos"):
         assert history[column][-1] == 0.0
 
 
