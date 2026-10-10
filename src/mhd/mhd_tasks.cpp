@@ -1105,8 +1105,36 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
                    0, n1m1, 0, n2m1, 0, n3m1);
   // Rates and walls change fine-cell anisotropy after the last restriction.
   RestrictU(pdrive, stage);
-  RecomputeTimeStepFromCurrentState(pdrive);
+  if (!NeedsCGLLFShearingRefresh()) {
+    RecomputeTimeStepFromCurrentState(pdrive);
+  }
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \brief Restore sheared A halos after local moment conversion and walls.
+
+bool MHD::NeedsCGLLFShearingRefresh() const {
+  return has_cgl_lf_split && psbox_u != nullptr &&
+      (pmy_pack->pmesh->three_d || psbox_u->shearing_box_r_phi);
+}
+
+void MHD::RefreshCGLLFShearingState(Driver *pdrive, Real boundary_time) {
+  if (!NeedsCGLLFShearingRefresh()) return;
+  RequireCGLAnisotropyRepresentation("CGL LF shearing boundary refresh");
+  // Called after stage sends/receives clear; shear interpolation must act on final A.
+  (void) pbval_u->InitRecv(nmhd+nscalars);
+  (void) pbval_u->PackAndSendCC(u0, coarse_u0);
+  (void) pbval_u->ClearSend();
+  (void) pbval_u->ClearRecv();
+  (void) pbval_u->RecvAndUnpackCC(u0, coarse_u0);
+  (void) psbox_u->InitRecv(boundary_time);
+  (void) psbox_u->PackAndSendCC(u0, recon_method);
+  (void) psbox_u->ClearSend();
+  (void) psbox_u->ClearRecv();
+  (void) psbox_u->RecvAndUnpackCC(u0);
+  (void) ApplyPhysicalBCs(pdrive, 0);
+  (void) ConToPrim(pdrive, 0);
 }
 
 //----------------------------------------------------------------------------------------

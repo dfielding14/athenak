@@ -715,7 +715,8 @@ TaskStatus MHD::STSRefreshTimeStep(Driver *pdrive, int stage) {
     TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "skip", stage);
     return TaskStatus::complete;
   }
-  if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages) {
+  if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages &&
+      !NeedsCGLLFShearingRefresh()) {
     RecomputeTimeStepFromCurrentState(pdrive);
   }
   TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "end", stage);

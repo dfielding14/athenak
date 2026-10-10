@@ -543,6 +543,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     while ((pmesh->time < tlim) && (pmesh->ncycle < nlim || nlim < 0) &&
            (elapsed_time < wall_time)) {
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
+      auto *pmhd = pmesh->pmb_pack->pmhd;
 
       if (sts.enabled) {
         BeginSTSSweep(pmesh, STSSweep::pre);
@@ -553,6 +554,9 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
           ExecuteTaskList(pmesh, "after_parabolic_stagen", sts_stage);
         }
         EndSTSSweep();
+        if (pmhd != nullptr) {
+          pmhd->RefreshCGLLFShearingState(this, pmesh->time);
+        }
       }
 
       // Execute TaskLists
@@ -573,6 +577,10 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
+      if (pmhd != nullptr && pmhd->NeedsCGLLFShearingRefresh()) {
+        pmhd->RefreshCGLLFShearingState(this, pmesh->time + pmesh->dt);
+        pmhd->NewTimeStep(this, nexp_stages);
+      }
 
       const bool has_explicit_cgl_lf =
           (pmesh->pmb_pack->pmhd != nullptr &&
@@ -594,9 +602,15 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
                    pmesh->pmb_pack->pmhd->has_cgl_lf_split) {
           // A zero LF operator still owes the cycle's full rates and final walls.
           pmesh->pmb_pack->pmhd->STSPostSweepCGLCollisions(this, 0);
-          pmesh->pmb_pack->pmhd->NewTimeStep(this, nexp_stages);
+          if (!pmhd->NeedsCGLLFShearingRefresh()) {
+            pmhd->NewTimeStep(this, nexp_stages);
+          }
         }
         EndSTSSweep();
+        if (pmhd != nullptr && pmhd->NeedsCGLLFShearingRefresh()) {
+          pmhd->RefreshCGLLFShearingState(this, pmesh->time + pmesh->dt);
+          pmhd->NewTimeStep(this, nexp_stages);
+        }
       }
 
       // Work outside of TaskLists:
