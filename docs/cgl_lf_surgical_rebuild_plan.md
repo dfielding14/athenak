@@ -611,7 +611,8 @@ from the base and needed for the current piece.
 | 7, 8 | `cgl/test_cgl_heat_flux_limiter_cpu.py::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints`; `A::test_decay_resolves_closure_coefficients` | Reuse `CheckDiffusionSlopeMeans` and collisional/cancellation checks; coupled two-pressure decay oracle rejects the old coefficient |
 | 9 | `L::test_cgl_lf_uniform_collisional_timestep`; `L::test_cgl_lf_density_contact_stability`; `L::test_cgl_lf_staggered_checkerboard_timestep_and_stability`; `L::test_cgl_lf_scaled_face_row_timestep` | Ordinary collision values, seeded/unseeded density jumps, 2D/3D CT counterexample, finite complete-row cold arithmetic |
 | 9 | `L::test_cgl_lf_low_field_faces_disable_transport_cleanly`; `L::test_cgl_lf_post_sweep_timestep_refresh`; `LM::test_cgl_lf_post_sweep_timestep_refresh_agrees_across_mpi_ranks` | Zero operator and unheated/heated current-state budget |
-| 10 | `L::test_cgl_lf_invalid_sts_safety_is_rejected`; `L::test_cgl_lf_sts_safety_changes_only_sts_budget`; `L::test_cgl_lf_sts_safety_is_loaded_from_restart` | Constructor, explicit-vs-STS semantics, restart parameter loading |
+| 10 | `diffusion/test_sts_safety_cpu.py`; `diffusion/test_parabolic_budget_cpu.py` | Explicit parameter bounds, exact absent-CFL fallback, initial/refreshed STS versus explicit/advective budgets, real restart, ordinary viscosity and inactive sentinels in both precisions |
+| 10 | `cgl/test_cgl_lf_safety_refinement_cpu.py`; `cgl/test_cgl_lf_geometry_cpu.py::test_cgl_lf_sts_reversal_converges_to_explicit` | Full pressure fields at safety 0.3/0.9; finite-rate soft-threshold crossing and reversal against refined references. Scale the ratio cap inversely with safety to match nominal outer-step ladders; verify actual steps and work |
 | 11 | In `turb/test_turb_driving_cpu.py`: `test_type_two_has_nonzero_force`, `test_conservative_forcing_kick`, `test_once_per_step_power`; `L::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks` | Existing `tst/inputs/turb_driving_edot.athinput`; register the retained `turb_forcing` pgen for direct production tests |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
 | 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Existing groups: identity, heating, linear, advection, restart, fences; `passive_acceptance.py` and `cgl_passive_validation` pgen |
@@ -732,10 +733,12 @@ restart (1.0) cadences, verifying each writer exists in the candidate. The
 analysis window is [6,14]. The `cgl_lf_paper_standard_*` MKS24 decks (32 x 32 x 64
 blocks, PLM, `dedt=0.32` per volume) are a different benchmark; neither those,
 the small smoke deck nor the custom-pgen planar workload substitutes for this box.
-Until piece 10 qualifies a separate STS safety, use and record the existing CFL
-multiplier (0.3). The WO2-era matched deck used `sts_safety=0.9`, which the frozen
-startup copy omitted; restore 0.9 only if it passes piece 10's accuracy gates.
-Freeze the qualified value for the matched pair and label historical differences.
+Use explicit `sts_safety=0.3` for the active milestone. Piece 10 qualifies the
+separate parameter and small 0.3/0.9 refinement cases, but its Tier 2 cost screen
+does not establish equal turbulent accuracy. The WO2-era matched deck used
+`sts_safety=0.9`, which the frozen startup copy omitted; selecting that value
+requires milestone accuracy criteria and evidence first. Freeze the qualified
+value for the matched pair and label historical differences.
 Run the active member at the active milestone and the passive member at the
 passive milestone. Restore canonical `iso_sound_speed=sqrt(5)`, omitted from the
 active startup control, and set `mhd/passive` and `problem/passive_delta` together
@@ -766,12 +769,14 @@ The 40-cycle `active3d-1n.athinput` startup screen remains an optional quick che
 of hyperbolic, forcing and LF evaluation cost on the target geometry. It cannot
 replace Tier 2 work counts or Tier 3 physical-time cost and accuracy evidence.
 
-Planning estimates from measured startup rates, not developed-state measurements:
-Tier 1 takes a few minutes on two nodes per invocation; producing the t=6 state
-is roughly 0.8 node-hours at 480 seconds per simulation-time unit; each Tier 2
-invocation is a few minutes on one node; Tier 3 is roughly two node-hours per
-member to t=14 if work stays near 38 LF evaluations/cycle. Work may grow as
-turbulence develops. Revise these estimates with Tier 2 and milestone evidence.
+Tier 1 takes a few minutes on two nodes per invocation. Piece 10's checkpoint
+producer reached t=6.05 in 1.371 node-hours including I/O (1.400 for the entire
+allocation). At safety 0.3, its Tier 2 candidate uses 50.4 LF evaluations/cycle
+and about 863 seconds per simulation-time unit near t=6. Timing invocations take
+seconds, while the separate full-q qualification replays take about 90 seconds.
+The earlier Tier 3 estimate of two node-hours assumed startup work near 38 evaluations
+per cycle; budget more for the milestone and measure its actual node-hours to
+t=14. A short developed-state interval does not fix the cost of the trajectory.
 
 Default production timing configuration: safe arithmetic, diagnostics none,
 weighted STS fluxes, strict checks on. Explicitly put these keys in the timing

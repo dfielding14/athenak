@@ -12,15 +12,16 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–9 and 11 complete.
+**Status:** pieces 0–11 complete.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** piece 10 — separate STS safety from advective/explicit CFL. The
-qualified Piece 9 follow-up (`build/piece9-final-v2`, source `171e81eb7`) and Tier 2
-screen `5646649` establish the immediate work-count/cost baseline on the piece-6
-checkpoint (t=6.000234496394158, cycle 19334). This is a cost-screening state,
-not a qualified developed trajectory of the corrected model. Retain its timings;
-regenerate and relabel the checkpoint when Piece 10 adds a restart-loaded
-parameter. The larger STS safety and Tier 3 trajectory remain unqualified.
+**Next:** the active milestone, using qualified Piece 10 source `ad99fad72`
+(`build/piece10-final`) and explicit STS safety 0.3. All 50 focused tests and
+regenerated Tier 2 qualification/comparisons pass. The new checkpoint is
+`t=6.000305031020128`, cycle 19315; old checkpoints and timings remain retained.
+Safety 0.9 passes the small refinement examples and short cost screen, but has
+not been selected for turbulent accuracy. The absent-key default still follows
+CFL. Workspace `analysis/piece10-completion.json` binds the final evidence and
+supersedes the earlier focused-qualification record's pending Tier 2 tasks.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
@@ -117,7 +118,7 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   Retained closure/hotspot/oblique gates and Tier 1/2 measurements pass; the
   developed-state slowdown is recorded below, separately from uniform savings.
 
-- [ ] **10 — STS safety.** Separate STS safety from advective/explicit CFL,
+- [x] **10 — STS safety.** Separate STS safety from advective/explicit CFL,
   including restart loading and both budget selections. Gate: parameter bounds,
   analytic odd-stage counts, stability, and temporal convergence before accepting
   a larger factor. Record work-count changes separately from evaluation cost.
@@ -193,8 +194,9 @@ boxes are separate work.
   active milestone, passive at the passive milestone, canonical history/field/restart
   output.
   It provides the physical comparison and node-hours including I/O to the common
-  endpoint. Keep the CFL-based LF safety until piece 10 qualifies a separate
-  value; historical 0.9 is not automatically accepted. Chunking requires piece 15.
+  endpoint. Use explicit STS safety 0.3 for the active milestone; Piece 10's small
+  refinement examples and cost screen do not select historical 0.9 for turbulent
+  accuracy. Chunking requires piece 15.
 
 Use safe/none/weighted LF with strict checks and explicit environment-override
 control. Keep pressure-work and injected-work recording enabled on Tiers 2 and 3;
@@ -271,3 +273,5 @@ candidate. Keep commands/backend and evidence paths sufficient to resume the wor
 | 9 / convergence and cost | Same qualified `486bbb570` binary frozen in `build/piece9-final`; current-CFL safety and retained checkpoint unchanged | Oblique continuation `5646516`: finest Fourier-amplitude error 0.599%, spatial orders 2.22/2.17, half-step contamination 0.234% of intermediate spatial error. Total 67 physics cases pass. Sequential Tier 1/2 jobs `5646534`/`5646545`: all 31 invocations pass, three measured pairs per workload plus separate profiles | Tier 1 LF 100.827→130.202M zone-cycles/s/node, 42→26 RHS/cycle; no-LF 558.887→558.731M. Tier 2 74.011→50.824M, 34→50.457 RHS/cycle: throughput −31.33%, amortized whole-step s/RHS 0.00562546→0.00552006. Uniform savings do not predict developed-state cost | Tier 2 s/physical-time 612.815→892.387 using each history; full-q/q-off conserved/CT/forcing/live-RNG endpoints match bitwise, nonzero transport and no new floor/invalid/projection events. Heat-flux profile s/RHS rises 20.0% / 11.6% in Tiers 1/2; new bound cost retained explicitly. Workspace README and per-run summaries/reviews retain spreads, physical advances, nested profiles and provenance. No equal-accuracy turbulence or general speedup claim |
 | 9 follow-up / exceptional arithmetic | `4b5ea7f67` retains the represented grad-B residual in the cold bound; `7011864b9` preserves subnormal parallel scattering; `afb2be2d6` makes the local-speed fixture satisfy E/A recovery and active pressure walls. Final archived source `171e81eb7` | Old-source reproduction `5646561`: intended cold-row failure and parallel double/float failures, with a passing legacy device control. Final HIP qualification `5646611`: all 69 tests pass across nine gates, including 14 signed device closure cases and safe/fast admitted zero-cycle local-speed checks | Old cold row 132874.47 was below a capped reverse-coupling row 177087.31; corrected row 177165.96 covers it. The double parallel response was 14.04% above the cold coefficient because scattering vanished. These are local arithmetic counterexamples, not evolved-instability reproductions | Binary SHA `3ffebd3e…`; all 923 application and 1,455 Kokkos files match Git. All 89 retained numerical artifacts match `5646500` byte-for-byte. Preliminary `5646569` is preserved separately. Workspace `analysis/piece9-reaudit/` and final qualification review retain evidence; frozen-Jacobian, nonlinear/AMR and full-float scope limits remain |
 | 9 follow-up / retained results and cost | Exact qualified binary frozen in `build/piece9-final-v2`; original Piece 9 freeze and all old timings retained | Oblique `5646631` passes with all eight numerical files byte-identical to `5646516`; final total 70 tests. Tier 1/2 `5646643`/`5646649`: all 31 invocations pass, three measured pairs per workload, separate profiles and transport replay | Tier 1 LF 130.649→136.862M zone-cycles/s/node (+4.76%), no-LF 559.014→559.716M; 26 RHS/cycle unchanged. Tier 2 51.189→51.422M (+0.46%, within observed variation), 50.457 RHS/cycle unchanged; whole-step s/RHS 0.00548095→0.00545585 | Tier 2 native conserved/CT/ghost arrays, forcing/live RNG, ledgers and time/dt/work histories match exactly; q-full/q-off identity, nonzero transport and zero floor/invalid/projection events pass. Intermediate limiter/hard-bound detections remain nonzero. Timings/profile scopes, spreads and independent reconciliation are in workspace summaries/reviews. No isolated source attribution or general speedup claim |
+| 10 / independent STS safety | `28d748f49`; preserve absent-key current-CFL behavior, load/validate explicit safety on fresh starts and restarts, scale only STS budgets and retain inactive sentinels. Final source `ad99fad72` | Qualification `5646694`: all 50 tests pass across eight gates, including host double/float budgets, actual HIP startup/restart/refresh, ordinary diffusion, MPI, closure and hotspots. Exact binary frozen as `build/piece10-final` | Safety 0.3/0.9 reversal and finite-rate mirror-crossing full pressure fields converge at matched nominal outer budgets. Larger safety reduces coarse reversal RHS 20→12 but raises coarse pressure error about 42–45%; both pass unchanged tolerances. Threshold reference differences are 33.35–34.72% of finest reported errors: coarse first-order evidence, not turbulent accuracy | Workspace `analysis/piece10/physics-5646694-independent-review.json`, runtime review and seven-matrix RKL probe retain raw reconciliation and limits. Exploratory `5646678` fixture/provenance issues are retained; final source archive matches all 926 application and 1,455 Kokkos files. Tier 2 generation `5646710`, same-safety comparison `5646841` and separate 0.3/0.9 cost screen `5646854` pass. No larger default adopted |
+| 10 / checkpoint and paired cost | New canonical producer with explicit safety 0.3; frozen t=6.000305031020128, cycle 19315, SHA `bb475c16…`; old checkpoint and timings retained | Generation `5646710` reaches t=6.05 in 1.371 node-hours including I/O. Comparisons `5646841`/`5646854` each pass 14 invocations with three alternating measured pairs and separate profiles | Parent/candidate at 0.3 match native conserved/CT/ghost state, forcing/live RNG, ledgers and all q-off history columns exactly. Rates 52.053→51.934M zone-cycles/s/node (−0.229%, within observed variation), both 50.4 RHS/cycle. Safety 0.3→0.9 reduces work 50.4→30 RHS/cycle, rates 51.723→75.130M (+45.255%), and s/physical-time 866.138→596.288 using each history | Both safeties pass q-mode identity, nonzero transport, positivity and zero floor/invalid/projection/EOS repair checks; intermediate hard-bound detections remain nonzero. Safety screen cost/RHS rises 5.43027→6.28058 ms as fewer RHS share outer-step work; separate heat-flux ms/RHS 1.70897→1.70781. Workspace completion/review records retain raw reconciliation, spreads and profile scopes. No equal-accuracy turbulent speedup claim; explicit 0.3 remains the active-milestone setting. Tier 1 unnecessary without recurring full-domain changes; active milestone remains next |
