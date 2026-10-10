@@ -782,7 +782,7 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
           pcgl_lf->RecordAdmissibility(
               u0, w0, bcc0, peos->eos_data, dfloor_delta, pfloor_delta,
               pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
-              stage, pdrive->sts.nstages, stage == 0);
+              stage, pdrive->sts.nstages);
         }
       } else {
         RequireCGLAnisotropyRepresentation("CGL AMR primitive restriction");

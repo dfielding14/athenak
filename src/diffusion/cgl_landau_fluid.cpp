@@ -1265,7 +1265,8 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;
   const bool backup = effective_backup_limiter;
-  if (profile_enabled_ && !wall_checkpoint) {
+  const bool counted_rhs = !wall_checkpoint && stage > 0;
+  if (profile_enabled_ && counted_rhs) {
     profile_last_nstages_ = nstages;
     if (nstages > profile_max_nstages_) {
       profile_max_nstages_ = nstages;
@@ -1314,7 +1315,7 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
 
   // Count every unprojected LF stage, including its hard-wall crossings. Entry
   // and post-wall checks validate the split state without counting extra stages.
-  if (!wall_checkpoint) {
+  if (counted_rhs) {
     diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
     diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
     diagnostics.pfloor += static_cast<std::uint64_t>(pfloor_delta);

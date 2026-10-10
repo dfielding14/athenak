@@ -617,12 +617,13 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
     peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju,
                                            kl, ku);
   }
+  // Entry walls were checked in A before conversion; moment recovery can round across them.
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
       pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before,
       pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before,
       pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
-      stage, pdrive->sts.nstages, stage == 0);
+      stage, pdrive->sts.nstages);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);

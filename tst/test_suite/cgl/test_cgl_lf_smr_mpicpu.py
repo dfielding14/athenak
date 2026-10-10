@@ -72,7 +72,8 @@ def test_cgl_lf_smr_sts_converges_to_explicit(tmp_path, primitive):
     """Qualify the composed refined operator at a fixed mesh and common endpoint."""
     pressures, steps, work = [], [], []
     reference_state = None
-    for integrator, budget in (("explicit", 0.02), ("explicit", 0.01),
+    # Resolve first-order reference error below the smaller second-order STS errors.
+    for integrator, budget in (("explicit", 0.005), ("explicit", 0.0025),
                                ("sts", 8.0), ("sts", 4.0), ("sts", 2.0)):
         directory = tmp_path / f"{integrator}{budget}"
         directory.mkdir()
