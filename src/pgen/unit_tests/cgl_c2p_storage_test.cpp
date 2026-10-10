@@ -125,8 +125,8 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
       ? std::nextafter(initial_kinetic + magnetic, Real(0.0))
       : 0.5*initial_parallel + initial_perp + initial_kinetic + magnetic;
   const Real expected_kinetic = 0.5*(1.0/expected_density)*SQR(momentum);
-  const char *names[] = {"anisotropy", "magnetic moment", "moment refresh"};
-  for (int mode = 0; mode < 3; ++mode) {
+  const char *names[] = {"anisotropy", "moment refresh"};
+  for (int mode = 0; mode < 2; ++mode) {
     const std::string label = std::string(names[mode]) + " " + case_name;
     auto initial = Kokkos::create_mirror(cons);
     Kokkos::deep_copy(initial, 0.0);
@@ -148,8 +148,6 @@ void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
     auto convert = [&]() {
       if (mode == 0) {
         peos->ConsToPrim(cons, b, prim, bcc, false, 0, 0, 0, 0, 0, 0);
-      } else if (mode == 1) {
-        peos->CGLMagneticMomentToPrim(cons, b, prim, bcc, 0, 0, 0, 0, 0, 0);
       } else {
         peos->CGLRefreshPrimFromMagneticMoment(cons, bcc, prim, 0, 0, 0, 0, 0, 0);
       }

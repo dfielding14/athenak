@@ -2003,26 +2003,6 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
     ])
     assert args.reference_curves == ["fig2.json", "fig13.json"]
     assert args.allow_partial_reference_cases
-    all_paper_inputs = sorted(PAPER_PRODUCTION_INPUT_ROOT.glob("*.athinput"))
-    assert len(all_paper_inputs) == 20
-    for input_path in all_paper_inputs:
-        source = input_path.read_text()
-        turbulence = source.split("<turb_driving>", 1)[1].split("<", 1)[0]
-        assert "spectrum = power_law" in turbulence
-        assert "physical_k_shell = true" in turbulence
-        assert "k_shell_unit = 3.141592653589793" in turbulence
-        assert "nlow = 1" in turbulence
-        assert "nhigh = 3" in turbulence
-        assert "isotropic_power_spectrum = true" in turbulence
-        assert "expo = 2.0" in turbulence
-        expected_policy = (
-            "mks24_random_unprojected"
-            if "driving_type = 0" in turbulence
-            else "mks24_alfvenic_perpendicular"
-        )
-        assert f"projection_policy = {expected_policy}" in turbulence
-        if expected_policy == "mks24_alfvenic_perpendicular":
-            assert "sol_fraction = 1.0" in turbulence
     input_paths = sorted(
         PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")
     )
@@ -2041,6 +2021,25 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
         )
     )
     assert len(input_paths) == 18
+    smoke_paths = sorted(PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_smoke_*.athinput"))
+    for input_path in input_paths + smoke_paths:
+        source = input_path.read_text()
+        turbulence = source.split("<turb_driving>", 1)[1].split("<", 1)[0]
+        assert "spectrum = power_law" in turbulence
+        assert "physical_k_shell = true" in turbulence
+        assert "k_shell_unit = 3.141592653589793" in turbulence
+        assert "nlow = 1" in turbulence
+        assert "nhigh = 3" in turbulence
+        assert "isotropic_power_spectrum = true" in turbulence
+        assert "expo = 2.0" in turbulence
+        expected_policy = (
+            "mks24_random_unprojected"
+            if "driving_type = 0" in turbulence
+            else "mks24_alfvenic_perpendicular"
+        )
+        assert f"projection_policy = {expected_policy}" in turbulence
+        if expected_policy == "mks24_alfvenic_perpendicular":
+            assert "sol_fraction = 1.0" in turbulence
     standard_input_names = {
         path.name
         for path in PAPER_PRODUCTION_INPUT_ROOT.glob("cgl_lf_paper_standard_*.athinput")

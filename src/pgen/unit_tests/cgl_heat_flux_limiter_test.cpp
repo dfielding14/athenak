@@ -106,17 +106,6 @@ void CheckModerateValues() {
 }
 
 void CheckBackupLimiterPolicy() {
-  Require("configured backup remains enabled",
-          cgl::EffectiveBackupLimiter(true, false, false, true));
-  Require("strict LF does not imply backup",
-          !cgl::EffectiveBackupLimiter(false, true, true, true));
-  Require("relaxed LF does not imply backup",
-          !cgl::EffectiveBackupLimiter(false, true, true, false));
-  Require("relaxed LF without instability limiters does not imply backup",
-          !cgl::EffectiveBackupLimiter(false, true, false, false));
-  Require("unrelated relaxed configuration does not imply backup",
-          !cgl::EffectiveBackupLimiter(false, false, true, false));
-
   constexpr Real ppar = 1.0;
   constexpr Real bsqr = 1.0;
   constexpr Real limiter_rate = 20.0;
@@ -128,8 +117,7 @@ void CheckBackupLimiterPolicy() {
   eos.limiter_backup_nu = 1.0e10;
   eos.lim_coll = limiter_rate;
   eos.mlim = true;
-  const bool relaxed_backup =
-      cgl::EffectiveBackupLimiter(true, true, true, false);
+  const bool relaxed_backup = true;
   RequireClose("default firehose threshold", cgl::FirehoseThreshold(bsqr, eos), -1.0);
   RequireClose("default mirror threshold", cgl::MirrorThreshold(bsqr, eos), 0.5);
   RequireClose("default firehose wall", cgl::FirehoseBackupWall(bsqr, eos), -1.0);

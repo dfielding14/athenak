@@ -550,14 +550,8 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
   }
   strict_admissibility =
       pin->GetOrAddBoolean("mhd", "cgl_lf_strict_admissibility", false);
-  const bool configured_backup =
+  effective_backup_limiter =
       pin->GetOrAddBoolean("mhd", "backup_limiters", false);
-  const bool instability_limiter_active =
-      pin->GetOrAddBoolean("mhd", "mirror_limiter", false) ||
-      pin->GetOrAddBoolean("mhd", "firehose_limiter", false);
-  effective_backup_limiter = cgl::EffectiveBackupLimiter(
-      configured_backup, true, instability_limiter_active,
-      strict_admissibility);
   profile_enabled_ =
       CGLProfileEnvValue("ATHENAK_CGL_LF_PROFILE",
                          pin->GetOrAddBoolean("mhd", "cgl_lf_profile", false));

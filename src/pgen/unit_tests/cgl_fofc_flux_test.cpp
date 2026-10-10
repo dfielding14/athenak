@@ -64,7 +64,6 @@ EOS_Data MakeCglEOS(bool passive=false) {
   eos.passive = passive;
   eos.flim = false;
   eos.mlim = false;
-  eos.coll = false;
   eos.backup_lim = false;
   eos.dfloor = 1.0e-12;
   eos.pfloor = 1.0e-12;

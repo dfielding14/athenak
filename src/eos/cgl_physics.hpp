@@ -21,12 +21,6 @@ constexpr Real kSqrtTwoPi = 2.5066282746310002;
 constexpr Real kSqrtEightPi = 5.013256549262000;
 constexpr Real kThreePiMinusEight = 1.4247779607693793;
 
-KOKKOS_INLINE_FUNCTION
-bool EffectiveBackupLimiter(const bool configured_backup,
-                            const bool, const bool, const bool) {
-  return configured_backup;
-}
-
 // Threshold parameters are positive coefficients of magnetic pressure B^2/2.
 KOKKOS_INLINE_FUNCTION
 Real FirehoseThreshold(const Real bsqr, const EOS_Data &eos) {

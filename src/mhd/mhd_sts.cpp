@@ -388,7 +388,6 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
 
   int scr_level = 0;
   size_t scr_size = ScrArray1D<Real>::shmem_size(ncells1);
-  const int nvars_update = lf_only_sts_cell_update ? 2 : nvars;
 
   {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_update_kernel);
@@ -435,10 +434,10 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
       });
     } else {
       par_for_outer("mhd_sts_update_u", DevExeSpace(), scr_size, scr_level, 0, nmb1,
-                    0, nvars_update - 1, ks, ke, js, je,
+                    0, nvars - 1, ks, ke, js, je,
       KOKKOS_LAMBDA(TeamMember_t member, const int m, const int q, const int k,
                     const int j) {
-        const int n = lf_only_sts_cell_update ? ((q == 0) ? IEN : IAN) : q;
+        const int n = q;
         if (!UpdateSTSMHDVariable(n, update_momentum, update_energy,
                                   update_cgl_moment, update_scalars,
                                   nmhd_vars)) {

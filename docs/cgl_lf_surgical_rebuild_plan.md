@@ -165,7 +165,7 @@ Gate: invalid and unsupported inputs fail clearly; valid active cases are unchan
 **2. Repair the remaining EOS floor defects individually.**
 Scope: `SingleC2P_CGLMHD` and `SingleC2P_CGLMHDFromMagneticMoment` in
 `src/eos/ideal_c2p_mhd.hpp`; repaired-state persistence in
-`CGLMHD::ConsToPrim`, `CGLMagneticMomentToPrim`, and the lightweight refresh.
+`CGLMHD::ConsToPrim` and `CGLRefreshPrimFromMagneticMoment`.
 For otherwise valid magnetized states, preserve the pressure ratio under density
 floors in the A decoder. In the magnetic-moment decoder, retain the accepted
 different density repair: at fixed B and without further pressure-floor repair,

@@ -1,5 +1,5 @@
 # CGL-LF Squire/Majeski turbulence validation, active anisotropic-pressure feedback.
-# Build with: cmake -S . -B build-cgl-lf-paper -DPROBLEM=cgl_lf_paper
+# Historical standalone-pgen input; current runs use cgl_lf_paper_standard_* decks.
 
 <job>
 basename = cgl_lf_paper_turb_active

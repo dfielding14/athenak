@@ -33,7 +33,6 @@ struct EOS_Data {
   bool is_cgl;       // flag to denote CGL anisotropic MHD EOS
   bool passive;      // passive CGL evolution flag
   bool mlim, flim;   // mirror and firehose limiter flags
-  bool coll;         // enable CGL collision/limiter relaxation
   bool backup_lim;   // enable backup CGL instability limiters
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
   // Soft Delta p thresholds are -firehose_threshold*B^2/2 and +mirror_threshold*B^2/2.
@@ -328,13 +327,6 @@ class EquationOfState {
                                              const int il, const int iu,
                                              const int jl, const int ju,
                                              const int kl, const int ku);
-  virtual void CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
-                                       const DvceFaceFld4D<Real> &b,
-                                       DvceArray5D<Real> &prim,
-                                       DvceArray5D<Real> &bcc,
-                                       const int il, const int iu,
-                                       const int jl, const int ju,
-                                       const int kl, const int ku);
   virtual void CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                                 const DvceArray5D<Real> &bcc,
                                                 DvceArray5D<Real> &prim,
@@ -499,13 +491,6 @@ class CGLMHD : public EquationOfState {
                                      const int il, const int iu,
                                      const int jl, const int ju,
                                      const int kl, const int ku) override;
-  void CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
-                               const DvceFaceFld4D<Real> &b,
-                               DvceArray5D<Real> &prim,
-                               DvceArray5D<Real> &bcc,
-                               const int il, const int iu,
-                               const int jl, const int ju,
-                               const int kl, const int ku) override;
   void CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                         const DvceArray5D<Real> &bcc,
                                         DvceArray5D<Real> &prim,

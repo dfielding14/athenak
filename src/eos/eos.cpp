@@ -28,7 +28,6 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   eos_data.passive = false;
   eos_data.mlim = false;
   eos_data.flim = false;
-  eos_data.coll = false;
   eos_data.backup_lim = false;
   eos_data.nu_coll = 0.0;
   eos_data.lim_coll = 0.0;
@@ -134,26 +133,6 @@ void EquationOfState::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
   (void) kl;
   (void) ku;
   Kokkos::abort("CGLMagneticMomentToAnisotropy is only defined for CGL MHD.\n");
-}
-
-void EquationOfState::CGLMagneticMomentToPrim(DvceArray5D<Real> &cons,
-                                              const DvceFaceFld4D<Real> &b,
-                                              DvceArray5D<Real> &prim,
-                                              DvceArray5D<Real> &bcc,
-                                              const int il, const int iu,
-                                              const int jl, const int ju,
-                                              const int kl, const int ku) {
-  (void) cons;
-  (void) b;
-  (void) prim;
-  (void) bcc;
-  (void) il;
-  (void) iu;
-  (void) jl;
-  (void) ju;
-  (void) kl;
-  (void) ku;
-  Kokkos::abort("CGLMagneticMomentToPrim is only defined for CGL MHD.\n");
 }
 
 void EquationOfState::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
