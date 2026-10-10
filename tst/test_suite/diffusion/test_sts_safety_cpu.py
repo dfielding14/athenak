@@ -54,8 +54,9 @@ def test_absent_sts_safety_preserves_current_cfl(tmp_path):
     for label, safety in (("absent", ""), ("explicit", f"sts_safety = {CFL:.17g}\n")):
         case = tmp_path / label
         source = (INPUTS / UNIFORM).read_text() + f"\n<time>\n{safety}"
+        # Nonzero anisotropy keeps the pgen's relative relaxation oracle well scaled.
         _run(case, UNIFORM, f"time/cfl_number={CFL:.17g}", "time/nlim=2",
-             "mhd/nu_coll=0", source=source)
+             "mhd/nu_coll=0", "problem/pperp0=1.5", source=source)
         histories.append(_history(case))
     for name in histories[0]:
         np.testing.assert_array_equal(histories[0][name], histories[1][name])
@@ -122,7 +123,9 @@ def test_sts_safety_restart_loading(tmp_path, safety):
     if safety is not None:
         source += f"sts_safety = {safety}\n"
     original = tmp_path / "original"
-    _run(original, UNIFORM, "time/nlim=1", "mhd/nu_coll=0", source=source)
+    # Uniform background coefficients keep the analytic budget independent of anisotropy.
+    _run(original, UNIFORM, "time/nlim=1", "mhd/nu_coll=0",
+         "problem/pperp0=1.5", source=source)
     checkpoint = sorted((original / "rst").glob("*.rst"))[-1]
     record = checkpoint.read_bytes().split(b"<par_end>", 1)[0].decode("ascii")
     marker = re.search(r"(?m)^sts_safety\s*=\s*(\S+)", record)

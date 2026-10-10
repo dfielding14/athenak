@@ -6,6 +6,7 @@ This checks an unforced smooth flow, not turbulent switching or split second ord
 import json
 import os
 from pathlib import Path
+import re
 import subprocess
 
 import numpy as np
@@ -72,7 +73,17 @@ dcycle = 1
     # Finalize writes a second terminal snapshot. Keep one state per cycle.
     snapshots = {}
     for path in sorted((directory / "tab").glob("*.mhd_w_bcc.*.tab")):
-        snapshot = testutils.athena_read.tab(str(path))
+        # This 1D writer labels unused j/k coordinates but omits their data.
+        with path.open() as stream:
+            header, fields = stream.readline(), stream.readline().split()[-9:]
+        assert fields == ["dens", "velx", "vely", "velz", "eint", "p_perp",
+                          "bcc1", "bcc2", "bcc3"]
+        data = np.loadtxt(path)
+        assert data.shape == (64, 12) and np.all(np.isfinite(data))
+        snapshot = dict(zip(fields, data[:, 3:].T))
+        snapshot["time"] = float(re.search(r"time=(\S+)", header)[1])
+        snapshot["cycle"] = int(re.search(r"cycle=(\d+)", header)[1])
+        snapshot["x1v"] = data[:, 2]
         if snapshot["cycle"] in snapshots:
             previous = snapshots[snapshot["cycle"]]
             for field in snapshot.keys() - {"time", "cycle"}:
