@@ -298,7 +298,7 @@ def main(argv=None):
         pressures, steps, work = [], [], []
         # Stationary native isothermal flow isolates nonlinear LF without forcing
         # or collision cadence changes when the outer timestep is refined.
-        for method, budget in [('explicit',.005),('explicit',.0025),
+        for method, budget in [('explicit',.04),('explicit',.02),('explicit',.01),
                                ('sts',8),('sts',4),('sts',2)]:
             overrides = ['problem/advect_velocity=0', 'mhd/lf_coefficient_mode=local']
             if method == 'sts':
@@ -317,19 +317,34 @@ def main(argv=None):
             pressures.append(np.stack([out['pp'], out['pt']]))
             steps.append(float(np.max(np.diff(h['time']))))
             work.append(float(h['lf_nstage'][-1]/64/out['cycle']))
-        uncertainty = np.mean(abs(pressures[0] - pressures[1]), axis=(1,2,3,4))
-        errors = np.array([np.mean(abs(state - pressures[1]), axis=(1,2,3,4))
-                           for state in pressures[2:]])
-        scale = np.mean(abs(pressures[1]), axis=(1,2,3,4))
+        # Explicit LF uses forward-Euler half-sweeps. Verify first-order error
+        # before Richardson extrapolation, and retain the full extrapolate difference.
+        differences = [np.mean(abs(pressures[i] - pressures[i+1]), axis=(1,2,3,4))
+                       for i in range(2)]
+        reference_order = np.log(differences[0]/differences[1])/math.log(2)
+        coarse_reference = 2*pressures[1] - pressures[0]
+        reference = 2*pressures[2] - pressures[1]
+        uncertainty = np.mean(abs(reference - coarse_reference), axis=(1,2,3,4))
+        errors = np.array([np.mean(abs(state - reference), axis=(1,2,3,4))
+                           for state in pressures[3:]])
+        max_errors = [np.max(abs(state - reference), axis=(1,2,3,4)).tolist()
+                      for state in pressures[3:]]
+        scale = np.mean(abs(reference), axis=(1,2,3,4))
+        finest_order = np.log(errors[-2]/errors[-1])/math.log(steps[-2]/steps[-1])
         check('nonlinear-temporal-refinement',
               .45 < steps[1]/steps[0] < .55
-              and np.all(np.asarray(steps[3:]) < .6*np.asarray(steps[2:-1]))
-              and all(value == 2 for value in work[:2])
-              and all(value > 2 for value in work[2:])
+              and .45 < steps[2]/steps[1] < .55
+              and np.all(np.asarray(steps[4:]) < .6*np.asarray(steps[3:-1]))
+              and all(value == 2 for value in work[:3])
+              and all(value > 2 for value in work[3:])
+              and np.all((reference_order > .85) & (reference_order < 1.15))
               and np.all(errors > 1e-13) and np.all(errors[1:] < .85*errors[:-1])
               and np.all(uncertainty < .5*errors[-1])
+              and np.all(finest_order > 1.7)
               and np.all(errors[-1]/scale < 1e-4),
-              pressure_L1_errors=errors.tolist(), reference_uncertainty=uncertainty.tolist(),
+              pressure_L1_errors=errors.tolist(), pressure_Linf_errors=max_errors,
+              reference_order=reference_order.tolist(), finest_sts_order=finest_order.tolist(),
+              reference_uncertainty=uncertainty.tolist(),
               max_dt=steps, rhs_per_cycle=work)
     if args.suite in ['all','fences']:
         for name,flags,error in [
