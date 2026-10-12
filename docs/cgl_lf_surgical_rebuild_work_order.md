@@ -12,17 +12,14 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–12 complete; the active physical suite and bounded reference
-comparison are accepted. The active milestone remains open.
+**Status:** pieces 0–13 and the active milestone are complete within their
+recorded scopes, including the reviewed Tier 3 run and [6,14] analysis.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** external workflow consolidation, Tier 1 and the authorized code cleanup
-are complete, as is Piece 12 mesh qualification. Piece 13 is a profile-driven
-decision, not a requirement to implement every listed optimization; then proceed
-to the separately qualified passive model (14). Tier 3 job
-`5647225` is queued in `extended` (one node, fresh to t=14, safety 0.3); existing
-[6,14] analysis job `5647226` depends on its successful completion. Follow the
-[three-step workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
-to review the results and update the concise completion record when available.
+**Next:** the separately qualified passive model (14). Piece 13 retains compact
+LF cell exchange after exact-state and paired-cost qualification; larger
+refresh/cache and logarithm changes are deferred. The
+[workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
+retains reproduction commands and links to the completed milestone evidence.
 Reuse accepted physics and reference evidence unless a relevant change or concrete
 failure requires repeating it.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
@@ -129,7 +126,7 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   crossing case: require full-pressure-field convergence under outer-step
   refinement before accepting a larger safety. Preserve first-order split semantics.
 
-- [ ] **Active milestone.** The physical suite is frozen in
+- [x] **Active milestone.** The physical suite is frozen in
   `build/active-milestone-final`: source `73e2769fc`, selected test source
   `08189c1e2`, 33 passes and two known B4 expected failures. The fixed 8, 4, 2, 1
   local-hotspot window (`5647113`) passes the original physical gates and
@@ -142,20 +139,21 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   LF/no-LF rates 135.512/557.546M zone-cycles/s/node (ratio 0.243051), 26 LF
   RHS/cycle, and rate spans below 0.04%. The historical control is separately
   labeled in the report. Cancelled job `5647148` remains partial evidence.
-  Tier 3 job `5647225` is queued; analysis job `5647226` waits for successful
-  completion. No Tier 3 results are available yet.
+  Tier 3 job `5647225` completed fresh to t=14 at safety 0.3: 47,681 cycles,
+  3.475833 node-hours including I/O and 47.465 LF RHS/cycle. LF floor/invalid
+  and EOS repair counters stayed zero; the [6,14] energy minus applied-work
+  residual is 2.23e-11 relative to injected work. Analysis job `5647226`
+  completed all four figure groups, reviewed on 2026-10-12. The scientific
+  interpretation remains inconclusive: one heated realization does not establish
+  turbulent convergence or active/passive causality. The run used frozen
+  pre-cleanup source `73e2769fc`; later cleanup and Piece 12 evidence are separate.
 
   External workflow consolidation is complete: three existing entrypoints and
   their required helpers are listed in the workflow above. One-off and duplicate
   audit/setup scripts are archived in place, preserving evidence and provenance
   paths. The [milestone report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/active-milestone-report.md)
-  is the concise record of completed evidence, remaining results and limits.
-
-  Complete the queued fresh canonical matched active run to t=14 at
-  safety 0.3, followed by the dependent [6,14] analysis and report. Keep the plan's
-  physical, energy-budget, work-count and I/O-inclusive cost reporting. Reuse the
-  completed physics and reference work unless a relevant change or concrete
-  failure requires a rerun. Later pieces remain separate.
+  records the completed evidence and limits. Reuse completed physics and reference
+  work unless a relevant change or concrete failure requires a rerun.
 
 - [x] **12 — Mesh support.** Separately repair physical corners after prolongation
   and synchronize shared LF face fluxes. Grow both buffers before receives, with
@@ -171,11 +169,33 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   one ulp after restart regrouping. See the completion record and workspace
   [Piece 12 report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece12/README.md).
 
-- [ ] **13 — Optional optimizations.** Profile the corrected target and select
+  Requested follow-up: a monotonic physical-time target level for uniform
+  refinement in the turbulence problem, using the existing AMR hook. Qualify
+  forcing/restart and conservation through refinement; passive and chunked LF
+  support require their own checks. This callback is not implemented yet.
+
+- [x] **13 — Optional optimizations.** Profile the corrected target and select
   the smallest useful removal/fusion/message change. Compact communication follows
   mesh correctness. Gate each retained change on full-precision primary, ghost,
   coarse, scalar, and restart/RNG equivalence plus paired GPU timing. A simple
   deletion may stand within timing noise; larger machinery needs repeatable benefit.
+
+  **Compact exchange (`920090906`):** later strict LF stages on uniform periodic
+  meshes send only IEN/IAN; the first stage and all excluded cases retain full
+  messages. No new option or buffer. CPU `5656649` and HIP `5656646` each pass
+  nine checks, including exact native scalar/conserved/CT/ghost payloads on
+  one/four ranks. Tier 1 `5656691` passes all 18 invocations: 136.122→140.333M
+  zone-cycles/s/node (+3.09%), 26 RHS/cycle unchanged, no-LF +0.002%.
+  Tier 2 qualified replays `5656928` plus timing continuation `5656954` give
+  53.350→58.008M zone-cycles/s/node (+8.73%; all three pairs +8.59–8.88%).
+  Native fields/ghosts, forcing/RNG, ledgers, time/dt and work are exact;
+  both builds retain 50.4 RHS/cycle and pass the separate full-q checks.
+  Retain the change: 22 net production lines and one 51-line regression.
+  Failed Slurm allocations `5656757`/`5656928` remain recorded separately;
+  successful replays were reused without repeating physics checks.
+  Defer the larger refresh/cache fusion and
+  upwind-log changes; details and artifacts are in the
+  [Piece 13 report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece13/README.md).
 
   **Authorized cleanup (2026-10-10):** dead code `e763f1d10` passes three host and
   seven HIP checks (`5647261`); environment-override/replay removal `1e8c02c37`

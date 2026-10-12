@@ -394,30 +394,39 @@ count entry refreshes as RHS evaluations. Add fixed-mesh STS-to-explicit pressur
 convergence for both prolongation modes, plus exact shearing restart checks.
 These finite checks do not prove a composed nonlinear AMR stability bound.
 
+Requested follow-up: spatially uniform refinement increasing with physical time.
+Reuse the existing user-refinement hook with a monotonic target level in the
+turbulence problem, between completed cycles, and qualify forcing/restart and
+conservation across refinement. PPM4 requires four ghosts for AMR; primitive
+prolongation currently excludes pressure-work recording. Active mesh support
+does not automatically qualify the later passive model or LF chunking on AMR.
+
 **13. Apply only measured, equivalent optimizations.**
 LF-only flux-clear removal is accepted (`718901fa2`, measurements below).
-Remaining candidates: fused primitive/
-temperature refresh with valid frozen-B reuse (`d02bb714d`); upwind-only HLLE
-logarithm (`31b739890`); compact IEN/IAN messages (`6539bfbbc`); then any proven
-redundant timestep refresh. Keep full shearing exchange and required magnetic
-boundary work. Gate: same-configuration full-precision state/restart equality,
-including ghosts/coarse data and scalars, plus paired GPU timing. Keep only a
-beneficial or independently justified simplification; no configurable fallback
-framework. Handle diagnostic reduction-order differences explicitly.
-Only change a path that still contains the waste. For refresh fusion, preserve
-the different raw/scaled B norms needed for identical rounding, repair stores,
-floor counters, and the final full halo. Cache density/B only while frozen;
-invalidate at existing sweep boundaries. For compact exchange, receive sizes,
-packing, unpacking and call-site offsets/counts must land together. A simple
-deletion can be worthwhile even when timing is within noise; a large new kernel
-or cache mechanism needs a repeatable benefit on the target with q diagnostics off.
-Start with the existing non-detailed profile of the corrected target. Optimize
-the dominant recurring work; do not implement every historical optimization in
-the listed order. In particular, reducing bound cost at the expense of extra LF
-evaluations can make the whole calculation slower.
-The historical upwind-log patch predates piece 5's stable weak-field
-`2*log(rho)-3*log(Bref)` arithmetic. Adapt only the selection logic; do not restore
-the old product/log expression. Preserve the neighboring-field rule as well.
+Select compact IEN/IAN cell messages (`920090906`, adapted from `6539bfbbc`):
+prior profiles show cell communication costs more than temperature preparation.
+Limit compaction to stage > 1 of strict LF on uniform periodic meshes without
+shear/orbital advection. Stage one synchronizes all frozen fields; strict checks
+reject density/scalar repairs before another stage. One predicate controls
+receive sizes, packing and unpacking. Entry refreshes and all excluded cases
+retain full messages, and flux communication is unchanged. No new option or
+buffer is needed. CPU/HIP each pass nine focused checks, including exact native
+conserved/scalar/CT/ghost payloads across full/compact exchange and one/four ranks.
+Accepted Tier 1/2 comparisons improve throughput by 3.09%/8.73% against the
+immediate parent, with unchanged work counts and exact developed-state native
+fields/ghosts, forcing/RNG and ledgers. No-LF throughput is unchanged (+0.002%).
+Tier 1 is `5656691`; Tier 2 uses qualified replays from `5656928` and timings
+from `5656954` after scheduler failures interrupted the original allocation.
+The work order and workspace `analysis/piece13/README.md` retain all evidence.
+
+Defer primitive/temperature fusion (`d02bb714d`): its small measured preparation
+cost does not justify duplicating EOS recovery and adding a magnetic-cache
+lifetime. Defer upwind-only HLLE logarithms (`31b739890`) and speculative timestep
+refresh removal. Implementing every historical optimization is not the goal.
+If revisited, preserve raw/scaled B rounding, all repairs/counters and final halos;
+the old logarithm patch must retain piece 5's stable weak-field expression and
+neighboring-field rule. Keep only a measured benefit or independently useful
+simplification, and report reduction-order differences explicitly.
 
 **14. Add passive thermodynamics as a separate model series.**
 Reuse the physical design of `a2d994a3a` and the later decoding correction
@@ -582,7 +591,7 @@ whether the smaller reconstruction improves on the newer solver. Use physical
 endpoint checks for intentional arithmetic differences. Exact equivalence of
 each optimization remains a comparison with its immediate rebuilt parent.
 
-**Remaining active-milestone work (revised 2026-10-10):** the physical suite is
+**Active milestone complete (reviewed 2026-10-12):** the physical suite is
 frozen in `build/active-milestone-final` with 33 passes and two known B4 expected
 failures. The bounded corrected-reference comparison (`5647118`) is complete;
 its near-threshold pressure differences remain descriptive, not an accuracy
@@ -599,19 +608,22 @@ oracle. Reuse these results and keep STS safety 0.3.
    allocation, including three LF/no-LF pairs and the historical control. The
    milestone report records rates, spread and work/cost per RHS. Cancelled job
    `5647148` remains separate partial evidence.
-3. Canonical Tier 3 job `5647225` is queued, fresh to t=14 at safety 0.3; existing
-   [6,14] analysis job `5647226` depends on its successful completion. The
-   eight-hour one-node simulation uses `extended` because `batch` limits this
-   node count to two hours; analysis uses `batch`/normal. Results remain pending.
-   Record cost, work, energy budget, numerical health, required figure groups
-   and tested limits in the milestone report after completion.
+3. Canonical Tier 3 job `5647225` completed fresh to t=14 at safety 0.3:
+   47,681 cycles, 3.475833 node-hours including I/O and 47.465 LF RHS/cycle.
+   LF floor/invalid and EOS repair counters stayed zero; the [6,14] energy minus
+   applied-work residual is 2.23e-11 relative to injected work. Analysis job
+   `5647226` completed all four figure groups, now reviewed in the milestone
+   report. The scientific interpretation remains inconclusive: one heated
+   realization does not establish turbulent convergence or active/passive
+   causality. This is evidence for frozen pre-cleanup source `73e2769fc`;
+   subsequent cleanup and Piece 12 qualifications remain separate.
 
 Do not repeat completed physical/reference checks or add another review layer
 without a relevant change or concrete failure. Investigate a new failure with
 the smallest discriminating check. Keep existing acceptance tolerances and
 required health checks; consolidation itself needs no new simulation campaign.
-Leave the active milestone open until the remaining results are reviewed; mesh,
-passive and optional optimization work remain separate.
+The active milestone is closed within that scope; mesh, passive and optional
+optimization work retain their separate qualification.
 
 **Authorized code cleanup completed (2026-10-10):** dead-code and environment-override/
 replay removal, directional consolidation and LF-only flux-clear removal are accepted.
@@ -620,8 +632,8 @@ The work order records gates and separate paired costs: consolidation retains a
 Tier 1/2 throughput by 4.10%/2.95%, with identical native endpoints and work counts.
 It records the then-existing shearing restart-counter failure, subsequently
 resolved by Piece 12's boundary lifecycle repair.
-The frozen Tier 3 executable and analysis dependencies remain intact and its jobs
-remain queued. Defer workspace deletion and additional physics/mode changes.
+The frozen Tier 3 executable and analysis dependencies remain intact; both jobs
+completed successfully. Defer workspace deletion and additional physics/mode changes.
 
 **Mesh milestone:** after 12, cover both physical-corner cases, all six retained
 conservation parameters, actual regrid/restart, repair accounting and shearing.
@@ -704,6 +716,7 @@ from the base and needed for the current piece.
 | 11 | In `turb/test_turb_driving_cpu.py`: `test_type_two_has_nonzero_force`, `test_conservative_forcing_kick`, `test_once_per_step_power`; `L::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks` | Existing `tst/inputs/turb_driving_edot.athinput`; register the retained `turb_forcing` pgen for direct production tests |
 | Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Qualified wave/e-fold checks and local-hotspot window 8, 4, 2, 1 (`5647113`); fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Retain the finer 1-to-0.125 precision stress failures and reference-sensitivity evidence; no rung is an exact oracle |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
+| 13 | `cgl/test_cgl_lf_compact_mpicpu.py::test_cgl_lf_compact_exchange_matches_full_exchange` | Existing nonuniform 3D scalar fixture; exact full native payload across strict/full exchange and one/four ranks, positive pressures, nonzero LF work and zero repairs; run on CPU/HIP |
 | 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Existing groups: identity, heating, linear, advection, restart, fences; `passive_acceptance.py` and `cgl_passive_validation` pgen |
 | 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_limiter_cadence`, `test_smooth_lf_temporal_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted_run`, `test_invalid_chunk_configurations_fail_before_evolution` | Prebuilt executable; small fixture dependency extraction required; failing passive checkpoint is an additional accuracy check |
 
