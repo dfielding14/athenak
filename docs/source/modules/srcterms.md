@@ -34,7 +34,8 @@ standalone cooling and relativistic cooling, to the global timestep reduction.
    corresponding `<hydro_srcterms>`, `<mhd_srcterms>`, or `<rad_srcterms>` block exists.
    Hydro and MHD also construct one when `<cooling enabled=true>` is present.
 2. `MeshBlockPack` constructs a `TurbulenceDriver` when `<turb_driving>` exists.
-   The driver contributes tasks before the time integrator and during each stage.
+   Newtonian driving updates modal forcing before the time integrator and
+   applies one full-timestep kick at the final RK stage.
 3. `main.cpp` calls `ApplyInitialPerturbations` only for brand-new runs, immediately
    after the problem generator constructs the initial state. Restarted runs skip the hook.
 4. `Driver::Initialize` then fills ghost zones and recomputes primitive variables, so
@@ -234,18 +235,25 @@ reference, restart behavior, examples, and validation notes.
 
 The turbulence driver is a runtime forcing mechanism, not an initial-condition edit. It
 constructs a random acceleration field from Fourier modes, removes net momentum from the
-forcing pattern, and applies the force inside time-integration stages.
+forcing pattern, and, for Newtonian fluids, applies one full-timestep kick after the
+final RK fluid update.
+The kick uses conserved density and momentum and adds exactly its kinetic-energy change
+to total energy for an ideal EOS. Coupling to fluid evolution is first order.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
 | `nlow`, `nhigh` | `1`, `2` | Inclusive integer wavenumber shell. |
 | `driving_type` | `0` | `0` for isotropic driving; `1` for the alternate parallel/perpendicular weighting path. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Spectral weights. |
-| `dedt` | `0.0` | Energy injection rate. |
+| `normalization` | `accel_rms` | Fixed RMS acceleration or `edot` for fixed injected power. |
+| `accel_rms` | required for `accel_rms` | Volume-weighted RMS acceleration. |
+| `dedt` | required for `edot` | Volume-averaged energy injection rate. |
 | `tcorr` | `0.0` | Ornstein-Uhlenbeck correlation time; very small values use white-noise updates. |
 
 Use `<turb_driving>` when the forcing should persist during the run. Use
 `<initial_perturbations>` when the state should be perturbed once and then evolved normally.
+See [Turbulence Driving](turbulence_driving.md) for the normalization and integration
+contracts and the full parameter reference.
 
 ## Operational Tips
 

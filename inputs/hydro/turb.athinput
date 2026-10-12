@@ -50,6 +50,7 @@ gamma       = 1.4   # gamma = C_p/C_v
 <turb_driving>
 type = hydro
 tcorr = 0.5           # ~ L / 2 pi urms 
+normalization = edot
 dedt  = 0.1           # ~ urms^3 / 2 L
 nlow = 1
 nhigh = 2

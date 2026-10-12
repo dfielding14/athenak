@@ -4,6 +4,10 @@ These short `turb` problem-generator calculations demonstrate the driver
 controls and write the applied acceleration with `variable=turb_force`. They
 are validation examples, not statistically converged turbulence experiments.
 
+The default mode is `normalization=accel_rms`, with an explicit `accel_rms`
+strength. The power-controlled examples select `normalization=edot`
+explicitly. All cases apply one full-timestep kick at the final RK stage.
+
 ## Build And Run
 
 From the repository root:
@@ -28,7 +32,7 @@ directory.
 
 ### Constant Energy Injection
 
-`constant_edot_fixed_grid.athinput` uses a \(32^3\) periodic uniform grid and
+`constant_edot_fixed_grid.athinput` uses a $32^3$ periodic uniform grid and
 
 ```text
 normalization = edot
@@ -36,6 +40,10 @@ dedt          = 0.1
 ```
 
 It supplies the homogeneous baseline for checking requested energy injection.
+In this periodic box, with no other energy sources, the total energy should
+increase by `dedt * volume * dt` each driven cycle, including cycle zero when
+`tdriv_start=0`. The kick itself preserves thermal energy; later fluid
+evolution can convert kinetic energy to heat.
 
 ### Tiled Included Region
 
@@ -52,40 +60,75 @@ sigma_x2      = 0.18
 sigma_x3      = 0.28
 ```
 
-The same realization repeats over \(2\times2\times1\) tiles and is
+The same realization repeats over $2\times2\times1$ tiles and is
 concentrated near the origin.
 
 ### Adaptive Excluded Region
 
 `amr_localized_exclude.athinput` uses location-based adaptive refinement
-around the origin, the same \(2\times2\times1\) tile pattern, and
+around the origin, the same $2\times2\times1$ tile pattern, and
 `localization=exclude`. Its refined central region is suppressed while
-driving remains active outside.
+driving remains active outside. It selects `normalization=edot` with `dedt=0.1`.
 
 ## Projected Acceleration
 
-The figure below is generated from cycle-12 `turb_force` dumps. Each panel
-shows \(L_3^{-1}\int|\boldsymbol{a}|\,dx_3\); the cyan contour in the AMR
+The committed figure predates the full-timestep kick update and illustrates
+the spatial controls; it is not validation of the current integration. It
+was generated from cycle-12 `turb_force` dumps. Each panel
+shows $L_3^{-1}\int|\boldsymbol{a}|\,dx_3$; the cyan contour in the AMR
 panel marks the level-0/level-1 interface.
 
 ![Projections of turbulence-driving examples](../_static/turbulence_driving_projections.png)
 
-Measured checks from the committed inputs are:
+Checks to make when rerunning the committed inputs are:
 
-| Case | Measured check |
+| Case | Check |
 | --- | --- |
-| Constant energy injection | Fitted total-energy growth rate after onset: `0.09924` for `dedt=0.1`. |
-| Tiled included region | Volume-weighted `a_rms=0.30000000` for `accel_rms=0.3`; central/outer projected-amplitude ratio `13.67`. |
-| AMR excluded region | 88 final MeshBlocks at maximum level 1; central/outer projected-amplitude ratio `0.56`. |
+| Constant energy injection | Per-cycle total-energy increase equals `dedt * volume * dt` within numerical error. |
+| Tiled included region | Volume-weighted RMS of `turb_force` equals `accel_rms=0.3`; acceleration is concentrated near the selected region. |
+| AMR excluded region | Refinement does not add statistical weight to fine cells; acceleration is suppressed near the selected region. |
 
-The projected-amplitude ratio is the mean within `r < 0.12` divided by the
-mean at `r > 0.32`, where \(r=(x_1^2+x_2^2)^{1/2}\). It is used here only as
-a compact confirmation of the requested spatial selection.
+These energy and RMS checks concern the applied force. The raw modal OU
+coefficients are subsequently localized, mean-subtracted, and normalized.
+Exact injected work is separate from the temporal accuracy of the coupled
+fluid evolution, which uses first-order splitting.
 
-## Implementation Benchmark
+## Single-Kick Validation
+
+The 2026-10-12 double-precision validation passed 35 serial regressions and
+two additional two-rank MPI regressions. All three production examples above
+also ran successfully: both power-controlled cases matched their per-cycle
+energy budgets, and the included-region case retained RMS acceleration 0.3.
+
+Matched AppleClang/Serial timings used the uniform MHD regression fixture,
+a $32^3$ grid with $16^3$ MeshBlocks, RK3, PLM/HLLE, 100 cycles, and no outputs.
+Both modes used strength 0.1 and one frozen modal realization
+(`dt_update=1000`). Three repetitions alternated old/new executable order.
+The table reports median executable integration time against `b6035d254`:
+
+| Normalization | Before (s) | Single kick (s) | Ratio |
+| --- | ---: | ---: | ---: |
+| `accel_rms` | 2.611135 | 2.531720 | 0.970 |
+| `edot` | 2.625087 | 2.559827 | 0.975 |
+
+A separate time-refinement experiment used a periodic one-dimensional unit
+box with 128 cells, uniform ideal hydro ($\rho=p=1$, $\gamma=5/3$), RK3/PLM/HLLC,
+and one compressive mode (`nlow=nhigh=1`, `spectrum=power_law`,
+`min_kx=max_kx=1`, `max_ky=max_kz=0`, `sol_fraction=0`, `rseed=2718`). With
+`accel_rms=0.01`, `dt_update=1`, `tcorr=1e6`, and final time 0.2, the modal field
+is frozen. Halving CFL through 0.4, 0.2, 0.1, and 0.05 gave density/momentum
+self-convergence orders 0.997--1.001 on the same spatial grid; CFL 0.003125
+provided an additional reference. The applied acceleration varied by less
+than $6\times10^{-12}$. This confirms the expected first-order deterministic
+coupling and provides a baseline for a later symmetric-splitting comparison.
+It does not establish stochastic convergence or GPU performance.
+
+## Earlier Modal-State Benchmark
 
 Three Release runs of each input were compared against the initial feature
 prototype at commit `a84c7ffd`; the table reports median executable CPU time.
+These measurements predate the full-timestep kick update and have not been
+repeated for the current integration.
 These short total-runtime measurements include integration and output work,
 not only driver kernels.
 
@@ -115,12 +158,27 @@ python vis/python/plot_turbulence_driving_projection.py \
 
 ## Regression Coverage
 
+The regression fixture is distinct from the `turb` examples. From the
+repository root, build it and run the CPU tests from the binary directory:
+
+```bash
+cmake -S . -B build-turb-tests -DPROBLEM=tests/turb_forcing -DCMAKE_BUILD_TYPE=Release
+cmake --build build-turb-tests -j
+cd build-turb-tests/src
+python3 -m pytest ../../tst/test_suite/turb/test_turb_driving_cpu.py
+```
+
 The turbulence regression tests exercise:
 
+- conserved-state kick work and thermal-energy preservation with stale primitives;
+- per-cycle fixed-power injection for RK1--RK4, including the first cycle;
+- combined two-fluid work and momentum for ImEx2 and ImEx2+;
+- default RMS acceleration and zero-target forcing;
+- zero power with opposing flow and cancellation-resistant power normalization;
 - fixed-RMS normalization with tiling and inclusion localization;
 - AMR execution with exclusion localization;
-- exact rendered-force continuation across fixed-grid and AMR restarts;
-- MPI execution of the AMR/localized case;
+- exact rendered-force and final-history continuation across fixed-grid and AMR restarts;
+- MPI execution of the AMR/localized case and periodic MHD energy budget;
 - rejection of removed parameter names and singular parabolic spectra.
 
 The driver uses precision-correct MPI reductions. The current upstream source
