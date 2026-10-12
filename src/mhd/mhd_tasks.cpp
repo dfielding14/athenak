@@ -308,7 +308,7 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 TaskStatus MHD::InitRecvParabolic(Driver *pdrive, int stage) {
   TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "begin", stage);
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_init_recv);
-  TaskStatus tstat = pbval_u->InitRecv(nmhd+nscalars);
+  TaskStatus tstat = pbval_u->InitRecv(UseCompactCGLLFExchange(stage) ? 2 : nmhd+nscalars);
   if (tstat != TaskStatus::complete) {
     TraceCGLLFTaskList(pmy_pack, "InitRecvParabolic", "wait_u", stage);
     return tstat;
@@ -806,7 +806,9 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
 
 TaskStatus MHD::SendU(Driver *pdrive, int stage) {
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_send_u);
-  TaskStatus tstat = pbval_u->PackAndSendCC(u0, coarse_u0);
+  const bool compact = UseCompactCGLLFExchange(stage);
+  TaskStatus tstat = pbval_u->PackAndSendCC(u0, coarse_u0,
+                                          compact ? IEN : 0, compact ? 2 : 0);
   return tstat;
 }
 
@@ -816,8 +818,19 @@ TaskStatus MHD::SendU(Driver *pdrive, int stage) {
 
 TaskStatus MHD::RecvU(Driver *pdrive, int stage) {
   CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_recv_u);
-  TaskStatus tstat = pbval_u->RecvAndUnpackCC(u0, coarse_u0);
+  const bool compact = UseCompactCGLLFExchange(stage);
+  TaskStatus tstat = pbval_u->RecvAndUnpackCC(u0, coarse_u0,
+                                            compact ? IEN : 0, compact ? 2 : 0);
   return tstat;
+}
+
+bool MHD::UseCompactCGLLFExchange(int stage) const {
+  // Stage 1 synchronizes frozen fields; strict LF forbids repairs that could change them.
+  return has_cgl_lf_split && stage > 1 &&
+      cgl_slot_representation == CGLSlotRepresentation::magnetic_moment &&
+      pcgl_lf->strict_admissibility && !pmy_pack->pmesh->multilevel &&
+      pmy_pack->pmesh->strictly_periodic && porb_u == nullptr &&
+      psbox_u == nullptr && psbox_b == nullptr;
 }
 
 //----------------------------------------------------------------------------------------

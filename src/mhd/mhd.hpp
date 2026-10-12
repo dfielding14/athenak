@@ -278,6 +278,7 @@ class MHD {
   DvceArray5D<Real> utest, bcctest;  // scratch arrays for FOFC
 
  private:
+  bool UseCompactCGLLFExchange(int stage) const;
   void AddSelectedDiffusionFluxes(DiffusionSelection selection,
                                   Real cgl_dt_sweep = 0.0,
                                   Real cgl_rkl_weight = 0.0);
