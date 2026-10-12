@@ -73,8 +73,8 @@ def assert_step_power(run_dir, fluid="hydro", power=0.1, cycles=6):
                                rtol=2.0e-10, atol=3.0e-12)
 
 
-def read_force_blocks(filename):
-    """Read force arrays and MeshBlock geometry from a binary output."""
+def read_binary_blocks(filename, names):
+    """Read selected arrays and MeshBlock geometry from a binary output."""
     with open(filename, "rb") as file_obj:
         assert file_obj.readline().decode("ascii") == "Athena binary output version=1.1\n"
         file_obj.readline()
@@ -88,9 +88,7 @@ def read_force_blocks(filename):
         file_obj.read(header_offset)
         location_dtype = np.dtype("=f4" if location_size == 4 else "=f8")
         variable_dtype = np.dtype("=f4" if variable_size == 4 else "=f8")
-        force_indices = [
-            variables.index(name) for name in ("force1", "force2", "force3")
-        ]
+        variable_indices = [variables.index(name) for name in names]
         blocks = []
         while True:
             raw_indices = file_obj.read(6 * 4)
@@ -110,9 +108,17 @@ def read_force_blocks(filename):
             blocks.append({
                 "level": logical[3],
                 "limits": limits,
-                "force": data[force_indices, :, :, :],
+                "data": data[variable_indices, :, :, :],
             })
     return {"time": time, "cycle": cycle, "blocks": blocks}
+
+
+def read_force_blocks(filename):
+    """Read force arrays and MeshBlock geometry from a binary output."""
+    output = read_binary_blocks(filename, ("force1", "force2", "force3"))
+    for block in output["blocks"]:
+        block["force"] = block.pop("data")
+    return output
 
 
 def latest_force(run_dir):
@@ -318,7 +324,7 @@ def test_removed_parameter_and_degenerate_spectrum_are_rejected(tmp_path):
 @pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3", "rk4"])
 @pytest.mark.parametrize("fluid", ["hydro", "mhd"])
 def test_once_per_step_power(tmp_path, integrator, fluid):
-    """One complete kick supplies dedt times box volume on every timestep."""
+    """The two half kicks supply dedt times box volume on every timestep."""
     path = forcing_input(tmp_path, "ideal" if fluid == "hydro" else None,
                          "ideal" if fluid == "mhd" else None)
     run_dir = tmp_path / "run"
@@ -377,7 +383,7 @@ def test_edot_normalization_root(tmp_path, velocity, target):
 
 @pytest.mark.parametrize("integrator", ["imex2", "imex2+"])
 def test_two_fluid_step_power(tmp_path, integrator):
-    """Both fluids finish their implicit stages before receiving one common kick."""
+    """Both fluids share the prescribed power across the two half kicks."""
     path = forcing_input(tmp_path, "ideal", "ideal")
     run_dir = tmp_path / "run"
     require_success(run_athena(run_dir, path, "time/nlim=3",
@@ -392,6 +398,145 @@ def test_two_fluid_step_power(tmp_path, integrator):
                                rtol=2.0e-10, atol=3.0e-12)
     assert np.sum(hydro[-1, 7:10]) > 0.0
     assert np.sum(mhd[-1, 7:10]) > 0.0
+
+
+@pytest.mark.parametrize("integrator", ["rk2", "rk3"])
+@pytest.mark.parametrize("fluid", ["hydro", "mhd"])
+def test_frozen_forcing_second_order(tmp_path, integrator, fluid):
+    """At fixed grid, smooth frozen forcing converges quadratically in time."""
+    path = forcing_input(tmp_path, "ideal" if fluid == "hydro" else None,
+                         "ideal" if fluid == "mhd" else None,
+                         normalization="accel_rms", target=0.01)
+    path.write_text(path.read_text().replace(
+        "<turb_driving>", "<turb_driving>\nmin_kx = 1\nmax_kx = 1\nmin_ky = 0\n"
+        "max_ky = 0\nmin_kz = 0\nmax_kz = 0").replace(
+        "<output3>", "<output3>\ndata_precision = real"))
+    states = []
+    for cfl in (0.4, 0.2, 0.1, 0.05):
+        run_dir = tmp_path / f"cfl_{cfl}"
+        require_success(run_athena(
+            run_dir, path, f"time/integrator={integrator}", f"time/cfl_number={cfl}",
+            "time/nlim=-1", "time/tlim=0.2", "mesh/nx1=128", "mesh/nx2=1",
+            "mesh/nx3=1", "meshblock/nx1=128", "meshblock/nx2=1", "meshblock/nx3=1",
+            f"{fluid}/rsolver={'hllc' if fluid == 'hydro' else 'hlld'}",
+            "turb_driving/dt_update=1", "turb_driving/tcorr=1e6",
+            "turb_driving/nlow=1", "turb_driving/nhigh=1", "turb_driving/spectrum=power_law",
+            "turb_driving/sol_fraction=0", "output1/dcycle=1000000",
+            "output2/dcycle=1000000", "output3/dcycle=1000000", f"output3/variable={fluid}_u",
+            "output3/id=cons"))
+        output = read_binary_blocks(max((run_dir / "bin").glob("*.cons.*.bin")),
+                                    ("dens", "mom1"))
+        assert output["time"] == pytest.approx(0.2, abs=1.0e-14)
+        assert len(output["blocks"]) == 1
+        state = output["blocks"][0]["data"]
+        assert np.all(np.isfinite(state))
+        states.append(state)
+    differences = [np.sqrt(np.sum((left - right)**2, axis=(1, 2, 3)))
+                   for left, right in zip(states[:-1], states[1:])]
+    orders = np.log2(np.array(differences[:-1]) / np.array(differences[1:]))
+    assert np.all(orders > 1.8), f"density/momentum temporal orders: {orders}"
+
+
+def test_forcing_start_stop_and_ou_boundaries(tmp_path):
+    """Both halves use the same forcing interval, including its end boundary."""
+    start, stop, update = 0.013, 0.047, 0.011
+    path = forcing_input(tmp_path)
+    path.write_text(path.read_text().replace(
+        "<turb_driving>", "<turb_driving>\ntdriv_start = 0.013\ntdriv_duration = 0.034"
+    ).replace("<output2>", "<output2>\ndata_precision = real"))
+    run_dir = tmp_path / "run"
+    require_success(run_athena(
+        run_dir, path, "time/integrator=rk3", "time/cfl_number=0.15", "time/nlim=-1",
+        "time/tlim=0.065", "turb_driving/turb_flag=1", f"turb_driving/dt_update={update}",
+        "output2/dcycle=1", "output3/dcycle=1000000"))
+    history = np.loadtxt(next(run_dir.glob("*.hydro.hst")))
+    times = np.unique(history[:, 0])
+    for event in (start, start + update, start + 2*update, start + 3*update, stop):
+        assert np.any(np.abs(times - event) < 1.0e-14), f"missed forcing event at {event}"
+    expected_work = 0.1*np.clip(history[:, 0] - start, 0.0, stop - start)
+    np.testing.assert_allclose(history[:, 6] - history[0, 6], expected_work, atol=3.0e-12)
+    np.testing.assert_allclose(history[:, 3:6], 0.0, atol=3.0e-12)
+
+    shapes = {}
+    repeats = 0
+    for filename in sorted((run_dir / "bin").glob("*.force.*.bin")):
+        output = read_force_blocks(filename)
+        if output["cycle"] == 0:
+            continue
+        left_time = times[output["cycle"] - 1]
+        force = np.concatenate([block["force"].reshape(3, -1)
+                                for block in output["blocks"]], axis=1)
+        if left_time < start - 1.0e-14 or left_time >= stop - 1.0e-14:
+            np.testing.assert_array_equal(force, 0.0)
+            continue
+        interval = int(np.floor((left_time - start + 1.0e-14) / update))
+        # Remove normalization and the density-dependent constant offset.
+        shape = force - np.mean(force, axis=1, keepdims=True)
+        shape /= np.linalg.norm(shape)
+        if interval in shapes:
+            repeats += 1
+            np.testing.assert_allclose(shape, shapes[interval], rtol=3.0e-12, atol=3.0e-13)
+        else:
+            shapes[interval] = shape
+    assert set(shapes) == {0, 1, 2, 3}
+    assert repeats > 0
+    for interval in range(1, 4):
+        assert np.linalg.norm(shapes[interval] - shapes[interval - 1]) > 1.0e-4
+
+
+def test_final_time_at_ou_boundary_has_no_tiny_step_tail(tmp_path):
+    """A clipped step retains unused fluid CFL margin and reaches the final event."""
+    path = forcing_input(tmp_path, normalization="accel_rms", target=0.25)
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/nlim=-1", "time/tlim=0.1",
+                               "turb_driving/dt_update=0.01"))
+    history = np.loadtxt(next(run_dir.glob("*.hydro.hst")))
+    times = np.unique(history[:, 0])
+    assert times[-1] == pytest.approx(0.1, abs=1.0e-14)
+    # The weak forcing needs at most two fluid steps per 0.01 forcing interval.
+    assert len(times) - 1 <= 20, f"excess steps near the final forcing boundary: {times}"
+
+
+def test_first_half_kick_respects_source_cfl(tmp_path):
+    """A strong first kick cannot use the unforced initial fluid timestep."""
+    acceleration, cfl, dx = 1.0e5, 0.3, 1.0/16.0
+    path = forcing_input(tmp_path, normalization="accel_rms", target=acceleration)
+    path.write_text(path.read_text().replace(
+        "<turb_driving>", "<turb_driving>\nmin_kx = 1\nmax_kx = 1\nmin_ky = 0\n"
+        "max_ky = 0\nmin_kz = 0\nmax_kz = 0").replace(
+        "<output3>", "<output3>\ndata_precision = real"))
+    run_dir = tmp_path / "run"
+    require_success(run_athena(
+        run_dir, path, "time/nlim=1", f"time/cfl_number={cfl}", "mesh/nx2=1", "mesh/nx3=1",
+        "meshblock/nx1=16", "meshblock/nx2=1", "meshblock/nx3=1", "hydro/rsolver=hllc",
+        "turb_driving/nlow=1", "turb_driving/nhigh=1", "turb_driving/spectrum=power_law",
+        "turb_driving/sol_fraction=0", "turb_driving/dt_update=1", "turb_driving/tcorr=1e6",
+        "output3/variable=hydro_u", "output3/id=cons"))
+    history = np.loadtxt(next(run_dir.glob("*.hydro.hst")))
+    step = history[-1, 0] - history[0, 0]
+    sound_speed = np.sqrt(5.0/3.0)
+    assert 0.0 < step < cfl*dx/sound_speed
+    # The peak acceleration of this cosine is bounded by sqrt(2) times its RMS.
+    assert step*(sound_speed + 0.5*np.sqrt(2.0)*acceleration*step) <= cfl*dx
+    output = read_binary_blocks(max((run_dir / "bin").glob("*.cons.*.bin")),
+                                ("dens", "mom1", "mom2", "mom3", "ener"))
+    state = output["blocks"][0]["data"]
+    assert np.all(np.isfinite(state))
+    assert np.all(state[0] > 0.0)
+    assert np.all(state[4] - 0.5*np.sum(state[1:4]**2, axis=0)/state[0] > 0.0)
+
+
+@pytest.mark.parametrize("fluid", ["hydro", "mhd"])
+def test_sts_preserves_forcing_power(tmp_path, fluid):
+    """Viscous half sweeps preserve the forcing work budget around RK."""
+    path = forcing_input(tmp_path, "ideal" if fluid == "hydro" else None,
+                         "ideal" if fluid == "mhd" else None)
+    path.write_text(path.read_text().replace(
+        "<time>", "<time>\nsts_integrator = rkl2").replace(
+        f"<{fluid}>", f"<{fluid}>\nviscosity = 1.0\nviscosity_integrator = sts"))
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/integrator=rk3"))
+    assert_step_power(run_dir, fluid)
 
 
 @pytest.mark.parametrize("normalization", ["edot", "accel_rms"])

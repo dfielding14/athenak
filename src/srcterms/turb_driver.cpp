@@ -590,6 +590,8 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
   auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
   if (pmy_pack->pcoord->is_special_relativistic) {
     tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  } else {
+    tl->AddTask(&TurbulenceDriver::PrepareForcing, this, id_init);
   }
   return;
 }
@@ -637,9 +639,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
     return TaskStatus::complete;
   }
 
-  Real current_time = pm->time;
-  if (current_time < tdriv_start) return TaskStatus::complete;
-  Real t_since_start = current_time - tdriv_start;
+  Real t_since_start = ForcingTime();
+  if (t_since_start < 0.0) return TaskStatus::complete;
   int n_turb_updates_reqd = static_cast<int>(t_since_start / dt_update) + 1;
 
   int nlow_sqr = SQR(nlow);
@@ -876,19 +877,108 @@ void TurbulenceDriver::RenderForce() {
       });
 }
 
+// Treat roundoff-sized offsets from forcing events as having reached the event.
+// The same clock is used for activity, OU updates, and timestep clipping.
+Real TurbulenceDriver::ForcingTime() const {
+  Real time = pmy_pack->pmesh->time;
+  Real elapsed = time - tdriv_start;
+  if (pmy_pack->pcoord->is_special_relativistic) return elapsed;
+  return elapsed + 8.0*std::numeric_limits<Real>::epsilon()
+                   *std::max(std::abs(time), std::abs(tdriv_start));
+}
+
+// Finalize the timestep before either diffusion or forcing changes the state.
+TaskStatus TurbulenceDriver::PrepareForcing(Driver* pdrive, int stage) {
+  Mesh *pm = pmy_pack->pmesh;
+  Real elapsed = ForcingTime();
+  bool active = elapsed >= 0.0 && (turb_flag != 1 || elapsed < tdriv_duration);
+  Real next_event = std::numeric_limits<Real>::max();
+  if (elapsed < 0.0) {
+    next_event = tdriv_start;
+  } else if (active) {
+    int next_update = static_cast<int>(elapsed / dt_update) + 1;
+    next_event = tdriv_start + next_update*dt_update;
+    if (turb_flag == 1) next_event = std::min(next_event, tdriv_start + tdriv_duration);
+  }
+  NormalizeForcing(0.5*pm->dt);
+  if (!active || (normalization == TurbNormalization::edot ? dedt : accel_rms) == 0.0) {
+    pm->dt = std::min(pm->dt, next_event - pm->time);
+    return TaskStatus::complete;
+  }
+
+  // Reserve CFL margin for the first half kick, using the stored fluid bound
+  // before event/end-time clipping. The edot impulse also grows monotonically with dt.
+  Real inverse_fluid_dt = 0.0;
+  if (pmy_pack->phydro != nullptr) {
+    inverse_fluid_dt = 1.0/(pm->cfl_no*pmy_pack->phydro->dtnew);
+  }
+  if (pmy_pack->pmhd != nullptr) {
+    inverse_fluid_dt = std::max(inverse_fluid_dt,
+                               1.0/(pm->cfl_no*pmy_pack->pmhd->dtnew));
+  }
+  auto &indcs = pm->mb_indcs;
+  const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
+  const int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  const int nji = nx1*nx2, nkji = nji*nx3;
+  const bool multi_d = pm->multi_d, three_d = pm->three_d;
+  const Real half_dt_over_cfl = 0.5*pm->dt/pm->cfl_no;
+  auto force_ = force;
+  auto size = pmy_pack->pmb->mb_size.d_view;
+  Real rate = 0.0;
+  Kokkos::parallel_reduce("forcing_cfl",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, pmy_pack->nmb_thispack*nkji),
+      KOKKOS_LAMBDA(const int idx, Real &max_rate) {
+        int m = idx/nkji;
+        int k = (idx - m*nkji)/nji;
+        int j = (idx - m*nkji - k*nji)/nx1;
+        int i = idx - m*nkji - k*nji - j*nx1 + is;
+        k += ks;
+        j += js;
+        Real r = fabs(force_(m,0,k,j,i))/size(m).dx1;
+        if (multi_d) r = fmax(r, fabs(force_(m,1,k,j,i))/size(m).dx2);
+        if (three_d) r = fmax(r, fabs(force_(m,2,k,j,i))/size(m).dx3);
+        max_rate = fmax(max_rate, half_dt_over_cfl*r);
+      }, Kokkos::Max<Real>(rate));
+#if MPI_PARALLEL_ENABLED
+  Real bounds[2] = {inverse_fluid_dt, rate};
+  MPI_Allreduce(MPI_IN_PLACE, bounds, 2, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+  inverse_fluid_dt = bounds[0];
+  rate = bounds[1];
+#endif
+  Real old_dt = pm->dt;
+  // h*(lambda + |dv|)/(C*dx) <= 1 for the prepared state.
+  pm->dt = std::min(old_dt, 1.0/(inverse_fluid_dt + rate));
+  // Clip last so a CFL adjustment cannot move us just short of an event.
+  Real remaining = next_event - pm->time;
+  // Balance the last two steps to avoid a tiny remainder and slow timestep recovery.
+  pm->dt = (pm->dt < remaining && remaining < 2.0*pm->dt) ?
+            0.5*remaining : std::min(pm->dt, remaining);
+  if (normalization == TurbNormalization::edot && pm->dt != old_dt) {
+    NormalizeForcing(0.5*pm->dt);
+  }
+  return TaskStatus::complete;
+}
+
 //----------------------------------------------------------------------------------------
 //! \fn UpdateForcing
 //  \brief render, localize, remove net acceleration, and normalize one forcing field
 //
 
 TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
+  // Retain the full-step normalization API for SR and direct source tests.
+  if (pmy_pack == nullptr || pmy_pack->pmesh == nullptr) return TaskStatus::complete;
+  NormalizeForcing(pmy_pack->pmesh->dt);
+  return TaskStatus::complete;
+}
+
+void TurbulenceDriver::NormalizeForcing(Real dt) {
   if (pmy_pack == nullptr) {
-    return TaskStatus::complete;
+    return;
   }
 
   Mesh* pm = pmy_pack->pmesh;
   if (pm == nullptr) {
-    return TaskStatus::complete;
+    return;
   }
 
   auto& indcs = pmy_pack->pmesh->mb_indcs;
@@ -900,9 +990,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
   int& nx2 = indcs.nx2;
   int& nx3 = indcs.nx3;
 
-  Real dt = pm->dt;
-  Real current_time = pm->time;
-  Real t_since_start = current_time - tdriv_start;
+  Real t_since_start = ForcingTime();
 
   DvceArray5D<Real> u0, u0_;
   if (pmy_pack->phydro != nullptr) u0 = (pmy_pack->phydro->u0);
@@ -933,7 +1021,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
   const TurbLocalization localization_ = localization;
 
   if ((!pmy_pack->pcoord->is_special_relativistic || pm->ncycle >= 1) &&
-      (current_time >= tdriv_start) &&
+      (t_since_start >= 0.0) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
     RenderForce();
 
@@ -1111,7 +1199,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
         });
   }
 
-  return TaskStatus::complete;
+  return;
 }
 
 //----------------------------------------------------------------------------------------
@@ -1138,8 +1226,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   int& nx2 = indcs.nx2;
   int& nx3 = indcs.nx3;
 
-  Real current_time = pm->time;
-  Real t_since_start = current_time - tdriv_start;
+  Real t_since_start = ForcingTime();
 
   EquationOfState* peos;
 
@@ -1172,7 +1259,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
   auto eos = peos->eos_data;  // copy-by-value (POD expected)
   bool second_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal;
 
-  if ((current_time >= tdriv_start) &&
+  if ((t_since_start >= 0.0) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
     par_for(
         "push", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
@@ -1503,18 +1590,33 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
   }
 
   if (pmy_pack->pcoord->is_special_relativistic) {
+    if (stage == 0) return TaskStatus::complete;
     Real bdt = pm->dt;
     if (pdrive != nullptr && stage > 0) bdt *= pdrive->beta[stage - 1];
     ApplyForcingWithStep(bdt);
     return TaskStatus::complete;
   }
 
-  if (pdrive != nullptr && stage != pdrive->nexp_stages) return TaskStatus::complete;
+  if (stage != 0 && pdrive != nullptr && stage != pdrive->nexp_stages) {
+    return TaskStatus::complete;
+  }
+  Real elapsed = ForcingTime();
+  if (elapsed < 0.0 || (turb_flag == 1 && elapsed >= tdriv_duration) ||
+      (normalization == TurbNormalization::edot ? dedt : accel_rms) == 0.0) {
+    return TaskStatus::complete;
+  }
 
-  // shortcut: first-order fluid/forcing splitting; use symmetric kicks if higher
-  // coupling accuracy is needed. Normalize against the state being kicked.
-  UpdateForcing(pdrive, stage);
-  ApplyForcingWithStep(pm->dt);
+  // Use one OU realization for both halves, but normalize against each kick's state.
+  // Diffusion leaves density unchanged, so the prepared RMS field remains valid.
+  if (stage != 0 || (pdrive != nullptr && pdrive->sts.enabled &&
+                    normalization == TurbNormalization::edot)) {
+    NormalizeForcing(0.5*pm->dt);
+  }
+  ApplyForcingWithStep(0.5*pm->dt);
+  if (stage == 0 && pdrive != nullptr) {
+    // Refresh before RK copies its initial state or posts stage receives.
+    pdrive->InitBoundaryValuesAndPrimitives(pm);
+  }
   return TaskStatus::complete;
 }
 

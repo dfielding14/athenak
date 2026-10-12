@@ -6,7 +6,7 @@ are validation examples, not statistically converged turbulence experiments.
 
 The default mode is `normalization=accel_rms`, with an explicit `accel_rms`
 strength. The power-controlled examples select `normalization=edot`
-explicitly. All cases apply one full-timestep kick at the final RK stage.
+explicitly. All cases use exact half kicks before and after the fluid step.
 
 ## Build And Run
 
@@ -91,11 +91,91 @@ Checks to make when rerunning the committed inputs are:
 These energy and RMS checks concern the applied force. The raw modal OU
 coefficients are subsequently localized, mean-subtracted, and normalized.
 Exact injected work is separate from the temporal accuracy of the coupled
-fluid evolution, which uses first-order splitting.
+fluid evolution. The current driver uses symmetric splitting; the
+single-kick measurements below document its first-order baseline.
 
-## Single-Kick Validation
+## Symmetric-Kick Validation And Cost
 
-The 2026-10-12 double-precision validation passed 35 serial regressions and
+The 2026-10-12 symmetric implementation passed 44 serial regressions and two
+two-rank MPI regressions. The tests cover exact kick work, hydro/MHD temporal
+convergence, event timing, strong initial forcing, STS viscosity, two-fluid
+integration, AMR, and restart continuation. They also reject a long tail of
+tiny steps near the final forcing event.
+
+All three committed examples also ran for 12 cycles with the production
+`turb` problem generator, increasing only history-output precision for the
+check. Maximum per-cycle work discrepancies were $4.3\times10^{-10}$ for the
+uniform power-controlled box and $2.9\times10^{-10}$ for the AMR case, against
+an initial box energy of approximately 1000. The included-region RMS was
+0.300000000002 when measured from its binary force output.
+
+The fixed-grid, frozen-forcing experiment described below isolates temporal
+error by comparing both methods with the same fine-step symmetric reference
+at CFL 0.003125. At CFL 0.4, both methods take 83 steps to time 0.2:
+
+| Quantity | Single-kick relative error | Symmetric relative error | Reduction |
+| --- | ---: | ---: | ---: |
+| Density perturbation | $9.306\times10^{-3}$ | $3.241\times10^{-5}$ | $287\times$ |
+| Momentum | $1.0303\times10^{-2}$ | $3.202\times10^{-5}$ | $322\times$ |
+
+These are errors relative to the small physical perturbation, not the mean
+density, and exclude spatial discretization error. RK3 density/momentum
+self-convergence orders change from approximately 1.00 to 2.00. Independent
+RK2 and MHD cases also converge at approximately second order; the MHD tests
+use a nonzero transverse magnetic field.
+
+To reach comparable density and momentum errors in this smooth hydro test,
+the single-kick method needed CFL 0.00123 and 26,894 steps, versus 83 symmetric
+steps at CFL 0.4. This illustrates the potential gain when temporal error
+controls the calculation; it is not a speedup prediction for turbulent statistics.
+
+Runtime comparisons used commit `de43aaca9` as the single-kick baseline and
+the symmetric turbulence-driver source with SHA-256 prefix `7e7ae5246fac`.
+Both used AppleClang 21, Release builds, Kokkos Serial, an Apple M4 Max,
+and the uniform ideal-MHD regression fixture: $32^3$ cells, $16^3$
+MeshBlocks, RK3, PLM/HLLE, strength 0.1, and no outputs. Reported times are
+median executable integration times from three alternating repetitions;
+two-rank MPI runs used the same machine.
+
+With one frozen realization (`dt_update=1000`), 100 cycles isolate the cost
+per cycle:
+
+| Backend / normalization | Single kick (s) | Symmetric (s) | Extra cost |
+| --- | ---: | ---: | ---: |
+| Serial / `accel_rms` | 2.711 | 3.240 | 19.5% |
+| Serial / `edot` | 2.703 | 3.621 | 33.9% |
+| MPI, 2 ranks / `accel_rms` | 1.415 | 1.675 | 18.4% |
+| MPI, 2 ranks / `edot` | 1.412 | 1.830 | 29.6% |
+
+With `dt_update=0.01` and `tcorr=0.25`, both methods were also run to the same
+physical time 0.5. This comparison includes the additional steps needed to
+land on OU events and respect the first kick's CFL margin:
+
+| Backend / normalization | Single kick (s) | Symmetric (s) | Extra cost | Steps, single → symmetric |
+| --- | ---: | ---: | ---: | ---: |
+| Serial / `accel_rms` | 2.426 | 3.262 | 34.5% | 89 → 100 |
+| Serial / `edot` | 2.827 | 4.963 | 75.5% | 104 → 139 |
+| MPI, 2 ranks / `accel_rms` | 1.272 | 1.689 | 32.8% | 89 → 100 |
+| MPI, 2 ranks / `edot` | 1.429 | 2.530 | 77.0% | 104 → 139 |
+
+The extra work is a first-half kick, a boundary/primitive refresh, a second
+normalization, and a global CFL reduction. Fixed-power forcing can require
+another normalization after the timestep changes. No additional cell-sized
+arrays are allocated. Balancing event remainders reduces avoidable timestep
+recovery; the CFL calculation reuses the fluid's existing stability bound.
+
+For RMS driving, the measured cost buys a clear second-order coupling
+improvement while preserving exact kick work. Whether this changes a
+particular turbulent statistic still requires timestep and sampling studies.
+The OU experiment has an additional event-alignment benefit, so its error
+reduction cannot be attributed solely to symmetric splitting. Continuous-OU
+accuracy, GPU performance, and large-rank scaling were not measured.
+Fixed-power normalization retains the singular-state qualification explained
+in {doc}`../modules/turbulence_driving`.
+
+## Single-Kick Baseline
+
+The 2026-10-12 single-kick validation at `de43aaca9` passed 35 serial regressions and
 two additional two-rank MPI regressions. All three production examples above
 also ran successfully: both power-controlled cases matched their per-cycle
 energy budgets, and the included-region case retained RMS acceleration 0.3.
@@ -120,7 +200,7 @@ is frozen. Halving CFL through 0.4, 0.2, 0.1, and 0.05 gave density/momentum
 self-convergence orders 0.997--1.001 on the same spatial grid; CFL 0.003125
 provided an additional reference. The applied acceleration varied by less
 than $6\times10^{-12}$. This confirms the expected first-order deterministic
-coupling and provides a baseline for a later symmetric-splitting comparison.
+coupling and provides the baseline for the symmetric-splitting comparison.
 It does not establish stochastic convergence or GPU performance.
 
 ## Earlier Modal-State Benchmark
@@ -172,6 +252,11 @@ The turbulence regression tests exercise:
 
 - conserved-state kick work and thermal-energy preservation with stale primitives;
 - per-cycle fixed-power injection for RK1--RK4, including the first cycle;
+- second-order frozen-forcing convergence for RK2/RK3 in hydro and MHD;
+- forcing start/stop and OU-event alignment, with one modal realization per interval;
+- a forcing-aware timestep for a strong first half kick;
+- exact final-time arrival without a long tail of tiny event-clipped steps;
+- per-cycle fixed-power injection with RKL2 viscosity sweeps in hydro and MHD;
 - combined two-fluid work and momentum for ImEx2 and ImEx2+;
 - default RMS acceleration and zero-target forcing;
 - zero power with opposing flow and cancellation-resistant power normalization;

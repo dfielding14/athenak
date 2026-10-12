@@ -93,7 +93,7 @@ modes require at least one positive width.
 ## Normalization
 
 The normalization modes are shared by Newtonian and special-relativistic
-driving. The full-timestep kick and exact-work guarantees below apply to
+driving. The symmetric kicks and exact-work guarantees below apply to
 Newtonian hydro and MHD, including ion-neutral fluids. Single-fluid
 special-relativistic driving retains its legacy stage updates; ion-neutral
 turbulence driving requires Newtonian fluids.
@@ -102,7 +102,7 @@ General-relativistic and dynamical-spacetime turbulence driving are unsupported.
 All integrals include physical cell volumes. On AMR meshes this prevents fine
 cells from receiving extra statistical weight solely because they are more
 numerous. For Newtonian fluids, the force is rendered and normalized from the
-current conserved state immediately before its full-timestep kick.
+current conserved state for each half kick.
 
 `normalization=accel_rms` is the default. The strength must still be supplied
 explicitly as `accel_rms`; there is no default forcing amplitude. Existing
@@ -124,10 +124,11 @@ negative. This mode does not prescribe an energy injection rate.
 ### Energy Injection
 
 With `normalization=edot`, `dedt` specifies the target volume-averaged energy
-injection rate. For a scale factor $s$, the driver evaluates
+injection rate. For a kick of duration $h=\Delta t/2$ and scale factor $s$,
+the driver evaluates
 
 $$
-m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2\Delta t\,dV,
+m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2h\,dV,
 \qquad
 m_1=\frac{1}{V}\int \boldsymbol{p}\cdot\boldsymbol{a}\,dV,
 $$
@@ -138,8 +139,8 @@ $$
 m_0s^2+m_1s=\dot e_{\rm target}.
 $$
 
-Each Newtonian kick then does work
-$\Delta E_{\rm box}=\texttt{dedt}\,V\Delta t$.
+Each Newtonian half kick does work $\texttt{dedt}\,Vh$; together they supply
+$\Delta E_{\rm box}=\texttt{dedt}\,V\Delta t$ per driven cycle.
 This is added to total energy for an ideal EOS; an isothermal EOS does not
 evolve total energy.
 A zero target produces no kick. Fixed-power normalization is a feedback
@@ -152,19 +153,31 @@ mode requires its target and rejects the other target.
 
 ## Time Integration
 
-The Newtonian driver updates its modal OU state before the time integrator.
-It applies one kick at the final RK stage, after the fluid update and source terms,
-before boundary exchange and primitive recovery. Driving starts on the first
-cycle whose time satisfies `tdriv_start`; it is not skipped merely because
-the cycle number is zero.
-
-The kick uses the current conserved density and momentum, with the full
-timestep $\Delta t$:
+The Newtonian driver surrounds each fluid step with two exact half kicks:
 
 $$
-\boldsymbol{p}'=\boldsymbol{p}+\rho\boldsymbol{a}\Delta t,\qquad
-E'=E+\boldsymbol{p}\cdot\boldsymbol{a}\Delta t
-+\frac12\rho|\boldsymbol{a}|^2\Delta t^2.
+F_{\Delta t/2}\;H_{\Delta t}\;F_{\Delta t/2},
+$$
+
+where $F$ is forcing and $H$ is the existing fluid integrator, including its
+other sources. With STS diffusion enabled, its existing two half sweeps
+surround this sequence. The first kick is followed by boundary exchange and
+primitive recovery before RK copies its initial state. The second kick uses
+the final RK-stage hook and its existing boundary and primitive refresh.
+
+Timesteps end at forcing start, stop, and `dt_update` boundaries. Modal OU
+updates occur at the beginning of an interval, and both half kicks use the
+same modal realization. Mean removal and normalization use each kick's own
+state. The final two steps approaching an update are balanced when possible
+to avoid a tiny remainder followed by slow timestep recovery. Driving
+includes cycle zero when `tdriv_start=0`.
+
+Each kick uses the current conserved density and momentum, with $h=\Delta t/2$:
+
+$$
+\boldsymbol{p}'=\boldsymbol{p}+\rho\boldsymbol{a}h,\qquad
+E'=E+\boldsymbol{p}\cdot\boldsymbol{a}h
++\frac12\rho|\boldsymbol{a}|^2h^2.
 $$
 
 The energy increment is exactly the kinetic-energy change. Density and
@@ -174,11 +187,24 @@ update. In two-fluid calculations, each fluid uses its own conserved state
 and EOS. Removing the mass-weighted mean immediately before the kick also
 gives zero net momentum injection, summed over both fluids when present.
 
-This is first-order operator splitting between forcing and fluid evolution,
-even when the fluid integrator is RK2, RK3, or RK4. Exact kick work does not
-establish higher-order accuracy of the coupled evolution. Symmetric or
-higher-order splitting is deferred. OU updates retain the prescribed
-`dt_update` cadence; their application is resolved at timestep boundaries.
+The first kick changes velocity before the fluid step. The timestep therefore
+reserves a conservative CFL margin for that impulse, using the prepared
+acceleration and the existing fluid timestep. This is evaluated before STS
+diffusion, when enabled; state changes during diffusion can affect the
+subsequent signal speeds and fixed-power normalization.
+
+For smooth solutions with fixed modal coefficients, RMS forcing and a fluid
+integrator of order at least two give second-order Strang splitting. RK1
+remains first order; RK3 and RK4 do not raise the splitting order above two.
+The same statement applies interval by interval to the event-aligned,
+piecewise-constant modal forcing. It does not establish second-order accuracy
+relative to a continuous OU process: `dt_update` is a separate resolution
+parameter. Shock-capturing, AMR, and other source terms can also limit accuracy.
+
+Fixed-power kicks still supply exact work. Their positive-root feedback rule
+is singular at zero force-flow correlation and can make a finite jump when
+the force opposes the flow. Symmetric ordering alone does not establish
+second-order convergence through those states.
 
 Single-fluid special-relativistic driving keeps its previous scheduling and arithmetic,
 including the first-cycle skip. The Newtonian kick and accuracy statements

@@ -26,6 +26,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "ion-neutral/ion-neutral.hpp"
 #include "radiation/radiation.hpp"
+#include "srcterms/turb_driver.hpp"
 #include "driver.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -599,6 +600,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
     }
     while ((pmesh->time < tlim) && (pmesh->ncycle < nlim || nlim < 0) &&
            (elapsed_time < wall_time)) {
+      // Choose the forcing interval and final timestep before any split evolution.
+      ExecuteTaskList(pmesh, "before_timeintegrator", 0);
       if (global_variable::my_rank == 0) {OutputCycleDiagnostics(pmesh);}
 
       if (sts.enabled) {
@@ -612,9 +615,10 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
         EndSTSSweep();
       }
 
-      // Execute TaskLists
-      // Work before time integrator indicated by "0" in stage
-      ExecuteTaskList(pmesh, "before_timeintegrator", 0);
+      // Symmetric forcing surrounds RK, inside the two diffusion half sweeps.
+      if (pmesh->pmb_pack->pturb != nullptr) {
+        (void) pmesh->pmb_pack->pturb->AddForcing(this, 0);
+      }
 
       // time-integrator tasks for each stage of integrator
       for (int stage=1; stage<=(nexp_stages); ++stage) {
