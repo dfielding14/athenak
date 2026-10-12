@@ -14,14 +14,14 @@ archive uses a third revision, `f2d0a259`.
 
 **Status:** pieces 0–14 are implemented and qualified within their recorded
 scopes. The frozen active milestone is complete; the passive turbulent milestone
-remains open. Piece 15's default-off implementation and focused checks pass;
-turbulent interval qualification remains open. Piece 14's active-parent bitwise
+remains open. Piece 15's default-off implementation, passive short-screen criteria
+and production cost selection are complete. Piece 14's active-parent bitwise
 comparison failed (details below).
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** Set physical-observable and pressure-depletion tolerances, then use
-short matched-cadence passive continuations to select an LF interval before
-passive Tier 3. Reuse the completed one-cycle studies. Larger refresh/cache and
-logarithm changes remain deferred. The
+**Next:** Update the passive Tier 3 workflow to the qualified Piece 15 executable,
+cap 32 and safety 0.3, then run fresh to t=14 with the existing [6,14] analysis.
+Speed and scaling take priority over pointwise agreement; strict health remains
+required. Larger refresh/cache and logarithm changes remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
 retains reproduction commands and links to the completed milestone evidence.
 Reuse accepted physics and reference evidence unless a relevant change or concrete
@@ -255,9 +255,9 @@ Piece 15 addresses the reproduced passive pressure loss and active threshold sen
   **The passive milestone is still open:** stress replay `5657268` hits one
   pressure floor at post-LF stage 25/27 near cycle 10312, t=4.396717, safety 0.3.
   This old state is a stress probe, not a current-model physical result. Tier 3
-  is prepared but unlaunched; qualify smaller LF intervals in Piece 15 first.
+  is prepared but unlaunched; Piece 15 now passes its short bulk-acceptance screen.
 
-- [ ] **15 — LF chunking implemented; turbulent qualification open.**
+- [x] **15 — LF chunking and short passive setting selection.**
   Source `6ea48ac69` adds about 100 production lines, default off, for uniform
   periodic LF-only RKL2; AMR is excluded. CPU `5658077` and HIP `5658068` pass
   16 checks each, including smooth orders 1.95/2.01, cadence and restart; the
@@ -265,20 +265,31 @@ Piece 15 addresses the reproduced passive pressure loss and active threshold sen
   fixed-outer study `5658095` preserves forcing/RNG and records no repairs, but
   the finest two caps still differ by 0.2341% in parallel pressure locally, with
   nonmonotone worst-cell refinement. Work grows from 48 to 25,626 RHS per cycle.
-  No turbulent cap is qualified. The face probe confirms a local abrupt
-  scattering/transport branch while retaining its failed full replay gate;
+  No active chunk cap is qualified by this study. The face probe confirms a local
+  abrupt scattering/transport branch while retaining its failed full replay gate;
   cross-restart `5658231` shows the onset follows the accumulated starting-state
   difference, with only roundoff-sized differences between executables at fixed
   state. External SSPRK2 `5658198` also passes 16 focused HIP checks but retains
   nonmonotone local refinement differences; only 9-19 cells exceed 0.1% in either
-  pressure in the fine comparisons. No production integrator is added. Select
-  physical-observable and depletion tolerances before a production cap.
+  pressure in the fine comparisons. No production integrator is added.
   Passive `5658164` completes all eight positive caps without new LF floor/invalid
   events; cap zero reproduces the failure. Cap 4 differs from the finest endpoint
   by 4.60% in parallel pressure locally; the finest pair differs by 0.918%, with
   5,450 cells (0.0385%) above 0.1% in either pressure. Integrated q-gradient work
   agrees to about 1e-5 relative. The old deck has no event writer for repairs
-  outside LF. Keep passive Tier 3 unlaunched. Measurements and limitations are in the
+  outside LF. Subsequent 40-cycle screen `5658763` uses predeclared bulk criteria
+  and canonical event logs: caps 32 through 2 pass; 64/128 hit a pressure floor.
+  The 4/2 reference pair passes its tighter budget. Cap 32 differs from cap 2 by
+  at most 1.403% in integrated q-gradient work, despite a 10.374% local maximum;
+  only 0.01046% of cells differ by more than 1%. Mechanics/clock/forcing match
+  exactly and all repair/invalid counters remain zero. Q-off timings `5659344`
+  select cap 32 at safety 0.3: 24.717 versus 6.836 million zone-cycles/s/node,
+  3.616 times faster than cap 4 over three alternating pairs. Timed LF work is
+  119.029 versus 411.286 RHS/cycle; all eight q-off/full-q endpoints match in
+  physical state and non-q ledgers. The initial runner's q-counter assertion
+  failure is retained; completed full-q companions from `5659159` were reused.
+  Full turbulent acceptance remains with passive Tier 3. Active chunk accuracy,
+  AMR and scaling remain separate. Measurements and limitations are in the
   [Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md).
 
 **Measurement and acceptance**

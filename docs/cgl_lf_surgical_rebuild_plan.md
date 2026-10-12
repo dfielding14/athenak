@@ -94,7 +94,8 @@ waiting for LF tuning. Piece 13 follows the relevant corrected reference; 14
 does not depend on optional optimizations or multilevel work in 12. The uniform
 active milestone is a usable stopping point; add refinement or passive support
 when that model is needed. Nonlinear temporal qualification applies to both
-models; piece 15 provides optional chunking, with turbulent qualification still open.
+models; piece 15 provides optional chunking and a short passive setting screen.
+Full passive turbulent acceptance remains with its Tier 3 milestone.
 Keep separate commits at the performance suspects, even when their functional
 checks share a single GPU allocation.
 
@@ -478,17 +479,17 @@ passive speedup; turbulent threshold accuracy remains unresolved.
 The retained depleted-pressure replay `5657268` still fails at safety 0.3:
 cycle 10312, t approximately 4.396717, post-LF stage 25/27, one pressure-floor
 event. Its old checkpoint is a stress state, not a current-model physical result.
-This establishes the need for Piece 15 before the passive Tier 3 milestone;
-do not launch the full passive box or relax strict checks to bypass it.
+Piece 15's short continuation and production cost screens now select cap 32
+without relaxing strict checks; use it for the next passive Tier 3 run.
 Workspace `analysis/piece14/README.md` retains the qualification and measurements.
 
-**15. LF interval refinement: implemented; turbulent qualification remains open.**
+**15. LF interval refinement: implemented; passive milestone setting selected.**
 Hold the outer step, forcing and collision cadence fixed while refining LF
-intervals on the same grid. Qualify both the passive depleted-pressure stress
-state and active Tier 2 threshold sensitivity. Report worst-cell absolute,
-relative and local-thermal-energy-scaled pressure differences, norms, budgets,
-health and actual work; refine the reference too. Survival alone does not
-qualify an interval, and the finest available trajectory is not an error oracle.
+intervals on the same grid. Select settings against intended bulk observables,
+budgets, health and actual work, with a checked reference pair. Report local
+pressure differences descriptively. Assess the passive stress state and active
+Tier 2 sensitivity separately; survival alone does not qualify an interval,
+and the finest available trajectory is not an error oracle.
 
 Source `6ea48ac69` adds about 100 production lines for optional
 `time/cgl_lf_max_chunk_ratio`, default zero/off, using the existing RKL recurrence.
@@ -505,7 +506,7 @@ events. Work rises from 48 RHS unchunked to 333 at cap 4 and 25,626 at the fines
 cap. Maximum relative parallel-pressure differences against that finest cap are
 4.522% unchunked and 0.2404% at cap 4; the two finest caps still differ by
 0.2341%. Bulk differences improve, but worst-cell differences are nonmonotone:
-no turbulent cap is qualified.
+no active chunk cap is qualified by this study.
 Against that same fine reference, either pressure differs by more than 0.1% in
 51,392 cells unchunked (0.363% of the domain), versus 63 cells at cap 4.
 
@@ -532,9 +533,8 @@ nonmonotone under both methods. This does not isolate RKL as the cause or qualif
 an alternative integrator; SSP remains a scratch executable only.
 Only 9-19 of 14,155,776 cells exceed 0.1% in either pressure across the fine
 comparisons; none exceeds 1%. These descriptive thresholds are not acceptance
-cuts. Set tolerances for the intended physical observables and pressure-depletion
-safety before selecting a production cap; do not make monotone worst-cell
-convergence an invented universal criterion for turbulent physics.
+cuts. These findings motivate the bulk-observable criteria below; monotone
+worst-cell convergence is not a universal criterion for turbulent physics.
 
 Passive continuation `5658164` completes all eight positive caps without new LF
 floor/invalid events; cap zero reproduces the original failure. Density, momentum,
@@ -547,12 +547,44 @@ to 7.11e-6/1.76e-5 relative. Pressure minima stay positive and stable; this old
 deck has no event writer to audit repairs outside LF.
 The passive thermal budget is a convergence diagnostic, not an exact discrete
 invariant; its residual settles near -1.83e-7 of initial thermal energy.
-Choose observable and depletion tolerances, then use short matched-cadence
-passive continuations to select a cap before Tier 3. Reuse these one-cycle
-studies; keep the existing physical model and production integrator. No cap is
-selected here. The
+The subsequent short continuation screen below reuses these one-cycle studies
+and keeps the existing physical model and production integrator. The
 [Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md)
 retains the measurements and limitations; frozen active Tier 3 artifacts remain intact.
+
+**Production selection priority (2026-10-12):** prioritize speed and eventual
+scaling, accepting local pressure differences when bulk distributions and
+integrated transport remain adequate. The short passive continuations use
+predeclared tolerances: 1% for pressure/thermal means and normalized temperature
+distribution distance, 5% for temperature fluctuation RMS, lower pressure
+quantiles and integrated work, and 0.01 for bounded-anisotropy distribution
+distance. Reference-pair differences must use at most one third of these budgets.
+Strict health and passive mechanical/clock invariants remain required; pointwise
+maxima are descriptive. Choose the fastest passing cap using production q-off
+timings; report LF stages and chunk counts as communication-work indicators,
+without claiming many-node scaling from one node. The external
+[continuation criteria](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/CONTINUATION_CRITERIA.md)
+define quantities, matched cadence, reference refinement and the timing screen.
+
+Job `5658763` passes all declared quantities at caps 32, 20, 12, 6, 4 and 2 over
+40 matched outer cycles; caps 64 and 128 hit a pressure floor in cycle five.
+All successful cases preserve native mechanics/CT, clock and forcing/RNG, with
+zero LF floor/invalid and EOS/FOFC events. Cap 32 versus cap 2 differs by at most
+0.00633% in pressure means, 0.0984% in temperature fluctuation RMS and 1.403%
+in integrated q-gradient work. The 4/2 reference pair uses only 2.273% of a
+candidate tolerance, below the one-third allowance. The accepted local tradeoff
+is a 10.374% maximum, with 0.01046% of cells differing by more than 1%.
+Production q-off timing `5659344` measures 24.717 versus 6.836 million
+zone-cycles/s/node at caps 32/4: 3.616 times faster over three alternating pairs.
+LF work in the timed interval falls from 411.286 to 119.029 RHS/cycle; chunk
+counts over all 41 cycles fall from 88.098 to 12.317/cycle. All eight q-off endpoints match
+their full-q physical state, forcing/RNG and non-q ledgers exactly. The job
+reuses `5659159`'s full-q companions after correcting only an external runner
+assertion about the intentional q-diagnostic reset; the failed job is retained.
+Select cap 32 at safety 0.3 for the fresh passive Tier 3 run. This is a practical
+setting selected on a short stress window; stationary and spatial turbulent
+statistics remain unqualified. Active chunk qualification, AMR
+support and many-node scaling remain separate; the production default stays off.
 
 ## Deferred work
 
@@ -749,9 +781,10 @@ Do not relabel the active kinematic fixture as a passive
 test: the current passive guard requires dynamic evolution.
 Run the Tier 3 matched passive member to t=14 at this milestone. Piece 14
 qualified the model but reproduced the depleted-pressure failure; this run
-remains pending Piece 15's turbulent qualification. The separate passive workflow
-is prepared in workspace `analysis/piece14/TIER3.md`, with the frozen active
-artifacts intact.
+now uses Piece 15's selected cap 32 at safety 0.3 for the fresh run and existing
+[6,14] analysis, including retained spatial figures.
+Update the separate workflow in workspace `analysis/piece14/TIER3.md` to that
+setting before launch; the frozen active artifacts remain intact.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
@@ -929,8 +962,9 @@ Run the active member at the active milestone and the passive member at the
 passive milestone. Restore canonical `iso_sound_speed=sqrt(5)`, omitted from the
 active startup control, and set `mhd/passive` and `problem/passive_delta` together
 for each member. Half-sweep merging stays off; chunking requires piece 15. If
-passive qualification requires different numerical settings, do not label differently
-configured members as a matched pair; rerun the active member when needed.
+passive qualification requires different numerical settings, label them separately.
+A numerically matched-pair claim requires independently qualifying and rerunning
+active at the common settings; it is not a prerequisite for the passive milestone.
 
 Report:
 
