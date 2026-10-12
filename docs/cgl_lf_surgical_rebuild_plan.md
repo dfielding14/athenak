@@ -94,7 +94,7 @@ waiting for LF tuning. Piece 13 follows the relevant corrected reference; 14
 does not depend on optional optimizations or multilevel work in 12. The uniform
 active milestone is a usable stopping point; add refinement or passive support
 when that model is needed. Nonlinear temporal qualification applies to both
-models; the chunk implementation in 15 remains conditional on demonstrated need.
+models; piece 15 provides optional chunking, with turbulent qualification still open.
 Keep separate commits at the performance suspects, even when their functional
 checks share a single GPU allocation.
 
@@ -482,33 +482,77 @@ This establishes the need for Piece 15 before the passive Tier 3 milestone;
 do not launch the full passive box or relax strict checks to bypass it.
 Workspace `analysis/piece14/README.md` retains the qualification and measurements.
 
-**15. Add LF chunking only if nonlinear accuracy or positivity requires it.**
-The active/passive milestones below first qualify temporal accuracy without
-requiring a new integrator feature. If either target needs smaller LF intervals
-at a fixed outer step, use `4af7c9a55` as a small implementation reference;
-the retained passive depleted-pressure failure, reproduced by Piece 14 at
-safety 0.3, is the immediate motivating case.
-Hold the outer step, forcing and collision cadence fixed; change only LF substeps
-within each sweep.
-Include the retained Piece 14 active Tier 2 state as a short threshold-sensitivity
-probe in that refinement. Test whether smaller LF intervals reduce its local
-pressure sensitivity; do not assume that chunking resolves it.
-Preserve the current zero-operator driver fallback, which still owes the full
-collision/wall update when STS is disabled. The historical driver also contains
-excluded half-sweep merging; do not import that context.
-Gate: actual failing-state reproduction and timestep refinement, worst-cell
-pressure differences as well as norms, energy and smooth temporal order. Recorded
-positive chunked runs still differed locally by about 14%; cap 4 is not an
-accuracy-qualified default. Do not merge chunking with a kernel optimization.
-Retain the existing smooth refinement, cadence, default-off and restart checks.
-Their current test module imports half-sweep-merge fixture helpers; extract only
-the needed input/run/comparison pieces, not the merge feature or its campaign.
-For the failing state, compare at least three decreasing LF intervals at fixed
-outer step on the same grid. Report worst-cell absolute and relative pressure
-errors, local thermal-energy-scaled errors, and norms; establish decreasing
-temporal error rather than selecting a cap because it survives. The old cap-1
-trajectory is not a converged oracle. If refinement remains unresolved, report
-that numerical limitation instead of silently lowering forcing or changing walls.
+**15. LF interval refinement: implemented; turbulent qualification remains open.**
+Hold the outer step, forcing and collision cadence fixed while refining LF
+intervals on the same grid. Qualify both the passive depleted-pressure stress
+state and active Tier 2 threshold sensitivity. Report worst-cell absolute,
+relative and local-thermal-energy-scaled pressure differences, norms, budgets,
+health and actual work; refine the reference too. Survival alone does not
+qualify an interval, and the finest available trajectory is not an error oracle.
+
+Source `6ea48ac69` adds about 100 production lines for optional
+`time/cgl_lf_max_chunk_ratio`, default zero/off, using the existing RKL recurrence.
+Each chunk is at most this ratio times the safety-scaled global LF explicit
+bound; the bound is refreshed between chunks.
+Logical conversion/wall/rate cadence and the zero-operator collision fallback
+are preserved. Initial support is uniform periodic LF-only RKL2; AMR is excluded.
+CPU `5658077` and HIP `5658068` pass 16 checks each, including smooth pressure
+orders 1.95/2.01, cadence, default-off identity, restart and one/four-rank state.
+A native active one-cycle comparison also matches Piece 14 exactly with chunking
+off. In active one-cycle study `5658095`, caps 0, 4, 2, 1, 0.5, 0.25, 0.125,
+0.0625 and 0.03125 share the outer time, forcing/RNG state and zero repair/invalid
+events. Work rises from 48 RHS unchunked to 333 at cap 4 and 25,626 at the finest
+cap. Maximum relative parallel-pressure differences against that finest cap are
+4.522% unchunked and 0.2404% at cap 4; the two finest caps still differ by
+0.2341%. Bulk differences improve, but worst-cell differences are nonmonotone:
+no turbulent cap is qualified.
+Against that same fine reference, either pressure differs by more than 0.1% in
+51,392 cells unchunked (0.363% of the domain), versus 63 cells at cap 4.
+
+Face probe `5658098` preserves the original endpoints, but its full replay-flux
+gate fails on small DIR1/2 rounding differences. One exactly reproduced DIR0
+face on both runs (block 1, ghost-index k/j/i=132/41/13, post stage 13) nonetheless
+confirms different scattering branches: effective rate 0 versus 1e10 and weighted
+energy flux 2.31208e-7 versus 3.68616e-16. This is direct local transport evidence,
+not qualification of every probe row. A same-binary single-cell +/-1e-13
+perturbation at N+27 (`5658089`) produces only about 2e-11 relative pressure
+response after 14 cycles. Cross-restart `5658231` isolates the actual accumulated
+state difference: either executable amplifies the two N+27 states to the same
+8.17e-5 relative parallel-pressure difference after one cycle; swapping only
+the executable at fixed state produces at most 1.58e-13. All four zero-cycle loads
+and both diagonal restarted native endpoints match the original states exactly.
+This identifies state-dependent threshold amplification at the onset, without
+establishing a general chaotic-growth law or the earliest roundoff source.
+
+External SSPRK2 experiment `5658198` passes the same 16 focused HIP checks with
+smooth orders 2.005-2.018. With identical initial state and outer cadence, its
+finest two intervals still differ by 0.1225% in parallel pressure; finest RKL
+versus SSP differs by 0.1982%. Bulk differences decrease, but local maxima remain
+nonmonotone under both methods. This does not isolate RKL as the cause or qualify
+an alternative integrator; SSP remains a scratch executable only.
+Only 9-19 of 14,155,776 cells exceed 0.1% in either pressure across the fine
+comparisons; none exceeds 1%. These descriptive thresholds are not acceptance
+cuts. Set tolerances for the intended physical observables and pressure-depletion
+safety before selecting a production cap; do not make monotone worst-cell
+convergence an invented universal criterion for turbulent physics.
+
+Passive continuation `5658164` completes all eight positive caps without new LF
+floor/invalid events; cap zero reproduces the original failure. Density, momentum,
+CT, outer time and forcing/RNG match exactly across successful caps. Parallel
+pressure differs from cap 1/32 by 4.60% locally at cap 4 and 1.08% at cap 1;
+the finest pair still differs by 0.918%. Either pressure differs by more than
+0.1% in 5,450 cells (0.0385% of the domain) for that fine pair, versus 15,487
+cells at cap 4. Their integrated parallel/perpendicular q-gradient work agrees
+to 7.11e-6/1.76e-5 relative. Pressure minima stay positive and stable; this old
+deck has no event writer to audit repairs outside LF.
+The passive thermal budget is a convergence diagnostic, not an exact discrete
+invariant; its residual settles near -1.83e-7 of initial thermal energy.
+Choose observable and depletion tolerances, then use short matched-cadence
+passive continuations to select a cap before Tier 3. Reuse these one-cycle
+studies; keep the existing physical model and production integrator. No cap is
+selected here. The
+[Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md)
+retains the measurements and limitations; frozen active Tier 3 artifacts remain intact.
 
 ## Deferred work
 
@@ -699,14 +743,15 @@ Require a short nonlinear temporal comparison in the supported passive model;
 reuse the smooth refinement and retained depleted-pressure state as applicable.
 Keep forcing and rate cadence matched for an LF-only comparison. Reducing the
 outer timestep in a forced run changes that composition and is not an isolated
-LF refinement. Piece 15 is implemented only when needed to refine LF intervals
-independently; a small smooth test or clean termination does not establish
-turbulent accuracy. Do not relabel the active kinematic fixture as a passive
+LF refinement. Piece 15 now provides independent LF interval refinement;
+a small smooth test or clean termination does not establish turbulent accuracy.
+Do not relabel the active kinematic fixture as a passive
 test: the current passive guard requires dynamic evolution.
 Run the Tier 3 matched passive member to t=14 at this milestone. Piece 14
 qualified the model but reproduced the depleted-pressure failure; this run
-remains pending Piece 15. The separate passive deck/analysis workflow is prepared
-in workspace `analysis/piece14/TIER3.md`, with the frozen active artifacts intact.
+remains pending Piece 15's turbulent qualification. The separate passive workflow
+is prepared in workspace `analysis/piece14/TIER3.md`, with the frozen active
+artifacts intact.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
@@ -757,7 +802,7 @@ from the base and needed for the current piece.
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
 | 13 | `cgl/test_cgl_lf_compact_mpicpu.py::test_cgl_lf_compact_exchange_matches_full_exchange` | Existing nonuniform 3D scalar fixture; exact full native payload across strict/full exchange and one/four ranks, positive pressures, nonzero LF work and zero repairs; run on CPU/HIP |
 | 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Identity, heating, linear, advection, restart, fences and nonlinear temporal refinement; `passive_acceptance.py` and `cgl_passive_validation` pgen; forced four-rank identity/restart through `--suite forced` |
-| 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_limiter_cadence`, `test_smooth_lf_temporal_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted_run`, `test_invalid_chunk_configurations_fail_before_evolution` | Prebuilt executable; small fixture dependency extraction required; failing passive checkpoint is an additional accuracy check |
+| 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_zero_operator_cadence`, `test_smooth_chunk_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted`, `test_chunked_mpi_state_and_schedule`, `test_invalid_chunk_configurations` | Prebuilt executable; existing passive and conservation fixtures; active threshold and failing passive checkpoint refinements remain separate accuracy checks |
 
 The physical oracle must be independent where it matters. A copied production
 Riemann expression only tests wiring; a collision/C2P roundtrip only tests

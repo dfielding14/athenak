@@ -14,12 +14,14 @@ archive uses a third revision, `f2d0a259`.
 
 **Status:** pieces 0–14 are implemented and qualified within their recorded
 scopes. The frozen active milestone is complete; the passive turbulent milestone
-remains open. Piece 14's active-parent bitwise comparison failed (details below).
+remains open. Piece 15's default-off implementation and focused checks pass;
+turbulent interval qualification remains open. Piece 14's active-parent bitwise
+comparison failed (details below).
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** Piece 15, LF interval refinement for the reproduced passive pressure
-failure, before the passive Tier 3 run. Retain the active threshold-sensitivity
-finding as a separate accuracy limitation. Larger refresh/cache and logarithm
-changes remain deferred. The
+**Next:** Set physical-observable and pressure-depletion tolerances, then use
+short matched-cadence passive continuations to select an LF interval before
+passive Tier 3. Reuse the completed one-cycle studies. Larger refresh/cache and
+logarithm changes remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
 retains reproduction commands and links to the completed milestone evidence.
 Reuse accepted physics and reference evidence unless a relevant change or concrete
@@ -27,7 +29,7 @@ failure requires repeating it.
 Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
-Bring conditional chunking (15) forward if active/passive qualification requires it.
+Piece 15 addresses the reproduced passive pressure loss and active threshold sensitivity.
 
 **Working rules**
 
@@ -248,19 +250,36 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   differ. These are descriptive costs, not an equivalent-optimization result;
   small integrated budgets do not resolve the local accuracy question. Replay
   `5657582` confirms identical loading, then pressure differences of order 1e-13
-  after one cycle and 1e-12 after four; the later local amplification is unresolved.
+  after one cycle and 1e-12 after four. Piece 15 identifies the onset's local
+  amplification; the earliest arithmetic source remains unresolved.
   **The passive milestone is still open:** stress replay `5657268` hits one
   pressure floor at post-LF stage 25/27 near cycle 10312, t=4.396717, safety 0.3.
   This old state is a stress probe, not a current-model physical result. Tier 3
   is prepared but unlaunched; qualify smaller LF intervals in Piece 15 first.
 
-- [ ] **15 — LF chunking, now required by the passive stress failure.**
-  Piece 14 reproduced pressure loss at safety 0.3. Refine LF intervals at fixed
-  outer dt before attempting the passive milestone; also assess the retained
-  active Tier 2 threshold sensitivity under that refinement. Reproduce the failing
-  state, preserve forcing/collision cadence, and demonstrate decreasing pressure
-  errors across at least three LF intervals, with conservation and restart checks.
-  Surviving with cap 4 is insufficient; an unconverged cap-1 run is not an oracle.
+- [ ] **15 — LF chunking implemented; turbulent qualification open.**
+  Source `6ea48ac69` adds about 100 production lines, default off, for uniform
+  periodic LF-only RKL2; AMR is excluded. CPU `5658077` and HIP `5658068` pass
+  16 checks each, including smooth orders 1.95/2.01, cadence and restart; the
+  default-off active one-cycle native state matches Piece 14 exactly. Active
+  fixed-outer study `5658095` preserves forcing/RNG and records no repairs, but
+  the finest two caps still differ by 0.2341% in parallel pressure locally, with
+  nonmonotone worst-cell refinement. Work grows from 48 to 25,626 RHS per cycle.
+  No turbulent cap is qualified. The face probe confirms a local abrupt
+  scattering/transport branch while retaining its failed full replay gate;
+  cross-restart `5658231` shows the onset follows the accumulated starting-state
+  difference, with only roundoff-sized differences between executables at fixed
+  state. External SSPRK2 `5658198` also passes 16 focused HIP checks but retains
+  nonmonotone local refinement differences; only 9-19 cells exceed 0.1% in either
+  pressure in the fine comparisons. No production integrator is added. Select
+  physical-observable and depletion tolerances before a production cap.
+  Passive `5658164` completes all eight positive caps without new LF floor/invalid
+  events; cap zero reproduces the failure. Cap 4 differs from the finest endpoint
+  by 4.60% in parallel pressure locally; the finest pair differs by 0.918%, with
+  5,450 cells (0.0385%) above 0.1% in either pressure. Integrated q-gradient work
+  agrees to about 1e-5 relative. The old deck has no event writer for repairs
+  outside LF. Keep passive Tier 3 unlaunched. Measurements and limitations are in the
+  [Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md).
 
 **Measurement and acceptance**
 
