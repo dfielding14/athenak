@@ -38,8 +38,9 @@ $$
 
 where $\boldsymbol{\xi}^{n}$ is a newly generated, projected modal
 innovation. With negligible `tcorr`, each update replaces the previous state
-with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
-`sol_fraction=0` gives compressive forcing.
+with an independent realization. `sol_fraction=1` selects solenoidal modal
+innovations and `sol_fraction=0` selects compressive innovations; spatial
+localization can change these properties of the applied field.
 
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
 cell-centered `force` field is rendered from those coefficients and the
@@ -101,8 +102,9 @@ General-relativistic and dynamical-spacetime turbulence driving are unsupported.
 
 All integrals include physical cell volumes. On AMR meshes this prevents fine
 cells from receiving extra statistical weight solely because they are more
-numerous. For Newtonian fluids, the force is rendered and normalized from the
-current conserved state immediately before its full-timestep kick.
+numerous. For Newtonian fluids, the force is rendered from the modal state
+and normalized using the current conserved state immediately before its
+full-timestep kick.
 Non-finite normalization integrals are rejected before scaling, with a
 separate diagnostic from a zero forcing field.
 
@@ -126,7 +128,7 @@ negative. This mode does not prescribe an energy injection rate.
 ### Energy Injection
 
 With `normalization=edot`, `dedt` specifies the target volume-averaged energy
-injection rate. For a scale factor $s$, the driver evaluates
+injection rate. For Newtonian fluids and a scale factor $s$, the driver evaluates
 
 $$
 m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2\Delta t\,dV,
@@ -188,6 +190,13 @@ update. In two-fluid calculations, each fluid uses its own conserved state
 and EOS. Removing the mass-weighted mean immediately before the kick also
 gives zero net momentum injection, summed over both fluids when present.
 
+For a source integrated within the RK right-hand side, the appropriate equations
+are $d\boldsymbol{p}/dt=\rho\boldsymbol{a}$ and
+$dE/dt=\boldsymbol{p}\cdot\boldsymbol{a}$, evaluated from the RK stage state.
+They contain no quadratic kick term. The finite-kick formula above instead
+requires the conserved momentum immediately before the kick; substituting
+primitives from an earlier state generally changes thermal energy.
+
 For smooth fixed-RMS forcing, this single operator-split kick gives
 first-order coupling to fluid evolution, even when the fluid integrator is
 RK2, RK3, or RK4. Exact kick work does not establish higher-order accuracy
@@ -224,9 +233,9 @@ parameter representation on the initial run, so an unchanged restart uses
 the same exact configuration record as the uninterrupted calculation.
 
 MPI reductions use `MPI_ATHENA_REAL`, so the driver source is valid for both
-double and single `Real` builds. Full single-precision executable builds of
-the current upstream tree remain blocked by pre-existing non-turbulence
-sources; see the example validation notes.
+double and single `Real` builds. The tested development checkout did not build
+a complete single-precision executable with AppleClang because of pre-existing
+errors in non-turbulence sources; see the example validation notes.
 
 ## Input Reference
 

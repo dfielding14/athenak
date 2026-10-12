@@ -234,9 +234,9 @@ reference, restart behavior, examples, and validation notes.
 ## Turbulence Driver
 
 The turbulence driver is a runtime forcing mechanism, not an initial-condition edit. It
-constructs a random acceleration field from Fourier modes, removes net momentum from the
-forcing pattern, and, for Newtonian fluids, applies one full-timestep kick after the
-final RK fluid update.
+constructs a random acceleration field from Fourier modes and removes its
+mass-weighted mean. For Newtonian fluids, it applies one full-timestep kick
+after the final RK fluid update, with zero net momentum injection.
 The kick uses conserved density and momentum and adds exactly its kinetic-energy change
 to total energy for an ideal EOS. Coupling to fluid evolution is first order for
 smooth RMS forcing; exact kick work does not establish higher-order accuracy.

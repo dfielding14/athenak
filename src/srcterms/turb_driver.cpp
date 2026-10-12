@@ -578,14 +578,13 @@ void TurbulenceDriver::BuildBasis() {
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn  void IncludeModeEvolutionTasks
-//  \brief Includes task in the operator split task list that constructs new modes with
-//  random amplitudes and phases that can be used to evolve the force via an O-U process
+//! \fn IncludeInitializeModesTask
+//  \brief Schedule modal OU updates before RK evolution.
 //  Called by MeshBlockPack::AddPhysics() function
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  // Evolve the random coefficients once per cycle, independently of RK stages.
+  // Check for due modal updates once per cycle, independently of RK stages.
   auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
   auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
   if (pmy_pack->pcoord->is_special_relativistic) {
@@ -595,8 +594,8 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
 }
 
 //----------------------------------------------------------------------------------------
-//! \fn  void IncludeForcingTasks
-//  \brief includes task in the stage_run task list for adding random forcing to fluid
+//! \fn IncludeAddForcingTask
+//  \brief Include the forcing task in the fluid-stage task list,
 //  before the existing boundary exchange and primitive recovery
 //  Called by MeshBlockPack::AddPhysics() function
 

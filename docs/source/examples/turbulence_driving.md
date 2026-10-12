@@ -100,16 +100,27 @@ regressions. All three production examples above
 also ran successfully: both power-controlled cases matched their per-cycle
 energy budgets, and the included-region case retained RMS acceleration 0.3.
 
-Matched AppleClang/Serial timings used the uniform MHD regression fixture,
-a $32^3$ grid with $16^3$ MeshBlocks, RK3, PLM/HLLE, 100 cycles, and no outputs.
-Both modes used strength 0.1 and one frozen modal realization
-(`dt_update=1000`). Three repetitions alternated old/new executable order.
-The table reports median executable integration time against `b6035d254`:
+A matched comparison of development `b6035d254` and single-kick `a97bc75ad`
+used a periodic unit box with $64^3$ cells, eight MPI ranks, RK3/WENO-Z/HLLC,
+CFL 0.3, and $\gamma=1.00001$, initially at rest with $\rho=p=1$.
+Both used `accel_rms=0.37`, solenoidal parabolic modes 1--3 peaked at mode 2,
+directional mode bounds $-3$ to $3$, and seed 2718. They ran for three nominal
+turnover times $\tau=(L/2)/(0.5c_{s,0})$, with `tcorr` equal to $\tau$ and
+`dt_update` equal to $\tau/100$.
 
-| Normalization | Before (s) | Single kick (s) | Ratio |
-| --- | ---: | ---: | ---: |
-| `accel_rms` | 2.611135 | 2.531720 | 0.970 |
-| `edot` | 2.625087 | 2.559827 | 0.975 |
+Over the last nominal turnover, the single-kick mean mass-weighted 3D RMS
+Mach number differed by $+0.035\%$ and the mean
+$\sigma_\rho/\langle\rho\rangle$ by $-0.021\%$ relative to development.
+Final total-energy gain differed by $-0.114\%$.
+Source instrumentation confirmed that single-kick work matched its
+kinetic-energy change to roundoff; the development stage updates did not.
+Similar bulk statistics do not imply identical trajectories: the final fields
+$\rho/\langle\rho\rangle-1$ and $\boldsymbol{v}-\langle\boldsymbol{v}\rangle$
+differed by about 17% and 16% in relative L2 norm, using volume averages and
+development norms as denominators. Neither run was an accuracy reference,
+and three nominal turnovers from rest do not establish converged turbulence
+statistics. Three alternating-order timing repetitions showed substantial
+run-to-run variation and do not support a general performance claim.
 
 A separate time-refinement experiment used a periodic one-dimensional unit
 box with 128 cells, uniform ideal hydro ($\rho=p=1$, $\gamma=5/3$), RK3/PLM/HLLC,
@@ -193,11 +204,10 @@ The turbulence regression tests exercise:
 - MPI execution of the AMR/localized case and periodic MHD energy budget;
 - rejection of removed parameter names and singular parabolic spectra.
 
-The driver uses precision-correct MPI reductions. The current upstream source
-tree does not build a complete single-precision executable with AppleClang
-because unchanged coordinate and tabulated-EOS translation units contain
-single-precision type/narrowing errors; those blockers are outside this
-feature.
+The driver uses precision-correct MPI reductions. In the tested development
+checkout, a complete single-precision executable did not build with AppleClang:
+unchanged coordinate and tabulated-EOS translation units contained
+single-precision type/narrowing errors. Those blockers were outside this feature.
 
 The equations, restart contract, and full canonical parameter reference are
 in {doc}`../modules/turbulence_driving`.
