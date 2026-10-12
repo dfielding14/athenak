@@ -206,7 +206,8 @@ TaskStatus MHD::STSFluxes(Driver *pdrive, int stage) {
 
 TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   TraceCGLLFTask(pmy_pack, "BeginCGLLandauFluidSTSSweep", "begin", stage);
-  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != 1) {
+  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != 1 ||
+      !pdrive->sts.first_chunk) {
     TraceCGLLFTask(pmy_pack, "BeginCGLLandauFluidSTSSweep", "skip", stage);
     return TaskStatus::complete;
   }
@@ -638,7 +639,8 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
 
 TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   TraceCGLLFTask(pmy_pack, "EndCGLLandauFluidSTSSweep", "begin", stage);
-  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != pdrive->sts.nstages) {
+  if (!has_cgl_lf_split || !pdrive->sts.enabled || stage != pdrive->sts.nstages ||
+      !pdrive->sts.last_chunk) {
     TraceCGLLFTask(pmy_pack, "EndCGLLandauFluidSTSSweep", "skip", stage);
     return TaskStatus::complete;
   }
@@ -677,7 +679,8 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 
 TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
   TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "begin", stage);
-  if (!peos->eos_data.is_cgl || stage != pdrive->sts.nstages) {
+  if (!peos->eos_data.is_cgl || stage != pdrive->sts.nstages ||
+      !pdrive->sts.last_chunk) {
     TraceCGLLFTask(pmy_pack, "STSPostSweepCGLCollisions", "skip", stage);
     return TaskStatus::complete;
   }
@@ -727,7 +730,7 @@ TaskStatus MHD::STSRefreshTimeStep(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   if (pdrive->sts.sweep == Driver::STSSweep::post && stage == pdrive->sts.nstages &&
-      !NeedsCGLLFBoundaryRefresh()) {
+      pdrive->sts.last_chunk && !NeedsCGLLFBoundaryRefresh()) {
     RecomputeTimeStepFromCurrentState(pdrive);
   }
   TraceCGLLFTask(pmy_pack, "STSRefreshTimeStep", "end", stage);
