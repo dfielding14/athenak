@@ -81,7 +81,10 @@ Acceptance tests are `test_cgl_passive_{cpu,gpu}.py` and the independent-kernel
 full-precision flow and restart arrays, timestep sequences, reconstructors,
 forcing, floors, independent linear modes, thermal advection and pressure work.
 The nonlinear temporal case uses stationary dynamic isothermal flow and
-refines local LF against an explicit reference. These smooth checks do not
-certify accuracy in depleted turbulent cells; those require a separate
-same-state temporal study. Inputs, logs, full-precision restarts and results
-are retained in the test output directory.
+refines local LF against a three-timestep, Richardson-extrapolated explicit
+reference, checking the explicit method's first-order convergence and reference
+uncertainty. These smooth checks do not certify accuracy in depleted turbulent
+cells. A retained depleted-pressure stress replay still triggers strict pressure
+floor rejection at STS safety 0.3; LF interval refinement and the passive turbulent
+milestone remain pending. Inputs, logs, full-precision restarts and results are
+retained in the test output directory.

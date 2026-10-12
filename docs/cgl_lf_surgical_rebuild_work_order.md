@@ -12,12 +12,14 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–13 and the active milestone are complete within their
-recorded scopes, including the reviewed Tier 3 run and [6,14] analysis.
+**Status:** pieces 0–14 are implemented and qualified within their recorded
+scopes. The frozen active milestone is complete; the passive turbulent milestone
+remains open. Piece 14's active-parent bitwise comparison failed (details below).
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** the separately qualified passive model (14). Piece 13 retains compact
-LF cell exchange after exact-state and paired-cost qualification; larger
-refresh/cache and logarithm changes are deferred. The
+**Next:** Piece 15, LF interval refinement for the reproduced passive pressure
+failure, before the passive Tier 3 run. Retain the active threshold-sensitivity
+finding as a separate accuracy limitation. Larger refresh/cache and logarithm
+changes remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
 retains reproduction commands and links to the completed milestone evidence.
 Reuse accepted physics and reference evidence unless a relevant change or concrete
@@ -229,16 +231,33 @@ Bring conditional chunking (15) forward if active/passive qualification requires
   shared helpers and analysis dependencies remain unchanged. No workspace cleanup,
   physics changes, exceptional-arithmetic fallback removal or fast-mode removal.
 
-- [ ] **14 — Passive model.** Complete J/A outside LF and U/moment inside LF,
-  including EOS, fluxes, forcing, initialization, outputs, restart encoding, and
-  guards before enabling support. Preserve the native isothermal flow kernel.
-  Gate: matched-timestep flow identity, independent thermal evolution/work, HIP
-  wall decoding, forced MPI restart, all supported reconstructors, and nonlinear
-  temporal refinement. Initial scope is uniform periodic; document absent shock heating.
-  Run the Tier 3 matched passive member to t=14 at the passive milestone.
+- [x] **14 — Passive model implementation and qualification.** Source `276eee6ce`
+  evolves J/A outside LF and U/moment inside LF on native isothermal flow,
+  including forcing, initialization, outputs, restart encoding and support guards.
+  Model scope and absent shock heating are documented in
+  [passive thermodynamics](source/modules/cgl_passive.md). CPU `5657203` and HIP
+  `5657202`/`5657220`/`5657266` pass identity, thermal/work references, independent
+  wall decoding, all five reconstructors and forced four-rank restart. The
+  resolved nonlinear oracle (`3a2a5409b`) measures STS orders 1.999/1.994;
+  failed reference/launch evidence remains retained. Initial scope is uniform
+  periodic. Workspace `analysis/piece14/README.md` records the full evidence.
+  Active control timings (`5657269`/`5657270`) show Tier 1 LF throughput
+  -0.86%, no-LF +8.32%, and Tier 2 +0.14%, with unchanged LF work counts.
+  **Tier 2's exact parent-state gate failed:** all applications and health/q-mode
+  checks pass, but local pressure differences reach 0.38% and mirror counts
+  differ. These are descriptive costs, not an equivalent-optimization result;
+  small integrated budgets do not resolve the local accuracy question. Replay
+  `5657582` confirms identical loading, then pressure differences of order 1e-13
+  after one cycle and 1e-12 after four; the later local amplification is unresolved.
+  **The passive milestone is still open:** stress replay `5657268` hits one
+  pressure floor at post-LF stage 25/27 near cycle 10312, t=4.396717, safety 0.3.
+  This old state is a stress probe, not a current-model physical result. Tier 3
+  is prepared but unlaunched; qualify smaller LF intervals in Piece 15 first.
 
-- [ ] **15 — Conditional LF chunking.** Implement only if active/passive accuracy
-  or positivity needs smaller LF intervals at fixed outer dt. Reproduce the failing
+- [ ] **15 — LF chunking, now required by the passive stress failure.**
+  Piece 14 reproduced pressure loss at safety 0.3. Refine LF intervals at fixed
+  outer dt before attempting the passive milestone; also assess the retained
+  active Tier 2 threshold sensitivity under that refinement. Reproduce the failing
   state, preserve forcing/collision cadence, and demonstrate decreasing pressure
   errors across at least three LF intervals, with conservation and restart checks.
   Surviving with cap 4 is insufficient; an unconverged cap-1 run is not an oracle.

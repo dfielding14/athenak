@@ -450,13 +450,49 @@ After model qualification, profile before considering narrower thermal
 reconstruction or a cheaper wall path. An eager isotropic fallback and bisection
 are candidates for simplification, not reasons to alter the thermal model.
 
+**Piece 14 model qualification (2026-10-12):** source `276eee6ce` implements
+this contract; [the model guide](source/modules/cgl_passive.md) records storage,
+forcing, output/restart semantics and support limits. CPU `5657203` and HIP
+`5657202`/`5657220`/`5657266` qualify native-flow identity, all five reconstructors,
+independent heating/linear/advection references, rotated pressure work, wall
+encoding and forced four-rank restart. The nonlinear reference test in `3a2a5409b`
+verifies the explicit method's first-order convergence before Richardson
+extrapolation; the finest STS orders are 1.999/1.994. The earlier unresolved
+reference failure and corrected test-launch failure remain in the evidence.
+
+Active control measurements (`5657269`/`5657270`) give 140.8930 to 139.6849
+million zone-cycles/s/node for Tier 1 LF (-0.86%, 26 RHS/cycle), 558.4358 to
+604.9033 million without LF (+8.32%), and 57.99294 to 58.07608 million for
+Tier 2 (+0.14%, 50.4 RHS/cycle). Tier 2's applications and individual health,
+transport and q-mode checks pass, but its inherited exact active-parent gate
+fails. Local pressure differences reach 0.38% despite small global budget
+residuals, with changed mirror-threshold counts. Short replay `5657582` loads
+identical native fields; maximum relative parallel-pressure differences grow
+from 1.50e-13 after one cycle to 1.54e-12 after four, then 0.003767 after 41.
+Source review finds unchanged active equations; the specific arithmetic origin
+remains unproven. Retain the failed comparison and full-precision field
+differences. This is a qualified
+passive model addition, not a bitwise-equivalent optimization or a demonstrated
+passive speedup; turbulent threshold accuracy remains unresolved.
+
+The retained depleted-pressure replay `5657268` still fails at safety 0.3:
+cycle 10312, t approximately 4.396717, post-LF stage 25/27, one pressure-floor
+event. Its old checkpoint is a stress state, not a current-model physical result.
+This establishes the need for Piece 15 before the passive Tier 3 milestone;
+do not launch the full passive box or relax strict checks to bypass it.
+Workspace `analysis/piece14/README.md` retains the qualification and measurements.
+
 **15. Add LF chunking only if nonlinear accuracy or positivity requires it.**
 The active/passive milestones below first qualify temporal accuracy without
 requiring a new integrator feature. If either target needs smaller LF intervals
 at a fixed outer step, use `4af7c9a55` as a small implementation reference;
-the retained passive depleted-pressure failure is the known motivating case.
+the retained passive depleted-pressure failure, reproduced by Piece 14 at
+safety 0.3, is the immediate motivating case.
 Hold the outer step, forcing and collision cadence fixed; change only LF substeps
 within each sweep.
+Include the retained Piece 14 active Tier 2 state as a short threshold-sensitivity
+probe in that refinement. Test whether smaller LF intervals reduce its local
+pressure sensitivity; do not assume that chunking resolves it.
 Preserve the current zero-operator driver fallback, which still owes the full
 collision/wall update when STS is disabled. The historical driver also contains
 excluded half-sweep merging; do not import that context.
@@ -667,7 +703,10 @@ LF refinement. Piece 15 is implemented only when needed to refine LF intervals
 independently; a small smooth test or clean termination does not establish
 turbulent accuracy. Do not relabel the active kinematic fixture as a passive
 test: the current passive guard requires dynamic evolution.
-Run the Tier 3 matched passive member to t=14 at this milestone.
+Run the Tier 3 matched passive member to t=14 at this milestone. Piece 14
+qualified the model but reproduced the depleted-pressure failure; this run
+remains pending Piece 15. The separate passive deck/analysis workflow is prepared
+in workspace `analysis/piece14/TIER3.md`, with the frozen active artifacts intact.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
@@ -717,7 +756,7 @@ from the base and needed for the current piece.
 | Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Qualified wave/e-fold checks and local-hotspot window 8, 4, 2, 1 (`5647113`); fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Retain the finer 1-to-0.125 precision stress failures and reference-sensitivity evidence; no rung is an exact oracle |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
 | 13 | `cgl/test_cgl_lf_compact_mpicpu.py::test_cgl_lf_compact_exchange_matches_full_exchange` | Existing nonuniform 3D scalar fixture; exact full native payload across strict/full exchange and one/four ranks, positive pressures, nonzero LF work and zero repairs; run on CPU/HIP |
-| 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Existing groups: identity, heating, linear, advection, restart, fences; `passive_acceptance.py` and `cgl_passive_validation` pgen |
+| 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Identity, heating, linear, advection, restart, fences and nonlinear temporal refinement; `passive_acceptance.py` and `cgl_passive_validation` pgen; forced four-rank identity/restart through `--suite forced` |
 | 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_limiter_cadence`, `test_smooth_lf_temporal_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted_run`, `test_invalid_chunk_configurations_fail_before_evolution` | Prebuilt executable; small fixture dependency extraction required; failing passive checkpoint is an additional accuracy check |
 
 The physical oracle must be independent where it matters. A copied production

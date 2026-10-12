@@ -109,7 +109,7 @@ by `backup_limiters`; relaxed admissibility does not enable it implicitly.
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `eos` | required | Set to `cgl` for this feature. |
-| `passive` | `false` | Must remain `false` during the surgical rebuild; passive evolution is rejected until its redesign and qualification in piece 14. |
+| `passive` | `false` | Use `true` for [passive J/A thermodynamics](cgl_passive.md) on native isothermal flow; requires positive `iso_sound_speed` and uniform periodic Newtonian MHD. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
 | `lf_k_parallel` | required | Finite positive closure wavenumber magnitude. |
@@ -278,8 +278,8 @@ The reduced forced-turbulence initializer is registered as
 initializes `rho0 = 1`, `B0` along `z`, and
 `p_parallel0 = p_perp0 = beta0 B0^2/2`, uses the explicit MKS24
 `cgl_firehose_threshold = parallel` policy, and exercises the shared
-turbulence driver. The retained passive smoke deck is rejected on this branch;
-its evolution regressions are deferred until rebuild piece 14.
+turbulence driver. The passive smoke deck uses the separate
+[J/A thermodynamic model](cgl_passive.md) and its required isothermal sound speed.
 These are reduced smoke cases, not standard paper-resolution runs. Their
 forcing-orientation, seed-continuation, and multi-cycle OU/full-kick work checks
 qualify reduced mechanics, not paper-scale active/passive statistics or

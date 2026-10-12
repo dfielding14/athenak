@@ -407,7 +407,9 @@ summarized from LF history counters over the same selected interval. When the
 selected history contains `lf_cpwrk` and `lf_cawrk`, it additionally reports
 the explicit-RK-applied CGL pressure-traction ledger. That ledger is evaluated
 from the retained traction after the same AMR flux correction used by
-momentum; passive-Delta decks record zero applied pressure work.
+momentum. Passive J/A runs instead diagnose the centered thermal pressure
+traction without applying it to the flow; their periodic thermal budget is
+`Delta integral(U) + lf_cpwrk = 0` in the converged limit.
 When the
 default staged MKS24 manifest is available, `paper-analyze` also writes
 `analysis/reference_provenance.json` with its archive and source-TeX
