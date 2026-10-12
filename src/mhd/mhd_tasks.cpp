@@ -512,6 +512,15 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
   } else if (rsolver_method == MHD_RSolver::hlle) {
     CalculateFluxes<MHD_RSolver::hlle>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlle_cgl) {
+    if (peos->eos_data.passive) {
+      // Reuse the compiled isothermal flow kernel; fusion changes HIP rounding.
+      const auto cgl_eos = peos->eos_data;
+      peos->eos_data.is_ideal = false;
+      peos->eos_data.is_cgl = false;
+      peos->eos_data.gamma = 0.0;
+      CalculateFluxes<MHD_RSolver::hlle>(pdrive, stage);
+      peos->eos_data = cgl_eos;
+    }
     CalculateFluxes<MHD_RSolver::hlle_cgl>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlld) {
     CalculateFluxes<MHD_RSolver::hlld>(pdrive, stage);
@@ -1116,6 +1125,10 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
       ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
   peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt, mode,
                    0, n1m1, 0, n2m1, 0, n3m1);
+  if (peos->eos_data.passive) {
+    // Use the restart decoder kernel to preserve HIP wall and restart rounding.
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  }
   // Rates and walls change fine-cell anisotropy after the last restriction.
   RestrictU(pdrive, stage);
   if (!NeedsCGLLFBoundaryRefresh()) {

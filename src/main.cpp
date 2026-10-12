@@ -232,6 +232,8 @@ int main(int argc, char *argv[]) {
   ParameterInput* pinput = new ParameterInput;
   IOWrapper infile, restartfile;
   // read parameters from restart file
+  bool restart_passive = false;
+  int restart_passive_encoding = -1;
   bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
   if (res_flag) {
     // Check if the path contains "rank_" directory
@@ -261,6 +263,12 @@ int main(int argc, char *argv[]) {
     // read parameters from restart file
     restartfile.Open(restart_file.c_str(),IOWrapper::FileMode::read,single_file_per_rank);
     pinput->LoadFromFile(restartfile, single_file_per_rank);
+    // Capture the payload contract before an input overlay can replace its metadata.
+    restart_passive = pinput->DoesParameterExist("mhd", "passive") &&
+                      pinput->GetBoolean("mhd", "passive");
+    if (pinput->DoesParameterExist("mhd", "passive_restart_encoding")) {
+      restart_passive_encoding = pinput->GetInteger("mhd", "passive_restart_encoding");
+    }
     IOWrapperSizeT headeroffset = restartfile.GetPosition(single_file_per_rank);
   }
 
@@ -273,6 +281,20 @@ int main(int argc, char *argv[]) {
     pinput->CheckBlockNames();
   }
   pinput->ModifyFromCmdline(argc, argv);
+
+  if (res_flag) {
+    const bool passive = pinput->DoesParameterExist("mhd", "passive") &&
+                         pinput->GetBoolean("mhd", "passive");
+    const int encoding = pinput->DoesParameterExist("mhd", "passive_restart_encoding") ?
+        pinput->GetInteger("mhd", "passive_restart_encoding") : -1;
+    if (passive != restart_passive || encoding != restart_passive_encoding ||
+        (passive && (encoding != 1 || pinput->GetString("mhd", "eos") != "cgl")) ||
+        (!passive && encoding != -1)) {
+      std::cout << "### FATAL ERROR: passive restarts require J/A encoding version 1; "
+                << "active and passive checkpoints cannot be interchanged." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   // Dump input parameters and quit if code was run with -n option.
   if (narg_flag) {

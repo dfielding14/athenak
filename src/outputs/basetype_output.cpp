@@ -184,6 +184,12 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
 
 
   for (const auto& variable : variables) {
+    if (variable == "mhd_sgs" && pm->pmb_pack->pmhd != nullptr &&
+        pm->pmb_pack->pmhd->peos->eos_data.passive) {
+      std::cout << "### FATAL ERROR: mhd_sgs requires total energy; "
+                << "passive CGL stores J in that slot." << std::endl;
+      exit(EXIT_FAILURE);
+    }
     // hydro (lab-frame) density
     if (variable.compare("hydro_u_d") == 0 ||
         variable.compare("hydro_u") == 0 ||
@@ -378,7 +384,12 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
         variable.compare("rad_mhd_u") == 0 ||
         variable.compare("rad_mhd_u_bcc") == 0) {
       if (pm->pmb_pack->pmhd->peos->eos_data.is_ideal) {
-        outvars.emplace_back("ener",4,&(pm->pmb_pack->pmhd->u0));
+        auto *pmhd = pm->pmb_pack->pmhd;
+        outvars.emplace_back(pmhd->peos->eos_data.passive ? "cgl_J" : "ener",
+                             IEN, &(pmhd->u0));
+        if (pmhd->peos->eos_data.passive) {
+          outvars.emplace_back("cgl_A", IAN, &(pmhd->u0));
+        }
       }
     }
 

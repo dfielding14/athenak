@@ -980,6 +980,15 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
   // else read name of built-in pgen from <problem> block in input file, and call
   std::string pgen_fun_name = pin->GetOrAddString("problem", "pgen_name", "none");
 
+  auto *pmhd = pmy_mesh_->pmb_pack->pmhd;
+  if (pmhd != nullptr && pmhd->peos->eos_data.passive &&
+      pgen_fun_name != "turb" && pgen_fun_name != "cgl_lf_paper" &&
+      pgen_fun_name != "cgl_passive_validation") {
+    std::cout << "### FATAL ERROR: this problem generator does not initialize "
+              << "passive CGL invariants." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
   if (pgen_fun_name.compare("advection") == 0) {
     Advection(pin, is_restart);
   } else if (pgen_fun_name.compare("cpaw") == 0) {
@@ -992,6 +1001,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     CGLFOFC(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_landau_fluid") == 0) {
     CGLLandauFluid(pin, is_restart);
+  } else if (pgen_fun_name.compare("cgl_passive_validation") == 0) {
+    CGLPassiveValidation(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_lf_paper") == 0) {
     CGLLFPaper(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_lf_sbox") == 0) {

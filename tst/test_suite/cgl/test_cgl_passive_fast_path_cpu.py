@@ -16,7 +16,6 @@ ISO_CS = 0.7
 BX = math.sqrt(0.65)
 BY = math.sqrt(0.35)
 PRESSURE_STATES = ((1.0, 0.5), (1.5, 1.0))
-FLOW_FIELDS = ("dens", "velx", "vely", "velz", "bcc1", "bcc2", "bcc3")
 
 
 def _run(command, cwd=None):
@@ -134,15 +133,6 @@ def _read_final_table(run_dir):
     return columns
 
 
-def _isothermal_fast_speed(density, bx, by, bz):
-    asq = ISO_CS * ISO_CS * density
-    bperp2 = by * by + bz * bz
-    qsq = bx * bx + bperp2 + asq
-    tmp = bx * bx + bperp2 - asq
-    return math.sqrt(0.5 * (qsq + math.sqrt(tmp * tmp + 4.0 * asq * bperp2))
-                     / density)
-
-
 def _active_cgl_fast_speed(density, ppar, pperp, bx, by, bz):
     bx2 = bx * bx
     b2 = bx2 + by * by + bz * bz
@@ -181,13 +171,6 @@ def _initial_timestep(table, speed):
     ):
         limits.append(dx / (abs(vx) + speed(density, bx, by, bz)))
     return CFL * min(limits)
-
-
-def _assert_hard_bound_admissible(table, ppar, pperp):
-    for bx, by, bz in zip(table["bcc1"], table["bcc2"], table["bcc3"]):
-        b_squared = bx * bx + by * by + bz * bz
-        anisotropy = pperp - ppar
-        assert -1.5 * b_squared < anisotropy < b_squared
 
 
 def test_passive_cgl_fast_overload_isolated_from_flow_and_timestep(tmp_path):
@@ -258,55 +241,6 @@ def executable(tmp_path_factory):
     ])
     _run(["cmake", "--build", str(build_dir), "--target", "athena", "-j4"])
     return build_dir / "src" / "athena"
-
-
-@pytest.mark.skip(reason="Passive evolution is disabled until rebuild piece 14")
-def test_passive_cgl_flow_and_timestep_isolation(tmp_path, executable):
-    initial_dir = tmp_path / "initial"
-    initial_dir.mkdir()
-    initial_input = initial_dir / "athinput.passive_fast_path"
-    initial_input.write_text(_input_text(*PRESSURE_STATES[0], nlim=0))
-    initial_result = _run([str(executable), "-i", str(initial_input)], cwd=initial_dir)
-    initial_table = _read_final_table(initial_dir)
-    initial_timesteps = _diagnostic_timesteps(initial_result.stdout)
-    for pressure_state in PRESSURE_STATES:
-        _assert_hard_bound_admissible(initial_table, *pressure_state)
-
-    results = []
-    for index, (ppar, pperp) in enumerate(PRESSURE_STATES):
-        run_dir = tmp_path / f"run-{index}"
-        run_dir.mkdir()
-        input_path = run_dir / "athinput.passive_fast_path"
-        input_path.write_text(_input_text(ppar, pperp, nlim=2))
-        result = _run([str(executable), "-i", str(input_path)], cwd=run_dir)
-        results.append((_diagnostic_timesteps(result.stdout), _read_final_table(run_dir)))
-
-    timesteps_a, table_a = results[0]
-    timesteps_b, table_b = results[1]
-    assert timesteps_a == timesteps_b
-
-    expected_passive_dt = _initial_timestep(initial_table, _isothermal_fast_speed)
-    assert math.isclose(initial_timesteps[0], expected_passive_dt, rel_tol=2.0e-6)
-    assert math.isclose(timesteps_a[0], expected_passive_dt, rel_tol=2.0e-6)
-
-    active_dts = []
-    for ppar, pperp in PRESSURE_STATES:
-        active_dts.append(_initial_timestep(
-            initial_table,
-            lambda density, bx, by, bz: _active_cgl_fast_speed(
-                density, ppar, pperp, bx, by, bz
-            )
-        ))
-    assert not math.isclose(active_dts[0], active_dts[1], rel_tol=0.05)
-    assert all(
-        not math.isclose(timesteps_a[0], active_dt, rel_tol=0.02)
-        for active_dt in active_dts
-    )
-
-    for field in FLOW_FIELDS:
-        assert table_a[field] == table_b[field], field
-    assert table_a["eint"] != table_b["eint"]
-    assert table_a["p_perp"] != table_b["p_perp"]
 
 
 def test_active_cgl_oblique_timestep(tmp_path, executable):

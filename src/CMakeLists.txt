@@ -125,6 +125,7 @@ add_executable(
         pgen/tests/cgl_landau_fluid.cpp
         pgen/tests/cgl_lf_paper.cpp
         pgen/tests/cgl_lf_sbox.cpp
+        pgen/tests/cgl_passive_validation.cpp
         pgen/tests/divb_amr.cpp
         pgen/tests/diffusion.cpp
         pgen/tests/sts_diffusion.cpp

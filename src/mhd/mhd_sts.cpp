@@ -657,6 +657,10 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     peos->CGLMagneticMomentToAnisotropy(u0, bcc0, w0, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
+  if (peos->eos_data.passive) {
+    // Subsequent walls and restarts must decode the stored J/A in the same kernel.
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  }
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "post",
                               STSSweepName(pdrive), "anisotropy", u0);
@@ -693,6 +697,10 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
         ? CGLCollisionMode::full : CGLCollisionMode::walls_only;
     peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_cycle, mode,
                      0, n1m1, 0, n2m1, 0, n3m1);
+  }
+  if (peos->eos_data.passive) {
+    // Use the restart decoder kernel to preserve HIP wall and restart rounding.
+    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   // Synchronize the coarse representation with the final rates/wall update.
   RestrictU(pdrive, stage);

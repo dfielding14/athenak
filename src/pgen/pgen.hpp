@@ -64,6 +64,7 @@ class ProblemGenerator {
   void CGLLandauFluid(ParameterInput *pin, const bool restart);
   void CGLLFPaper(ParameterInput *pin, const bool restart);
   void CGLLFSbox(ParameterInput *pin, const bool restart);
+  void CGLPassiveValidation(ParameterInput *pin, const bool restart);
   void DivBAMR(ParameterInput *pin, const bool restart);
   void Diffusion(ParameterInput *pin, const bool restart);
   void STSDiffusion(ParameterInput *pin, const bool restart);

@@ -102,13 +102,10 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   RequirePositiveCGLParameter("sigma_max", eos_data.sigma_max);
 
   eos_data.passive = pin->GetOrAddBoolean("mhd", "passive", false);
+  eos_data.iso_cs = eos_data.passive ? pin->GetReal("mhd", "iso_sound_speed") : 0.0;
   if (eos_data.passive) {
-    std::cout << "### FATAL ERROR: <mhd>/passive=true is not supported during the "
-              << "CGL surgical rebuild; use passive=false until the passive "
-              << "model is redesigned and qualified." << std::endl;
-    std::exit(EXIT_FAILURE);
+    RequirePositiveCGLParameter("iso_sound_speed", eos_data.iso_cs);
   }
-  eos_data.iso_cs = 0.0;
 
   eos_data.mlim = pin->GetOrAddBoolean("mhd", "mirror_limiter", false);
   eos_data.flim = pin->GetOrAddBoolean("mhd", "firehose_limiter", false);
@@ -181,7 +178,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
 
     // load cell-centered fields into conserved state
     // use input CC fields if only testing floors with FOFC
-    if (only_testfloors) {
+    if (only_testfloors && !eos.passive) {
       u.bx = bcc(m,IBX,k,j,i);
       u.by = bcc(m,IBY,k,j,i);
       u.bz = bcc(m,IBZ,k,j,i);
@@ -193,7 +190,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     }
 
     // Preserve invalid input evidence before local C2P repairs can hide it.
-    if (only_testfloors &&
+    if (only_testfloors && !eos.passive &&
         (!Kokkos::isfinite(u.d) || !Kokkos::isfinite(u.mx) ||
          !Kokkos::isfinite(u.my) || !Kokkos::isfinite(u.mz) ||
          !Kokkos::isfinite(u.e) || !Kokkos::isfinite(u.mu) ||
@@ -201,6 +198,20 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
          !Kokkos::isfinite(u.bz))) {
       fofc_(m,k,j,i) = true;
       sumd++;
+      return;
+    }
+
+    // Passive thermal repairs must not change native isothermal flow/FOFC decisions.
+    if (only_testfloors && eos.passive) {
+      const Real b2 = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+      HydPrim1D w;
+      bool dfloor_used = false;
+      SingleC2P_IsothermalMHD(u, fmax(eos.dfloor, b2/eos.sigma_max), w, dfloor_used);
+      if (dfloor_used) {
+        cons(m,IDN,k,j,i) = u.d;
+        fofc_(m,k,j,i) = true;
+        sumd++;
+      }
       return;
     }
 
@@ -224,6 +235,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       // update counter, reset conserved if floor was hit
       if (dfloor_used) {
         cons(m,IDN,k,j,i) = u.d;
+        if (eos.passive) cons(m,IEN,k,j,i) = u.e;
         cons(m,IAN,k,j,i) = u.mu;
         sumd++;
       }
@@ -233,6 +245,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
         sume++;
       }
       if (bfloor_used) {
+        if (eos.passive) cons(m,IEN,k,j,i) = u.e;
         cons(m,IAN,k,j,i) = u.mu;
       }
 
@@ -381,6 +394,9 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
   const int nscal = pmy_pack->pmhd->nscalars;
   const int nmb = pmy_pack->nmb_thispack;
   const Real bfloor = eos_data.bfloor;
+  const bool passive = eos_data.passive;
+  const bool magnetic_moment = pmy_pack->pmhd->cgl_slot_representation ==
+      mhd::CGLSlotRepresentation::magnetic_moment;
 
   par_for("mhd_p2c", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -400,7 +416,14 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
 
     // call p2c function
     HydCons1D u;
-    SingleP2C_CGLMHD(w, bfloor, u);
+    if (passive) cgl::PassiveP2C(w, bfloor, u);
+    else SingleP2C_CGLMHD(w, bfloor, u);
+    if (passive && magnetic_moment) {
+      const Real bmag = sqrt(SQR(w.bx) + SQR(w.by) + SQR(w.bz));
+      const Real pt = (bmag > bfloor) ? w.pp : TWO_3RDS*w.pp + ONE_3RD*w.e;
+      u.e = 0.5*w.e + w.pp;
+      u.mu = pt/fmax(bmag, bfloor);
+    }
 
     //no need to change pressures here if bfloor was hit as they'll be changed elsewhere
 
@@ -433,9 +456,21 @@ void CGLMHD::CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
   const int nmb = pmy_pack->nmb_thispack;
   const Real pfloor = eos_data.pfloor;
   const Real bfloor = eos_data.bfloor;
+  const bool passive = eos_data.passive;
 
   par_for("mhd_cgl_anis_to_mub", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (passive) {
+      const Real bmag = sqrt(SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i)) +
+                             SQR(bcc(m,IBZ,k,j,i)));
+      Real pp, pt;
+      cgl::PassiveDecode(cons(m,IDN,k,j,i),
+                         {cons(m,IEN,k,j,i), cons(m,IAN,k,j,i)},
+                         fmax(bmag, bfloor), pp, pt);
+      cons(m,IEN,k,j,i) = 0.5*pp + pt;
+      cons(m,IAN,k,j,i) = pt/fmax(bmag, bfloor);
+      return;
+    }
     cons(m,IAN,k,j,i) =
         CGLConservedAnisotropyToMagneticMoment(cons(m,IDN,k,j,i),
                                                cons(m,IM1,k,j,i),
@@ -465,9 +500,26 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
   const int nmb = pmy_pack->nmb_thispack;
   const Real pfloor = eos_data.pfloor;
   const Real bfloor = eos_data.bfloor;
+  const bool passive = eos_data.passive;
 
   par_for("mhd_cgl_mub_to_anis", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+    if (passive) {
+      const Real bmag = sqrt(SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i)) +
+                             SQR(bcc(m,IBZ,k,j,i)));
+      const Real beff = fmax(bmag, bfloor);
+      Real pt = cons(m,IAN,k,j,i)*beff;
+      Real pp = 2.0*(cons(m,IEN,k,j,i) - pt);
+      if (bmag <= bfloor) { pp = TWO_3RDS*cons(m,IEN,k,j,i); pt = pp; }
+      const auto q = cgl::PassiveEncodeFloored(cons(m,IDN,k,j,i),
+                                              fmax(pp, pfloor), fmax(pt, pfloor),
+                                              beff, pfloor);
+      cons(m,IEN,k,j,i) = q.j;
+      cons(m,IAN,k,j,i) = q.a;
+      cgl::PassiveDecode(cons(m,IDN,k,j,i), q, beff,
+                         prim(m,IPR,k,j,i), prim(m,IPP,k,j,i));
+      return;
+    }
     Real total_energy = cons(m,IEN,k,j,i);
     Real anisotropy = 0.0;
     CGLMagneticMomentToConservedAnisotropy(cons(m,IDN,k,j,i),
@@ -543,6 +595,17 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
     }
     SingleCollWalls_CGLMHD(w, eos, backup);
     if (w.e == initial_ppar && w.pp == initial_pperp) return;
+    if (eos.passive) {
+      const Real eint = 0.5*initial_ppar + initial_pperp;
+      const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
+      const auto q = cgl::PassiveWallEncode(w.d, eint, w.pp - w.e, bsqr,
+                                            eos, backup, w.e, w.pp);
+      cons(m,IEN,k,j,i) = q.j;
+      cons(m,IAN,k,j,i) = q.a;
+      prim(m,IPR,k,j,i) = w.e;
+      prim(m,IPP,k,j,i) = w.pp;
+      return;
+    }
     SingleP2C_CGLMHD(w, bfloor, u);
     // Match canonical C2P arithmetic so a wall remains admissible after restart.
     const Real di = 1.0/w.d;

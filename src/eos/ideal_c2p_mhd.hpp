@@ -14,6 +14,7 @@
 #include <limits>
 
 #include "eos/cgl_physics.hpp"
+#include "eos/cgl_passive.hpp"
 
 //----------------------------------------------------------------------------------------
 //! \!fn void SingleC2P_IdealMHD()
@@ -269,6 +270,11 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
                                         HydPrim1D &w, bool &dfloor_used,
                                         bool &efloor_used, bool &tfloor_used,
                                         bool &bfloor_used) {
+  if (eos.passive) {
+    const Real bmag = sqrt(SQR(u.bx) + SQR(u.by) + SQR(u.bz));
+    cgl::PassiveMomentC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used, bmag);
+    return;
+  }
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
@@ -367,6 +373,10 @@ void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
                         HydPrim1D &w,
                         bool &dfloor_used, bool &efloor_used, bool &tfloor_used,
                         bool &bfloor_used) {
+  if (eos.passive) {
+    cgl::PassiveC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used);
+    return;
+  }
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   const Real dfloor_ = fmax(eos.dfloor, bsqr/eos.sigma_max);
   Real pfloor = eos.pfloor;
