@@ -1005,6 +1005,11 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
     t3 = gm[3];
 #endif
 
+    if (!std::isfinite(t0) || !std::isfinite(t1) ||
+        !std::isfinite(t2) || !std::isfinite(t3)) {
+      FatalTurbulenceError("non-finite mass or acceleration integral while normalizing "
+                           "forcing; check the fluid state and forcing field");
+    }
     if (t0 <= 0.0) {
       FatalTurbulenceError("mass integral is not positive while normalizing forcing");
     }
@@ -1067,11 +1072,16 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
     totvol = gm[2];
 #endif
 
-    if (totvol <= 0.0) {
-      FatalTurbulenceError("volume integral is not positive while normalizing forcing");
+    if (!std::isfinite(totvol) || totvol <= 0.0) {
+      FatalTurbulenceError("volume integral must be finite and positive while "
+                           "normalizing forcing");
     }
     Real m0 = t0 / totvol;
     Real m1 = t1 / totvol;
+    if (!std::isfinite(m0) || !std::isfinite(m1)) {
+      FatalTurbulenceError("non-finite forcing normalization integral; "
+                           "check the fluid state and forcing field");
+    }
 
     Real s = 0.0;
     if (normalization == TurbNormalization::edot) {
@@ -1093,6 +1103,9 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
         FatalTurbulenceError(
             "cannot impose non-zero accel_rms with a zero forcing field");
       }
+    }
+    if (!std::isfinite(s)) {
+      FatalTurbulenceError("non-finite forcing normalization scale");
     }
     par_for(
         "force_norm", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
@@ -1511,8 +1524,9 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
 
   if (pdrive != nullptr && stage != pdrive->nexp_stages) return TaskStatus::complete;
 
-  // shortcut: first-order fluid/forcing splitting; use symmetric kicks if higher
-  // coupling accuracy is needed. Normalize against the state being kicked.
+  // Normalize against the state being kicked, after the final fluid update.
+  // shortcut: first-order splitting for smooth forcing; revisit the splitting
+  // only if higher temporal accuracy of the coupled evolution is needed.
   UpdateForcing(pdrive, stage);
   ApplyForcingWithStep(pm->dt);
   return TaskStatus::complete;

@@ -19,6 +19,14 @@ modules/turbulence_driving
 examples/turbulence_driving
 ```
 
+Add `"dollarmath"` to `myst_enable_extensions` in `docs/source/conf.py` so
+the inline `$...$` and display `$$...$$` equations render as mathematics.
+
+If also updating the source-terms overview (`docs/source/modules/srcterms.md`),
+include its existing cooling, frame-tracking, and initial-perturbation page
+and image dependencies from this branch. A partial overlay of that overview
+otherwise leaves broken links in the older Pages tree.
+
 ## Documentation Contract
 
 The module page records the public API, equations, AMR invariants, restart

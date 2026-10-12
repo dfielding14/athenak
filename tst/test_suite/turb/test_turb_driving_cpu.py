@@ -22,7 +22,8 @@ def run_athena(output_dir, input_name, *overrides, restart=None):
     else:
         command.extend(["-r", str(restart)])
     command.extend(overrides)
-    return subprocess.run(command, capture_output=True, text=True, check=False, timeout=60)
+    return subprocess.run(command, capture_output=True, text=True,
+                          check=False, timeout=60)
 
 
 def require_success(result):
@@ -375,7 +376,7 @@ def test_edot_normalization_root(tmp_path, velocity, target):
     assert "normalization check passed" in result.stdout
 
 
-@pytest.mark.parametrize("integrator", ["imex2", "imex2+"])
+@pytest.mark.parametrize("integrator", ["imex2", "imex2+", "imex3"])
 def test_two_fluid_step_power(tmp_path, integrator):
     """Both fluids finish their implicit stages before receiving one common kick."""
     path = forcing_input(tmp_path, "ideal", "ideal")
@@ -402,6 +403,43 @@ def test_invalid_forcing_strength(tmp_path, normalization, target):
     assert result.returncode != 0
 
 
+@pytest.mark.parametrize("normalization", ["edot", "accel_rms"])
+def test_nonfinite_density_is_not_reported_as_zero_force(tmp_path, normalization):
+    """A broken fluid state must be distinguished from a vanishing forcing field."""
+    path = forcing_input(tmp_path, normalization=normalization)
+    path.write_text(path.read_text().replace(
+        "<problem>", "<problem>\nnonfinite_density = true"))
+    result = run_athena(tmp_path / "run", path)
+    assert result.returncode != 0
+    assert "non-finite mass or acceleration integral" in result.stdout + result.stderr
+
+
+def test_nonfinite_work_is_rejected(tmp_path):
+    """Fixed-power normalization cannot propagate a non-finite momentum integral."""
+    path = forcing_input(tmp_path)
+    path.write_text(path.read_text().replace(
+        "<problem>", "<problem>\nnormalization_velocity = nan"))
+    result = run_athena(tmp_path / "run", path)
+    assert result.returncode != 0
+    assert "non-finite forcing normalization integral" in result.stdout + result.stderr
+
+
+def test_driving_window_uses_cycle_start_time(tmp_path):
+    """Start/stop times select full kicks; they do not clip the fluid timestep."""
+    path = forcing_input(tmp_path)
+    path.write_text(path.read_text().replace(
+        "<turb_driving>", "<turb_driving>\ntdriv_start = 0.02\ntdriv_duration = 0.025"))
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "turb_driving/turb_flag=1"))
+    data = np.loadtxt(next(run_dir.glob("*.hydro.hst")))
+    dt = np.diff(data[:, 0])
+    driven = (data[:-1, 0] >= 0.02) & (data[:-1, 0] < 0.045)
+    assert np.any(driven) and np.any(~driven)
+    assert np.any(driven & (data[1:, 0] > 0.045))
+    np.testing.assert_allclose(np.diff(data[:, 6]), 0.1*dt*driven,
+                               rtol=2.0e-10, atol=3.0e-12)
+
+
 def test_dedt_requires_explicit_normalization(tmp_path):
     path = forcing_input(tmp_path)
     path.write_text(path.read_text().replace("normalization  = edot\n", ""))
@@ -420,7 +458,8 @@ def test_relativistic_two_fluid_forcing_is_rejected(tmp_path):
 
 def test_general_relativistic_forcing_is_rejected(tmp_path):
     path = forcing_input(tmp_path)
-    path.write_text(path.read_text() + "\n<coord>\ngeneral_rel = true\nminkowski = true\n")
+    path.write_text(path.read_text() +
+                    "\n<coord>\ngeneral_rel = true\nminkowski = true\n")
     result = run_athena(tmp_path / "run", path)
     assert result.returncode != 0
     assert "does not support general" in result.stdout + result.stderr

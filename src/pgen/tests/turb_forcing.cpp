@@ -9,6 +9,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -25,6 +26,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   const auto &in = pmy_mesh_->mb_indcs;
   auto *turb = pack->pturb;
   const bool check_kick = pin->GetOrAddBoolean("problem", "check_kick", false);
+  const bool nonfinite_density =
+      pin->GetOrAddBoolean("problem", "nonfinite_density", false);
   const Real norm_velocity = pin->GetOrAddReal("problem", "normalization_velocity", 0.0);
   DvceArray5D<Real> states[2], prims[2];
   bool ideal[2], magnetic[2];
@@ -47,8 +50,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     Kokkos::deep_copy(pack->pmhd->b0.x2f, 0.0);
     Kokkos::deep_copy(pack->pmhd->b0.x3f, 1.0);
   }
-  if (count == 0 || ((check_kick || norm_velocity != 0.0) && turb == nullptr)) {
-    std::cerr << "### FATAL ERROR: turb_forcing requires a fluid and forcing for checks\n";
+  if (count == 0 ||
+      ((check_kick || nonfinite_density || norm_velocity != 0.0) && turb == nullptr)) {
+    std::cerr << "### FATAL ERROR: turb_forcing requires a fluid and forcing for checks"
+              << std::endl;
     std::exit(EXIT_FAILURE);
   }
 
@@ -84,6 +89,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
     Kokkos::deep_copy(states[fluid], u);
     if (check_kick) Kokkos::deep_copy(prims[fluid], -3.0);
+  }
+  if (nonfinite_density) {
+    // Exercise normalization diagnostics before primitive recovery can alter the state.
+    auto u = Kokkos::create_mirror_view_and_copy(HostMemSpace(), states[0]);
+    u(0,IDN,in.ks,in.js,in.is) = std::numeric_limits<Real>::quiet_NaN();
+    Kokkos::deep_copy(states[0], u);
+    turb->UpdateForcing(nullptr, 0);
   }
   if (norm_velocity != 0.0) {
     // A single cosine gives an independent normalization check with <cos^2> = 1/2.
@@ -175,8 +187,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
   }
   if (max_error > 2.0e-14 || !std::isfinite(max_error)) {
-    std::cerr << "### FATAL ERROR: forcing kick changed thermal energy/scalar or impulse; "
-              << "max error=" << max_error << std::endl;
+    std::cerr << "### FATAL ERROR: forcing kick changed thermal energy/scalar or impulse;"
+              << " max error=" << max_error << std::endl;
     std::exit(EXIT_FAILURE);
   }
   std::cout << "turb_forcing: " << count << " fluid(s); max kick error=" << max_error

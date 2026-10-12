@@ -238,12 +238,13 @@ constructs a random acceleration field from Fourier modes, removes net momentum 
 forcing pattern, and, for Newtonian fluids, applies one full-timestep kick after the
 final RK fluid update.
 The kick uses conserved density and momentum and adds exactly its kinetic-energy change
-to total energy for an ideal EOS. Coupling to fluid evolution is first order.
+to total energy for an ideal EOS. Coupling to fluid evolution is first order for
+smooth RMS forcing; exact kick work does not establish higher-order accuracy.
 
 | Parameter | Default | Description |
 |-----------|---------|-------------|
-| `nlow`, `nhigh` | `1`, `2` | Inclusive integer wavenumber shell. |
-| `driving_type` | `0` | `0` for isotropic driving; `1` for the alternate parallel/perpendicular weighting path. |
+| `nlow`, `nhigh` | `1`, `3` | Inclusive integer wavenumber shell. |
+| `driving_type` | `0` | `0` for three-dimensional driving; `1` for planar driving. |
 | `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Spectral weights. |
 | `normalization` | `accel_rms` | Fixed RMS acceleration or `edot` for fixed injected power. |
 | `accel_rms` | required for `accel_rms` | Volume-weighted RMS acceleration. |

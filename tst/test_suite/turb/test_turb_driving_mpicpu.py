@@ -29,7 +29,8 @@ def test_amr_localized_driving_under_mpi(tmp_path):
         "-i",
         str(INPUT),
     ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=60)
+    result = subprocess.run(command, capture_output=True, text=True,
+                            check=False, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     output = read_force_blocks(latest_force(output_dir))
     assert max(block["level"] for block in output["blocks"]) > 0
@@ -43,6 +44,7 @@ def test_periodic_power_under_mpi(tmp_path):
     run_dir.mkdir()
     command = ["mpirun", "-np", "2", str(ATHENA), "-d", str(run_dir), "-i", str(path),
                "time/integrator=rk3", "mesh/x1max=1.5"]
-    result = subprocess.run(command, capture_output=True, text=True, check=False, timeout=60)
+    result = subprocess.run(command, capture_output=True, text=True,
+                            check=False, timeout=60)
     assert result.returncode == 0, result.stdout + result.stderr
     assert_step_power(run_dir, "mhd", power=0.2)

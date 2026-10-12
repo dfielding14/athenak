@@ -95,8 +95,8 @@ fluid evolution, which uses first-order splitting.
 
 ## Single-Kick Validation
 
-The 2026-10-12 double-precision validation passed 35 serial regressions and
-two additional two-rank MPI regressions. All three production examples above
+The single-kick double-precision validation passed serial and two-rank MPI
+regressions. All three production examples above
 also ran successfully: both power-controlled cases matched their per-cycle
 energy budgets, and the included-region case retained RMS acceleration 0.3.
 
@@ -120,8 +120,15 @@ is frozen. Halving CFL through 0.4, 0.2, 0.1, and 0.05 gave density/momentum
 self-convergence orders 0.997--1.001 on the same spatial grid; CFL 0.003125
 provided an additional reference. The applied acceleration varied by less
 than $6\times10^{-12}$. This confirms the expected first-order deterministic
-coupling and provides a baseline for a later symmetric-splitting comparison.
+coupling for this smooth fixed-RMS problem.
 It does not establish stochastic convergence or GPU performance.
+
+Strongly compressible validation remains incomplete. Exploratory $64^3$
+hydro and MHD runs with $\gamma=1.00001$, RK3/WENO-Z, fixed-RMS driving
+targeting Mach 5, and CFL 0.3 encountered floor activations and terminated
+before three nominal turnover times. These runs did not isolate the cause
+of failure. Exact work in an individual kick does not guarantee positivity
+or stability of the complete fluid calculation.
 
 ## Earlier Modal-State Benchmark
 
@@ -168,13 +175,18 @@ cd build-turb-tests/src
 python3 -m pytest ../../tst/test_suite/turb/test_turb_driving_cpu.py
 ```
 
+The standard `tst/run_test_suite.py` CPU and MPI runs also build this fixture
+when needed, without replacing the executable used by the other tests.
+
 The turbulence regression tests exercise:
 
 - conserved-state kick work and thermal-energy preservation with stale primitives;
 - per-cycle fixed-power injection for RK1--RK4, including the first cycle;
-- combined two-fluid work and momentum for ImEx2 and ImEx2+;
+- combined two-fluid work and momentum for ImEx2, ImEx2+, and ImEx3;
 - default RMS acceleration and zero-target forcing;
+- cycle-start activation and deactivation of finite driving windows;
 - zero power with opposing flow and cancellation-resistant power normalization;
+- rejection of non-finite density and work integrals before force normalization;
 - fixed-RMS normalization with tiling and inclusion localization;
 - AMR execution with exclusion localization;
 - exact rendered-force and final-history continuation across fixed-grid and AMR restarts;

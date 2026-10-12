@@ -103,6 +103,8 @@ All integrals include physical cell volumes. On AMR meshes this prevents fine
 cells from receiving extra statistical weight solely because they are more
 numerous. For Newtonian fluids, the force is rendered and normalized from the
 current conserved state immediately before its full-timestep kick.
+Non-finite normalization integrals are rejected before scaling, with a
+separate diagnostic from a zero forcing field.
 
 `normalization=accel_rms` is the default. The strength must still be supplied
 explicitly as `accel_rms`; there is no default forcing amplitude. Existing
@@ -144,19 +146,31 @@ This is added to total energy for an ideal EOS; an isothermal EOS does not
 evolve total energy.
 A zero target produces no kick. Fixed-power normalization is a feedback
 prescription: its amplitude depends on the fluid state and the timestep.
-When the unscaled force opposes the flow, the positive root can require a
-large impulse; this mode is not an externally prescribed OU acceleration.
+For positive power, an unscaled force opposing the flow can require a
+finite impulse even as the timestep tends to zero. At zero force-flow
+correlation, the impulse scales as $\sqrt{\Delta t}$. Thus the exact work
+budget does not establish a regular continuous-time limit for this feedback
+prescription; it is not an externally prescribed OU acceleration.
 
 `dedt` and `accel_rms` are mutually exclusive: the selected normalization
 mode requires its target and rejects the other target.
 
 ## Time Integration
 
-The Newtonian driver updates its modal OU state before the time integrator.
-It applies one kick at the final RK stage, after the fluid update and source terms,
-before boundary exchange and primitive recovery. Driving starts on the first
-cycle whose time satisfies `tdriv_start`; it is not skipped merely because
-the cycle number is zero.
+Before RK evolution, the Newtonian driver advances its modal OU state through
+all updates due at the cycle-start time. The resulting realization is held
+for that cycle. It applies one kick at the final RK stage, after the
+cell-centered fluid update and source terms, before boundary exchange and
+primitive recovery.
+
+A cycle is driven when its start time is at least `tdriv_start` and, for
+`turb_flag=1`, less than `tdriv_start + tdriv_duration`. Cycle zero is included
+when it satisfies these conditions. The driver does not shorten timesteps
+at start, stop, or OU update boundaries. An active cycle receives a full
+kick even if it crosses the stopping time; a cycle starting before the
+driving window receives none. Pending OU updates are processed together at
+the next active cycle, retaining the prescribed recurrence and random
+sequence but resolving changes only at cycle boundaries.
 
 The kick uses the current conserved density and momentum, with the full
 timestep $\Delta t$:
@@ -174,11 +188,11 @@ update. In two-fluid calculations, each fluid uses its own conserved state
 and EOS. Removing the mass-weighted mean immediately before the kick also
 gives zero net momentum injection, summed over both fluids when present.
 
-This is first-order operator splitting between forcing and fluid evolution,
-even when the fluid integrator is RK2, RK3, or RK4. Exact kick work does not
-establish higher-order accuracy of the coupled evolution. Symmetric or
-higher-order splitting is deferred. OU updates retain the prescribed
-`dt_update` cadence; their application is resolved at timestep boundaries.
+For smooth fixed-RMS forcing, this single operator-split kick gives
+first-order coupling to fluid evolution, even when the fluid integrator is
+RK2, RK3, or RK4. Exact kick work does not establish higher-order accuracy
+of the coupled evolution, or temporal convergence of the singular
+fixed-power feedback cases described above.
 
 Single-fluid special-relativistic driving keeps its previous scheduling and arithmetic,
 including the first-cycle skip. The Newtonian kick and accuracy statements
