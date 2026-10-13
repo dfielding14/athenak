@@ -7,7 +7,7 @@ ion-neutral fluid states. It supports uniform meshes and adaptive mesh
 refinement (AMR), with three controls intended for localized multiphase
 calculations:
 
-- normalization by fixed energy injection rate or fixed RMS acceleration;
+- normalization by fixed RMS acceleration or fixed energy injection rate;
 - periodic repetition of one forcing realization on spatial tiles;
 - Gaussian inclusion or exclusion of a specified physical region.
 
@@ -16,48 +16,55 @@ in cell arrays. Mesh changes therefore alter only the evaluation geometry.
 
 ## Modal Evolution
 
-For selected wavevectors \(\boldsymbol{k}\), the unnormalized acceleration is
+For selected wavevectors $\boldsymbol{k}$, the unnormalized acceleration is
 
-```{math}
+$$
 \boldsymbol{a}_0(\boldsymbol{x},t)
  = \sum_{\boldsymbol{k}} \operatorname{Re}\left[
  \boldsymbol{A}_{\boldsymbol{k}}(t)
  \exp(i\boldsymbol{k}\cdot\boldsymbol{x})\right].
-```
+$$
 
 At cadence `dt_update`, each complex modal coefficient is updated by an
 Ornstein-Uhlenbeck (OU) recurrence,
 
-```{math}
+$$
 \boldsymbol{A}^{n+1}
 = f_{\rm corr}\boldsymbol{A}^{n}
 + g_{\rm corr}\boldsymbol{\xi}^{n},\qquad
 f_{\rm corr}=\exp(-\Delta t_{\rm update}/t_{\rm corr}),\qquad
 g_{\rm corr}=\sqrt{1-f_{\rm corr}^{2}},
-```
+$$
 
-where \(\boldsymbol{\xi}^{n}\) is a newly generated, projected modal
+where $\boldsymbol{\xi}^{n}$ is a newly generated, projected modal
 innovation. With negligible `tcorr`, each update replaces the previous state
-with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
-`sol_fraction=0` gives compressive forcing.
+with an independent realization. `sol_fraction=1` selects solenoidal modal
+innovations and `sol_fraction=0` selects compressive innovations; spatial
+localization can change these properties of the applied field.
 
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
 
+The modal update cadence and random sequence are independent of the RK stages.
+The actual acceleration is obtained after localization, mass-weighted mean
+removal, and normalization. Its RMS is therefore prescribed in `accel_rms`
+mode, but its temporal statistics are not those of an unmodified Gaussian OU
+field.
+
 ## Tiled Evaluation
 
 `tile_nx`, `tile_ny`, and `tile_nz` specify the number of repetitions in each
 coordinate direction. A count of one disables tiling in that direction. For
-coordinate \(q\),
+coordinate $q$,
 
-```{math}
+$$
 q_{\rm tile} = q - q_{\min}
  - L_{\rm tile}\left\lfloor\frac{q-q_{\min}}{L_{\rm tile}}\right\rfloor,
 \qquad L_{\rm tile}=L/N_{\rm tile}.
-```
+$$
 
-The basis is evaluated at \(q_{\rm tile}\), so every tile receives the same
+The basis is evaluated at $q_{\rm tile}$, so every tile receives the same
 modal realization. Tile counts must be positive and evenly divide the
 root-grid cell count; inactive dimensions require a tile count of one.
 
@@ -66,58 +73,139 @@ root-grid cell count; inactive dimensions require a tile count of one.
 When `localization=include` or `localization=exclude`, positive widths among
 `sigma_x1`, `sigma_x2`, and `sigma_x3` define
 
-```{math}
+$$
 G(\boldsymbol{x}) =
 \exp\left[-\frac{1}{2}\sum_q
 \left(\frac{x_q-\mathrm{center}_{x_q}}{\sigma_{x_q}}\right)^2\right].
-```
+$$
 
 Directions with non-positive widths are omitted. The applied envelope is
-\(W=G\) for `include` and \(W=1-G\) for `exclude`. The driver then removes
+$W=G$ for `include` and $W=1-G$ for `exclude`. The driver then removes
 the mass-weighted mean acceleration,
 
-```{math}
+$$
 \boldsymbol{a} \leftarrow W\boldsymbol{a}_0
 -\frac{\int \rho W\boldsymbol{a}_0\,dV}{\int \rho\,dV}.
-```
+$$
 
 `localization=none` rejects positive `sigma_x*` parameters, and localized
 modes require at least one positive width.
 
 ## Normalization
 
+The normalization modes are shared by Newtonian and special-relativistic
+driving. The full-timestep kick and exact-work guarantees below apply to
+Newtonian hydro and MHD, including ion-neutral fluids. Single-fluid
+special-relativistic driving retains its legacy stage updates; ion-neutral
+turbulence driving requires Newtonian fluids.
+General-relativistic and dynamical-spacetime turbulence driving are unsupported.
+
 All integrals include physical cell volumes. On AMR meshes this prevents fine
 cells from receiving extra statistical weight solely because they are more
-numerous.
+numerous. For Newtonian fluids, the force is rendered from the modal state
+and normalized using the current conserved state immediately before its
+full-timestep kick.
+Non-finite normalization integrals are rejected before scaling, with a
+separate diagnostic from a zero forcing field.
+
+`normalization=accel_rms` is the default. The strength must still be supplied
+explicitly as `accel_rms`; there is no default forcing amplitude. Existing
+power-controlled inputs must specify `normalization=edot` alongside `dedt`.
+
+### RMS Acceleration
+
+With `normalization=accel_rms`, the volume-weighted RMS of the applied
+acceleration is imposed directly:
+
+$$
+a_{\rm rms}^2=\frac{1}{V}\int|\boldsymbol{a}|^2\,dV,\qquad
+s=\frac{a_{\rm rms,target}}{a_{\rm rms}}.
+$$
+
+The resulting work depends on the fluid state and can be positive or
+negative. This mode does not prescribe an energy injection rate.
 
 ### Energy Injection
 
 With `normalization=edot`, `dedt` specifies the target volume-averaged energy
-injection rate. For a scale factor \(s\), the driver evaluates
+injection rate. For Newtonian fluids and a scale factor $s$, the driver evaluates
 
-```{math}
+$$
 m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2\Delta t\,dV,
 \qquad
 m_1=\frac{1}{V}\int \boldsymbol{p}\cdot\boldsymbol{a}\,dV,
-```
+$$
 
-and uses the non-negative solution to
+where $\boldsymbol{p}=\rho\boldsymbol{v}$, and uses the non-negative solution to
 
-```{math}
+$$
 m_0s^2+m_1s=\dot e_{\rm target}.
-```
+$$
 
-### RMS Acceleration
-
-With `normalization=accel_rms`, `accel_rms` is imposed directly:
-
-```{math}
-a_{\rm rms}^2=\frac{1}{V}\int|\boldsymbol{a}|^2\,dV,\qquad
-s=\frac{a_{\rm rms,target}}{a_{\rm rms}}.
-```
+Each Newtonian kick then does work
+$\Delta E_{\rm box}=\texttt{dedt}\,V\Delta t$.
+This is added to total energy for an ideal EOS; an isothermal EOS does not
+evolve total energy.
+A zero target produces no kick. Fixed-power normalization is a feedback
+prescription: its amplitude depends on the fluid state and the timestep.
+For positive power, an unscaled force opposing the flow can require a
+finite impulse even as the timestep tends to zero. At zero force-flow
+correlation, the impulse scales as $\sqrt{\Delta t}$. Thus the exact work
+budget does not establish a regular continuous-time limit for this feedback
+prescription; it is not an externally prescribed OU acceleration.
 
 `dedt` and `accel_rms` are mutually exclusive: the selected normalization
 mode requires its target and rejects the other target.
+
+## Time Integration
+
+Before RK evolution, the Newtonian driver advances its modal OU state through
+all updates due at the cycle-start time. The resulting realization is held
+for that cycle. It applies one kick at the final RK stage, after the
+cell-centered fluid update and source terms, before boundary exchange and
+primitive recovery.
+
+A cycle is driven when its start time is at least `tdriv_start` and, for
+`turb_flag=1`, less than `tdriv_start + tdriv_duration`. Cycle zero is included
+when it satisfies these conditions. The driver does not shorten timesteps
+at start, stop, or OU update boundaries. An active cycle receives a full
+kick even if it crosses the stopping time; a cycle starting before the
+driving window receives none. Pending OU updates are processed together at
+the next active cycle, retaining the prescribed recurrence and random
+sequence but resolving changes only at cycle boundaries.
+
+The kick uses the current conserved density and momentum, with the full
+timestep $\Delta t$:
+
+$$
+\boldsymbol{p}'=\boldsymbol{p}+\rho\boldsymbol{a}\Delta t,\qquad
+E'=E+\boldsymbol{p}\cdot\boldsymbol{a}\Delta t
++\frac12\rho|\boldsymbol{a}|^2\Delta t^2.
+$$
+
+The energy increment is exactly the kinetic-energy change. Density and
+magnetic field are unchanged, so the kick preserves thermal energy to
+roundoff for an ideal EOS. Isothermal fluids receive only the momentum
+update. In two-fluid calculations, each fluid uses its own conserved state
+and EOS. Removing the mass-weighted mean immediately before the kick also
+gives zero net momentum injection, summed over both fluids when present.
+
+For a source integrated within the RK right-hand side, the appropriate equations
+are $d\boldsymbol{p}/dt=\rho\boldsymbol{a}$ and
+$dE/dt=\boldsymbol{p}\cdot\boldsymbol{a}$, evaluated from the RK stage state.
+They contain no quadratic kick term. The finite-kick formula above instead
+requires the conserved momentum immediately before the kick; substituting
+primitives from an earlier state generally changes thermal energy.
+
+For smooth fixed-RMS forcing, this single operator-split kick gives
+first-order coupling to fluid evolution, even when the fluid integrator is
+RK2, RK3, or RK4. Exact kick work does not establish higher-order accuracy
+of the coupled evolution, or temporal convergence of the singular
+fixed-power feedback cases described above.
+
+Single-fluid special-relativistic driving keeps its previous scheduling and arithmetic,
+including the first-cycle skip. The Newtonian kick and accuracy statements
+above do not describe that path.
 
 ## AMR And Restart Invariants
 
@@ -145,9 +233,9 @@ parameter representation on the initial run, so an unchanged restart uses
 the same exact configuration record as the uninterrupted calculation.
 
 MPI reductions use `MPI_ATHENA_REAL`, so the driver source is valid for both
-double and single `Real` builds. Full single-precision executable builds of
-the current upstream tree remain blocked by pre-existing non-turbulence
-sources; see the example validation notes.
+double and single `Real` builds. The tested development checkout did not build
+a complete single-precision executable with AppleClang because of pre-existing
+errors in non-turbulence sources; see the example validation notes.
 
 ## Input Reference
 
@@ -160,7 +248,7 @@ The following keys belong in `<turb_driving>`.
 | `tdriv_duration` | `tcorr` | Duration when `turb_flag=1`. |
 | `tcorr` | `0.0` | OU correlation time; must be non-negative. |
 | `dt_update` | `0.01` | Modal update cadence; must be positive. |
-| `normalization` | `edot` | `edot` or `accel_rms`. |
+| `normalization` | `accel_rms` | `accel_rms` or `edot`; supply the corresponding strength explicitly. |
 | `dedt` | required for `edot` | Target volume-averaged injection rate. |
 | `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
@@ -195,5 +283,5 @@ Three runnable demonstrations are provided under `inputs/hydro/turb_driving/`:
 | `tiled_localized_include.athinput` | Tiled fixed-RMS forcing with a Gaussian inclusion region. |
 | `amr_localized_exclude.athinput` | AMR calculation with a Gaussian exclusion region. |
 
-See {doc}`../examples/turbulence_driving` for commands, measured checks, and
-projections generated from these inputs.
+See {doc}`../examples/turbulence_driving` for commands, verification checks,
+and illustrative projections.

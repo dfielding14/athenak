@@ -29,6 +29,37 @@ def energy_budget(data):
     return total, magnetic, kinetic
 
 
+@pytest.mark.parametrize("mode", ["explicit", "sts"])
+def test_forcing_work_with_current_limited_resistivity(tmp_path, mode):
+    # Ohmic dissipation redistributes energy; only forcing changes the box total.
+    forcing = """
+<turb_driving>
+normalization = edot
+dedt = 0.1
+tcorr = 1
+dt_update = 0.01
+nlow = 1
+nhigh = 2
+rseed = 2718
+<output2>
+file_type = hst
+data_format = %24.16e
+dt = 1e-12
+"""
+    run_model(tmp_path, ["time/integrator=rk3", "time/nlim=4", "time/tlim=1",
+                         "mesh/nx2=16", "meshblock/nx2=16"],
+              mode=mode, extra=forcing)
+    initial, final = read_state(tmp_path, first=True), read_state(tmp_path)
+    e0, b0, _ = energy_budget(initial)
+    e1, b1, _ = energy_budget(final)
+    _, volume, _ = cells(initial)
+    history = np.loadtxt(next(tmp_path.glob("*.mhd.hst")))
+    assert final["cycle"] == 4
+    assert b1 < b0
+    np.testing.assert_allclose(e1 - e0, 0.1 * volume.sum() * history[-1, 0],
+                               rtol=2e-9, atol=2e-12)
+
+
 def exact_forcefree_amplitude(time, k2, q0=3.0, eta0=0.1, eta_max=1.0):
     """Integrate dq/dt=-k^2 eta(q)q analytically, then invert the low-q branch."""
     qs = 1 - math.sqrt(eta0 / eta_max)
