@@ -432,3 +432,38 @@ def test_every_selected_mode_is_nonzero(tmp_path, driving_type):
     result = run_athena(tmp_path / "run", path, "time/nlim=0")
     require_success(result)
     assert "nonzero modes" in result.stdout
+
+
+def test_zero_power_with_opposing_flow(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {})
+    text = path.read_text().replace("pgen_name = turb", "pgen_name = turb_forcing")
+    path.write_text(text[:text.index("<output1>")])
+    result = run_athena(tmp_path / "run", path, "time/nlim=0", "turb_driving/dedt=0")
+    require_success(result)
+    assert "zero power with opposing flow passed" in result.stdout
+
+
+@pytest.mark.parametrize("ifield", [1, 2])
+def test_ion_neutral_initial_magnetic_energy(tmp_path, ifield):
+    """Both Bz profiles initialize total energy from the complete magnetic field."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "problem": f"ifield = {ifield}\nd_i = 1.3\nbeta = 4.0",
+        "output1": "data_format = %24.16e",
+    })
+    text = path.read_text().replace("gamma       = 1.001",
+                                    "gamma       = 1.666666666666667")
+    text = text.replace("integrator = rk2", "integrator = imex2")
+    text = text.replace("d_n = 1.0", "d_n = 2.1")
+    text = text[:text.index("<output2>")]
+    text += ("\n<mhd>\neos = ideal\ngamma = 1.666666666666667\n"
+             "reconstruct = plm\nrsolver = hlle\n"
+             "\n<ion-neutral>\ndrag_coeff = 0.0\n")
+    path.write_text(text)
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/nlim=0"))
+    data = np.atleast_2d(np.loadtxt(next(run_dir.glob("*.mhd.hst"))))
+    gamma = 5.0 / 3.0
+    magnetic_energy = (1.3 + 2.1) / 4.0 * (0.5 if ifield == 1 else 1.0)
+    expected_energy = 1.3 / (gamma * (gamma - 1.0)) + magnetic_energy
+    np.testing.assert_allclose(data[:, 2], 1.3, rtol=2.0e-13)
+    np.testing.assert_allclose(data[:, 6], expected_energy, rtol=2.0e-13)

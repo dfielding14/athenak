@@ -52,6 +52,8 @@ std::string ForcingNormalizationContext(Real time, int cycle, int update,
 }
 
 Real NonnegativeEdotRoot(Real dt, Real field_norm, Real linear_work, Real dedt) {
+  // Zero power disables forcing even when the field opposes the flow.
+  if (dedt == 0.0) return 0.0;
   using Wide = long double;
   Wide quadratic = static_cast<Wide>(dt) * static_cast<Wide>(field_norm);
   Wide linear = static_cast<Wide>(linear_work);
