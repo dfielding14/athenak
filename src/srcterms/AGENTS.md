@@ -94,11 +94,11 @@ Key behaviors (see `turb_driver.cpp`):
 - `turb_flag`: 1 = decaying, 2 = continuously driven.
 
 Tasks:
-- `IncludeInitializeModesTask` inserts mode setup and forcing update into
-  `before_timeintegrator`.
-- `IncludeAddForcingTask` inserts forcing between RK update and source terms.
-  Multistage RK updates add `rho*v.a` only; RK1 and standalone impulses include the
-  exact finite-kick kinetic-energy term.
+- `IncludeInitializeModesTask` evolves the OU state in `before_timeintegrator`.
+- Newtonian `IncludeAddForcingTask` normalizes and applies one exact full-timestep
+  kick after the final fluid/PIC update and before boundary exchange and primitive
+  recovery. This external gas forcing is first-order split from fluid/PIC evolution.
+  The special-relativistic algorithm retains its previous stage treatment.
 
 ### Initial turbulence kick
 If an `<initial_turb>` block exists, `main.cpp` creates a temporary

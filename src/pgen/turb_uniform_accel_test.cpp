@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file turb_uniform_accel_test.cpp
-//! \brief Exercises the production turbulence source update with a uniform force.
+//! \brief Exercises the exact turbulence impulse with a uniform force.
 
 #include <cmath>
 #include <cstdlib>
@@ -26,9 +26,7 @@ Real test_accel_x1 = 0.0;
 Real test_accel_x2 = 0.0;
 Real test_accel_x3 = 0.0;
 
-// This task is enrolled only by this custom problem-generator build.  It runs after
-// the ordinary before-time-integrator tasks, replacing the generated finite-k force
-// register without adding a k=0 option to the production turbulence driver.
+// This test-only task applies a uniform impulse after the unforced fluid step.
 TaskStatus SetManufacturedUniformForce(Driver *pdriver, int stage) {
   (void)pdriver;
   (void)stage;
@@ -56,6 +54,7 @@ TaskStatus SetManufacturedUniformForce(Driver *pdriver, int stage) {
     force(m, 1, k, j, i) = a2;
     force(m, 2, k, j, i) = a3;
   });
+  test_pack->pturb->ApplyImpulse(test_pack->pmesh->dt);
   return TaskStatus::complete;
 }
 
@@ -90,10 +89,9 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::exit(EXIT_FAILURE);
   }
 
-  // Add the override after all physics modules have assembled their ordinary
-  // before-time-integrator tasks.  On a restart the task must be re-enrolled, too.
-  auto task_list = pmbp->tl_map.at("before_timeintegrator");
-  TaskID dependency = task_list->GetIDLastTask();
+  // The ordinary forcing strength is zero in this fixture. Re-enroll on restart.
+  auto task_list = pmbp->tl_map.at("after_timeintegrator");
+  TaskID dependency = task_list->Empty() ? TaskID(0) : task_list->GetIDLastTask();
   task_list->AddTask(SetManufacturedUniformForce, dependency);
   if (restart) return;
 

@@ -1,4 +1,4 @@
-"""Production-path one-cycle invariant for staged turbulence forcing."""
+"""One-cycle uniform-impulse invariant for the turbulence kick helper."""
 
 from __future__ import annotations
 
@@ -12,6 +12,7 @@ import subprocess
 import sys
 
 import numpy as np
+import scripts.utils.athena as athena  # noqa: F401 (run_tests.py build entry)
 
 
 _SOURCE_ROOT = Path(__file__).resolve().parents[3]

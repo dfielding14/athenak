@@ -43,7 +43,9 @@ where:
 
 ### Common Parameters
 - `turb_flag`: 1=decaying turbulence, 2=continuously driven
-- `dedt`: Energy injection rate (energy/time/volume)
+- `constant_edot`: Defaults to `true`; `dedt` is total box power (energy/time).
+  With `false`, the acceleration normalization is $\int |a|^2 dV/2 = \texttt{dedt}$.
+  These are this branch's existing input conventions; no volume factor is added.
 - `tcorr`: Correlation time for amplitude evolution
 - `rseed`: RNG seed for the OU process (non-negative values give reproducible sequences; negative values fall back to the internal default seed = 1).
 - `sol_fraction`: Amplitude-space blend between solenoidal (divergence-free) and compressive components of each Fourier mode (`1.0` = purely solenoidal, `0.0` = purely compressive).
@@ -66,15 +68,29 @@ where:
    - Precompute basis functions (sin/cos arrays)
    - Initialize random amplitudes
 
-2. **Update** (every `dt_turb_update`):
-   - Evolve amplitudes using Ornstein-Uhlenbeck process
-   - Ensure desired power spectrum
-   - Remove net momentum to maintain momentum conservation
+2. **Update** (when the OU cadence requires it):
+   - Evolve the random forcing state before the fluid/PIC integrator.
 
-3. **Force Application** (every timestep):
-   - Compute force field at each cell center
-   - Add to momentum equation source terms
-   - Add corresponding energy source term
+3. **Newtonian force application** (once per eligible timestep, including cycle zero):
+   - Finish the fluid/PIC update, including particle feedback and orbital remapping.
+   - Remove the density-weighted mean acceleration and normalize using that state.
+   - Apply one full-step kick, then use the existing boundary exchange and primitive
+     recovery. Each fluid uses its own density, momentum, and EOS energy guard.
+
+For $m=\rho v$ and $\Delta v=a\Delta t$, the exact kick is
+
+$$
+m'=m+\rho\Delta v,\qquad
+E'=E+m\cdot\Delta v+\tfrac12\rho|\Delta v|^2.
+$$
+
+It preserves thermal energy during the kick. With `constant_edot=true`, the
+integrated work is `dedt*dt`; zero `dedt` gives no kick. This replaces the previous
+RK-stage source integration, which used the linear work $m\cdot a$ correctly as
+an RHS but normalized against a different, full-step map and skipped cycle zero.
+The new external forcing is first-order split from fluid/PIC evolution, including
+VL2. It does not change the particle pusher, Hall induction, or deposited
+particle-to-gas exchange ledger. The special-relativistic path is unchanged.
 
 ## AMR Considerations
 

@@ -207,7 +207,8 @@ def test_driver_uses_three_force_components_for_isotropic_2d() -> None:
     assert "PowerLawAmplitudeExponent(\n" in source
     assert "ShellCompensationExponent<Real>(" in source
     assert "pdrive->nexp_stages == 1" in source
-    assert "ApplyForcingWithStep(bdt, exact_single_stage);" in source
+    assert "ApplyForcingWithStep(pm->dt, true);" in source
+    assert "stage != pdrive->nexp_stages" in source
     assert "ApplyForcingWithStep(kick_dt, true);" in source
 
 
@@ -223,10 +224,11 @@ def test_uniform_acceleration_regression_is_confined_to_custom_pgen() -> None:
     assert "test_accel_x1" not in driver_source
     assert "SetManufacturedUniformForce" not in driver_source
 
-    # The custom pgen replaces only the force register after ordinary force setup;
-    # the stage task still calls the production AddForcing implementation.
-    assert 'tl_map.at("before_timeintegrator")' in pgen_source
+    # The custom pgen supplies a standalone uniform impulse; separate Fourier-force
+    # regressions exercise normalization and the production stage task.
+    assert 'tl_map.at("after_timeintegrator")' in pgen_source
     assert "task_list->GetIDLastTask()" in pgen_source
     assert "task_list->AddTask(SetManufacturedUniformForce" in pgen_source
     assert "test_pack->pturb->force" in pgen_source
     assert "ApplyForcingWithStep" not in pgen_source
+    assert "test_pack->pturb->ApplyImpulse" in pgen_source

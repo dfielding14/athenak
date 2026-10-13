@@ -11,7 +11,7 @@ import subprocess
 import sys
 
 import numpy as np
-import scripts.utils.athena as athena  # noqa: E402
+import scripts.utils.athena as athena  # noqa: F401 (run_tests.py build entry)
 
 _PUBLICATION_DIR = os.path.abspath(
     os.path.join(os.path.dirname(__file__), "..", "..", "publication")
@@ -70,6 +70,13 @@ def _mpi_launcher_available():
 
 def _run(basename, nproc, overrides=()):
     input_path = os.path.join(_SOURCE_ROOT, "inputs", _INPUT)
+    if "particles/pic_cr_hall_mode=full" in overrides:
+        with open(input_path, encoding="utf-8") as stream:
+            text = stream.read().replace(
+                "<particles>", "<particles>\npic_background_ion_q_over_mc = 10")
+        input_path = os.path.join(_exe_dir(), basename + ".athinput")
+        with open(input_path, "w", encoding="utf-8") as stream:
+            stream.write(text)
     command = [
         "./athena", "-i", input_path, "job/basename=" + basename,
         "time/nlim=2", "time/tlim=1.0",
@@ -189,7 +196,9 @@ def _force_metrics(force):
     )
     power = np.sum(np.abs(force_hat)**2, axis=0)
     shell = (wave_squared >= 1.0) & (wave_squared <= 9.0)
-    outside_shell_fraction = float(np.sum(power[~shell])/np.sum(power))
+    # Density-weighted mean removal may add k=0 once density evolves.
+    outside = (~shell) & (wave_squared > 0.0)
+    outside_shell_fraction = float(np.sum(power[outside])/np.sum(power))
 
     indices = [
         {int(round(wave)): n for n, wave in enumerate(axis)}
@@ -203,7 +212,7 @@ def _force_metrics(force):
     peak_power = float(np.max(power))
     for nx, ny, nz in mixed_sign_modes:
         mixed_sign_power.append(
-            float(power[indices[0][nz], indices[1][ny], indices[2][nx]]/
+            float(power[indices[0][nz], indices[1][ny], indices[2][nx]] /
                   peak_power)
         )
     return {
@@ -237,7 +246,9 @@ def _measure(basename):
     mhd_history = _history_rows(basename, "mhd")
     user_history = _history_rows(basename, "user")
     if mhd_history.shape[0] < 3 or user_history.shape[0] < 3:
-        raise RuntimeError("Expected initial, pre-driving, and driven history rows")
+        raise RuntimeError("Expected initial and two driven history rows")
+    total_energy = mhd_history[:, 6] + user_history[:, 10]
+    work_residual = np.diff(total_energy) - 0.06*np.diff(mhd_history[:, 0])
     before_energy = mhd_history[-2, 6] + user_history[-2, 10]
     after_energy = mhd_history[-1, 6] + user_history[-1, 10]
     driven_time = mhd_history[-1, 0] - mhd_history[-2, 0]
@@ -270,6 +281,7 @@ def _measure(basename):
         "forcing_energy_residual": float(
             after_energy - before_energy - expected_energy
         ),
+        "all_cycle_work_residual": float(np.max(np.abs(work_residual))),
         "force": force,
         **_force_metrics(force),
     }
@@ -278,7 +290,7 @@ def _measure(basename):
 def _measure_mhd(basename):
     mhd_history = _history_rows(basename, "mhd")
     if mhd_history.shape[0] < 3:
-        raise RuntimeError("Expected initial, pre-driving, and driven MHD rows")
+        raise RuntimeError("Expected initial and two driven MHD rows")
     energy_increment = mhd_history[-1, 6] - mhd_history[-2, 6]
     driven_time = mhd_history[-1, 0] - mhd_history[-2, 0]
     energy_expected = 0.06*driven_time
@@ -293,6 +305,8 @@ def _measure_mhd(basename):
         "forcing_energy_increment": float(energy_increment),
         "forcing_energy_expected": float(energy_expected),
         "forcing_energy_residual": float(energy_increment - energy_expected),
+        "all_cycle_work_residual": float(np.max(np.abs(
+            np.diff(mhd_history[:, 6]) - 0.06*np.diff(mhd_history[:, 0])))),
         "final_history": mhd_history[-1],
         "force": force,
         **_force_metrics(force),
@@ -347,7 +361,8 @@ def run(**kwargs):
         "MPI parallelism:            ON" in config
         and _mpi_launcher_available()
     )
-    cases = [("np1", 1, ())]
+    cases = [("np1", 1, ()),
+             ("hall_full_np1", 1, ("particles/pic_cr_hall_mode=full",))]
     if mpi_available:
         cases.append(("np2", 2, ()))
     elif "MPI parallelism:            ON" in config:
@@ -448,7 +463,9 @@ def analyze():
         energy_tolerance = max(
             2.0e-9, 5.0e-6*abs(result["forcing_energy_expected"])
         )
-        ok = (abs(result["forcing_energy_residual"]) < energy_tolerance) and ok
+        logger.info("%s all-cycle work residual=% .8e",
+                    label, result["all_cycle_work_residual"])
+        ok = (result["all_cycle_work_residual"] < energy_tolerance) and ok
         # Mesh binary output is float32, so FFT residuals are limited accordingly.
         ok = (result["divergence_ratio"] < 2.0e-7) and ok
         ok = (result["outside_shell_fraction"] < 2.0e-14) and ok
@@ -489,7 +506,9 @@ def analyze():
         energy_tolerance = max(
             2.0e-9, 5.0e-6*abs(result["forcing_energy_expected"])
         )
-        ok = (abs(result["forcing_energy_residual"]) < energy_tolerance) and ok
+        logger.info("%s all-cycle work residual=% .8e",
+                    label, result["all_cycle_work_residual"])
+        ok = (result["all_cycle_work_residual"] < energy_tolerance) and ok
         ok = (result["divergence_ratio"] < 2.0e-7) and ok
         ok = (result["outside_shell_fraction"] < 2.0e-14) and ok
         ok = bool(np.all(result["mixed_sign_relative_power"] > 1.0e-8)) and ok

@@ -524,35 +524,39 @@ void TurbulenceDriver::Initialize() {
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  //  We check for mesh changes, then initialize modes and update the forcing
+  // Check for due OU updates once per cycle, independently of fluid stages.
   auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
   auto id_init   = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
-  auto id_add    = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  if (pmy_pack->pcoord->is_special_relativistic) {
+    tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  }
   return;
 }
 
 //----------------------------------------------------------------------------------------
 //! \fn  void IncludeForcingTasks
-//  \brief includes task in the stage_run task list for adding random forcing to fluid
-//  as an explicit source terms in each stage of integrator
+//  \brief Add forcing before the existing boundary exchange and primitive recovery.
 //  Called by MeshBlockPack::AddPhysics() function
 
 void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start) {
-  // These must be inserted after update task, but before the source terms
-  // We apply the forcing in each step of the time integration,
-  // note that we do not update the forcing in each RK stage
+  // Finish fluid/PIC feedback and orbital remapping before the Newtonian kick.
+  // Retain the separate relativistic algorithm's original stage placement.
+  bool sr = pmy_pack->pcoord->is_special_relativistic;
   if (pmy_pack->pionn == nullptr) {
     if (pmy_pack->phydro != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
+      auto &id = pmy_pack->phydro->id;
+      tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                     sr ? id.rkupdt : id.recvu_oa, sr ? id.srctrms : id.restu);
     }
     if (pmy_pack->pmhd != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->pmhd->id.rkupdt, pmy_pack->pmhd->id.srctrms);
+      auto &id = pmy_pack->pmhd->id;
+      tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                     sr ? id.rkupdt : id.recvu_oa, sr ? id.srctrms : id.restu);
     }
   } else {
-    auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                            pmy_pack->pionn->id.n_rkupdt, pmy_pack->pionn->id.n_flux);
+    // Both fluids must finish their implicit update before the common kick.
+    auto &id = pmy_pack->pionn->id;
+    tl->InsertTask(&TurbulenceDriver::AddForcing, this, id.impl, id.i_restu);
   }
   return;
 }
@@ -812,8 +816,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 // It initializes various parameters and arrays, scales the forcing, and
 // handles momentum and energy updates. Additionally, it supports two-fluid
 // and magnetohydrodynamic (MHD) scenarios.
-// It is called before the time integrator. The acceleration field is fixed
-// for the sub-steps of the RK integrator.
+// Newtonian forcing is normalized against the state immediately before its kick.
 //
 // @param pdrive Pointer to the driver object.
 // @param stage The current stage of the driver.
@@ -892,7 +895,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
 
   // if (global_variable::my_rank == 0) std::cout << " norm_factor = " << norm_factor << std::endl;
 
-  if ((pm->ncycle >=1) && (current_time >= tdriv_start) &&
+  if ((!pmy_pack->pcoord->is_special_relativistic || pm->ncycle >= 1) &&
+      (current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1))
   {
     // Update the forcing and add momentum and energy only if the driving is continuous or t < tdriv_duration
@@ -1123,6 +1127,7 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt, bool exact_impulse) {
     u0_ = (pmy_pack->pmhd->u0);
     w0 = (pmy_pack->phydro->w0);
     w0_ = (pmy_pack->pmhd->w0);
+    peos = pmy_pack->phydro->peos;
     flag_twofl = true;
   }
 
@@ -1134,10 +1139,8 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt, bool exact_impulse) {
   const int nji  = nx2*nx1;
 
   auto eos = peos->eos_data;      // copy-by-value (POD expected)
-  // RK stages integrate the conservative source dE/dt = rho*v.a.  The quadratic
-  // kinetic-energy term belongs only to an exact momentum impulse (including RK1).
-  // Adding it to each multistage RK update does not compose correctly and over-injects
-  // for both explicit midpoint and Heun RK2.
+  bool second_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal;
+  // The separate relativistic path retains its existing stage-source treatment.
   const Real finite_kick_weight = exact_impulse ? 0.5 : 0.0;
 
   if ((current_time >= tdriv_start) &&
@@ -1148,6 +1151,31 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt, bool exact_impulse) {
       Real a1 = force_(m,0,k,j,i);
       Real a2 = force_(m,1,k,j,i);
       Real a3 = force_(m,2,k,j,i);
+
+      if (!flag_relativistic) {
+        Real dv1 = a1*bdt, dv2 = a2*bdt, dv3 = a3*bdt;
+        Real dv_sq = dv1*dv1 + dv2*dv2 + dv3*dv3;
+        Real den = u0(m,IDN,k,j,i);
+        // Use momentum before the kick: dE = m.dv + rho*|dv|^2/2.
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) += u0(m,IM1,k,j,i)*dv1 + u0(m,IM2,k,j,i)*dv2
+                            + u0(m,IM3,k,j,i)*dv3 + 0.5*den*dv_sq;
+        }
+        u0(m,IM1,k,j,i) += den*dv1;
+        u0(m,IM2,k,j,i) += den*dv2;
+        u0(m,IM3,k,j,i) += den*dv3;
+        if (flag_twofl) {
+          den = u0_(m,IDN,k,j,i);
+          if (second_ideal) {
+            u0_(m,IEN,k,j,i) += u0_(m,IM1,k,j,i)*dv1 + u0_(m,IM2,k,j,i)*dv2
+                               + u0_(m,IM3,k,j,i)*dv3 + 0.5*den*dv_sq;
+          }
+          u0_(m,IM1,k,j,i) += den*dv1;
+          u0_(m,IM2,k,j,i) += den*dv2;
+          u0_(m,IM3,k,j,i) += den*dv3;
+        }
+        return;
+      }
 
       Real den = w0(m,IDN,k,j,i);
       auto &ux = w0(m,IVX,k,j,i);
@@ -1436,19 +1464,21 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
 
-  Real dt = pm->dt;
-  Real bdt = dt;
-  if (pdrive != nullptr && stage > 0) {
-    bdt = (pdrive->beta[stage-1]) * dt;
+  if (pmy_pack->pcoord->is_special_relativistic) {
+    Real bdt = pm->dt;
+    if (pdrive != nullptr && stage > 0) bdt *= pdrive->beta[stage-1];
+    const bool exact_single_stage =
+        (pdrive != nullptr && pdrive->nexp_stages == 1);
+    ApplyForcingWithStep(bdt, exact_single_stage);
+    return TaskStatus::complete;
   }
+  if (pdrive != nullptr && stage != pdrive->nexp_stages) return TaskStatus::complete;
 
-  // Forward Euler has no later stage at which v.a can recover the finite kinetic
-  // energy of the momentum update.  Treat that supported one-stage method as an
-  // exact impulse so constant-edot normalization remains consistent.  RK2+ stages
-  // integrate v.a with their tableau and must not receive an extra quadratic term.
-  const bool exact_single_stage =
-      (pdrive != nullptr && pdrive->nexp_stages == 1);
-  ApplyForcingWithStep(bdt, exact_single_stage);
+  // External gas forcing follows the coupled fluid/PIC update. Its work is not
+  // particle feedback and must not enter the deposited particle-exchange ledger.
+  // shortcut: this is first-order splitting of forcing from fluid/PIC evolution.
+  UpdateForcing(pdrive, stage);
+  ApplyForcingWithStep(pm->dt, true);
   return TaskStatus::complete;
 }
 

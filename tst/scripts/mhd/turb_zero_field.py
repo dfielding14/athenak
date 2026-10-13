@@ -1,15 +1,16 @@
-"""Focused regression for <problem>/ifield=0 in the turb pgen."""
+"""Magnetic-field and thermal-energy initialization in the turb pgen."""
 
 import glob
 import logging
 import os
+from pathlib import Path
 import shlex
 import shutil
 import subprocess
 import sys
 
 import numpy as np
-import scripts.utils.athena as athena
+import scripts.utils.athena as athena  # noqa: F401 (run_tests.py build entry)
 
 sys.path.insert(0, '../vis/python')
 import bin_convert_new as bin_convert  # noqa
@@ -46,8 +47,17 @@ def _mpi_launcher_available():
     return bool(_MPIEXEC and shutil.which(_MPIEXEC[0]))
 
 
-def _run(basename, nproc):
-    input_path = '../../' + athena.athena_rel_path + 'inputs/' + _INPUT
+def _run(basename, nproc, ifield=0, twofluid=False):
+    source = Path(__file__).resolve().parents[3] / 'inputs' / _INPUT
+    text = source.read_text().replace('ifield = 0', 'ifield = ' + str(ifield))
+    text = text.replace('variable = mhd_bcc', 'variable = mhd_w_bcc')
+    if twofluid:
+        text = text.replace('integrator = rk2', 'integrator = imex2')
+        text += ('\n<hydro>\neos = ideal\ngamma = 1.6666666666666667\n'
+                 'rsolver = llf\nreconstruct = plm\n'
+                 '<ion-neutral>\ndrag_coeff = 0\n')
+    input_path = str(Path(_exe_dir()) / (basename + '.athinput'))
+    Path(input_path).write_text(text)
     command = ['./athena', '-i', input_path, 'job/basename=' + basename]
     if nproc > 1:
         command = _MPIEXEC + ['-n', str(nproc)] + command
@@ -66,7 +76,7 @@ def _latest(basename, file_id):
     return paths[-1]
 
 
-def _measure(basename):
+def _measure(basename, ifield=0, twofluid=False):
     magnetic = bin_convert.read_binary_as_athdf(
         _latest(basename, 'mhd_bcc'))
     divb = bin_convert.read_binary_as_athdf(
@@ -76,7 +86,17 @@ def _measure(basename):
         raise RuntimeError('Missing user history output for ' + basename)
     with open(user_history, 'r', encoding='utf-8') as stream:
         history_text = stream.read()
+    amplitude = 2.0 if twofluid else np.sqrt(2.0/(5.0/3.0))
+    expected_bz = np.zeros_like(magnetic['bcc3'])
+    if ifield == 1:
+        expected_bz[:] = amplitude*np.sin(2.0*np.pi*magnetic['x1v'])
+    elif ifield == 2:
+        expected_bz[:] = amplitude
     return {
+        'field_error': float(np.max(np.abs(np.stack([
+            magnetic['bcc1'], magnetic['bcc2'], magnetic['bcc3'] - expected_bz])))),
+        'zero_required': ifield == 0,
+        'thermal_error': float(np.max(np.abs(magnetic['eint'] - 0.9))),
         'max_b': max(float(np.max(np.abs(magnetic[name])))
                      for name in ('bcc1', 'bcc2', 'bcc3')),
         'max_divb': float(np.max(np.abs(divb['divb']))),
@@ -107,6 +127,13 @@ def run(**kwargs):
         _remove_outputs(basename)
         _run(basename, nproc)
         _RESULTS[name] = _measure(basename)
+        for ifield in (1, 2):
+            for twofluid in (False, True):
+                label = name + '_field' + str(ifield) + '_two' + str(twofluid)
+                basename = 'TurbField_' + label
+                _remove_outputs(basename)
+                _run(basename, nproc, ifield, twofluid)
+                _RESULTS[label] = _measure(basename, ifield, twofluid)
 
 
 def analyze():
@@ -116,7 +143,12 @@ def analyze():
     for name, result in _RESULTS.items():
         logger.info('%s max_b=% .8e max_divb=% .8e',
                     name, result['max_b'], result['max_divb'])
-        ok = (result['max_b'] == 0.0) and ok
+        logger.info('%s field error=% .8e thermal error=% .8e',
+                    name, result['field_error'], result['thermal_error'])
+        if result['zero_required']:
+            ok = (result['max_b'] == 0.0) and ok
+        ok = (result['field_error'] < 2.0e-7) and ok
+        ok = (result['thermal_error'] < 2.0e-7) and ok
         ok = (result['max_divb'] == 0.0) and ok
         ok = result['history_ok'] and ok
     return ok

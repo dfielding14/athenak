@@ -139,8 +139,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       if (k==ke) {b0.x3f(m,k+1,j,i) = bz;}
 
       if (eos.is_ideal) {
-        Real bz_cc = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
-        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*bz_cc*bz_cc +
+        // The analytic field is independent of z; avoid a neighboring thread's face.
+        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*bz*bz +
            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
            SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
       }
@@ -206,8 +206,8 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       if (k==ke) {b0.x3f(m,k+1,j,i) = bz;}
 
       if (eos.is_ideal) {
-        Real bz_cc = 0.5*(b0.x3f(m,k,j,i) + b0.x3f(m,k+1,j,i));
-        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*bz_cc*bz_cc +
+        // The analytic field is independent of z; avoid a neighboring thread's face.
+        u0(m,IEN,k,j,i) = p0/gm1 + 0.5*bz*bz +
            0.5*(SQR(u0(m,IM1,k,j,i)) + SQR(u0(m,IM2,k,j,i)) +
            SQR(u0(m,IM3,k,j,i)))/u0(m,IDN,k,j,i);
       }
