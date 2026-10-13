@@ -371,9 +371,11 @@ def test_cgl_lf_density_contact_stability(contrast, arithmetic):
         _cleanup()
 
 
-def test_cgl_lf_quantitative_decay_and_diagnostics():
+@pytest.mark.parametrize("integrator", ["rk2", "rk4"])
+def test_cgl_lf_quantitative_decay_and_diagnostics(integrator):
     try:
-        _run("cgl_lf_decay.athinput", "cgl_ci_decay")
+        _run("cgl_lf_decay.athinput", "cgl_ci_decay",
+             f"time/integrator={integrator}")
         history = testutils.athena_read.hst("cgl_ci_decay.mhd.hst")
         _assert_clean_lf_history(history)
         assert history["lf_qprwrk"][-1] > history["lf_qprwrk"][0]
@@ -1538,7 +1540,7 @@ def test_cgl_lf_paper_fixed_edot_normalization_sets_first_cycle_amplitude():
         _cleanup()
 
 
-@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
+@pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3", "rk4"])
 def test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks(integrator):
     try:
         _run_paper("cgl_ci_paper_multicycle_work", "time/nlim=4",
