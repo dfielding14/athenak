@@ -320,8 +320,6 @@ def test_removed_parameter_and_degenerate_spectrum_are_rejected(tmp_path):
 @pytest.mark.parametrize("fluid", ["hydro", "mhd"])
 def test_once_per_step_power(tmp_path, integrator, fluid):
     """One complete kick supplies dedt times box volume on every timestep."""
-    if fluid == "mhd" and integrator == "rk4":
-        pytest.skip("Existing MHD RK4 register updates do not preserve a uniform state")
     path = forcing_input(tmp_path, "ideal" if fluid == "hydro" else None,
                          "ideal" if fluid == "mhd" else None)
     run_dir = tmp_path / "run"
