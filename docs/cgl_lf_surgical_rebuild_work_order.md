@@ -18,8 +18,9 @@ remains open. Piece 15's default-off implementation, passive short-screen criter
 and production cost selection are complete. Piece 14's active-parent bitwise
 comparison failed (details below).
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** Update the passive Tier 3 workflow to the qualified Piece 15 executable,
-cap 32 and safety 0.3, then run fresh to t=14 with the existing [6,14] analysis.
+**Next:** Collect passive Tier 3 simulation `5661298` and its dependent [6,14]
+analysis `5661309`. The submitted workflow uses the qualified Piece 15 executable,
+cap 32 and safety 0.3 for a fresh run to t=14; acceptance awaits their results.
 Speed and scaling take priority over pointwise agreement; strict health remains
 required. Larger refresh/cache and logarithm changes remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
@@ -255,7 +256,8 @@ Piece 15 addresses the reproduced passive pressure loss and active threshold sen
   **The passive milestone is still open:** stress replay `5657268` hits one
   pressure floor at post-LF stage 25/27 near cycle 10312, t=4.396717, safety 0.3.
   This old state is a stress probe, not a current-model physical result. Tier 3
-  is prepared but unlaunched; Piece 15 now passes its short bulk-acceptance screen.
+  simulation `5661298` is submitted after Piece 15's short bulk-acceptance and
+  production cost screens; dependent analysis `5661309` covers [6,14].
 
 - [x] **15 — LF chunking and short passive setting selection.**
   Source `6ea48ac69` adds about 100 production lines, default off, for uniform
