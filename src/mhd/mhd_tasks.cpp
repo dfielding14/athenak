@@ -455,7 +455,7 @@ TaskStatus MHD::InitRecv(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::CopyCons
-//! \brief Simple task list function that copies u0 --> u1, and b0 --> b1 in first stage
+//! \brief Copy the initial state and accumulate the secondary RK4 registers.
 
 TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
   if (stage == 1) {
@@ -463,6 +463,34 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
     Kokkos::deep_copy(DevExeSpace(), b1.x1f, b0.x1f);
     Kokkos::deep_copy(DevExeSpace(), b1.x2f, b0.x2f);
     Kokkos::deep_copy(DevExeSpace(), b1.x3f, b0.x3f);
+  } else if (pdrive->integrator == "rk4") {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int is = indcs.is, ie = indcs.ie;
+    int js = indcs.js, je = indcs.je;
+    int ks = indcs.ks, ke = indcs.ke;
+    int nmb1 = pmy_pack->nmb_thispack - 1;
+    Real delta = pdrive->delta[stage-1];
+    auto u0_ = u0;
+    auto u1_ = u1;
+    auto b0_ = b0;
+    auto b1_ = b1;
+    par_for("rk4_copy_cons", DevExeSpace(), 0, nmb1, 0, nmhd+nscalars-1,
+            ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+      u1_(m,n,k,j,i) += delta*u0_(m,n,k,j,i);
+    });
+    par_for("rk4_copy_b1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x1f(m,k,j,i) += delta*b0_.x1f(m,k,j,i);
+    });
+    par_for("rk4_copy_b2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x2f(m,k,j,i) += delta*b0_.x2f(m,k,j,i);
+    });
+    par_for("rk4_copy_b3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x3f(m,k,j,i) += delta*b0_.x3f(m,k,j,i);
+    });
   }
   return TaskStatus::complete;
 }

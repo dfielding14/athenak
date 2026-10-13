@@ -126,10 +126,7 @@ def run(**kwargs):
     for fluid in ('hydro', 'mhd'):
         for eos in ('ideal', 'isothermal'):
             _case(exe_dir, fluid + '_' + eos, [(fluid, eos)], direct=True)
-        # MHD RK4 has a pre-existing unforced uniform-state defect on this branch.
-        integrators = ('rk1', 'rk2', 'rk3', 'rk4') if fluid == 'hydro' else (
-            'rk1', 'rk2', 'rk3')
-        for integrator in integrators:
+        for integrator in ('rk1', 'rk2', 'rk3', 'rk4'):
             _case(exe_dir, fluid + '_' + integrator, [(fluid, 'ideal')],
                   integrator)
     for hydro_eos in ('ideal', 'isothermal'):
