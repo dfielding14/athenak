@@ -14,9 +14,33 @@ calculations:
 The implementation keeps stochastic state in Fourier coefficient space, not
 in cell arrays. Mesh changes therefore alter only the evaluation geometry.
 
+## Newtonian Kick
+
+The driver applies one full-timestep kick after the final fluid stage, before
+boundary exchange and primitive recovery. It normalizes the acceleration using
+that current conserved state, including on the first cycle. For momentum density
+$\boldsymbol{m}=\rho\boldsymbol{v}$ and $\Delta\boldsymbol{v}=\boldsymbol{a}\Delta t$,
+
+$$
+\boldsymbol{m}'=\boldsymbol{m}+\rho\Delta\boldsymbol{v},\qquad
+\Delta E=\boldsymbol{m}\cdot\Delta\boldsymbol{v}
+          +\frac{1}{2}\rho|\Delta\boldsymbol{v}|^2.
+$$
+
+This is exactly the kinetic-energy change; the kick leaves thermal energy
+unchanged. Each fluid uses its own momentum and energy-equation guard. The
+coupling to fluid evolution remains first order, even with a higher-order RK
+integrator. Single-fluid special relativity retains its separate stage source;
+ion-neutral forcing requires Newtonian fluids, and GR forcing is unsupported.
+
+The cycle-start time determines whether a full kick is active. Start, stop, and
+OU update times do not clip the timestep. Before fluid evolution, the modal OU
+state catches up through all updates due at the cycle start; its seed, cadence,
+and sparse-annulus sampling are unchanged.
+
 ## Modal Evolution
 
-For selected wavevectors \(\boldsymbol{k}\), the unnormalized acceleration is
+For selected wavevectors $\boldsymbol{k}$, the unnormalized acceleration is
 
 ```{math}
 \boldsymbol{a}_0(\boldsymbol{x},t)
@@ -36,7 +60,7 @@ f_{\rm corr}=\exp(-\Delta t_{\rm update}/t_{\rm corr}),\qquad
 g_{\rm corr}=\sqrt{1-f_{\rm corr}^{2}},
 ```
 
-where \(\boldsymbol{\xi}^{n}\) is a newly generated, projected modal
+where $\boldsymbol{\xi}^{n}$ is a newly generated, projected modal
 innovation. With negligible `tcorr`, each update replaces the previous state
 with a white-noise realization. `sol_fraction=1` gives solenoidal forcing and
 `sol_fraction=0` gives compressive forcing.
@@ -145,7 +169,7 @@ npeak = 32
 
 `tile_nx`, `tile_ny`, and `tile_nz` specify the number of repetitions in each
 coordinate direction. A count of one disables tiling in that direction. For
-coordinate \(q\),
+coordinate $q$,
 
 ```{math}
 q_{\rm tile} = q - q_{\min}
@@ -153,7 +177,7 @@ q_{\rm tile} = q - q_{\min}
 \qquad L_{\rm tile}=L/N_{\rm tile}.
 ```
 
-The basis is evaluated at \(q_{\rm tile}\), so every tile receives the same
+The basis is evaluated at $q_{\rm tile}$, so every tile receives the same
 modal realization. Tile counts must be positive and evenly divide the
 root-grid cell count; inactive dimensions require a tile count of one.
 This exact repetition imposes an artificial periodicity at the tile length and
@@ -172,7 +196,7 @@ G(\boldsymbol{x}) =
 ```
 
 Directions with non-positive widths are omitted. The applied envelope is
-\(W=G\) for `include` and \(W=1-G\) for `exclude`. The driver then removes
+$W=G$ for `include` and $W=1-G$ for `exclude`. The driver then removes
 the mass-weighted mean acceleration,
 
 ```{math}
@@ -191,20 +215,25 @@ numerous.
 
 ### Energy Injection
 
-With `normalization=edot`, `dedt` specifies the target volume-averaged energy
-injection rate. For a scale factor \(s\), the driver evaluates
+With `normalization=edot` (the default on this branch), `dedt` specifies the
+target volume-averaged energy injection rate. Each Newtonian kick supplies
+$\Delta E_{\rm box}=\texttt{dedt}\,V\,\Delta t$. For a scale factor $s$,
+the driver evaluates
 
 ```{math}
 m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2\Delta t\,dV,
 \qquad
-m_1=\frac{1}{V}\int \boldsymbol{p}\cdot\boldsymbol{a}\,dV,
+m_1=\frac{1}{V}\int \boldsymbol{m}\cdot\boldsymbol{a}\,dV,
 ```
 
-and uses the non-negative solution to
+For positive `dedt`, it uses the positive solution to
 
 ```{math}
 m_0s^2+m_1s=\dot e_{\rm target}.
 ```
+
+A zero target disables the acceleration, including when the force opposes the
+current flow. Non-finite targets or normalization integrals are rejected.
 
 ### RMS Acceleration
 

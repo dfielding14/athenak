@@ -28,7 +28,7 @@ directory.
 
 ### Constant Energy Injection
 
-`constant_edot_fixed_grid.athinput` uses a \(32^3\) periodic uniform grid and
+`constant_edot_fixed_grid.athinput` uses a $32^3$ periodic uniform grid and
 
 ```text
 normalization = edot
@@ -52,20 +52,24 @@ sigma_x2      = 0.18
 sigma_x3      = 0.28
 ```
 
-The same realization repeats over \(2\times2\times1\) tiles and is
+The same realization repeats over $2\times2\times1$ tiles and is
 concentrated near the origin.
 
 ### Adaptive Excluded Region
 
 `amr_localized_exclude.athinput` uses location-based adaptive refinement
-around the origin, the same \(2\times2\times1\) tile pattern, and
+around the origin, the same $2\times2\times1$ tile pattern, and
 `localization=exclude`. Its refined central region is suppressed while
 driving remains active outside.
 
 ## Projected Acceleration
 
+The figure, measured checks, and implementation timings below predate the
+single-kick port. They document the earlier modal-driver implementation, not
+the current exact per-cycle energy input or its performance.
+
 The figure below is generated from cycle-12 `turb_force` dumps. Each panel
-shows \(L_3^{-1}\int|\boldsymbol{a}|\,dx_3\); the cyan contour in the AMR
+shows $L_3^{-1}\int|\boldsymbol{a}|\,dx_3$; the cyan contour in the AMR
 panel marks the level-0/level-1 interface.
 
 ![Projections of turbulence-driving examples](../_static/turbulence_driving_projections.png)
@@ -79,7 +83,7 @@ Measured checks from the committed inputs are:
 | AMR excluded region | 88 final MeshBlocks at maximum level 1; central/outer projected-amplitude ratio `0.56`. |
 
 The projected-amplitude ratio is the mean within `r < 0.12` divided by the
-mean at `r > 0.32`, where \(r=(x_1^2+x_2^2)^{1/2}\). It is used here only as
+mean at `r > 0.32`, where $r=(x_1^2+x_2^2)^{1/2}$. It is used here only as
 a compact confirmation of the requested spatial selection.
 
 ## Implementation Benchmark
@@ -117,14 +121,26 @@ python vis/python/plot_turbulence_driving_projection.py \
 
 The turbulence regression tests exercise:
 
+- exact Newtonian kick work with deliberately stale primitives and both fluids;
+- full-step power on every cycle for hydro RK1--4 and MHD RK1--3, including the
+  first cycle;
+- 2D sparse-annulus power and restart continuation;
 - fixed-RMS normalization with tiling and inclusion localization;
 - AMR execution with exclusion localization;
 - exact rendered-force continuation across fixed-grid and AMR restarts;
 - MPI execution of the AMR/localized case;
 - rejection of removed parameter names and singular parabolic spectra.
 
-The driver uses precision-correct MPI reductions. The current upstream source
-tree does not build a complete single-precision executable with AppleClang
+MHD RK4 is excluded: the existing register updates do not preserve even an
+unforced uniform state. This port does not change that integrator.
+
+The forcing tests use a dedicated uniform-state fixture, built with
+`-DPROBLEM=tests/turb_forcing`. Their pytest bootstrap builds it automatically
+when the test runner supplies another generator. SGS output tests continue to
+use `-DPROBLEM=turb`; instantaneous-history tests use `built_in_pgens`.
+
+The driver uses precision-correct MPI reductions. The previously tested development
+checkout did not build a complete single-precision executable with AppleClang
 because unchanged coordinate and tabulated-EOS translation units contain
 single-precision type/narrowing errors; those blockers are outside this
 feature.
