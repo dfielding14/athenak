@@ -455,14 +455,15 @@ def test_type_two_matches_unprojected_type_zero(tmp_path):
 
 
 @pytest.mark.parametrize("integrator", ["imex2", "imex3"])
-def test_two_fluid_once_per_step_power(tmp_path, integrator):
+@pytest.mark.parametrize("ifield", [1, 2])
+def test_two_fluid_once_per_step_power(tmp_path, integrator, ifield):
     """Both periodic fluid energies gain dedt*dt*volume once per full step."""
     path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
         "hydro": "gamma = 1.666666666666667",
         "mhd": "eos = ideal\ngamma = 1.666666666666667\n"
                "reconstruct = plm\nrsolver = hlle",
         "ion-neutral": "drag_coeff = 0.0",
-        "problem": "d_n = 1.3\nd_i = 0.7",
+        "problem": f"d_n = 1.3\nd_i = 0.7\nifield = {ifield}",
         "turb_driving": "driving_type = 0\nrseed = 2718\ndedt = 0.1\n"
                         "record_injected_work = false",
         "output1": "data_format = %24.16e",
@@ -477,6 +478,11 @@ def test_two_fluid_once_per_step_power(tmp_path, integrator):
         data = np.loadtxt(history)
         # The inherited periodic cube has unit volume.
         assert data[0, names.index("mass")] == pytest.approx(density, rel=1e-12)
+        magnetic_energy = (2.0 if ifield == 2 else 1.0) if fluid == "mhd" else 0.0
+        assert data[0, names.index("tot-E")] == pytest.approx(
+            0.9*density + magnetic_energy, rel=1e-12)
+        for axis in (1, 2, 3):
+            assert data[0, names.index(f"{axis}-KE")] == 0.0
         times.append(data[:, names.index("time")])
         energies.append(data[:, names.index("tot-E")])
     np.testing.assert_array_equal(*times)
