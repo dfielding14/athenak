@@ -95,6 +95,8 @@ class TurbulenceDriver {
   bool record_injected_work;
 
   void IncludeInitializeModesTask(std::shared_ptr<TaskList> tl, TaskID start);
+  void IncludeAddForcingTask(std::shared_ptr<TaskList> tl);
+  bool UsesStageKick() const;
   TaskStatus InitializeModes(Driver* pdrive, int stage);
   TaskStatus EnsureBasisSize(Driver* pdrive, int stage);
   TaskStatus UpdateForcing(Driver* pdrive, int stage);

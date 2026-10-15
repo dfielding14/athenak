@@ -258,10 +258,11 @@ pressures are not applied to flow momentum.
   the next stage. The pre-sweep uses the displacement at `t` and the
   post-sweep uses `t + dt`.
 - Modal `<turb_driving>` forcing is supported with CGL LF. It applies one
-  full-timestep kick before the RK stages, outside the protected LF
-  magnetic-moment sweep, then refreshes primitives and ghost zones before
-  flux evaluation. The routine strict AMR/restart regression exercises this
-  combined path.
+  full-timestep kick at the final fluid stage, outside the protected LF
+  magnetic-moment sweep. Existing boundary exchange and primitive recovery
+  follow the kick; CGL primitive restriction retains its CT dependency.
+  Coupling remains first-order split. The routine strict AMR/restart regression
+  exercises this combined path.
 
 ## Verification
 
@@ -293,8 +294,9 @@ labels `therm_cgl`, `abs_dp`, `mirror_vol`, `fire_vol`, `hard_vol`, and
 `force_pwr`) in addition to forcing-orientation quantities. Paper inputs
 also enable `record_injected_work`, adding cumulative exact net forcing-source
 work, including the zero-net-momentum projection, as `force_work`. Each full
-kick adds its measured total-energy change before the explicit RK stages. The
-analyzer uses it with conserved `tot-E` to report an active-Delta global
+kick records its measured total-energy change at the final fluid stage for
+active CGL, or its kinetic-energy change for passive CGL without changing J/A.
+The analyzer uses it with conserved `tot-E` to report an active-Delta global
 energy residual. These histories support reduced global
 summaries such as `C_B2`; `.mhd.hst` supplies operator-face heat-flux-cap
 activity and retained snapshots supply spatial diagnostics.

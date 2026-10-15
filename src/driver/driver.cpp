@@ -636,7 +636,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // Execute TaskLists
       // Work before time integrator indicated by "0" in stage
       ExecuteTaskList(pmesh, "before_timeintegrator", 0);
-      if (pmesh->pmb_pack->pturb != nullptr) {
+      if (pmesh->pmb_pack->pturb != nullptr &&
+          !pmesh->pmb_pack->pturb->UsesStageKick()) {
         // The forcing kick changed conserved momenta and energy. Refresh primitives
         // and ghost zones before CopyCons and the first hyperbolic flux evaluation.
         InitBoundaryValuesAndPrimitives(pmesh);

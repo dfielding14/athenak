@@ -94,10 +94,12 @@ state such as the current stage count or CFL buffers.
 `TaskList::InsertTask` splices a task before a target `TaskID` and rewrites downstream
 dependencies to preserve ordering (`src/tasklist/task_list.hpp:197`). For example,
 it can order a new source between a solver update and its next consumer.
-Turbulence forcing uses a dependency chain in `before_timeintegrator`:
-`EnsureBasisSize`, `InitializeModes`, `UpdateForcing`, and `AddForcing`. Its
-full-timestep kick runs once before `CopyCons`, followed by a primitive and
-ghost-zone refresh before the first flux evaluation.
+Newtonian turbulence forcing without radiation runs `EnsureBasisSize` and
+`InitializeModes` in `before_timeintegrator`. `AddForcing` normalizes and applies
+one full-timestep kick only at the final fluid stage, before restriction and the
+existing exchange/recovery. Insertion retains the restriction task's actual
+predecessor, including CT for CGL primitive prolongation. Radiation and
+relativistic paths retain their pre-RK forcing chain and separate refresh.
 
 ### Numerical Relativity Choreography
 `numrel::NumericalRelativity` maintains three queues (start/run/end). Each queued task

@@ -55,11 +55,16 @@ spectrum. The `mks24_alfvenic_perpendicular` policy projects against
 cell-centered `force` field is rendered from those coefficients and the
 current MeshBlock geometry.
 
-The force is normalized and applied once per timestep as a full-`dt` kick before
-`CopyCons`, independent of the RK integrator. Ghost cells and primitive variables
-are refreshed before hyperbolic fluxes. OU coefficients remain fixed between
-`dt_update` boundaries; a step crossing multiple boundaries catches up the OU
-recurrence without applying extra fluid kicks.
+For Newtonian fluids without radiation, modal updates run before RK evolution;
+the force is normalized against the current conserved state and applied once as
+a full-`dt` kick at the final fluid stage. The existing boundary exchange and
+primitive recovery follow the kick, so no separate pre-RK refresh is needed.
+Radiation and relativistic task graphs retain their previous pre-RK scheduling.
+OU coefficients remain fixed between `dt_update` boundaries; due updates are
+processed at cycle start without applying extra fluid kicks. Driving start and
+stop times also use cycle-start time, without shortening a crossing timestep.
+The single kick gives first-order splitting for smooth forcing; moving its
+position does not establish higher temporal accuracy of the coupled evolution.
 
 ## Tiled Evaluation
 
@@ -138,14 +143,15 @@ E'=E+\boldsymbol{p}\cdot\boldsymbol{a}\Delta t
 
 The work uses that fluid's own pre-kick conserved momentum and density, so a
 pure kick preserves thermal energy up to roundoff even when primitives are
-stale. Each fluid's EOS independently controls whether its energy is updated;
-isothermal fluids receive only the momentum increment. The kick leaves magnetic
-fields and the conserved CGL anisotropy unchanged. Net-momentum removal already
-acts on the acceleration before this update.
+stale. Active CGL retains its thermal energy and conserved anisotropy. Isothermal
+fluids receive only the momentum increment; passive CGL also leaves both J/A
+thermodynamic slots unchanged. The kick leaves magnetic fields unchanged.
+Net-momentum removal acts on the acceleration before this update.
 
 With `record_injected_work=true`, each full kick adds its measured total-energy
-change to the cumulative work counter before the RK stages. This diagnostic
-supports a single nonrelativistic ideal/CGL fluid.
+change to the cumulative work counter for an active ideal/CGL fluid, or its
+kinetic-energy change for isothermal/passive CGL. This diagnostic supports a
+single nonrelativistic fluid and does not add work to passive thermodynamics.
 
 ### RMS Acceleration
 
@@ -155,6 +161,9 @@ With `normalization=accel_rms`, `accel_rms` is imposed directly:
 a_{\rm rms}^2=\frac{1}{V}\int|\boldsymbol{a}|^2\,dV,\qquad
 s=\frac{a_{\rm rms,target}}{a_{\rm rms}}.
 ```
+
+This fixes acceleration amplitude, not injected power or the resulting Mach
+number. Work depends on the evolving fluid state and can have either sign.
 
 `dedt` and `accel_rms` are mutually exclusive: the selected normalization
 mode requires its target and rejects the other target.
@@ -180,6 +189,10 @@ the force is regenerated on the restored mesh from the authoritative modal
 state. A checkpoint is rejected if turbulence-driving configuration differs
 from the run reading it. Prototype checkpoint layouts are intentionally not
 supported.
+
+The final-stage kick preserves the existing restart layout. Its changed
+operator ordering does not preserve trajectories from the older pre-RK binary;
+record the executable revision with every continuation.
 
 Real-valued defaults added at runtime are read back from their serialized
 parameter representation on the initial run, so an unchanged restart uses
@@ -216,7 +229,7 @@ The following keys belong in `<turb_driving>`.
 | `isotropic_power_spectrum` | `false` | Apply `expo` to total `abs(k)` for planar driving. |
 | `sol_fraction` | `1.0` | Solenoidal/compressive amplitude blend in `[0,1]`; unused by unprojected driving and required to be 1 for the Alfvénic policy. |
 | `rseed` | `-1` | Positive values select reproducible sequences; zero and negative values use seed 1. |
-| `record_injected_work` | `false` | Restart exact accumulated forcing work for a single nonrelativistic ideal/CGL fluid. |
+| `record_injected_work` | `false` | Restart measured forcing work for one nonrelativistic fluid; kinetic work for isothermal/passive CGL. |
 | `tile_nx`, `tile_ny`, `tile_nz` | `1` | Tile repetitions in each direction. |
 | `localization` | `none` | `none`, `include`, or `exclude`. |
 | `sigma_x1`, `sigma_x2`, `sigma_x3` | `-1.0` | Positive Gaussian widths in active directions. |

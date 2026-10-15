@@ -2,6 +2,7 @@
 
 import struct
 import subprocess
+import sys
 from pathlib import Path
 
 import numpy as np
@@ -11,6 +12,8 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parents[3]
 INPUTS = REPO_ROOT / "tst" / "inputs"
 ATHENA = Path.cwd() / "athena"
+sys.path.insert(0, str(REPO_ROOT / "vis" / "python"))
+import bin_convert  # noqa: E402
 
 
 def run_athena(output_dir, input_name, *overrides, restart=None):
@@ -240,6 +243,10 @@ def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path):
         )
         assert_equal_force_outputs(latest_force(reference_dir), latest_force(resume_dir))
         if name == "turb_driving_edot.athinput":
+            reference = np.loadtxt(next(reference_dir.glob("*.hydro.hst")))[-1]
+            resumed = np.loadtxt(next(resume_dir.glob("*.hydro.hst")))[-1]
+            assert np.all(np.isfinite(reference)) and np.all(np.isfinite(resumed))
+            np.testing.assert_array_equal(reference, resumed)
             incompatible = run_athena(
                 tmp_path / "incompatible_restart",
                 name,
@@ -421,6 +428,45 @@ def test_conservative_forcing_kick(tmp_path, hydro_eos, mhd_eos):
     result = run_athena(tmp_path / "run", path, "time/nlim=0")
     require_success(result)
     assert "max kick error=" in result.stdout
+
+
+@pytest.mark.parametrize("model", ["hydro", "mhd", "active", "passive"])
+@pytest.mark.parametrize("normalization", ["edot", "accel_rms"])
+def test_final_stage_kick_from_uniform_state(tmp_path, model, normalization):
+    """The first cycle is an exact impulse after the uniform RK3 update."""
+    fluid = "hydro" if model == "hydro" else "mhd"
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        fluid: f"eos = {'cgl' if model in ('active', 'passive') else 'ideal'}\n"
+               f"passive = {str(model == 'passive').lower()}\n"
+               "gamma = 1.666666666666667\nrsolver = hlle\niso_sound_speed = 1.0",
+        "turb_driving": f"normalization = {normalization}",
+    })
+    text = path.read_text().replace("<hydro>", f"<{fluid}>")
+    if normalization == "accel_rms":
+        text = text.replace("dedt           = 0.1", "accel_rms = 0.25")
+    if fluid == "mhd":
+        text = text.replace("variable  = hydro_w", "variable  = mhd_w_bcc")
+    path.write_text(text)
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/nlim=1", "time/integrator=rk3"))
+    initial, final = [bin_convert.read_binary(str(path)) for path in sorted(
+        (run_dir / "bin").glob("*.prim.*.bin"))]
+    force = bin_convert.read_binary(str(latest_force(run_dir)))
+    assert initial["cycle"] == 0 and final["cycle"] == force["cycle"] == 1
+    dt = final["time"] - initial["time"]
+    assert dt > 0.0
+    for name, value in final["mb_data"].items():
+        if name in ("velx", "vely", "velz"):
+            axis = ("velx", "vely", "velz").index(name) + 1
+            expected = dt * np.asarray(force["mb_data"][f"force{axis}"])
+        else:
+            expected = initial["mb_data"][name]
+        # Binary fields are stored as float32; the direct kick test uses Real.
+        np.testing.assert_allclose(value, expected, rtol=3e-7, atol=1e-9,
+                                   err_msg=name)
+    if normalization == "accel_rms":
+        assert rms_acceleration(read_force_blocks(latest_force(run_dir))) == (
+            pytest.approx(0.25, rel=2e-6))
 
 
 @pytest.mark.parametrize("driving_type", [1, 2])

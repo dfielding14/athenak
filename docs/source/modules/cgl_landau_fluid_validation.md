@@ -840,8 +840,9 @@ The `cgl_lf_paper` user history stores volume integrals named `mass`,
 `force_work`. `force_pwr` is an instantaneous proxy; `force_work` is the
 cumulative net energy source actually applied by the once-per-cycle forcing kick,
 including its zero-net-momentum projection, when the paper input enables
-`record_injected_work`. Each kick adds its measured total-energy change to this
-accumulator before the explicit RK stages. Form means or fractions
+`record_injected_work`. Each final-stage kick records its measured total-energy
+change for active CGL, or kinetic-energy change for passive CGL without changing
+J/A. Form means or fractions
 using `volume`; for example, `C_B2 = b4*volume/b2^2 - 1`.
 Threshold-volume columns use the selected firehose policy, whereas
 `hard_vol` is safety-only. For active-Delta bundles, `paper-analyze` compares

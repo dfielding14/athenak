@@ -4,6 +4,7 @@ from pathlib import Path
 import shutil
 
 import numpy as np
+import pytest
 
 import test_suite.testutils as testutils
 from test_suite.turb.test_turb_driving_cpu import (
@@ -15,10 +16,11 @@ from test_suite.turb.test_turb_driving_cpu import (
 INPUT_FILE = "../../../inputs/tests/cgl_lf_turb_driving_amr.athinput"
 
 
-def _run(basename, threads):
+def _run(basename, threads, prolong_primitives):
     testutils.mpi_run(
         INPUT_FILE,
-        [f"job/basename={basename}"],
+        [f"job/basename={basename}",
+         f"mesh_refinement/prolong_primitives={str(prolong_primitives).lower()}"],
         threads=threads,
     )
     return (
@@ -49,11 +51,12 @@ def _assert_clean(mhd, user, basename):
     )
 
 
-def test_driven_cgl_lf_amr_is_reproducible_across_mpi_decomposition():
+@pytest.mark.parametrize("prolong_primitives", [False, True])
+def test_driven_cgl_lf_amr_is_reproducible_across_mpi_decomposition(prolong_primitives):
     """Driven strict LF evolution is clean and reduction-stable under MPI."""
     try:
-        single_mhd, single_user = _run("cgl_turb_mpi_single", threads=1)
-        multi_mhd, multi_user = _run("cgl_turb_mpi_four", threads=4)
+        single_mhd, single_user = _run("cgl_turb_mpi_single", 1, prolong_primitives)
+        multi_mhd, multi_user = _run("cgl_turb_mpi_four", 4, prolong_primitives)
         _assert_clean(single_mhd, single_user, "cgl_turb_mpi_single")
         _assert_clean(multi_mhd, multi_user, "cgl_turb_mpi_four")
 

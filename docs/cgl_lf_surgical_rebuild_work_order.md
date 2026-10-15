@@ -17,8 +17,10 @@ recorded scopes. Passive Tier 3 reached t=14 with clean numerical health and the
 [6,14] descriptive analysis; this does not establish turbulent convergence.
 Piece 14's active-parent bitwise comparison remains failed (details below).
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** No numbered rebuild piece remains. The requested time-driven uniform
-refinement callback and separate scaling work remain production extensions;
+**Next:** No numbered rebuild piece remains. The development-driver extension is
+qualified within the scope below; the beta-25 cubic campaign has not been launched.
+The requested time-driven uniform refinement callback and separate scaling work
+remain production extensions;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
 Speed and scaling take priority over pointwise agreement; strict health remains
 required. Larger refresh/cache and logarithm changes remain deferred. The
@@ -30,6 +32,25 @@ Keep the plan's piece numbers; execute forcing (11) immediately after collisions
 (4). The uniform active milestone precedes optional optimization and later models.
 Passive work (14) does not depend on mesh work (12) or optimizations (13).
 Piece 15 addresses the reproduced passive pressure loss and active threshold sensitivity.
+
+**Development-driver extension (2026-10-15):** port development `c082bea1f`'s
+final-stage Newtonian kick, retaining CGL CT ordering and reusing the existing
+exchange/recovery. No forcing defaults or restart layout change. Separately,
+`fb6880acd` fixes the remaining ion-neutral magnetic initialization race, exposed
+by CPU energy/power checks. CPU `5685579` and HIP `5685580` each pass 37 focused
+tests and four-rank passive flow-identity/native-restart checks. Tier 2 `5685581`
+completes all 14 invocations: each binary passes health and bitwise q-mode
+equivalence; three alternating pairs give 58.535→59.204M zone-cycles/s/node
+(+1.14%, individual pairs +1.09–1.24%, full spans 0.31%/0.29%). Work changes
+50.400→50.514 LF evaluations/cycle; amortized whole-step time/RHS falls
+4.798→4.733 ms. No new LF/EOS floor or invalid events; candidate incremental
+energy-minus-injected-work residual is at most 2.85e-14. The original reporting
+failure treated derived `restart_time` as configuration; corrected analysis
+validates it against each native endpoint and reuses the same runs. Coupling
+remains first-order split; long-time statistical accuracy and large-node scaling
+were not requalified. Frozen milestones remain intact. Commands, failed attempts,
+source/binary bindings and results are in the
+[driver workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/driver-final-kick/README.md).
 
 **Working rules**
 

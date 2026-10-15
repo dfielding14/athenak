@@ -19,7 +19,7 @@ The source terms module wires all non-conservative physics into the hydro, MHD, 
 
 ## Runtime Wiring
 1. `Hydro`, `MHD`, and `Radiation` constructors create one `SourceTerms` object per pack. Only the features whose flags appear in the corresponding block are activated.
-2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. It registers one chain in `before_timeintegrator`: `EnsureBasisSize`, `InitializeModes`, `UpdateForcing`, then a full-timestep `AddForcing` kick. The driver refreshes ghost zones and primitives before `CopyCons` and the first RK flux evaluation. Modal OU coefficients advance at `dt_update` boundaries and remain fixed between updates; forcing is applied once per physical timestep for every RK integrator.
+2. `MeshBlockPack::AddPhysics` instantiates a `TurbulenceDriver` when a `<turb_driving>` block is present. For Newtonian fluids without radiation, `EnsureBasisSize` and `InitializeModes` run before RK; `AddForcing` normalizes and applies one full-timestep kick at the final fluid stage, before existing boundary exchange and primitive recovery. Radiation and relativistic task graphs retain their pre-RK kick and separate refresh. Modal OU coefficients advance at `dt_update` boundaries and remain fixed between updates.
 3. Restart output stores the modal coefficients, OU update count, RNG state, and optional accumulated work so a resumed run continues the same forcing stream. The force field is rendered from the restored coefficients.
 
 ## Source Term Families
@@ -109,9 +109,10 @@ Gaussian include/exclude regions.
 For MKS24-oriented CGL runs, `physical_k_shell = true` applies the shell
 bounds to `abs(k)/k_shell_unit`, and `isotropic_power_spectrum = true` applies
 `expo` to total `abs(k)` while retaining planar forcing orientation. With
-`record_injected_work = true`, a single nonrelativistic ideal/CGL fluid also
-restarts and reports the exact accumulated energy supplied by the forcing
-source.
+`record_injected_work = true`, a single nonrelativistic fluid also restarts and
+reports measured forcing work: total-energy change for active ideal/CGL, or
+kinetic-energy change for isothermal/passive CGL. Passive J/A is unchanged by
+the kick. Fixed RMS acceleration prescribes neither power nor Mach number.
 
 Use the canonical parameter and algorithm reference in
 [Turbulence Driving](turbulence_driving.md), and runnable configurations in
@@ -121,8 +122,10 @@ Prototype keys previously documented on this page, including
 `x_turb_scale_height`, are rejected by the current implementation.
 
 For MHD calculations using the CGL Landau-fluid closure, modal driving applies
-its full-timestep kick before the RK stages, outside the dedicated LF split sweep. The
-CGL regression suite includes a strict AMR/restart interaction test for this
+its full-timestep kick at the final fluid stage, outside the dedicated LF split
+sweep. The existing exchange and primitive recovery replace the separate pre-RK
+refresh. This remains first-order operator splitting. The CGL regression suite
+includes a strict AMR/restart interaction test for this
 combined path. The relevant CGL model assumptions are summarized in
 [CGL Method Physics Primer](cgl_mhd_method.md).
 
@@ -130,7 +133,8 @@ combined path. The relevant CGL model assumptions are summarized in
 `SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.
 
 ## Operational Tips
-- Archive `rseed`, `driving_type`, mode bounds, spectral exponents, `dedt`,
+- Archive `rseed`, `driving_type`, mode bounds, spectral exponents, normalization
+  and its `dedt` or `accel_rms` strength,
   `tcorr`, `dt_update`, `record_injected_work`, and any physical-shell
   settings with driven-run results.
 - MKS24-oriented inputs explicitly set `physical_k_shell = true`,

@@ -368,6 +368,28 @@ refresh atomically. Replace the old RK-recurrence test expectation with the
 physical full-kick expectation. Register the small retained `turb_forcing` pgen
 only if needed for the direct work/cadence fixture; do not add a forcing framework.
 
+**Development-driver extension (2026-10-15):** selectively adopt development
+`c082bea1f`'s final-stage Newtonian kick. Keep OU evolution before RK, normalize
+against the live conserved state at the last stage, and reuse that stage's
+exchange/recovery instead of the separate pre-RK refresh. Preserve CGL's CT
+dependency for primitive restriction, passive J/A, injected-work accounting,
+physical mode selection and native restart format. `accel_rms` already exists;
+this changes scheduling, not the forcing options or the first-order split
+accuracy. Radiation and relativistic task graphs retain their prior placement.
+Also port development's remaining ion-neutral initializer fix: compute magnetic
+energy from analytic local Bz, avoiding a read of an uninitialized adjacent face.
+Qualify the analytic final impulse, power, thermal invariance, restart and both
+AMR prolongation modes on CPU/HIP and multiple ranks. Measure the forced Tier 2
+state with independent health/q-mode gates and each binary's own work counts;
+cross-binary trajectories need not match. Unforced Tier 1 cannot exercise this
+change. Keep the frozen milestones intact; the beta-25 campaign remains a plan.
+Completed qualification: CPU/HIP jobs `5685579`/`5685580` each pass 37 focused
+tests and the four-rank passive forced identity/restart gate. Tier 2 `5685581`
+measures +1.14% throughput with +0.23% LF work per cycle over three alternating
+pairs, with independent numerical health and bitwise q-mode equivalence. See the
+work order and [driver record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/driver-final-kick/README.md)
+for the initializer fix, reporting-only recovery, exact scope and retained evidence.
+
 **12. Repair refinement/boundary correctness before compact communication.**
 Refill physical corners after prolongation (`e1b2ecd00`), then synchronize shared
 LF face fluxes near refinement (`a6eef6406`) as separate fixes. Reuse the

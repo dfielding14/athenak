@@ -677,12 +677,48 @@ void TurbulenceDriver::BuildBasis() {
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  //  We check for mesh changes, then initialize modes and update the forcing
   auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
   auto id_init = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
-  auto id_update = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
-  tl->AddTask(&TurbulenceDriver::AddForcing, this, id_update);
+  if (!UsesStageKick()) {
+    auto id_update = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+    tl->AddTask(&TurbulenceDriver::AddForcing, this, id_update);
+  }
   return;
+}
+
+bool TurbulenceDriver::UsesStageKick() const {
+  // shortcut: retain other task graphs' pre-RK forcing until separately qualified.
+  const auto *coord = pmy_pack->pcoord;
+  return pmy_pack->prad == nullptr && !coord->is_special_relativistic &&
+         !coord->is_general_relativistic && !coord->is_dynamical_relativistic;
+}
+
+void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl) {
+  if (!UsesStageKick()) return;
+
+  auto *pm = pmy_pack->pmesh;
+  auto *pmhd = pmy_pack->pmhd;
+  const bool after_ct = pmhd != nullptr && pmhd->peos->eos_data.is_cgl &&
+      pm->multilevel && pm->pmr != nullptr && pm->pmr->prolong_prims;
+  TaskID dependency(0), location(0);
+  if (pmy_pack->pionn != nullptr) {
+    auto &id = pmy_pack->pionn->id;
+    dependency = after_ct ? id.ct : id.impl;
+    location = id.i_restu;
+  } else if (pmhd != nullptr) {
+    auto &id = pmhd->id;
+    dependency = after_ct ? id.recvb_oa : id.recvu_oa;
+    location = id.restu;
+  } else if (pmy_pack->phydro != nullptr) {
+    auto &id = pmy_pack->phydro->id;
+    dependency = id.recvu_oa;
+    location = id.restu;
+  }
+  // CGL primitive restriction must retain its dependency on the CT update.
+  if (tl->InsertTask(&TurbulenceDriver::AddForcing, this, dependency, location)
+      == TaskID(0)) {
+    FatalTurbulenceError("cannot place the forcing kick before fluid restriction");
+  }
 }
 
 //----------------------------------------------------------------------------------------
@@ -1685,6 +1721,11 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     return TaskStatus::complete;
   }
 
+  if (UsesStageKick()) {
+    if (pdrive != nullptr && stage != pdrive->nexp_stages) return TaskStatus::complete;
+    // Normalize against the conserved state receiving the full-timestep kick.
+    UpdateForcing(pdrive, stage);
+  }
   const Real bdt = pm->dt;
 
   Real forcing_energy_before = 0.0;

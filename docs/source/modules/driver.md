@@ -40,9 +40,10 @@ while time, cycle count, and optional wall-clock limits permit
   `before_timeintegrator` @ stage 0, then for each explicit stage
   `before_stagen`, `stagen`, `after_stagen`, and finally
   `after_timeintegrator` @ stage 1 ([src/driver/driver.cpp:384]).
-- When turbulence driving is enabled, `before_timeintegrator` applies one
-  full-timestep forcing kick. `InitBoundaryValuesAndPrimitives` refreshes the
-  changed state before `CopyCons` and the first RK flux evaluation.
+- Newtonian turbulence driving without radiation updates OU modes before RK and
+  applies one full-timestep kick at the final fluid stage. Existing stage exchange
+  and primitive recovery handle the changed state. Radiation and relativistic
+  paths retain their pre-RK kick and `InitBoundaryValuesAndPrimitives` refresh.
 - Updates conserved time/cycle counters and the running meshblock / particle statistics
   ([src/driver/driver.cpp:396]).
 - Triggers outputs when either their cadence `dt` or `dcycle` threshold is met
