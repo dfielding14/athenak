@@ -430,13 +430,14 @@ def test_conservative_forcing_kick(tmp_path, hydro_eos, mhd_eos):
     assert "max kick error=" in result.stdout
 
 
-@pytest.mark.parametrize("model", ["hydro", "mhd", "active", "passive"])
+@pytest.mark.parametrize("model", ["hydro", "mhd", "isothermal", "active", "passive"])
 @pytest.mark.parametrize("normalization", ["edot", "accel_rms"])
 def test_final_stage_kick_from_uniform_state(tmp_path, model, normalization):
     """The first cycle is an exact impulse after the uniform RK3 update."""
     fluid = "hydro" if model == "hydro" else "mhd"
+    eos = {"active": "cgl", "passive": "cgl", "isothermal": "isothermal"}.get(model, "ideal")
     path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
-        fluid: f"eos = {'cgl' if model in ('active', 'passive') else 'ideal'}\n"
+        fluid: f"eos = {eos}\n"
                f"passive = {str(model == 'passive').lower()}\n"
                "gamma = 1.666666666666667\nrsolver = hlle\niso_sound_speed = 1.0",
         "turb_driving": f"normalization = {normalization}",
@@ -455,6 +456,8 @@ def test_final_stage_kick_from_uniform_state(tmp_path, model, normalization):
     assert initial["cycle"] == 0 and final["cycle"] == force["cycle"] == 1
     dt = final["time"] - initial["time"]
     assert dt > 0.0
+    if model == "isothermal":
+        assert dt == pytest.approx(0.3 / (16 * np.sqrt(3.0)), rel=1e-12)
     for name, value in final["mb_data"].items():
         if name in ("velx", "vely", "velz"):
             axis = ("velx", "vely", "velz").index(name) + 1

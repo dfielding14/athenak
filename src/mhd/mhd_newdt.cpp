@@ -164,13 +164,13 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
       // timestep in Newtonian MHD
       } else {
         const Real w_d = w0_(m,IDN,k,j,i);
-        const Real w_e = w0_(m,IPR,k,j,i);
-        const Real w_p = w0_(m,IPP,k,j,i);
         const Real w_bx = bcc0_(m,IBX,k,j,i);
         const Real w_by = bcc0_(m,IBY,k,j,i);
         const Real w_bz = bcc0_(m,IBZ,k,j,i);
         Real cf;
         if (eos.is_cgl && !eos.passive) {
+          const Real w_e = w0_(m,IPR,k,j,i);
+          const Real w_p = w0_(m,IPP,k,j,i);
           cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bx, w_by, w_bz, eos.bfloor);
           max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
           cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_by, w_bz, w_bx, eos.bfloor);
