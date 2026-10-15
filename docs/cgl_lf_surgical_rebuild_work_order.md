@@ -12,15 +12,14 @@ Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the complete
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
-**Status:** pieces 0–14 are implemented and qualified within their recorded
-scopes. The frozen active milestone is complete; the passive turbulent milestone
-remains open. Piece 15's default-off implementation, passive short-screen criteria
-and production cost selection are complete. Piece 14's active-parent bitwise
-comparison failed (details below).
+**Status:** pieces 0–15 and both uniform-grid milestones are complete within their
+recorded scopes. Passive Tier 3 reached t=14 with clean numerical health and the
+[6,14] descriptive analysis; this does not establish turbulent convergence.
+Piece 14's active-parent bitwise comparison remains failed (details below).
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** Collect passive Tier 3 simulation `5661298` and its dependent [6,14]
-analysis `5661309`. The submitted workflow uses the qualified Piece 15 executable,
-cap 32 and safety 0.3 for a fresh run to t=14; acceptance awaits their results.
+**Next:** No numbered rebuild piece remains. The requested time-driven uniform
+refinement callback and separate scaling work remain production extensions;
+passive/chunked LF on AMR and active chunk accuracy need separate qualification.
 Speed and scaling take priority over pointwise agreement; strict health remains
 required. Larger refresh/cache and logarithm changes remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
@@ -253,11 +252,20 @@ Piece 15 addresses the reproduced passive pressure loss and active threshold sen
   `5657582` confirms identical loading, then pressure differences of order 1e-13
   after one cycle and 1e-12 after four. Piece 15 identifies the onset's local
   amplification; the earliest arithmetic source remains unresolved.
-  **The passive milestone is still open:** stress replay `5657268` hits one
+  The retained unchunked stress replay `5657268` hits one
   pressure floor at post-LF stage 25/27 near cycle 10312, t=4.396717, safety 0.3.
   This old state is a stress probe, not a current-model physical result. Tier 3
-  simulation `5661298` is submitted after Piece 15's short bulk-acceptance and
-  production cost screens; dependent analysis `5661309` covers [6,14].
+  **milestone is complete:** simulation `5661298` reaches t=14 in 37,848 cycles
+  at cap 32/safety 0.3, with zero LF floor/invalid or EOS repair events.
+  Cost including initialization and canonical I/O is 6.807 node-hours;
+  5,233,998 LF evaluations average 138.290/cycle. Analysis `5661309` delivers
+  [6,14], four time blocks and the reviewed figure groups. Active/passive
+  magnetic fluctuation amplitudes are similar, while passive field-aligned strain
+  is 2.35 times larger. Different thermal models and chunk settings limit causal
+  attribution; the thermal state is not stationary. The
+  [passive milestone record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece14/TIER3.md)
+  retains health, costs, physical findings and the t≈6 checkpoint; this checkpoint
+  does not automatically replace a qualified Tier 2 control.
 
 - [x] **15 — LF chunking and short passive setting selection.**
   Source `6ea48ac69` adds about 100 production lines, default off, for uniform
@@ -290,8 +298,9 @@ Piece 15 addresses the reproduced passive pressure loss and active threshold sen
   119.029 versus 411.286 RHS/cycle; all eight q-off/full-q endpoints match in
   physical state and non-q ledgers. The initial runner's q-counter assertion
   failure is retained; completed full-q companions from `5659159` were reused.
-  Full turbulent acceptance remains with passive Tier 3. Active chunk accuracy,
-  AMR and scaling remain separate. Measurements and limitations are in the
+  Passive Tier 3 now completes the numerical milestone at this setting; long-time
+  turbulent accuracy, active chunk accuracy, AMR and scaling remain separate.
+  Measurements and limitations are in the
   [Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md).
 
 **Measurement and acceptance**

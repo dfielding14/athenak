@@ -479,8 +479,11 @@ passive speedup; turbulent threshold accuracy remains unresolved.
 The retained depleted-pressure replay `5657268` still fails at safety 0.3:
 cycle 10312, t approximately 4.396717, post-LF stage 25/27, one pressure-floor
 event. Its old checkpoint is a stress state, not a current-model physical result.
-Piece 15's short continuation and production cost screens now select cap 32
-without relaxing strict checks; use it for the next passive Tier 3 run.
+Piece 15's short continuation and production cost screens select cap 32
+without relaxing strict checks. The fresh passive Tier 3 run `5661298` subsequently
+reaches t=14 with zero LF floor/invalid or EOS repair events; analysis `5661309`
+completes the descriptive [6,14] comparison. The milestone is complete within
+this numerical-health scope; the work order records cost and physical findings.
 Workspace `analysis/piece14/README.md` retains the qualification and measurements.
 
 **15. LF interval refinement: implemented; passive milestone setting selected.**
@@ -581,9 +584,10 @@ counts over all 41 cycles fall from 88.098 to 12.317/cycle. All eight q-off endp
 their full-q physical state, forcing/RNG and non-q ledgers exactly. The job
 reuses `5659159`'s full-q companions after correcting only an external runner
 assertion about the intentional q-diagnostic reset; the failed job is retained.
-Select cap 32 at safety 0.3 for the fresh passive Tier 3 run. This is a practical
-setting selected on a short stress window; stationary and spatial turbulent
-statistics remain unqualified. Active chunk qualification, AMR
+Cap 32 at safety 0.3 also completes the fresh passive Tier 3 run to t=14 in
+6.807 node-hours including I/O. This extends its clean-health evidence beyond
+the short stress window; stationary and spatial turbulent statistics remain
+unqualified. Active chunk qualification, AMR
 support and many-node scaling remain separate; the production default stays off.
 
 ## Deferred work
@@ -779,12 +783,13 @@ LF refinement. Piece 15 now provides independent LF interval refinement;
 a small smooth test or clean termination does not establish turbulent accuracy.
 Do not relabel the active kinematic fixture as a passive
 test: the current passive guard requires dynamic evolution.
-Run the Tier 3 matched passive member to t=14 at this milestone. Piece 14
-qualified the model but reproduced the depleted-pressure failure; this run
-now uses Piece 15's selected cap 32 at safety 0.3 for the fresh run and existing
-[6,14] analysis, including retained spatial figures.
-Update the separate workflow in workspace `analysis/piece14/TIER3.md` to that
-setting before launch; the frozen active artifacts remain intact.
+The Tier 3 passive member `5661298` completed t=14 using Piece 15's selected cap
+32 at safety 0.3. Analysis `5661309` covers [6,14], including the retained spatial
+figures. This closes the milestone after Piece 14 qualified the model but
+reproduced the old depleted-pressure failure without chunking. The separate
+workspace record `analysis/piece14/TIER3.md` gives health, cost and finite-window
+physical findings. The frozen active artifacts remain intact; active chunking
+is off, so this is not a comparison at matched LF settings.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
