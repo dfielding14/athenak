@@ -91,7 +91,7 @@ def test_cgl_amr_projection_rejects_nonfinite_magnetic_fields(tmp_path):
 
     finite = _run([str(executable), "finite"], cwd=tmp_path)
     assert "CGL AMR finite projection checks passed" in finite.stdout
-    assert "CGL AMR canonical wall encoding checks passed" in finite.stdout
+    assert "CGL AMR canonical encoding checks passed" in finite.stdout
     assert "CGL AMR representable pressure-floor checks passed" in finite.stdout
     for mode in ("nan-component", "infinite-component", "overflowed-magnitude"):
         rejected = _run([str(executable), mode], cwd=tmp_path, check=False)

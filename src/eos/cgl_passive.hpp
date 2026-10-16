@@ -32,12 +32,11 @@ void PassiveDecode(const Real rho, const PassivePair q, const Real bmag,
                     Real &ppar, Real &pperp) {
   const Real logr = log(rho), logb = log(bmag);
   const Real j = q.j/rho;
-  // Wall encoding and canonical C2P must use the same HIP contraction order.
+  // Encoding checks and canonical C2P must use the same HIP contraction order.
   const Real log_ppar = Kokkos::fma(static_cast<Real>(-2.0), logb,
                                   Kokkos::fma(static_cast<Real>(3.0), logr, j));
   ppar = exp(log_ppar);
-  // Preserve exact isotropy even when B is tiny, so roundoff cannot create a
-  // spurious fluid-firehose violation at an isotropic low-field state.
+  // Preserve exact isotropy even when B is tiny.
   if (q.a == rho*(2.0*logr - 3.0*logb)) {
     pperp = ppar;
   } else {
@@ -155,42 +154,6 @@ void PassiveMomentC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
   if (efloor_used) {
     u.e = 0.5*w.e + w.pp;
     u.mu = w.pp/beff;
-  }
-}
-
-// Re-encoding a boundary pressure can round outside the hard wall. Bisect the
-// physical anisotropy toward exact isotropy at fixed thermal U until both
-// conserved coordinates decode inside. Rates/walls call this only after a change.
-KOKKOS_INLINE_FUNCTION
-PassivePair PassiveWallEncode(const Real rho, const Real eint, const Real delta,
-                               const Real bsqr, const EOS_Data &eos,
-                               const bool backup, Real &ppar, Real &pperp) {
-  const Real bmag = fmax(sqrt(bsqr), eos.bfloor);
-  const Real piso = TWO_3RDS*eint;
-  Real trial = delta, outside = delta, inside = 0.0;
-  PassivePair q;
-  PassivePair best = PassiveEncodeFloored(rho, fmax(piso, eos.pfloor),
-                                           fmax(piso, eos.pfloor), bmag, eos.pfloor);
-  bool first = true;
-  while (true) {
-    const Real pp = piso - TWO_3RDS*trial;
-    const Real pt = piso + ONE_3RD*trial;
-    q = PassiveEncodeFloored(rho, fmax(pp, eos.pfloor), fmax(pt, eos.pfloor),
-                             bmag, eos.pfloor);
-    PassiveDecode(rho, q, bmag, ppar, pperp);
-    if (!HardBoundViolated(pperp - ppar, bsqr, eos, backup)) {
-      if (first) return q;
-      inside = trial;
-      best = q;
-    } else {
-      outside = trial;
-    }
-    first = false;
-    trial = 0.5*inside + 0.5*outside;
-    if (trial == inside || trial == outside) {
-      PassiveDecode(rho, best, bmag, ppar, pperp);
-      return best;
-    }
   }
 }
 

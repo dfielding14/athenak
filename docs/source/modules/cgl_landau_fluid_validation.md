@@ -800,13 +800,13 @@ With LF active, normal MHD history output appends cumulative counters:
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
 `lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, `lf_qpewrk`, and
 `lf_hwproj`. Strict checks reject floors and nonfinite/nonpositive states at
-each stage, and require admissible walls at operator checkpoints. Intermediate
-wall crossings are counted in `lf_hardbd`; these do not alone abort a sweep.
+each stage and operator checkpoint. Threshold crossings are counted in
+`lf_hardbd`; finite backup residuals do not abort a sweep or completed cycle.
 `lf_mirror` and `lf_firehs` count soft-threshold occupancy with the configured
-numeric thresholds. The mandatory fluid-firehose wall is always checked;
-optional backup walls are checked only when enabled. `lf_hwproj` is retained
+numeric thresholds. `lf_hardbd` records excursions beyond the fluid-firehose
+threshold and any configured backup bounds; no exact clamp follows. `lf_hwproj` is retained
 for history/restart compatibility with the former C2P hardwall projection;
-the new scheduled collision/wall operator does not increment that legacy counter.
+the finite-relaxation operator does not increment that legacy counter.
 The `lf_q*` columns record
 owned LF operator faces and parallel/perpendicular pre-cap flux ratios above
 `q_max` and `10*q_max`; shared MeshBlock faces are counted once and
@@ -825,7 +825,7 @@ Threshold-sensitive tests specify positive B^2/2 coefficients: firehose 2
 and mirror 1 by default. Legacy `parallel`/`oblique` map to 2/1.4 respectively.
 `limiter_hardwall=true` is rejected; migrated stiff-relaxation decks explicitly
 set their rate. Validate the finite-rate map and once-per-cycle cadence, then
-check wall encoding through a separate production C2P and an actual restart.
+check finite-backup encoding through a separate production C2P and an actual restart.
 The [rebuild work order](../../cgl_lf_surgical_rebuild_work_order.md) records
 current qualification; historical evidence below retains its original model.
 

@@ -112,7 +112,7 @@ class CGLLandauFluid {
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
                            int dfloor_delta, int pfloor_delta,
                            const char *sweep_name, int stage, int nstages,
-                           bool wall_checkpoint = false);
+                           bool split_checkpoint = false);
   bool ProfileEnabled() const {return profile_enabled_;}
   void AddProfileTime(CGLLFProfileBucket bucket, Real seconds);
   void ReportProfile(const char *context) const;

@@ -9,7 +9,7 @@ workflows, use [CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md).
 
 | Area | Primary files | Role |
 | --- | --- | --- |
-| CGL EOS and primitive recovery | `src/eos/cgl_mhd.cpp`, `src/eos/ideal_c2p_mhd.hpp`, `src/eos/cgl_physics.hpp` | CGL pressure recovery, conserved anisotropy, hard-wall projection, limiter predicates, heat-flux ratio helpers. |
+| CGL EOS and primitive recovery | `src/eos/cgl_mhd.cpp`, `src/eos/ideal_c2p_mhd.hpp`, `src/eos/cgl_physics.hpp` | CGL pressure recovery, conserved anisotropy, finite backup relaxation, limiter predicates, heat-flux ratio helpers. |
 | LF parabolic operator | `src/diffusion/cgl_landau_fluid.hpp`, `src/diffusion/cgl_landau_fluid.cpp`, `src/diffusion/cgl_landau_fluid_arithmetic.hpp` | Runtime parsing, face-state construction, LF heat-flux kernels, diagnostics, profiling, safe arithmetic. |
 | MHD integration | `src/mhd/mhd.cpp`, `src/mhd/mhd_tasks.cpp`, `src/mhd/mhd_sts.cpp`, `src/mhd/rsolvers/hlle_cgl.hpp` | Construction, task graph, STS sweep lifecycle, passive/active CGL fluxes, LF-only fast paths. |
 | Diagnostics and tests | `src/outputs/history.cpp`, `src/pgen/tests/cgl_landau_fluid.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `tst/scripts/cgl/`, `tst/test_suite/cgl/` | History columns, quantitative LF pgen, reduced paper pgen, regression workflows. |
@@ -91,16 +91,13 @@ For STS LF transport, MHD owns the split lifecycle:
 7. `EndCGLLandauFluidSTSSweep` converts `IAN` back to conserved anisotropy
    and refreshes both cached pressures from the stored E/A state.
 
-`CGLCollisions` applies walls after RK for every CGL configuration. Without
-split LF it also applies rates with the full cycle timestep.
-`STSPostSweepCGLCollisions` applies walls after every CGL parabolic sweep.
-For non-LF STS processes, such as viscosity or resistivity, both sweep
-checkpoints use `walls_only`; rates remain in the post-RK hook. With split LF,
-A is restored first, and the post-sweep checkpoint applies full-step rates
-before walls. The driver also invokes that LF post checkpoint when the
-post-sweep has no stages. Each sweep checkpoint follows the final field and
-primitive refresh. Both collision hooks refresh coarse state after their
-updates, and the post-sweep timestep estimate uses the corrected state.
+`CGLCollisions` applies full-cycle rates after RK only without split LF.
+With split LF, `STSPostSweepCGLCollisions` applies them after the final post-LF
+chunk, after A is restored. The driver invokes that post hook even when the
+sweep has no stages. Other sweep hooks retain state/coarse synchronization and
+timestep refresh without applying collisions. Neither regridding nor split
+boundaries project anisotropy. The two-tier finite update preserves its backup
+residual through ordinary active E/A or passive J/A encoding.
 On refined/shearing LF meshes, the driver completes pending communication and
 rebuilds anisotropy halos after each split checkpoint; it computes the post-RK
 and post-LF bounds only afterward. Other CGL runs refresh the post-RK bound
@@ -111,13 +108,15 @@ Initialization and regridding retain their existing boundary refreshes.
 The scalar rate map retains both the target anisotropy and its pressure exchange.
 `expm1` preserves tiny background kicks; the initially smaller pressure receives
 the exchange directly, and the larger pressure is recovered from the target.
-This avoids small-pressure cancellation while retaining the monotone stiff limit.
-The grid operator still changes only conserved A and refreshes pressures from E/A.
+This avoids small-pressure cancellation within each selected branch; the
+two-tier map has jumps at backup thresholds. The active grid operator changes
+only conserved A and refreshes pressures from E/A. The passive operator
+re-encodes J/A at fixed thermal energy, up to representation roundoff.
 
 `RecordAdmissibility` counts each unprojected LF stage. Intermediate wall
 crossings are diagnostic; invalid pressures and floors remain fatal in strict
-mode. Separate entry/post-wall checks enforce walls without incrementing stage
-counts. After AMR, walls run after the final field refresh.
+mode. Entry and sweep-end checks retain finite/positive-state validation without
+incrementing stage counts or rejecting finite backup overshoots.
 
 ## LF Face Closure
 
@@ -216,8 +215,8 @@ appends LF columns when the closure is active:
 
 Strict admissibility is controlled by `cgl_lf_strict_admissibility`. In strict
 mode, floors and non-finite or non-positive thermodynamic state are fatal at
-every LF stage; hard-bound violations are fatal at split-sweep checkpoints.
-Backup walls and scattering require an explicit `backup_limiters = true` in
+every LF stage and split checkpoint; threshold crossings remain diagnostic.
+Backup relaxation and scattering require an explicit `backup_limiters = true` in
 both strict and relaxed modes.
 
 ## Active And Passive CGL
@@ -246,12 +245,13 @@ Current restrictions are intentionally conservative:
   rebuild wrappers rather than treating `IAN` as a passive scalar. Active block
   creation now prolongates `rho`, velocity, CGL internal energy `U`, and
   pressure anisotropy `Delta`, then slope-scales child states before final
-  admissibility projection.
-- Current-threshold LF/STS AMR refine-up and forced moving-pattern
-  refine/derefine churn smokes have passed on GPUs with strict admissibility.
+  positivity repair. AMR does not apply a limiter projection.
+- Earlier LF/STS AMR refine-up and forced moving-pattern refine/derefine
+  smokes passed on GPUs with the former scheduled-wall operator; they do not
+  qualify the restored finite-backup model.
   Dedicated CGL AMR repair counters report whether AMR transfer needed density,
-  energy, pressure, low-field, hard-wall, anisotropy, interval, or slope-scaling
-  repairs.
+  energy, pressure, low-field, anisotropy, interval, or slope-scaling repairs.
+  The legacy hard-wall counters remain reserved and zero.
 - CGL LF pressure-work recording is disabled for AMR primitive prolongation.
   Keep `<mhd>/cgl_lf_record_pressure_work = false` for LF/STS AMR runs until
   the diagnostic flux-communication path is separately audited.

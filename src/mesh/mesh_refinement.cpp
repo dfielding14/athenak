@@ -254,16 +254,9 @@ void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin
       // reconstruction consumes them.
       pdriver->InitBoundaryValuesAndPrimitives(pmy_mesh);
       if (pmbp->pmhd->peos->eos_data.is_cgl) {
-        // Apply walls after the final field refresh, without repeating physical rates.
+        // Keep coarse CGL state consistent with the final field/primitive refresh.
         auto *pmhd = pmbp->pmhd;
-        pmhd->RequireCGLAnisotropyRepresentation("post-AMR CGL walls");
-        const auto &indcs = pmy_mesh->mb_indcs;
-        const int ni = indcs.nx1 + 2*indcs.ng;
-        const int nj = (indcs.nx2 > 1) ? indcs.nx2 + 2*indcs.ng : 1;
-        const int nk = (indcs.nx3 > 1) ? indcs.nx3 + 2*indcs.ng : 1;
-        pmhd->peos->Collisions(pmhd->w0, pmhd->bcc0, pmhd->u0, 0.0,
-                              CGLCollisionMode::walls_only,
-                              0, ni-1, 0, nj-1, 0, nk-1);
+        pmhd->RequireCGLAnisotropyRepresentation("post-AMR CGL refresh");
         (void) pmhd->RestrictU(pdriver, 0);
       }
     }
@@ -1796,7 +1789,7 @@ void MeshRefinement::RefineCGLMHDPrimitives(DualArray1D<int> &n2o, mhd::MHD *pmh
 
   // Generic RefineCC remains authoritative for primary conserved fields. Apply the
   // full projection result only for a genuinely invalid primary child state; ordinary
-  // Delta limiting and hard-wall projection change only the derived IAN slot above.
+  // Delta slope limiting changes only the derived IAN slot above.
   const cgl::amr::RepairMask primary_repair_mask =
       cgl::amr::kDensityFloor | cgl::amr::kInternalEnergyFloor |
       cgl::amr::kParallelPressureFloor | cgl::amr::kPerpPressureFloor |

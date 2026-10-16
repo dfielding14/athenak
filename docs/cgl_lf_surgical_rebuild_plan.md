@@ -55,12 +55,11 @@ exist at the base; their cost cannot simply be attributed to WO1.
 - Preserve RKL2 coefficients, odd-stage selection, and LF half-step / RK full-step /
   LF half-step ordering. The specified once-per-cycle collision update is not a
   symmetric collision split; do not claim second-order accuracy for that full model.
-- Restore the agreed collision and limiter model: rates once with the full outer
-  timestep; hard walls at the specified operator boundaries and after regridding.
-  Preserve the mandatory fluid-firehose bound $p_\perp-p_\parallel\ge-B^2$ at
-  those wall checkpoints, including configurations without optional limiters.
-  Do not add per-RKL-stage pressure clipping. Intermediate wall crossings and
-  nonpositive/nonfinite states have different meanings and must remain distinguishable.
+- Restore Majeski's original two-tier finite relaxation (user correction,
+  2026-10-15): background decay, then one selected soft or backup branch once
+  with the full outer timestep. No exact anisotropy projection at split
+  boundaries, in pressure encoding, or after regridding. Threshold crossings
+  remain diagnostic; nonpositive/nonfinite states remain distinct errors.
 - Preserve forcing power, its random-process cadence, and exact kinetic-work
   accounting. Keep checks that prevent invalid states; detailed q diagnostics can
   be off for performance measurements.
@@ -76,16 +75,17 @@ exist at the base; their cost cannot simply be attributed to WO1.
   already present at the base and unchanged in the newer reference. Reuse them.
   Shorten duplicated storage and unnecessary passes, not the physical operator.
 
-The collision contract is explicit. With $\Delta=p_\perp-p_\parallel$, background
-relaxation gives $\Delta_b=\Delta\exp(-\nu_{\rm coll}\,dt)$. Beyond an enabled soft
-threshold $\Delta_*$, use the stable backward-Euler form
-$\Delta'=\Delta_*+(\Delta_b-\Delta_*)/(1+\nu_{\rm lim}\,dt)$ at fixed
-$(p_\parallel+2p_\perp)/3$, then apply the prescribed walls.
-Default soft thresholds are $-B^2$ and $B^2/2$; backup factors are respectively
-1 and 2, and backup scattering defaults to $10^{10}$ in code time units.
-LF scattering adds background, applicable soft, and enabled backup contributions
-once each; equality contributes no extra scattering. Keep numeric threshold
-parameters and the intended legacy-policy mapping, not a second limiter model.
+The collision contract follows Majeski's corrected `0e6d5e034` implementation.
+With $\Delta=p_\perp-p_\parallel$, background relaxation gives
+$\Delta_b=\Delta\exp(-\nu_{\rm coll}dt)$. Select the soft target/rate inside
+its backup boundary, or the backup target/rate at or beyond that boundary.
+Then $\Delta'=\Delta_*+(\Delta_b-\Delta_*)/(1+\nu_*dt)$ at fixed thermal
+energy. Backup replaces soft relaxation; do not clamp the finite residual.
+LF scattering adds background to the selected limiter rate, using inclusive
+thresholds. The original AthenaK thresholds are soft $[-0.7,+0.5]B^2$ and backup
+$[-1,+1]B^2$, with backup rate $10^{10}$. Select these explicitly for the current
+campaign; generic parameter defaults and historical paper decks retain their
+stated threshold conventions.
 
 Dependency order: establish 0, then local repairs 1-3; 4 owns the coherent
 collision model; 5-8 correct face transport; 9-10 qualify its controller; 11
@@ -190,41 +190,28 @@ repair obscures it. Gate: actual reconstruction wrappers, injected NaN/Inf in
 E/A, a steep-pressure evolution, and ordinary MHD controls. Change matching
 reference consumers only where their old expectation is demonstrably wrong.
 
-**4. Restore thresholds, relaxation, walls and their schedule coherently.**
-Scope: `EOS_Data`, `cgl_physics.hpp`, `SingleCollRates_CGLMHD`,
-`SingleCollWalls_CGLMHD`, `CGLWallAdmissibleAnisotropy`, `CGLMHD::Collisions`,
-and the mode/signature declaration plus the base stub in `src/eos/eos.cpp`.
-Update `MHD::AssembleMHDTasks`, `CGLCollisions`, `STSPostSweepCGLCollisions`,
-AMR projection, LF face-rate consumers and affected diagnostics/inputs together.
-Introduce the agreed soft/backup thresholds and additive scattering, then land
-the monotone relaxation map with its full-step schedule. Keep coarse state and
-primitives consistent after updates. Incorporate the later canonical active wall
-encoding correction here (`71ad25ebc`, regression `4cd46a131`), rather than
-reintroducing its known restart failure.
-The call sites choose the mode: no LF split means full rates/walls after RK;
-split LF means walls after the pre-sweep and RK, then full rates/walls after
-the post-sweep, with A restored before those calls. Without LF, other enabled
-STS processes also receive walls-only checkpoints after both parabolic sweeps;
-rates remain once after RK. These checkpoints follow the final field/primitive
-refresh and precede the post-sweep timestep estimate. After the final AMR field
-refresh, apply walls and refresh the coarse representation. Do not retain an
-obsolete soft-threshold projection in C2P or AMR alongside the new finite-rate map.
-Honor the specified default thresholds (firehose 2, mirror 1), explicit legacy
-equivalence and finite-rate fixtures. Update shipped runnable inputs that use
-the removed `limiter_hardwall=true` contract with the operator change; preserve
-historical evidence. No input should silently acquire a different physical rate.
-Gate: analytic background relaxation with/without LF; an independent finite-rate
-map distinguishing one full kick from two half kicks; threshold equality and
-additive-rate checks; invariant E/momentum/B; unchanged A on no-op; wall
-idempotence; a separate production C2P after collision encoding; real restart.
+**4. Restore the original two-tier finite relaxation and its schedule.**
+The 2026-10-15 user correction supersedes the earlier scheduled-wall operator.
+Use Majeski's corrected `0e6d5e034` rule in `SingleCollRates_CGLMHD` and extend
+its branch selection consistently to LF face scattering. Remove exact-wall
+helpers, their encoding adjustments, and all walls-only hooks. Preserve
+full-step rates once after RK without LF, or after the final post-LF sweep;
+retain coarse state, boundary, primitive, and timestep synchronization.
+AMR retains pressure positivity and conservative primary fields, without
+anisotropy clipping. Finite backup residuals are diagnostic rather than fatal.
+Gate: original-formula pressure/energy oracle, disabled-side and threshold
+cases, actual active/passive grid encoding and reload, full-cycle cadence,
+LF face-rate checks, restart, and regridding without an implicit clamp.
+Earlier wall-encoding qualification remains historical evidence for the
+superseded operator, not acceptance of this restored model.
 Give the post-RK timestep one owner. The newer reference registers the ordinary
 last-stage `MHD::NewTimeStep` and then recomputes it in `CGLCollisions`, before
-the driver consumes the budget. Once the unconditional post-wall CGL hook is
+the driver consumes the budget. Once the unconditional post-RK CGL state hook is
 installed, omit only the redundant CGL task registration; keep `NewTimeStep`
 callable for initialization and regridding. Keep the post-LF refresh and global
 post-RK minimum.
 This small dependent deletion can follow 4 immediately; it need not wait for 13.
-Use existing heated/wall/restart checks and call counts to verify the ownership,
+Use existing heated/relaxation/restart checks and call counts to verify the ownership,
 including zero rates and no LF. Ordinary MHD keeps its last-stage task.
 
 **5. Restore the small weak-field face-transport correction.**
@@ -257,8 +244,8 @@ same gradients; do not introduce a new general stencil abstraction.
 **8. Correct the perpendicular BGK response.**
 Scope: `cgl::PerpendicularHeatFluxRatio` in `src/eos/cgl_physics.hpp`, its normal
 and logarithmic paths, `ChiPerp` reference consumers and associated method docs
-(`d2ab32f58`). Both safe and fast fluxes use that shared helper. Additive scattering
-was completed in 4; do not reimplement it here. Use the intended $2\nu_{\rm eff}$
+(`d2ab32f58`). Both safe and fast fluxes use that shared helper. Limiter rate selection
+belongs to 4; do not reimplement it here. Use the intended $2\nu_{\rm eff}$
 perpendicular response. With $\dot\Delta=-\nu\Delta$, this follows
 [SHD97, equation 49](https://w3.pppl.gov/~hammett/gyrofluid/papers/snyder_pop97.pdf)
 and differs from the printed one-$\nu$ coefficient in
@@ -409,7 +396,7 @@ areas in 3D and is insufficient. Cache both original estimates before the
 identically ordered symmetric mean. No new completion framework is needed.
 Qualification also requires one boundary operator throughout each sweep: rebuild
 magnetic-moment halos before the first LF RHS, then rebuild anisotropy halos
-after conversion/walls before the next operator or timestep bound. Conservative
+after conversion and relaxation before the next operator or timestep bound. Conservative
 prolongation and the nonlinear slot conversion do not commute; mixing their
 order produces an STS/explicit error plateau even as the timestep shrinks.
 Reuse the existing exchanges at completed communication boundaries and do not
@@ -459,7 +446,7 @@ has a different meaning; active total-energy restarts are not passive J/A data.
 Start with the implemented uniform-periodic supported domain; no speculative
 AMR/boundary/source extensions. Gate: density/momentum/B identical to native
 isothermal flow at matched outer timesteps and forcing; thermal evolution from
-independent smooth references; pressure-work balance; wall decode and restart.
+independent smooth references; pressure-work balance; finite-backup decode and restart.
 Document the absence of irreversible shock heating. Optimize only against the
 preceding implementation of this same model, never against the old passive defect.
 Keep the native isothermal flow kernel intact: the attempted combined face
@@ -470,8 +457,7 @@ $J=\rho\ln(p_\parallel B_{\rm eff}^2/\rho^3)$ is stored in IEN outside LF;
 LF uses physical U and magnetic moment instead. A direct source increment to
 IEN is therefore not a passive heating operation.
 After model qualification, profile before considering narrower thermal
-reconstruction or a cheaper wall path. An eager isotropic fallback and bisection
-are candidates for simplification, not reasons to alter the thermal model.
+reconstruction; preserve the selected finite-relaxation model.
 
 **Piece 14 model qualification (2026-10-12):** source `276eee6ce` implements
 this contract; [the model guide](source/modules/cgl_passive.md) records storage,
@@ -645,12 +631,11 @@ deferred: it must not bypass the current rejection of invalid face sound speeds.
 
 ## Testing cadence
 
-`lf_hardbd` counts unprojected LF-stage hard-bound crossings. The retained
-`lf_hwproj` field is for history/restart compatibility with the removed
-`limiter_hardwall` mode; current evolution never increments it. Its zero value
-does not establish absence of scheduled fluid-wall projection or wall work.
-Use strict wall checkpoints and completed-state hard-bound measurements for
-admissibility; an LF-only control also requires zero intermediate crossings.
+`lf_hardbd` counts LF-stage threshold crossings, including permitted finite
+backup residuals. `lf_hwproj` remains a zero placeholder for history/restart
+compatibility. No anisotropy projection is part of the current model. Check
+finite/positive state and conservation separately from threshold occupancy;
+zero crossings are only required for fixtures whose physics predicts them.
 
 Reuse `tst/test_suite/`, `tst/scripts/cgl/`, `test_suite.testutils`, existing
 inputs and production pgen fixtures. A gate is evidence for the changed behavior,
@@ -684,7 +669,7 @@ of the known-defective base.
 non-integer-period waves, an e-folding of parallel/perpendicular decay, oblique
 transport, finite-rate relaxation, heating/timestep refresh, forcing/restart,
 and the Tier 3 matched active run to t=14 with nonzero LF work. Run an actual HIP
-wall-encoding fixture; CPU scalar helpers cannot substitute for it. Run the
+finite-backup encoding fixture; CPU scalar helpers cannot substitute for it. Run the
 small safe/fast and diagnostic/profile branch checks once after all face changes,
 not after each constant edit. Production timings keep detailed q diagnostics off.
 Use the existing 64-by-64 hotspot with `lf_coefficient_mode=local`,
@@ -713,7 +698,7 @@ ladder as evidence; no further conditioning sweep is planned.
 
 Before accepting a larger STS safety, also use the existing `limiter_stress`
 fixture for one smooth, unforced, finite-rate threshold-crossing case. Keep the
-grid, endpoint, physical rates and walls fixed across at least three decreasing
+grid, endpoint, physical rates and thresholds fixed across at least three decreasing
 outer steps; compare both full pressure fields, means/energy and repair activity.
 Verify that face-averaged states actually cross an enabled soft threshold during
 the run. Require decreasing errors rather than second order: the once-per-cycle
@@ -847,10 +832,10 @@ from the base and needed for the current piece.
 | 1, 4 | `cgl/test_cgl_parameters_cpu.py::test_cgl_constructor_parameters` | Import parameter cases only when their consuming implementation lands |
 | 2 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_c2p_pressure_floor_energy_consistency` | Existing checker, extended progressively; double and focused float |
 | 3, 5 | `L::test_cgl_reconstruction_pressure_peak`; `L::test_cgl_fofc_live_flux_mutation`; `cgl/test_cgl_weak_field_cpu.py::test_weak_field_contact_remains_bounded` | `inputs/unit_tests/cgl_reconstruction_{ppmx,wenoz}.athinput`, built-in FOFC pgen, preserved B4 strict expected failures |
-| 4 | `L::test_cgl_collision_rates_once_per_cycle_with_and_without_lf`; `L::test_cgl_lf_face_collision_rates_add`; `A::test_limiter_stress_matches_cellwise_relaxation`; `A::test_limiter_stress_matches_wall_ordering` | `cgl_collision_once.athinput` and existing mirror/firehose unit inputs; independent rate/cadence oracles |
-| 4 | `L::test_cgl_sts_viscosity_finishes_with_admissible_pressures` | No-LF viscous heating from the fluid-firehose wall; final admissibility, shear decay and conserved totals. The cadence selector also checks that non-LF STS checkpoints add no rate kicks |
-| 4 | `L::test_cgl_collision_refreshes_next_timestep_from_relaxed_state`; `L::test_cgl_lf_restart_with_finite_collision_preserves_corrected_split`; `cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_walls_after_final_field_refresh` | Inputs under `inputs/tests/`; actual restart and post-regrid state checks |
-| 4 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_production_wall_encoding_survives_independent_c2p` | Supplied HIP wall binary; real collision kernel followed by independent C2P; serialized fixture bytes do not replace a driver restart |
+| 4 | `L::test_cgl_collision_rates_once_per_cycle_with_and_without_lf`; `L::test_cgl_lf_face_collision_rates_are_tiered`; `L::test_limiter_stress_matches_cellwise_relaxation`; `L::test_limiter_stress_matches_finite_backup_relaxation` | `cgl_collision_once.athinput` and existing mirror/firehose unit inputs; independent rate/cadence oracles |
+| 4 | `L::test_cgl_sts_viscosity_finishes_with_admissible_pressures` | No-LF viscous heating across the fluid-firehose threshold without clipping; positive pressures, shear decay and conserved totals. The cadence selector also checks that non-LF STS checkpoints add no rate kicks |
+| 4 | `L::test_cgl_collision_refreshes_next_timestep_from_relaxed_state`; `L::test_cgl_lf_restart_with_finite_collision_preserves_corrected_split`; `cgl/test_cgl_amr_walls_cpu.py::test_cgl_amr_refresh_preserves_finite_anisotropy` | Inputs under `inputs/tests/`; actual restart and post-regrid state checks |
+| 4 | `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_finite_backup_survives_independent_c2p` | Supplied HIP collision binary; active/passive collision kernels followed by independent C2P; serialized fixture bytes do not replace a driver restart |
 | 6, 7 | `L::test_cgl_lf_field_reversal_stability`; `L::test_cgl_lf_hotspot_preserves_minima_and_energy`; `cgl/test_cgl_lf_oblique_decay_cpu.py::test_cgl_lf_oblique_decay_agrees_across_blocks` | Reversal 1D/2D, 30/45-degree hotspot, global oblique decay; start safe/none |
 | 7, 8 | `cgl/test_cgl_heat_flux_limiter_cpu.py::test_cgl_heat_flux_limiter_and_perpendicular_closure_endpoints`; `A::test_decay_resolves_closure_coefficients` | Reuse `CheckDiffusionSlopeMeans` and collisional/cancellation checks; coupled two-pressure decay oracle rejects the old coefficient |
 | 9 | `L::test_cgl_lf_uniform_collisional_timestep`; `L::test_cgl_lf_density_contact_stability`; `L::test_cgl_lf_staggered_checkerboard_timestep_and_stability`; `L::test_cgl_lf_scaled_face_row_timestep` | Ordinary collision values, seeded/unseeded density jumps, 2D/3D CT counterexample, finite complete-row cold arithmetic |
@@ -861,7 +846,7 @@ from the base and needed for the current piece.
 | Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Qualified wave/e-fold checks and local-hotspot window 8, 4, 2, 1 (`5647113`); fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Retain the finer 1-to-0.125 precision stress failures and reference-sensitivity evidence; no rung is an exact oracle |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
 | 13 | `cgl/test_cgl_lf_compact_mpicpu.py::test_cgl_lf_compact_exchange_matches_full_exchange` | Existing nonuniform 3D scalar fixture; exact full native payload across strict/full exchange and one/four ranks, positive pressures, nonzero LF work and zero repairs; run on CPU/HIP |
-| 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_passive_wall_decode.py::test_passive_wall_survives_canonical_c2p` | Identity, heating, linear, advection, restart, fences and nonlinear temporal refinement; `passive_acceptance.py` and `cgl_passive_validation` pgen; forced four-rank identity/restart through `--suite forced` |
+| 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_finite_backup_survives_independent_c2p` | Identity, heating, linear, advection, restart, fences and nonlinear temporal refinement; `passive_acceptance.py` and `cgl_passive_validation` pgen; forced four-rank identity/restart through `--suite forced` |
 | 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_zero_operator_cadence`, `test_smooth_chunk_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted`, `test_chunked_mpi_state_and_schedule`, `test_invalid_chunk_configurations` | Prebuilt executable; existing passive and conservation fixtures; active threshold and failing passive checkpoint refinements remain separate accuracy checks |
 
 The physical oracle must be independent where it matters. A copied production
@@ -1127,12 +1112,11 @@ the test tree and the generic GPU defaults select CUDA.
 CPU-named application tests can use the supplied HIP executable in that layout.
 The fast-speed, heat-limiter and ordinary pressure-floor helper tests explicitly
 build Serial/HIP-off executables and remain CPU evidence. For the real production
-wall check, build `PROBLEM=unit_tests/cgl_c2p_pressure_floor_test` under the same
-HIP configuration and provide `ATHENAK_CGL_PRODUCTION_WALL_BINARY` and
-`ATHENAK_CGL_PRODUCTION_WALL_LAUNCHER` (the one-rank srun prefix) to its selector.
-The passive counterpart uses `unit_tests/cgl_passive_wall_decode_test` and
-`ATHENAK_CGL_PASSIVE_WALL_BINARY` / `ATHENAK_CGL_PASSIVE_WALL_LAUNCHER`.
-These custom pgens arrive with their owning corrections, not with the baseline.
+finite-backup check, build `PROBLEM=unit_tests/cgl_c2p_pressure_floor_test` under
+the same HIP configuration and provide `ATHENAK_CGL_COLLISION_BINARY` and
+`ATHENAK_CGL_COLLISION_LAUNCHER` (the one-rank srun prefix) to
+`test_cgl_finite_backup_survives_independent_c2p`. This fixture covers active
+and passive encoding through separate C2P/reload and LF representation changes.
 
 The archived uniform input is verified: the frozen historical copy matches its
 SHA-256, recorded in the rebuild workspace's `inputs/README.md` and above.

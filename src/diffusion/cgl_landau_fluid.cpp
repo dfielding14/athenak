@@ -1260,12 +1260,12 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const EOS_Data &eos_in,
                                          int dfloor_delta, int pfloor_delta,
                                          const char *sweep_name,
-                                         int stage, int nstages, bool wall_checkpoint) {
-  if (wall_checkpoint && !strict_admissibility) return;
+                                         int stage, int nstages, bool split_checkpoint) {
+  if (split_checkpoint && !strict_admissibility) return;
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;
   const bool backup = effective_backup_limiter;
-  const bool counted_rhs = !wall_checkpoint && stage > 0;
+  const bool counted_rhs = !split_checkpoint && stage > 0;
   if (profile_enabled_ && counted_rhs) {
     profile_last_nstages_ = nstages;
     if (nstages > profile_max_nstages_) {
@@ -1313,8 +1313,7 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
      Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
      Kokkos::Sum<int>(hard_bound));
 
-  // Count every unprojected LF stage, including its hard-wall crossings. Entry
-  // and post-wall checks validate the split state without counting extra stages.
+  // Entry and sweep-end checks validate the split state without counting extra stages.
   if (counted_rhs) {
     diagnostics.nstage += static_cast<std::uint64_t>(nmkji);
     diagnostics.dfloor += static_cast<std::uint64_t>(dfloor_delta);
@@ -1326,17 +1325,16 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
     diagnostics.hard_bound += static_cast<std::uint64_t>(hard_bound);
   }
 
-  // LF changes anisotropy while B is frozen and can cross a hard wall. The
-  // scheduled sweep-end projection must restore it before hyperbolic evolution;
-  // floors and invalid pressures remain fatal at every intermediate stage.
+  // Finite backup relaxation leaves a residual beyond its threshold: diagnostic only.
+  // Floors and invalid pressures remain fatal at every split checkpoint and stage.
   if (strict_admissibility &&
       (dfloor_delta > 0 || pfloor_delta > 0 || nonfinite > 0 ||
-       nonpositive > 0 || (wall_checkpoint && hard_bound > 0))) {
+       nonpositive > 0)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "CGL Landau-fluid strict admissibility failed "
-              << (wall_checkpoint ? "at a split-sweep wall checkpoint: "
-                                  : "after a split stage: ")
+              << (split_checkpoint ? "at a split-sweep checkpoint: "
+                                   : "after a split stage: ")
               << "sweep=" << sweep_name << " stage=" << stage << "/" << nstages
               << " dfloor=" << dfloor_delta << " pfloor=" << pfloor_delta
               << " nonfinite=" << nonfinite << " nonpositive=" << nonpositive

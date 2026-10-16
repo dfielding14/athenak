@@ -16,9 +16,25 @@ archive uses a third revision, `f2d0a259`.
 recorded scopes. Passive Tier 3 reached t=14 with clean numerical health and the
 [6,14] descriptive analysis; this does not establish turbulent convergence.
 Piece 14's active-parent bitwise comparison remains failed (details below).
+**Limiter correction (2026-10-15):** the user requested Stephen Majeski's
+original finite two-tier rule, without exact clamps. This changes the model
+used by the earlier milestones; their wall-related results remain historical.
+Focused qualification passes 74 HIP cases and five Serial host cases, including
+2,592 comparisons per precision against his corrected pressure-form equations.
+Jobs `5687625`/`5687655` cover cadence, LF tier selection, active/passive recovery,
+restart and AMR conservation without clipping. The initial AMR check assumed
+derefinement at cycle 3; stopping at its actual time trigger fixes that test.
+Source, binary and results are retained in the
+[limiter qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/majeski-limiter-20261015/REPORT.md).
+The four beta-16 inputs now explicitly enable the original backup thresholds in
+a separate `majeski_two_tier` setup. No production runs were submitted; long
+turbulent statistics and throughput have not been requalified for this model.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** No numbered rebuild piece remains. The development-driver extension is
-qualified within the scope below; the beta-25 cubic campaign has not been launched.
+**Next:** Measure the first pressure-floor repairs from the stopped beta-16 runs,
+then qualify recording those repairs without making them fatal, preserving
+nonfinite/nonpositive-state checks. Pressure-floor aborts remain in the limiter
+restoration build. Resume the revised campaign from fresh initial states after
+that correction. No numbered rebuild piece remains.
 The requested time-driven uniform refinement callback and separate scaling work
 remain production extensions;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
@@ -94,17 +110,14 @@ source/binary bindings and results are in the
   Gate: affine/quadratic wrapper tests, NaN/Inf injection through the live FOFC
   predictor/correction path, steep-pressure evolution, and MHD controls.
 
-- [x] **4 — Collisions and walls.** Implement thresholds, relaxation, additive LF
-  scattering, canonical wall encoding, and all scheduling/AMR/input consumers
-  coherently. Apply full-dt rates once per cycle and walls at prescribed checkpoints,
-  including non-LF parabolic sweeps and the mandatory fluid-firehose wall without
-  optional limiters. Preserve small pressures under tiny inward rate kicks. Update
-  admissibility: count intermediate wall crossings; reject invalid/floor-repaired
-  stages and enforce walls at checkpoints without inflating RHS counts. Gate:
-  independent rate/cadence/equality checks, invariants/no-op/idempotence, production
-  HIP wall encoding followed by C2P, and real restart. Then separately remove the
-  redundant CGL timestep task after verifying unconditional post-wall ownership,
-  including zero rates and no LF.
+- [x] **4 — Original two-tier relaxation.** The 2026-10-15 user correction
+  supersedes the earlier projection model: restore Majeski `0e6d5e034`'s
+  background-first, soft-or-backup finite update. Remove exact clamps and
+  walls-only hooks, retaining one full-dt update per cycle and required state/
+  timestep synchronization. LF uses background plus the selected limiter rate.
+  Threshold crossings, including finite backup residuals, remain diagnostic.
+  Gate: original formula oracle, active/passive grid recovery, cadence, LF
+  rates, restart, and AMR positivity/conservation without clipping.
 
 - [x] **11 — Forcing.** Separate mode selection, conserved-momentum work, and
   scheduling fixes; move task registration and required refresh together. Gate:

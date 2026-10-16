@@ -581,7 +581,7 @@ def test_cgl_lf_3d_runtime_modes_exercise_directional_fast_paths():
         _cleanup()
 
 
-def test_cgl_lf_intermediate_wall_crossings_are_projected_at_checkpoints(tmp_path):
+def test_cgl_lf_wall_crossings_are_recorded_without_projection(tmp_path):
     source = (Path(UNIT_INPUT_ROOT) / "cgl_lf_sts_grad_b.athinput").read_text()
     source += """
 <job>
@@ -641,8 +641,8 @@ slice_x3 = 0
     for state in (initial, final):
         assert all(np.all(np.isfinite(values)) for values in state.values())
         assert np.all(state["eint"] > 0) and np.all(state["p_perp"] > 0)
-        bsqr = sum(state[field]**2 for field in ("bcc1", "bcc2", "bcc3"))
-        assert np.all(state["p_perp"] - state["eint"] >= -bsqr)
+    bsqr = sum(final[field]**2 for field in ("bcc1", "bcc2", "bcc3"))
+    assert np.min(final["p_perp"] - final["eint"] + bsqr) < -1e-6
     # Checkpoints must not add RHS evaluations or cell-stage samples.
     match = re.search(r"^heat_flux_total\s+\S+\s+\S+\s+(\S+)\s+(\S+)", output, re.M)
     assert match, output
@@ -1009,15 +1009,16 @@ slice_x3 = 0
         thermal = u["ener"] - 0.5*u["mom2"]**2/u["dens"] - 0.5*bsqr
         np.testing.assert_allclose(0.5*w["eint"] + w["p_perp"], thermal,
                                    rtol=2e-14, atol=0)
-    # No finite rates or transport of A: a change proves wall-checkpoint work.
-    assert history["aam-D"][-1] - history["aam-D"][0] > 1e-4
+    # With rates disabled, viscosity must not silently project anisotropy.
+    np.testing.assert_allclose(history["aam-D"], history["aam-D"][0],
+                               rtol=1e-13, atol=1e-14)
     bsqr = sum(w1[field]**2 for field in ("bcc1", "bcc2", "bcc3"))
-    assert np.all(w1["p_perp"] - w1["eint"] >= -bsqr)
+    assert np.min(w1["p_perp"] - w1["eint"] + bsqr) < -1e-6
 
 
 @pytest.mark.parametrize("arithmetic", ("safe", "fast"))
-@pytest.mark.parametrize(("backup", "expected_rate"), (("false", 18), ("true", 119)))
-def test_cgl_lf_face_collision_rates_add(tmp_path, arithmetic, backup, expected_rate):
+@pytest.mark.parametrize(("backup", "expected_rate"), (("false", 18), ("true", 108)))
+def test_cgl_lf_face_collision_rates_are_tiered(tmp_path, arithmetic, backup, expected_rate):
     source = Path(
         f"{UNIT_INPUT_ROOT}/cgl_lf_limiter_heat_flux_suppression.athinput").read_text()
     source = source.replace("nlim = 1", "nlim = 0", 1)
@@ -1028,11 +1029,11 @@ def test_cgl_lf_face_collision_rates_add(tmp_path, arithmetic, backup, expected_
         "<mhd>", "<mhd>\nnu_coll = 7.0\nlimiter_backup_nu = 101.0", 1)
     source = source.replace(
         "<problem>", f"<problem>\nexpected_nu_eff = {expected_rate}", 1)
-    staged = tmp_path / "additive_collision_rates.athinput"
+    staged = tmp_path / "tiered_collision_rates.athinput"
     staged.write_text(source)
     try:
         result = subprocess.run(
-            ["./athena", "-i", str(staged), "job/basename=cgl_ci_additive_rates",
+            ["./athena", "-i", str(staged), "job/basename=cgl_ci_tiered_rates",
              f"mhd/cgl_lf_arithmetic={arithmetic}"],
             capture_output=True, text=True, check=False,
             env=_lf_mode_env(),
@@ -1074,11 +1075,11 @@ def test_limiter_stress_matches_cellwise_relaxation(
 
 @pytest.mark.parametrize("kind", ("mirror", "firehose"))
 @pytest.mark.parametrize("lf", (False, True), ids=("pure", "lf"))
-def test_limiter_stress_matches_wall_ordering(tmp_path, kind, lf):
+def test_limiter_stress_matches_finite_backup_relaxation(tmp_path, kind, lf):
     ppar, pperp = (0.5, 2.0) if kind == "mirror" else (3.0, 1.0)
     _run_limiter_case(tmp_path, kind, lf, "problem/amp=0", f"problem/ppar0={ppar}",
                       f"problem/pperp0={pperp}", "mhd/limiter_nu_coll=200",
-                      "mhd/cgl_lf_strict_admissibility=false")
+                      "mhd/cgl_lf_strict_admissibility=true")
 
 
 @pytest.mark.parametrize("heating_rate", (0, 3000))
@@ -1169,7 +1170,7 @@ def test_cgl_lf_stiff_limiter_relaxes_to_selected_firehose_threshold():
 
 
 @pytest.mark.parametrize("backup", ("false", "true"))
-def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
+def test_cgl_lf_strict_mode_records_finite_backup_overshoot(backup):
     command = [
         "./athena",
         "-i",
@@ -1179,10 +1180,21 @@ def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
         "problem/ppar0=3.0",
         "problem/pperp0=1.0",
     ]
-    result = subprocess.run(command, capture_output=True, text=True, check=False)
-    assert result.returncode != 0
-    assert "strict admissibility failed" in result.stdout
-    assert "hard_bound=" in result.stdout
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, check=False)
+        assert result.returncode == 0, result.stdout + result.stderr
+        history = testutils.athena_read.hst("cgl_lf_firehose_policy.mhd.hst")
+        assert history["lf_hardbd"][-1] > 0
+        for name in ("lf_dfloor", "lf_pfloor", "lf_nonfin", "lf_nonpos"):
+            assert np.all(history[name] == 0)
+        ratio = np.exp(history["aam-D"][-1])
+        thermal = history["tot-E"][-1] - 0.5
+        delta = 2.0*thermal*(ratio - 1.0)/(1.0 + 2.0*ratio)
+        expected = -1.0 - 1.0/(1.0 + 1e10*history["time"][-1]) if backup == "true" else -2.0
+        np.testing.assert_allclose(delta, expected, rtol=2e-14, atol=0)
+        assert delta < -1.0  # The finite backup residual is not clipped away.
+    finally:
+        _cleanup()
 
 
 @pytest.mark.parametrize(
@@ -1205,7 +1217,7 @@ def test_cgl_lf_strict_hard_bound_is_reported_before_backup_correction(backup):
         ),
     ),
 )
-def test_cgl_lf_relaxed_mode_enforces_only_configured_walls(
+def test_cgl_lf_relaxed_mode_does_not_add_anisotropy_clamps(
     input_name, basename, flags
 ):
     try:
@@ -1220,7 +1232,7 @@ def test_cgl_lf_relaxed_mode_enforces_only_configured_walls(
         if "mirror" in basename:
             assert delta > 1.0  # No implicit mirror backup wall in relaxed mode.
         else:
-            assert np.isclose(delta, -1.0, rtol=2.0e-14)  # Mandatory fluid wall.
+            assert np.isclose(delta, -2.0, rtol=2.0e-14)
     finally:
         _cleanup()
 
@@ -1243,7 +1255,9 @@ def test_cgl_lf_relaxed_mode_requires_explicit_backup(arithmetic):
         unbounded = _final_tab("cgl_ci_no_backup")
         bounded = _final_tab("cgl_ci_explicit_backup")
         assert np.min(unbounded["p_perp"] - unbounded["eint"]) > 1.0
-        assert np.max(bounded["p_perp"] - bounded["eint"]) <= 1.0
+        residual = bounded["p_perp"] - bounded["eint"] - 1.0
+        assert np.all(residual > 0.0)
+        assert np.max(residual) < 1e-4
     finally:
         _cleanup()
 
@@ -1258,7 +1272,7 @@ def test_cgl_lf_paper_history_reports_explicit_backup_policy(backup):
             "problem/p_parallel0=1.0", "problem/p_perp0=2.25")
         history = testutils.athena_read.hst("cgl_ci_relaxed_effective_nu.user.hst")
         mean_nu = history["nu_eff"][0] / history["volume"][0]
-        assert np.isclose(mean_nu, 100.0 + (1.0e10 if backup else 0.0),
+        assert np.isclose(mean_nu, 1.0e10 if backup else 100.0,
                           rtol=1.0e-12)
         assert history["hard_vol"][0] == (history["volume"][0] if backup else 0.0)
     finally:

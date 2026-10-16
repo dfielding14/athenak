@@ -125,7 +125,7 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.bcs       = tl["stagen"]->AddTask(&MHD::ApplyPhysicalBCs, this, id.recvb_shr);
   id.prol      = tl["stagen"]->AddTask(&MHD::Prolongate, this, id.bcs);
   id.c2p       = tl["stagen"]->AddTask(&MHD::ConToPrim, this, id.prol);
-  // CGL refreshes the timestep after the post-RK collision/wall checkpoint.
+  // CGL refreshes the timestep after the post-RK collision and state refresh.
   if (!peos->eos_data.is_cgl) {
     id.newdt = tl["stagen"]->AddTask(&MHD::NewTimeStep, this, id.c2p);
   }
@@ -1116,20 +1116,20 @@ TaskStatus MHD::CGLCollisions(Driver *pdrive, int stage) {
     return TaskStatus::complete;
   }
   RequireCGLAnisotropyRepresentation("CGL collision relaxation");
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int &ng = indcs.ng;
-  int n1m1 = indcs.nx1 + 2*ng - 1;
-  int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
-  int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
-  const auto mode = has_cgl_lf_split
-      ? CGLCollisionMode::walls_only : CGLCollisionMode::full;
-  peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt, mode,
-                   0, n1m1, 0, n2m1, 0, n3m1);
-  if (peos->eos_data.passive) {
-    // Use the restart decoder kernel to preserve HIP wall and restart rounding.
-    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+  if (!has_cgl_lf_split) {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    const int ng = indcs.ng;
+    const int n1m1 = indcs.nx1 + 2*ng - 1;
+    const int n2m1 = (indcs.nx2 > 1)? (indcs.nx2 + 2*ng - 1) : 0;
+    const int n3m1 = (indcs.nx3 > 1)? (indcs.nx3 + 2*ng - 1) : 0;
+    peos->Collisions(w0, bcc0, u0, pmy_pack->pmesh->dt,
+                     0, n1m1, 0, n2m1, 0, n3m1);
+    if (peos->eos_data.passive) {
+      // Decode stored J/A with the restart kernel to preserve HIP rounding.
+      peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+    }
   }
-  // Rates and walls change fine-cell anisotropy after the last restriction.
+  // Rates or primitive recovery can change fine cells after the last restriction.
   RestrictU(pdrive, stage);
   if (!NeedsCGLLFBoundaryRefresh()) {
     RecomputeTimeStepFromCurrentState(pdrive);

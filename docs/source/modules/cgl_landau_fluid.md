@@ -80,29 +80,36 @@ This lifecycle prevents ordinary hyperbolic fluxes, output, and restart state
 from interpreting magnetic moment as pressure anisotropy.
 
 Collision rates are applied once per cycle with the full outer timestep.
-Without split LF, rates and walls follow RK. If another STS process is enabled,
-walls also follow each parabolic half-sweep, without repeating collision rates.
-With split LF, the order is
-`L(dt/2) W H(dt) W L(dt/2) C(dt) W`, where `W` applies walls and `C` applies
-background and finite-rate limiter relaxation. A skipped LF sweep still receives
-its wall/rate checkpoint. After regridding, walls use the final refreshed field
-and the coarse state is refreshed. This collision schedule is not a symmetric
-split and does not establish second-order accuracy for the complete model.
+Without split LF, rates follow RK. With split LF, the order is
+`L(dt/2) H(dt) L(dt/2) C(dt)`. A skipped post-LF sweep still receives the
+collision update. Regridding and intermediate stages do not apply collisions
+or clip pressure anisotropy. This schedule is not a symmetric collision split
+and does not establish second-order accuracy for the complete model.
 
-At fixed mean pressure, background relaxation multiplies
-`Delta p = p_perp - p_parallel` by `exp(-nu_coll*dt)`. Beyond an enabled soft
-threshold `Delta_*`, limiter relaxation then gives
-`Delta_* + (Delta p - Delta_*)/(1 + limiter_nu_coll*dt)`.
-The fluid-firehose wall `Delta p >= -B^2` is mandatory at wall checkpoints,
-including configurations with no optional limiters. Explicitly enabled backup
-walls add the configured firehose/mirror bounds. Energy, momentum and B remain
-unchanged; corrected pressures are decoded from the stored E/A state.
+The two-tier update follows Stephen Majeski's corrected implementation,
+[`0e6d5e034`](https://github.com/dfielding14/athenak/blob/0e6d5e0340e1033774a0b69280d99cab599c052a/src/eos/ideal_c2p_mhd.hpp#L228).
+At fixed thermal energy, background collisions first give
+`Delta_b = (p_perp - p_parallel)*exp(-nu_coll*dt)`. The enabled limiter then
+selects one target and rate: the soft threshold and `limiter_nu_coll` between
+soft and backup thresholds; the backup threshold and `limiter_backup_nu` at
+or beyond the backup threshold. Backups replace the soft branch. The update is
+`Delta_new = target + (Delta_b - target)/(1 + rate*dt)`.
+Finite backup relaxation retains its residual overshoot; no exact clamp follows.
+Active total energy, momentum and B are unchanged; passive thermal energy is
+preserved when encoding J/A.
 
-LF histories count intermediate wall crossings without projecting each RKL
-stage. Strict admissibility rejects floors and nonfinite/nonpositive state at
-every stage, and rejects wall violations at entry/post-wall checkpoints.
-Checkpoint checks do not add LF RHS counts. Backup scattering is enabled only
-by `backup_limiters`; relaxed admissibility does not enable it implicitly.
+For Stephen's original thresholds, explicitly select `cgl_firehose_threshold =
+oblique`, `mirror_threshold = 1`, `backup_limiters = true`,
+`firehose_backup_factor = 2`, `mirror_backup_factor = 2`, and
+`limiter_backup_nu = 1e10`. These give soft thresholds `[-0.7, +0.5] B^2` and
+backup targets `[-1, +1] B^2`. These AthenaK settings differ from the parallel
+firehose onset used in the published MKS24 standard runs.
+
+LF histories count threshold crossings. Strict admissibility rejects floors
+and nonfinite/nonpositive state, while finite backup overshoots remain
+nonfatal at both intermediate stages and completed split states. Entry and
+sweep-end checks do not add LF RHS counts. Backup scattering requires explicit
+`backup_limiters`; relaxed admissibility does not enable it implicitly.
 
 ## Closure Controls
 
@@ -123,11 +130,11 @@ by `backup_limiters`; relaxed admissibility does not enable it implicitly.
 | `cgl_firehose_threshold` | absent | Legacy `oblique` maps to 1.4; `parallel` maps to 2.0. A conflicting numeric threshold is rejected. |
 | `limiter_nu_coll` | required when a soft limiter is enabled | Finite nonnegative soft relaxation frequency; supplied values are checked even with limiters disabled. |
 | `limiter_hardwall` | `false` | `true` is rejected. Use an explicit finite rate for soft relaxation. |
-| `backup_limiters` | `false` | Enable both backup walls and their extra LF scattering; requires at least one soft limiter. |
-| `firehose_backup_factor` | `1.0` | Finite factor >=1 multiplying the soft firehose threshold, capped by the mandatory fluid wall. |
+| `backup_limiters` | `false` | Enable the stiff backup relaxation branch and its LF scattering; requires at least one soft limiter. |
+| `firehose_backup_factor` | `1.0` | Finite factor >=1 multiplying the soft firehose threshold; backup target is no lower than `-B^2`. |
 | `mirror_backup_factor` | `2.0` | Finite factor >=1 multiplying the soft mirror threshold. |
-| `limiter_backup_nu` | `1e10` | Finite nonnegative backup contribution to LF scattering. |
-| `cgl_lf_strict_admissibility` | `false` | Reject invalid/floor-repaired stages and violations at wall checkpoints; count intermediate wall crossings. |
+| `limiter_backup_nu` | `1e10` | Finite nonnegative backup relaxation/scattering rate, replacing the soft rate. |
+| `cgl_lf_strict_admissibility` | `false` | Reject invalid/floor-repaired states; threshold crossings are diagnostic, including finite backup residuals. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 | `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
 | `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |
@@ -174,9 +181,11 @@ The default soft thresholds match `beta Delta = -2` and `+1`. Shipped decks
 that formerly requested `limiter_hardwall=true` now explicitly use stiff
 `limiter_nu_coll=1e10` relaxation where intended; existing explicit rates are
 preserved. This is a once-per-cycle finite-rate update, not primitive-recovery
-projection to the soft threshold. LF faces add background, applicable soft and
-enabled backup frequencies once each; equality adds no scattering. Threshold
-occupancy diagnostics may count equality, which is an admissible wall state.
+projection to the soft threshold. LF faces add the background rate to the
+selected soft or backup rate. Inclusive threshold tests match the original
+branch selection; a state on a backup threshold uses backup scattering. The
+original commit predates LF, so this shared rate selection is its extension to
+the heat-flux closure.
 
 Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
@@ -192,8 +201,8 @@ Differences between successive rows give interval counts; normalize limiter
 counts by `lf_nstage` and heat-flux-cap counts by `lf_qface`. All cumulative LF
 diagnostic columns are preserved through CGL-LF restart files so interval
 analysis remains continuous across segments. `lf_hwproj` is retained for history
-and restart compatibility; the scheduled collision/wall operator does not
-increment this legacy primitive-refresh counter.
+and restart compatibility; the finite-relaxation operator does not increment
+this legacy primitive-refresh counter.
 `lf_qprwrk` and `lf_qpewrk` are cumulative RKL2-weighted owned-face
 contractions of the capped heat fluxes with their corresponding temperature
 jumps. They characterize the closure-generated face fluxes before shearing-seam or

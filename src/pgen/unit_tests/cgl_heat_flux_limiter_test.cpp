@@ -128,7 +128,7 @@ void CheckBackupLimiterPolicy() {
   RequireClose(
       "relaxed mirror hard-bound backup rate",
       cgl::LimiterCollisionRate(ppar, 2.25, bsqr, eos, relaxed_backup),
-      eos.limiter_backup_nu + limiter_rate);
+      eos.limiter_backup_nu);
   RequireClose(
       "strict unconfigured hard bound retains finite limiter rate",
       cgl::LimiterCollisionRate(ppar, 2.25, bsqr, eos, false), limiter_rate);
@@ -137,7 +137,7 @@ void CheckBackupLimiterPolicy() {
   RequireClose(
       "relaxed firehose hard-bound backup rate",
       cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, relaxed_backup),
-      eos.limiter_backup_nu + limiter_rate);
+      eos.limiter_backup_nu);
   eos.firehose_threshold = 1.4;
   eos.mirror_threshold = 0.6;
   eos.firehose_backup_factor = 1.2;
@@ -148,7 +148,7 @@ void CheckBackupLimiterPolicy() {
   RequireClose("configured firehose wall", cgl::FirehoseBackupWall(2.0, eos), -1.68);
   RequireClose("configured mirror wall", cgl::MirrorBackupWall(2.0, eos), 1.8);
   RequireClose("configured backup rate",
-               cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, true), 1254.0);
+               cgl::LimiterCollisionRate(3.0, 1.0, bsqr, eos, true), 1234.0);
   Require("disabled backup leaves a soft-firehose state admissible",
           !cgl::HardBoundViolated(-0.9, 1.0, eos, false));
   Require("enabled backup detects a state beyond its firehose wall",
@@ -162,8 +162,8 @@ void CheckBackupLimiterPolicy() {
                cgl::FirehoseBackupWall(2.0, eos), -2.0);
 }
 
-void CheckAdditiveCollisionRates() {
-  // Independent totals: background 7, soft 11, backup 101, so both give 119.
+void CheckTieredCollisionRates() {
+  // Independent totals: background 7 plus soft 11 or backup 101 gives 18 or 108.
   EOS_Data eos{};
   eos.nu_coll = 7.0;
   eos.lim_coll = 11.0;
@@ -175,33 +175,37 @@ void CheckAdditiveCollisionRates() {
   struct Case { Real delta, bsqr; bool mirror, firehose, backup; Real expected; };
   const Case cases[] = {
     { 0.00, 1.0, true, true, true, 7.0},
-    { 0.50, 1.0, true, true, true, 7.0},
-    {-0.50, 1.0, true, true, true, 7.0},
+    { 0.50, 1.0, true, true, true, 18.0},
+    {-0.50, 1.0, true, true, true, 18.0},
     { 0.75, 1.0, true, true, true, 18.0},
     {-0.75, 1.0, true, true, true, 18.0},
-    { 1.00, 1.0, true, true, true, 18.0},
-    {-1.00, 1.0, true, true, true, 18.0},
-    { 1.25, 1.0, true, true, true, 119.0},
-    {-1.25, 1.0, true, true, true, 119.0},
+    { 1.00, 1.0, true, true, true, 108.0},
+    {-1.00, 1.0, true, true, true, 108.0},
+    { 1.25, 1.0, true, true, true, 108.0},
+    {-1.25, 1.0, true, true, true, 108.0},
     { 1.25, 1.0, true, true, false, 18.0},
     {-1.25, 1.0, true, true, false, 18.0},
-    { 1.25, 1.0, false, true, true, 108.0},
-    {-1.25, 1.0, true, false, true, 108.0},
+    { 1.25, 1.0, false, true, true, 7.0},
+    {-1.25, 1.0, true, false, true, 7.0},
+    { 1.00, 1.0, false, true, true, 7.0},
+    {-1.00, 1.0, true, false, true, 7.0},
+    { 0.50, 1.0, false, true, true, 7.0},
+    {-0.50, 1.0, true, false, true, 7.0},
     { 0.75, 1.0, false, true, true, 7.0},
     {-0.75, 1.0, true, false, true, 7.0},
     { 3.00, 4.0, true, true, true, 18.0},
     {-3.00, 4.0, true, true, true, 18.0},
-    { 4.50, 4.0, true, true, true, 119.0},
-    {-4.50, 4.0, true, true, true, 119.0},
+    { 4.50, 4.0, true, true, true, 108.0},
+    {-4.50, 4.0, true, true, true, 108.0},
   };
   for (const auto &test : cases) {
     eos.mlim = test.mirror;
     eos.flim = test.firehose;
     const Real got = eos.nu_coll +
         cgl::LimiterCollisionRate(8.0, 8.0 + test.delta, test.bsqr, eos, test.backup);
-    RequireClose("independent additive collision-rate total", got, test.expected);
+    RequireClose("independent tiered collision-rate total", got, test.expected);
   }
-  // The fluid wall still adds backup scattering when the chosen soft FH bound
+  // The fluid wall selects backup scattering when the chosen soft FH bound
   // lies farther from isotropy and is not yet active.
   eos.firehose_threshold = 4.0;
   eos.mlim = false;
@@ -915,7 +919,7 @@ void RunCglHeatFluxLimiterChecks() {
   CheckDiffusionSlopeMeans();
   CheckModerateValues();
   CheckBackupLimiterPolicy();
-  CheckAdditiveCollisionRates();
+  CheckTieredCollisionRates();
   CheckFiniteOverflowCases();
   CheckInfiniteAsymptotes();
   CheckRatioLimiter();

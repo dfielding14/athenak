@@ -75,8 +75,10 @@ not add irreversible shock heating; interpreting it as a control for a
 shock-heated active calculation requires this distinction. Smooth pressure
 work, heat flux, and collisional relaxation remain part of the model.
 
-Acceptance tests are `test_cgl_passive_{cpu,gpu}.py` and the independent-kernel
-`test_cgl_passive_wall_decode.py`. The shared `passive_acceptance.py` exposes
+Acceptance tests are `test_cgl_passive_{cpu,gpu}.py` and
+`test_cgl_c2p_pressure_floor_cpu.py::test_cgl_finite_backup_survives_independent_c2p`.
+The latter checks active/passive finite residuals through independent recovery.
+The shared `passive_acceptance.py` exposes
 `--suite forced` for focused multiple-rank flow/restart checks. They compare
 full-precision flow and restart arrays, timestep sequences, reconstructors,
 forcing, floors, independent linear modes, thermal advection and pressure work.
@@ -84,7 +86,7 @@ The nonlinear temporal case uses stationary dynamic isothermal flow and
 refines local LF against a three-timestep, Richardson-extrapolated explicit
 reference, checking the explicit method's first-order convergence and reference
 uncertainty. These smooth checks do not certify accuracy in depleted turbulent
-cells. A retained depleted-pressure stress replay still triggers strict pressure
-floor rejection at STS safety 0.3; LF interval refinement and the passive turbulent
-milestone remain pending. Inputs, logs, full-precision restarts and results are
-retained in the test output directory.
+cells. The retained depleted-pressure stress failure, subsequent LF interval
+refinement, and passive turbulent milestone used the earlier limiter operator;
+see the [work order](../../cgl_lf_surgical_rebuild_work_order.md) for their evidence
+and the separate qualification of the restored finite two-tier model.

@@ -453,7 +453,7 @@ void Driver::RunSTSSweep(Mesh *pm) {
         DriverFatalError(__FILE__, __LINE__, "Invalid LF chunk timestep or count");
       }
       sts.dt_sweep = remaining;
-      // A newly zero operator finishes the interval and still owes conversion and walls.
+      // A newly zero operator finishes the interval and still owes conversion and rates.
       if (sts.dt_parabolic_min < std::numeric_limits<float>::max() &&
           remaining/sts.dt_parabolic_min > cgl_lf_max_chunk_ratio_) {
         sts.dt_sweep = cgl_lf_max_chunk_ratio_*sts.dt_parabolic_min;
@@ -670,7 +670,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
           RunSTSSweep(pmesh);
         } else if (pmesh->pmb_pack->pmhd != nullptr &&
                    pmesh->pmb_pack->pmhd->has_cgl_lf_split) {
-          // A zero LF operator still owes the cycle's full rates and final walls.
+          // A zero LF operator still owes the cycle's full collision update.
           pmesh->pmb_pack->pmhd->STSPostSweepCGLCollisions(this, 0);
           if (!pmhd->NeedsCGLLFBoundaryRefresh()) {
             pmhd->NewTimeStep(this, nexp_stages);

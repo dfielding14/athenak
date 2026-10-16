@@ -24,8 +24,6 @@
 //! everything in a container makes them easier to capture, and pass to inline functions,
 //! inside kernels.
 
-enum class CGLCollisionMode { full, walls_only };
-
 struct EOS_Data {
   Real gamma;        // ratio of specific heats for ideal gas
   Real iso_cs;       // isothermal sound speed
@@ -38,7 +36,7 @@ struct EOS_Data {
   // Soft Delta p thresholds are -firehose_threshold*B^2/2 and +mirror_threshold*B^2/2.
   Real firehose_threshold, mirror_threshold;
   Real mirror_backup_factor, firehose_backup_factor;
-  Real limiter_backup_nu;  // backup heat-flux scattering rate in inverse code time
+  Real limiter_backup_nu;  // backup relaxation/scattering rate in inverse code time
   bool use_e, use_t; // use internal energy density (e) or temperature (t) as primitive
   Real dfloor, pfloor, tfloor, sfloor, bfloor;  // fluid and magnetic-field floors
   Real gamma_max;    // ceiling on Lorentz factor in SR/GR
@@ -313,7 +311,6 @@ class EquationOfState {
                           const int jl, const int ju, const int kl, const int ku);
   virtual void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const Real dtc,
-                          const CGLCollisionMode mode,
                           const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku);
   virtual void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,
@@ -477,7 +474,6 @@ class CGLMHD : public EquationOfState {
                   const int jl, const int ju, const int kl, const int ku) override;
   void Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                   DvceArray5D<Real> &cons, const Real dtc,
-                  const CGLCollisionMode mode,
                   const int il, const int iu,
                   const int jl, const int ju, const int kl, const int ku) override;
   void CGLAnisotropyToMagneticMoment(DvceArray5D<Real> &cons,

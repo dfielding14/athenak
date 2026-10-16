@@ -1521,8 +1521,6 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
             "limiter stress produced a nonfinite state");
     Require(rho > 0.0 && ppar > 0.0 && pperp > 0.0,
             "limiter stress produced a nonpositive primitive state");
-    Require(!cgl::HardBoundViolated(paniso, bsqr, eos, eos.backup_lim),
-            "limiter stress exceeded a configured hard wall");
     if (check_relaxation) {
       const Real phase = Wavenumber(pin, pm)*(XCenter(pm, q) - pm->mesh_size.x1min);
       const Real seed = (limiter_kind == "mirror" ? 1.0 : -1.0)*0.25*amp*std::sin(phase);
@@ -1531,20 +1529,19 @@ void CheckLimiterStress(ParameterInput *pin, Mesh *pm) {
       const Real initial_piso = (initial_ppar + 2.0*initial_pperp)/3.0;
       const Real mirror = 0.5*eos.mirror_threshold*bsqr;
       const Real firehose = -0.5*eos.firehose_threshold*bsqr;
-      const Real lower = eos.backup_lim ?
-          std::max(-bsqr, eos.firehose_backup_factor*firehose) : -bsqr;
-      const Real upper = eos.backup_lim ? eos.mirror_backup_factor*mirror :
-          std::numeric_limits<Real>::max();
+      const Real lower = std::max(-bsqr, eos.firehose_backup_factor*firehose);
+      const Real upper = eos.mirror_backup_factor*mirror;
       Real expected = initial_pperp - initial_ppar;
-      // The LF pre sweep and RK boundary apply walls before the final rates.
-      if (has_lf) expected = std::min(upper, std::max(lower, expected));
       expected *= std::exp(-eos.nu_coll*pm->time);
-      if (eos.mlim && expected > mirror) {
+      if (eos.backup_lim && eos.mlim && expected >= upper) {
+        expected = upper + (expected - upper)/(1.0 + eos.limiter_backup_nu*pm->time);
+      } else if (eos.backup_lim && eos.flim && expected <= lower) {
+        expected = lower + (expected - lower)/(1.0 + eos.limiter_backup_nu*pm->time);
+      } else if (eos.mlim && expected > mirror) {
         expected = mirror + (expected - mirror)/(1.0 + eos.lim_coll*pm->time);
       } else if (eos.flim && expected < firehose) {
         expected = firehose + (expected - firehose)/(1.0 + eos.lim_coll*pm->time);
       }
-      expected = std::min(upper, std::max(lower, expected));
       const Real error = std::abs(paniso - expected)/initial_piso;
       max_relaxation_error = std::max(max_relaxation_error, error);
       Require(error <= 1.0e-12,

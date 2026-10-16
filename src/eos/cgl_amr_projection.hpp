@@ -32,7 +32,7 @@ enum Repair : RepairMask {
   kParallelPressureFloor  = 1u << 3,
   kPerpPressureFloor      = 1u << 4,
   kLowFieldIsotropized    = 1u << 5,
-  kFirehoseHardwall       = 1u << 6,
+  kFirehoseHardwall       = 1u << 6,  // Reserved; retained history counters stay zero.
   kMirrorHardwall         = 1u << 7,
   kAnisotropyChanged      = 1u << 8,
   kIntervalEnergyExpanded = 1u << 9,
@@ -73,14 +73,10 @@ bool Finite3(const Real a, const Real b, const Real c) {
 }
 
 KOKKOS_INLINE_FUNCTION
-void DeltaInterval(const Real U, const Real bsqr,
-                   const EOS_Data &eos, Real &delta_min, Real &delta_max) {
-  delta_min = fmax(3.0*eos.pfloor - 2.0*U, -bsqr);
+void DeltaInterval(const Real U, const EOS_Data &eos,
+                   Real &delta_min, Real &delta_max) {
+  delta_min = 3.0*eos.pfloor - 2.0*U;
   delta_max = U - 1.5*eos.pfloor;
-  if (eos.backup_lim) {
-    delta_min = fmax(delta_min, cgl::FirehoseBackupWall(bsqr, eos));
-    delta_max = fmin(delta_max, cgl::MirrorBackupWall(bsqr, eos));
-  }
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -103,7 +99,7 @@ bool IsAdmissiblePrimaryState(const Real rho, const Real vx, const Real vy,
   if (bmag <= eos.bfloor) return true;
 
   Real delta_min, delta_max;
-  DeltaInterval(U, bsqr, eos, delta_min, delta_max);
+  DeltaInterval(U, eos, delta_min, delta_max);
   const Real tol = 16.0*std::numeric_limits<Real>::epsilon()*
                    fmax(fmax(fabs(delta_min), fabs(delta_max)), fmax(U, bsqr));
   return delta_min <= delta_max + tol;
@@ -131,7 +127,7 @@ bool IsAdmissibleUDelta(const Real rho, const Real vx, const Real vy,
     return fabs(delta) <= 16.0*std::numeric_limits<Real>::epsilon()*fmax(U, 1.0);
   }
   Real delta_min, delta_max;
-  DeltaInterval(U, bsqr, eos, delta_min, delta_max);
+  DeltaInterval(U, eos, delta_min, delta_max);
   const Real tol = 16.0*std::numeric_limits<Real>::epsilon()*
                    fmax(fmax(fabs(delta_min), fabs(delta_max)), fmax(U, bsqr));
   return delta >= delta_min - tol && delta <= delta_max + tol;
@@ -198,11 +194,11 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
   report.b_eff = b_eff;
 
   Real delta_min, delta_max;
-  DeltaInterval(U, bsqr, eos, delta_min, delta_max);
+  DeltaInterval(U, eos, delta_min, delta_max);
   if (delta_min > delta_max) {
     const Real U_floor = 1.5*eos.pfloor;
     U = fmax(U, U_floor);
-    DeltaInterval(U, bsqr, eos, delta_min, delta_max);
+    DeltaInterval(U, eos, delta_min, delta_max);
     if (delta_min > delta_max) {
       delta_min = delta_max = 0.0;
     }
@@ -216,13 +212,9 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
     }
     delta = 0.0;
   } else if (delta < delta_min) {
-    const Real wall = eos.backup_lim ? cgl::FirehoseBackupWall(bsqr, eos) : -bsqr;
-    if (delta < wall && wall >= delta_min) repairs |= kFirehoseHardwall;
     repairs |= kAnisotropyChanged;
     delta = delta_min;
   } else if (delta > delta_max) {
-    if (eos.backup_lim && delta > cgl::MirrorBackupWall(bsqr, eos) &&
-        cgl::MirrorBackupWall(bsqr, eos) <= delta_max) repairs |= kMirrorHardwall;
     repairs |= kAnisotropyChanged;
     delta = delta_max;
   }
@@ -236,12 +228,6 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
   if (!Kokkos::isfinite(p_perp) || p_perp < eos.pfloor) {
     p_perp = eos.pfloor;
     repairs |= kPerpPressureFloor;
-  }
-  // Keep pressure reconstruction roundoff inside the hard walls.
-  const Real lower = eos.backup_lim ? cgl::FirehoseBackupWall(bsqr, eos) : -bsqr;
-  if (p_perp - p_parallel < lower) p_parallel = Kokkos::nextafter(p_parallel, p_perp);
-  if (eos.backup_lim && p_perp - p_parallel > cgl::MirrorBackupWall(bsqr, eos)) {
-    p_perp = Kokkos::nextafter(p_perp, p_parallel);
   }
   U = InternalEnergyFromPressures(p_parallel, p_perp);
   delta = DeltaFromPressures(p_parallel, p_perp);
@@ -288,9 +274,6 @@ ProjectionReport ProjectUDeltaToCGL(const Real rho_in, const Real vx_in,
       const Real energy_with_kinetic = Kokkos::nextafter(corrected_eint + kinetic, infinity);
       u.e = Kokkos::nextafter(fmax(u.e, energy_with_kinetic + me), infinity);
     }
-    // Raising E at fixed A can cross a wall; encode against the final stored energy.
-    const Real recovered_eint = u.e - kinetic - me;
-    u.mu = CGLWallAdmissibleAnisotropy(w, recovered_eint, u.mu, eos, eos.backup_lim);
     CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
         u.d, u.mx, u.my, u.mz, u.e, u.mu, bx, by, bz, eos.bfloor, w.e, w.pp);
     p_parallel = w.e;

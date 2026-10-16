@@ -100,7 +100,7 @@ sharp-contact expected failures remain in the
 [rebuild work order](../../cgl_lf_surgical_rebuild_work_order.md).
 Smooth-interface convergence tests use a fully magnetized profile and qualify
 that resolved limit separately. Shared face fluxes conserve $A$ during transport;
-weak-field EOS recovery and collision walls can subsequently re-encode it.
+weak-field EOS recovery and collisional relaxation can subsequently re-encode it.
 
 ## Magneto-Immutability
 
@@ -220,9 +220,10 @@ Background relaxation and finite-rate limiters act once per full cycle.
 Background relaxation first multiplies $\Delta p$ by $\exp(-\nu_{\rm coll}dt)$;
 beyond an enabled soft threshold $\Delta_*$, the limiter then applies
 $\Delta_*+(\Delta p-\Delta_*)/(1+\nu_{\rm limiter}dt)$.
-Scheduled wall checkpoints enforce the mandatory fluid-firehose bound and
-any explicitly enabled backup bounds. The old `limiter_hardwall=true` option
-is rejected. Both relaxation and walls preserve
+At or beyond an enabled backup threshold, its target and stiff finite rate
+replace the soft branch. No exact anisotropy clamp follows; the finite residual
+is retained. This restores Majeski's original two-tier rule. The old
+`limiter_hardwall=true` option is rejected. Both relaxation branches preserve
 
 $$
 p_\perp + \frac{1}{2}p_\parallel .

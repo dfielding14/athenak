@@ -114,7 +114,7 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
               << std::endl
               << "<mhd>/limiter_hardwall=true is no longer supported; remove it and "
               << "set limiter_nu_coll=1e10 for stiff soft-threshold relaxation once "
-              << "per timestep. Set backup_limiters explicitly for backup walls."
+              << "per timestep. Set backup_limiters explicitly for backup relaxation."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
@@ -551,7 +551,6 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
 
 void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
                           DvceArray5D<Real> &cons, const Real dtc,
-                          const CGLCollisionMode mode,
                           const int il, const int iu,
                           const int jl, const int ju, const int kl, const int ku) {
   const int nmb = pmy_pack->nmb_thispack;
@@ -559,12 +558,6 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
   const bool flim = eos_data.flim;
   const bool mlim = eos_data.mlim;
   const Real bfloor = eos_data.bfloor;
-  const auto *pcgl_lf = pmy_pack->pmhd->pcgl_lf;
-  const bool landau_fluid_active = (pcgl_lf != nullptr);
-  const bool backup = landau_fluid_active
-                          ? pcgl_lf->effective_backup_limiter
-                          : eos_data.backup_lim;
-
   // TODO(cgl-lf): If the limiter/collision closure becomes nonlocal or
   // gradient-dependent, store nu_eff on the grid here and reconstruct it to LF
   // faces instead of recomputing the present algebraic thresholds in conduction.
@@ -586,20 +579,17 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
     w.by = bcc(m,IBY,k,j,i);
     w.bz = bcc(m,IBZ,k,j,i);
 
-    // Leave conserved A untouched when neither rates nor walls change pressures.
+    // Leave conserved thermodynamics untouched when relaxation changes no pressures.
     const Real initial_ppar = w.e;
     const Real initial_pperp = w.pp;
     HydCons1D u;
-    if (mode == CGLCollisionMode::full) {
-      SingleCollRates_CGLMHD(w, eos, dtc, mlim, flim);
-    }
-    SingleCollWalls_CGLMHD(w, eos, backup);
+    SingleCollRates_CGLMHD(w, eos, dtc, mlim, flim);
     if (w.e == initial_ppar && w.pp == initial_pperp) return;
     if (eos.passive) {
-      const Real eint = 0.5*initial_ppar + initial_pperp;
       const Real bsqr = SQR(w.bx) + SQR(w.by) + SQR(w.bz);
-      const auto q = cgl::PassiveWallEncode(w.d, eint, w.pp - w.e, bsqr,
-                                            eos, backup, w.e, w.pp);
+      const Real beff = fmax(sqrt(bsqr), bfloor);
+      const auto q = cgl::PassiveEncodeFloored(w.d, w.e, w.pp, beff, eos.pfloor);
+      cgl::PassiveDecode(w.d, q, beff, w.e, w.pp);
       cons(m,IEN,k,j,i) = q.j;
       cons(m,IAN,k,j,i) = q.a;
       prim(m,IPR,k,j,i) = w.e;
@@ -607,14 +597,7 @@ void CGLMHD::Collisions(DvceArray5D<Real> &prim, const DvceArray5D<Real> &bcc,
       return;
     }
     SingleP2C_CGLMHD(w, bfloor, u);
-    // Match canonical C2P arithmetic so a wall remains admissible after restart.
-    const Real di = 1.0/w.d;
-    const Real kinetic = 0.5*di*(SQR(cons(m,IM1,k,j,i)) + SQR(cons(m,IM2,k,j,i)) +
-                                 SQR(cons(m,IM3,k,j,i)));
-    const Real magnetic = 0.5*(SQR(w.bx) + SQR(w.by) + SQR(w.bz));
-    const Real eint = cons(m,IEN,k,j,i) - kinetic - magnetic;
-    u.mu = CGLWallAdmissibleAnisotropy(w, eint, u.mu, eos, backup);
-    // The cache must match conserved E and A even when A needed no extra wall step.
+    // Keep total E fixed and make the pressure cache match its stored E/A state.
     CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
         w.d, cons(m,IM1,k,j,i), cons(m,IM2,k,j,i), cons(m,IM3,k,j,i),
         cons(m,IEN,k,j,i), u.mu, w.bx, w.by, w.bz, bfloor, w.e, w.pp);

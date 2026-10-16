@@ -125,21 +125,17 @@ void CheckStoredProjection(const MHDPrim1D &w, const HydCons1D &u,
     Require("projected pressure cache matches stored state", decoded.e == w.e &&
             decoded.pp == w.pp && report.p_parallel == w.e && report.p_perp == w.pp);
     const Real delta = decoded.pp-decoded.e;
-    // With the nondefault firehose coefficient 1, backup raises its wall to -B^2/2.
-    Require("independent projected wall bounds", delta >= -bsqr &&
-            (!eos.backup_lim || (delta >= -0.5*bsqr && delta <= bsqr)));
-    Require("projected wall retains expected anisotropy",
+    Require("projected pressures remain positive", decoded.e >= eos.pfloor &&
+            decoded.pp >= eos.pfloor);
+    Require("projection retains expected anisotropy",
             std::abs(delta-expected_delta) <= tolerance);
     Require("stored energy recovers projected thermal energy",
             std::abs(0.5*decoded.e+decoded.pp-internal) <= tolerance &&
             std::abs(internal-expected_internal) <= tolerance);
-    MHDPrim1D wall = w;
-    SingleCollWalls_CGLMHD(wall, eos, eos.backup_lim);
-    Require("projected pressures need no second wall", wall.e == w.e && wall.pp == w.pp);
   }
 }
 
-void CheckCanonicalWallProjection() {
+void CheckCanonicalProjection() {
   EOS_Data eos = TestEOS();
   eos.firehose_threshold = 1.0;
   eos.mlim = eos.flim = true;
@@ -157,15 +153,13 @@ void CheckCanonicalWallProjection() {
     for (const auto &q : cases) {
       MHDPrim1D w{};
       HydCons1D u{};
-      const Real bsqr = SQR(q[4]) + SQR(q[5]) + SQR(q[6]);
-      Real expected_delta = fmax(q[8], backup ? -0.5*bsqr : -bsqr);
-      if (backup) expected_delta = fmin(expected_delta, bsqr);
+      const Real expected_delta = q[8];
       const auto report = cgl::amr::ProjectUDeltaToCGL(
           q[0], q[1], q[2], q[3], q[4], q[5], q[6], q[7], q[8], eos,
           cgl::amr::anisotropy, w, u);
-      Require("wall projection preserves density and momentum",
+      Require("projection preserves density and momentum",
               u.d == q[0] && u.mx == q[0]*q[1] && u.my == q[0]*q[2] && u.mz == q[0]*q[3]);
-      Require("wall projection preserves magnetic field",
+      Require("projection preserves magnetic field",
               w.bx == q[4] && w.by == q[5] && w.bz == q[6]);
       CheckStoredProjection(w, u, report, eos, cgl::amr::anisotropy,
                             expected_delta, q[7]);
@@ -190,7 +184,7 @@ void CheckCanonicalWallProjection() {
           repeated_u.d == u.d && repeated_u.mx == u.mx && repeated_u.my == u.my &&
           repeated_u.mz == u.mz && repeated_u.e == u.e && repeated_u.mu == u.mu &&
           repeated_w.e == w.e && repeated_w.pp == w.pp);
-  std::cout << "CGL AMR canonical wall encoding checks passed" << std::endl;
+  std::cout << "CGL AMR canonical encoding checks passed" << std::endl;
 }
 
 void CheckRepresentableProjectionFloor() {
@@ -221,9 +215,9 @@ void CheckRepresentableProjectionFloor() {
     Require("AMR energy rounding preserves primary fields",
             u.d == 1.0 && u.mx == q[0] && u.my == 0.0 && u.mz == 0.0 &&
             w.bx == q[1] && w.by == 0.0 && w.bz == 0.0);
-    Require("AMR rounded floor is finite and wall-admissible",
+    Require("AMR rounded floor is finite and positive",
             std::isfinite(u.e) && std::isfinite(u.mu) &&
-            w.e >= eos.pfloor && w.pp >= eos.pfloor && w.pp-w.e >= -SQR(q[1]));
+            w.e >= eos.pfloor && w.pp >= eos.pfloor);
     Require("AMR report returns encoded pressures", report.p_parallel == w.e &&
             report.p_perp == w.pp && report.U == w.pp+0.5*w.e);
     MHDCons1D stored{u.d, u.mx, u.my, u.mz, u.e, u.mu, w.bx, w.by, w.bz};
@@ -270,7 +264,7 @@ void RunCglAMRProjectionStandaloneChecks(const char *mode) {
     const std::string selected(mode);
     if (selected == "finite") {
       CheckFiniteProjection();
-      CheckCanonicalWallProjection();
+      CheckCanonicalProjection();
       CheckRepresentableProjectionFloor();
     } else {
       CheckRejectedMagneticField(selected);
@@ -283,6 +277,6 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   (void) pin;
   if (restart) return;
   CheckFiniteProjection();
-  CheckCanonicalWallProjection();
+  CheckCanonicalProjection();
   CheckRepresentableProjectionFloor();
 }

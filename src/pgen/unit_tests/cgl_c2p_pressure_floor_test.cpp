@@ -19,6 +19,7 @@
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_passive.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
 #include "pgen/pgen.hpp"
@@ -582,11 +583,6 @@ void CheckCollisionMap() {
       if (nudt == 0.0) {
         Require("zero-rate identity", std::memcmp(&w, &original, sizeof(w)) == 0);
       }
-      SingleCollWalls_CGLMHD(w, eos, true);
-      const MHDPrim1D projected = w;
-      Require("wall bounds", w.pp-w.e >= -0.7 && w.pp-w.e <= 1.0);
-      SingleCollWalls_CGLMHD(w, eos, true);
-      Require("bitwise idempotent walls", std::memcmp(&w, &projected, sizeof(w)) == 0);
     }
   }
 
@@ -672,250 +668,222 @@ void CheckCollisionMap() {
     }
   }
 
-  // Backup walls ignore soft flags; the fluid firehose wall ignores backup.
-  eos.mlim = eos.flim = false;
-  for (const bool backup : {false, true}) {
-    for (const Real delta : {Real(-2.0), Real(2.0)}) {
-      MHDPrim1D w{};
-      w.bx = 1.0;
-      w.e = 3.0 - TWO_3RDS*delta;
-      w.pp = 3.0 + ONE_3RD*delta;
-      SingleCollWalls_CGLMHD(w, eos, backup);
-      const Real expected = backup ? (delta < 0.0 ? -0.7 : 1.0)
-                                   : (delta < 0.0 ? -1.0 : delta);
-      RequireClose("independent wall flags", w.pp-w.e, expected);
-    }
-  }
   std::cout << "CGL collision-map checks passed" << std::endl;
 }
 
-// Exercise the real grid collision operator, then decode in a separate kernel.
-// These doubles are the three cells that failed a strict HIP restart at t=10.
-void CheckProductionWallEncoding(MeshBlockPack *pack, const std::string &filename) {
-  Require("production wall fixture uses double", !kSinglePrecision);
-  constexpr int ncase = 6;
-  double cases[ncase][9] = {
-    {1.0580936533619145, 0.4998698938877745, 0.162893050030097,
-     -0.03657178263370929, 11.505868899072333, -0.1425980922790349,
-     0.23714419782252238, 0.03332376975719438, 1.0067785045133788},
-    {1.068962309818397, -0.2853674066747329, 1.1165715708919983,
-     -0.47723398025244956, 12.294172720527772, -0.5135541903454163,
-     0.4807561523963997, -0.5410872057353117, 0.9013372287919911},
-    {1.045423160356516, -0.3245337512214358, 0.894759895491961,
-     -0.4707708062214894, 11.851465659314885, -0.501664065376218,
-     0.7615518523764249, -0.45361804497395064, 0.7156273634530386},
-    // Isotropic interior, exact fluid wall, and a genuinely outside-wall state.
-    {1., 0., 0., 0., 8., 0., 0., 0., 1.},
-    {1., 0., 0., 0., 4., std::log(2.)-std::log(3.), 0., 0., 1.},
-    {1., 0., 0., 0., 3.5, -std::log(4.), 0., 0., 1.}
-  };
-  const int nmb = pack->nmb_thispack;
-  auto *peos = pack->pmhd->peos;
-  const EOS_Data eos = peos->eos_data;
-  const bool backup = eos.backup_lim;
-  Require("active production wall fixture", eos.is_cgl && !eos.passive);
-  Real expected_delta[ncase]{};
-  Real expected_thermal[ncase]{};
-  if (backup) {
-    Require("asymmetric backup fixture policy",
-            eos.firehose_threshold == 1.4 && eos.firehose_backup_factor == 1.1 &&
-            eos.mirror_threshold == 0.7 && eos.mirror_backup_factor == 1.3 &&
-            eos.nu_coll == 0.3 && eos.lim_coll == 7.0);
-    for (int c=0; c<ncase; ++c) {
-      const Real rho = 1.7 + 0.13*c;
-      const Real mx = 0.31 - 0.06*c, my = -0.23 + 0.04*c, mz = 0.11 + 0.02*c;
-      const Real bx = 0.91 - 0.03*c, by = -0.28 + 0.02*c, bz = 0.37 + 0.01*c;
-      const Real bsqr = SQR(bx) + SQR(by) + SQR(bz);
-      // Independent numeric bounds; do not reuse the production threshold helpers.
-      const Real lower = 1.1*(-0.5*1.4*bsqr), upper = 1.3*(0.5*0.7*bsqr);
-      const Real delta = c == 0 ? -1.4*bsqr : c == 1 ? 1.2*bsqr :
-                         c == 2 ? lower : c == 4 ? upper : c == 5 ? 0.44*bsqr : 0.0;
-      const Real thermal = 6.0 + 0.2*c;
-      const Real ppar = (2.0/3.0)*(thermal - delta);
-      const Real pperp = (2.0/3.0)*thermal + delta/3.0;
-      cases[c][0] = rho; cases[c][1] = mx; cases[c][2] = my; cases[c][3] = mz;
-      cases[c][4] = thermal + 0.5/rho*(SQR(mx) + SQR(my) + SQR(mz)) + 0.5*bsqr;
-      cases[c][5] = rho*(std::log(pperp/ppar) + 2.0*std::log(rho)
-                        - 3.0*std::log(std::sqrt(bsqr)));
-      cases[c][6] = bx; cases[c][7] = by; cases[c][8] = bz;
-      expected_delta[c] = std::min(upper, std::max(lower, delta));
-      expected_thermal[c] = thermal;
-      if (c == 5) {
-        // This interior state sees background relaxation, then a finite soft kick.
-        const Real after_background = delta*std::exp(-0.3*0.2);
-        Require("finite-rate fixture activates soft mirror relaxation",
-                after_background > 0.35*bsqr && delta < upper);
-        expected_delta[c] = 0.35*bsqr + (after_background - 0.35*bsqr)/(1.0 + 7.0*0.2);
+// Independent pressure-form oracle from Stephen's 0e6d5e034 mirror correction.
+// The backup branch replaces the soft branch; the combined map has jumps.
+void CheckStephenLimiterMap() {
+  EOS_Data eos = MakeCglEOS();
+  eos.firehose_threshold = 1.4;
+  eos.firehose_backup_factor = 2.0;
+  const Real dt = 0.125;
+  const Real offset = 32.0*std::numeric_limits<Real>::epsilon();
+  const Real states[][2] = {{1.4, 0.7}, {0.5, 1.0}, {2.0, 1.0}, {1.0, 2.0},
+                            {2.0, 0.5}, {0.5, 2.0}};
+  const Real rates[][2] = {{0.0, 0.0}, {0.0, 1.0e10}, {4.0, 0.0},
+                           {4.0, 13.0}, {4.0, 1.0e10}, {1.0e10, 13.0}};
+  int checks = 0;
+  for (const bool backup : {false, true}) {
+    eos.backup_lim = backup;
+    for (int flags = 0; flags < 4; ++flags) {
+      const bool mirror = (flags & 1) != 0, firehose = (flags & 2) != 0;
+      for (const Real background : {Real(0.0), Real(4.0), Real(20.0)}) {
+        eos.nu_coll = background;
+        for (const auto &rates_case : rates) {
+          eos.lim_coll = rates_case[0];
+          eos.limiter_backup_nu = rates_case[1];
+          for (const auto &state : states) {
+            for (const int side : {-1, 0, 1}) {
+              MHDPrim1D w{};
+              w.d = w.bx = 1.0;
+              w.e = state[0];
+              w.pp = state[1] + side*offset;
+              const MHDPrim1D original = w;
+              const long double thermal = 0.5L*w.e + w.pp;
+              const long double piso = (w.e + 2.0L*w.pp)/3.0L;
+              const long double delta = (static_cast<long double>(w.pp)-w.e)
+                  * std::exp(-static_cast<long double>(background)*dt);
+              long double perp = piso + delta/3.0L, parallel = perp-delta;
+              long double target = 0.0L, rate = 0.0L;
+              if (firehose && delta <= -0.7L) {
+                target = backup && delta <= -1.0L ? -1.0L : -0.7L;
+                rate = backup && delta <= -1.0L ? rates_case[1] : rates_case[0];
+              } else if (mirror && delta >= 0.5L) {
+                target = backup && delta >= 1.0L ? 1.0L : 0.5L;
+                rate = backup && delta >= 1.0L ? rates_case[1] : rates_case[0];
+              }
+              const long double nudt = rate*dt;
+              const long double expected_perp =
+                  (3.0L*perp + nudt*(2.0L*perp+parallel+target))/(3.0L+3.0L*nudt);
+              const long double expected_parallel =
+                  (3.0L*parallel + nudt*(2.0L*perp+parallel-2.0L*target))
+                  /(3.0L+3.0L*nudt);
+              SingleCollRates_CGLMHD(w, eos, dt, mirror, firehose);
+              RequireClose("Stephen limiter parallel pressure", w.e, expected_parallel);
+              RequireClose("Stephen limiter perpendicular pressure", w.pp, expected_perp);
+              RequireClose("Stephen limiter thermal energy", 0.5*w.e+w.pp, thermal);
+              Require("Stephen limiter positive pressures", w.e > 0.0 && w.pp > 0.0);
+              Require("Stephen limiter preserves other primitives",
+                      w.d == original.d && w.vx == original.vx &&
+                      w.vy == original.vy && w.vz == original.vz &&
+                      w.bx == original.bx && w.by == original.by && w.bz == original.bz);
+              if (background == 0.0 && rate == 0.0L) {
+                Require("Stephen zero-rate identity",
+                        std::memcmp(&w, &original, sizeof(w)) == 0);
+              }
+              ++checks;
+            }
+          }
+        }
       }
     }
   }
-  DvceArray5D<Real> cons("wall_cons", nmb, 6, 1, 1, ncase);
-  DvceArray5D<Real> prim("wall_prim", nmb, 6, 1, 1, ncase);
-  DvceArray5D<Real> decoded("wall_decoded", nmb, 6, 1, 1, ncase);
-  DvceArray5D<Real> bcc("wall_bcc", nmb, 3, 1, 1, ncase);
-  Kokkos::View<int*> hard_bad("wall_bad", nmb*ncase);
+  // A configurable soft onset can lie beyond the fluid-capped backup target.
+  // The backup still acts first, as it does in the LF scattering coefficient.
+  eos.nu_coll = 0.0;
+  eos.firehose_threshold = 4.0;
+  eos.lim_coll = 64.0;
+  eos.limiter_backup_nu = 8.0;
+  MHDPrim1D capped{};
+  capped.d = capped.bx = 1.0;
+  capped.e = 2.0;
+  capped.pp = 0.5;
+  const MHDPrim1D original = capped;
+  eos.backup_lim = false;
+  SingleCollRates_CGLMHD(capped, eos, dt, false, true);
+  Require("inactive soft limiter with backup disabled",
+          std::memcmp(&capped, &original, sizeof(capped)) == 0);
+  eos.backup_lim = true;
+  SingleCollRates_CGLMHD(capped, eos, dt, false, true);
+  RequireClose("capped backup parallel pressure", capped.e, 11.0L/6.0L);
+  RequireClose("capped backup perpendicular pressure", capped.pp, 7.0L/12.0L);
+  RequireClose("capped backup thermal energy", 0.5*capped.e+capped.pp, 1.5L);
+  std::cout << "CGL Stephen two-tier limiter checks passed: " << checks << std::endl;
+}
+
+// Finite backups must survive conserved-state reload and LF representation changes.
+void CheckProductionFiniteBackup(MeshBlockPack *pack, const std::string &filename) {
+  auto *peos = pack->pmhd->peos;
+  const EOS_Data saved_eos = peos->eos_data;
+  const int nmb = pack->nmb_thispack;
+  constexpr int ncase = 4;
+  constexpr Real dt = 2.0e-4;
+  DvceArray5D<Real> cons("finite_backup_cons", nmb, 6, 1, 1, ncase);
+  DvceArray5D<Real> prim("finite_backup_prim", nmb, 6, 1, 1, ncase);
+  DvceArray5D<Real> bcc("finite_backup_bcc", nmb, 3, 1, 1, ncase);
   auto copy_to_host = [](const DvceArray5D<Real> &view) {
     auto host = Kokkos::create_mirror(view);
     Kokkos::deep_copy(host, view);
     return host;
   };
-  auto initial = Kokkos::create_mirror(cons);
-  auto initial_b = Kokkos::create_mirror(bcc);
-  for (int m=0; m<nmb; ++m) {
-    for (int c=0; c<ncase; ++c) {
-      for (int v=0; v<6; ++v) initial(m,v,0,0,c) = cases[c][v];
-      for (int v=0; v<3; ++v) initial_b(m,v,0,0,c) = cases[c][v+6];
+  for (const bool passive : {false, true}) {
+    EOS_Data eos = saved_eos;
+    eos.passive = passive;
+    eos.backup_lim = eos.mlim = eos.flim = true;
+    eos.firehose_threshold = 1.4;
+    eos.mirror_threshold = 1.0;
+    eos.firehose_backup_factor = eos.mirror_backup_factor = 2.0;
+    eos.nu_coll = 0.0;
+    eos.lim_coll = 64.0;
+    eos.limiter_backup_nu = 1.0e10;
+    peos->eos_data = eos;
+    auto initial = Kokkos::create_mirror(cons);
+    auto initial_b = Kokkos::create_mirror(bcc);
+    for (int m=0; m<nmb; ++m) for (int c=0; c<ncase; ++c) {
+      const Real delta = c == 0 ? -1.2 : c == 1 ? 1.2 : c == 2 ? -0.8 : 0.8;
+      const Real pp = 4.0 - TWO_3RDS*delta, pt = 4.0 + ONE_3RD*delta;
+      initial(m,IDN,0,0,c) = 1.0;
+      initial(m,IM1,0,0,c) = 0.1;
+      initial(m,IM2,0,0,c) = -0.2;
+      initial(m,IM3,0,0,c) = 0.3;
+      const auto q = cgl::PassiveEncode(1.0, pp, pt, 1.0);
+      initial(m,IEN,0,0,c) = passive ? q.j : 6.57;
+      initial(m,IAN,0,0,c) = passive ? q.a : CGLConservedAnisotropy(1.0, pp, pt, 1.0);
+      for (int v=0; v<3; ++v) initial_b(m,v,0,0,c) = v == IBZ ? 1.0 : 0.0;
     }
-  }
-  Kokkos::deep_copy(cons, initial);
-  Kokkos::deep_copy(bcc, initial_b);
-  // The same decoder is launched independently before and after the real operator.
-  auto decode = [&](DvceArray5D<Real> dest) {
-    Kokkos::parallel_for("production_wall_independent_c2p", nmb*ncase,
-    KOKKOS_LAMBDA(const int index) {
-      const int m = index/ncase, c = index%ncase;
-      MHDCons1D u{cons(m,IDN,0,0,c), cons(m,IM1,0,0,c), cons(m,IM2,0,0,c),
-                  cons(m,IM3,0,0,c), cons(m,IEN,0,0,c), cons(m,IAN,0,0,c),
-                  bcc(m,IBX,0,0,c), bcc(m,IBY,0,0,c), bcc(m,IBZ,0,0,c)};
-      HydPrim1D w{};
-      bool df=false, ef=false, tf=false, bf=false;
-      SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
-      if (df || ef || tf || bf) Kokkos::abort("Unexpected wall fixture floor");
-      dest(m,IDN,0,0,c)=w.d; dest(m,IVX,0,0,c)=w.vx;
-      dest(m,IVY,0,0,c)=w.vy; dest(m,IVZ,0,0,c)=w.vz;
-      dest(m,IPR,0,0,c)=w.e; dest(m,IPP,0,0,c)=w.pp;
-      const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
-      const Real lower = backup ? 1.1*(-0.5*1.4*bsqr) : -bsqr;
-      const Real upper = backup ? 1.3*(0.5*0.7*bsqr) :
-                                 std::numeric_limits<Real>::max();
-      hard_bad(index) = !Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp) ||
-                        !(w.e > 0.0) || !(w.pp > 0.0) ||
-                        w.pp-w.e < lower || w.pp-w.e > upper;
-    });
-  };
-  decode(prim);
-  if (backup) {
-    peos->Collisions(prim, bcc, cons, 0.2, CGLCollisionMode::full, 5, 5, 0, 0, 0, 0);
-  }
-  peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
-                  0, ncase-1, 0, 0, 0, 0);
-  decode(decoded);
-  auto corrected = copy_to_host(cons);
-  auto cached = copy_to_host(prim);
-  auto fresh = copy_to_host(decoded);
-  auto final_b = copy_to_host(bcc);
-  auto bad = Kokkos::create_mirror_view_and_copy(HostMemSpace(), hard_bad);
-  for (int m=0; m<nmb; ++m) {
-    for (int c=0; c<ncase; ++c) {
-      for (int v=0; v<5; ++v) {
-        Require("wall conserves rho/momentum/total E bitwise",
-                std::memcmp(&corrected(m,v,0,0,c), &initial(m,v,0,0,c),
-                            sizeof(Real)) == 0);
-      }
-      Require("production wall survives independent C2P", bad(m*ncase+c) == 0);
-      if (backup) {
-        RequireClose("encoded backup/rate anisotropy",
-                     fresh(m,IPP,0,0,c)-fresh(m,IPR,0,0,c), expected_delta[c]);
-        RequireClose("encoded backup/rate parallel pressure", fresh(m,IPR,0,0,c),
-                     (2.0/3.0)*(expected_thermal[c] - expected_delta[c]));
-        RequireClose("encoded backup/rate perpendicular pressure", fresh(m,IPP,0,0,c),
-                     (2.0/3.0)*expected_thermal[c] + expected_delta[c]/3.0);
-      } else if (c != 3) {
-        const Real bsqr = SQR(initial_b(m,IBX,0,0,c)) + SQR(initial_b(m,IBY,0,0,c)) +
-                          SQR(initial_b(m,IBZ,0,0,c));
-        RequireClose("encoded wall retains boundary anisotropy",
-                     fresh(m,IPP,0,0,c)-fresh(m,IPR,0,0,c), -bsqr);
+    Kokkos::deep_copy(cons, initial);
+    Kokkos::deep_copy(bcc, initial_b);
+    auto decode = [&]() {
+      par_for("finite_backup_independent_c2p", DevExeSpace(), 0,nmb-1, 0,0, 0,0, 0,ncase-1,
+      KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        MHDCons1D u{cons(m,IDN,k,j,i), cons(m,IM1,k,j,i), cons(m,IM2,k,j,i),
+                    cons(m,IM3,k,j,i), cons(m,IEN,k,j,i), cons(m,IAN,k,j,i), 0., 0., 1.};
+        HydPrim1D w{};
+        if (passive) {
+          w.d=u.d; w.vx=u.mx/u.d; w.vy=u.my/u.d; w.vz=u.mz/u.d;
+          cgl::PassiveDecode(u.d, {u.e, u.mu}, 1.0, w.e, w.pp);
+        } else {
+          bool df=false, ef=false, tf=false, bf=false;
+          SingleC2P_CGLMHD(u, eos, w, df, ef, tf, bf);
+          if (df || ef || tf || bf) Kokkos::abort("Finite backup fixture needs a floor");
+        }
+        prim(m,IDN,k,j,i)=w.d; prim(m,IVX,k,j,i)=w.vx;
+        prim(m,IVY,k,j,i)=w.vy; prim(m,IVZ,k,j,i)=w.vz;
+        prim(m,IPR,k,j,i)=w.e; prim(m,IPP,k,j,i)=w.pp;
+      });
+    };
+    decode();
+    const auto before = copy_to_host(prim);
+    peos->Collisions(prim, bcc, cons, dt, 0,ncase-1, 0,0, 0,0);
+    const auto corrected = copy_to_host(cons);
+    const auto cached = copy_to_host(prim);
+    decode();
+    const auto fresh = copy_to_host(prim);
+    for (int m=0; m<nmb; ++m) for (int c=0; c<ncase; ++c) {
+      const Real delta = before(m,IPP,0,0,c)-before(m,IPR,0,0,c);
+      const Real target = c == 0 ? -1.0 : c == 1 ? 1.0 : c == 2 ? -0.7 : 0.5;
+      const Real rate = c < 2 ? 1.0e10 : 64.0;
+      RequireClose("production two-tier map", fresh(m,IPP,0,0,c)-fresh(m,IPR,0,0,c),
+                   target+(delta-target)/(1.0+rate*dt));
+      RequireClose("production collision thermal energy", 0.5*fresh(m,IPR,0,0,c)
+                   +fresh(m,IPP,0,0,c), 0.5*before(m,IPR,0,0,c)+before(m,IPP,0,0,c));
+      for (int v=IDN; v <= (passive ? IM3 : IEN); ++v) {
+        Require("collision preserves primary conserved fields",
+                initial(m,v,0,0,c) == corrected(m,v,0,0,c));
       }
       for (int v : {IPR, IPP}) {
-        Require("production wall cached pressure is canonical",
+        Require("collision pressure cache matches independent decoder",
                 cached(m,v,0,0,c) == fresh(m,v,0,0,c));
       }
     }
-    Require("interior conservative A stays untouched",
-            std::memcmp(&corrected(m,IAN,0,0,3), &initial(m,IAN,0,0,3),
-                        sizeof(Real)) == 0);
-  }
-  Require("wall leaves magnetic field bitwise unchanged",
-          std::memcmp(initial_b.data(), final_b.data(),
-                      final_b.size()*sizeof(Real)) == 0);
-  // Serialize the actual corrected conserved state, restore into the device view,
-  // and check the independent decoder again. No primitive cache is serialized.
-  const std::size_t bytes = corrected.size()*sizeof(Real);
-  {
-    std::ofstream stream(filename, std::ios::binary);
-    stream.write(reinterpret_cast<const char*>(corrected.data()), bytes);
-    Require("write corrected wall state", stream.good());
-  }
-  auto restored = Kokkos::create_mirror(cons);
-  {
-    std::ifstream stream(filename, std::ios::binary);
-    stream.read(reinterpret_cast<char*>(restored.data()), bytes);
-    Require("read corrected wall state", stream.good());
-    Require("wall state has exact serialized length", stream.peek() == EOF);
-  }
-  Require("serialized wall state bitwise identity",
-          std::memcmp(corrected.data(), restored.data(), bytes) == 0);
-  Kokkos::deep_copy(cons, restored);
-  decode(prim);
-  auto restarted = copy_to_host(prim);
-  Require("serialized state independently recovers identical primitives",
-          std::memcmp(fresh.data(), restarted.data(), fresh.size()*sizeof(Real)) == 0);
-  peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
-                  0, ncase-1, 0, 0, 0, 0);
-  auto repeated = copy_to_host(cons);
-  Require("production wall encoded fixed point",
-          std::memcmp(corrected.data(), repeated.data(), bytes) == 0);
-  std::cout << "CGL production wall encoding/restart checks passed: "
-            << ncase << " states per block" << std::endl;
-  if (backup) {
-    std::cout << "CGL asymmetric backup wall/full-rate checks passed" << std::endl;
-  }
-
-  // Reproduce the LF sweep exit. Conversion must refresh the pressure cache
-  // from stored E and A before the following wall operation can skip a cell.
-  peos->CGLAnisotropyToMagneticMoment(cons, bcc, 0, ncase-1, 0, 0, 0, 0);
-  peos->CGLRefreshPrimFromMagneticMoment(cons, bcc, prim, 0, ncase-1, 0, 0, 0, 0);
-  peos->CGLMagneticMomentToAnisotropy(cons, bcc, prim, 0, ncase-1, 0, 0, 0, 0);
-  auto converted = copy_to_host(cons);
-  peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
-                  0, ncase-1, 0, 0, 0, 0);
-  decode(decoded);
-  auto transition_cons = copy_to_host(cons);
-  auto transition_cached = copy_to_host(prim);
-  auto transition_fresh = copy_to_host(decoded);
-  auto transition_bad = Kokkos::create_mirror_view_and_copy(HostMemSpace(), hard_bad);
-  for (int m=0; m<nmb; ++m) {
-    for (int c=0; c<ncase; ++c) {
-      const bool same_pressures =
-          transition_cached(m,IPR,0,0,c) == transition_fresh(m,IPR,0,0,c) &&
-          transition_cached(m,IPP,0,0,c) == transition_fresh(m,IPP,0,0,c);
-      if (transition_bad(m*ncase+c) != 0 || !same_pressures) {
-        const Real bsqr = SQR(initial_b(m,IBX,0,0,c)) + SQR(initial_b(m,IBY,0,0,c)) +
-                          SQR(initial_b(m,IBZ,0,0,c));
-        std::cout.precision(std::numeric_limits<Real>::max_digits10);
-        std::cout << "LF conversion wall case " << c << ": cached delta="
-                  << transition_cached(m,IPP,0,0,c)-transition_cached(m,IPR,0,0,c)
-                  << ", stored delta="
-                  << transition_fresh(m,IPP,0,0,c)-transition_fresh(m,IPR,0,0,c)
-                  << ", fluid wall=" << -bsqr << std::endl;
-      }
-      Require("LF conversion wall survives independent C2P",
-              transition_bad(m*ncase+c) == 0);
-      Require("LF conversion wall cached pressure is canonical", same_pressures);
-      for (int v=0; v<5; ++v) {
-        Require("LF conversion wall conserves rho/momentum/total E bitwise",
-                std::memcmp(&transition_cons(m,v,0,0,c), &converted(m,v,0,0,c),
-                            sizeof(Real)) == 0);
+    const std::size_t bytes = corrected.size()*sizeof(Real);
+    {
+      std::ofstream file(filename, std::ios::binary);
+      file.write(reinterpret_cast<const char*>(corrected.data()), bytes);
+      Require("write finite backup state", file.good());
+    }
+    auto restored = Kokkos::create_mirror(cons);
+    {
+      std::ifstream file(filename, std::ios::binary);
+      file.read(reinterpret_cast<char*>(restored.data()), bytes);
+      Require("read finite backup state", file.good() && file.peek() == EOF);
+    }
+    Kokkos::deep_copy(cons, restored);
+    decode();
+    const auto reloaded = copy_to_host(prim);
+    Require("persistent collision reload preserves pressure bits",
+            std::memcmp(fresh.data(), reloaded.data(), fresh.size()*sizeof(Real)) == 0);
+    // Zero-time calls and LF storage conversions must not add a hard projection.
+    peos->Collisions(prim, bcc, cons, 0.0, 0,ncase-1, 0,0, 0,0);
+    peos->CGLAnisotropyToMagneticMoment(cons, bcc, 0,ncase-1, 0,0, 0,0);
+    peos->CGLRefreshPrimFromMagneticMoment(cons, bcc, prim, 0,ncase-1, 0,0, 0,0);
+    peos->CGLMagneticMomentToAnisotropy(cons, bcc, prim, 0,ncase-1, 0,0, 0,0);
+    decode();
+    const auto converted = copy_to_host(prim);
+    for (int m=0; m<nmb; ++m) {
+      Require("finite firehose residual survives", converted(m,IPP,0,0,0)
+              -converted(m,IPR,0,0,0) < -1.0);
+      Require("finite mirror residual survives", converted(m,IPP,0,0,1)
+              -converted(m,IPR,0,0,1) > 1.0);
+      for (int c=0; c<ncase; ++c) for (int v : {IPR, IPP}) {
+        RequireClose("LF conversion retains finite relaxation", converted(m,v,0,0,c),
+                     fresh(m,v,0,0,c));
       }
     }
   }
-  peos->Collisions(prim, bcc, cons, 0.0, CGLCollisionMode::walls_only,
-                  0, ncase-1, 0, 0, 0, 0);
-  auto transition_repeated = copy_to_host(cons);
-  Require("LF conversion wall encoded fixed point",
-          std::memcmp(transition_cons.data(), transition_repeated.data(), bytes) == 0);
-  std::cout << "CGL LF conversion wall encoding checks passed: "
-            << ncase << " states per block" << std::endl;
+  peos->eos_data = saved_eos;
+  std::cout << "CGL finite backup/reload checks passed: active and passive" << std::endl;
 }
 
 // A tiny anisotropy loss must increase the small pressure, even at a binade edge.
@@ -975,7 +943,7 @@ void CheckProductionTinyCollisionRates(MeshBlockPack *pack) {
     // Put the canonical input exactly on its floor to expose any pressure decrease.
     eos.pfloor = before(0,IPR,0,0,0);
     peos->eos_data = eos;
-    peos->Collisions(prim, bcc, cons, 1.0, CGLCollisionMode::full, 0, 0, 0, 0, 0, 0);
+    peos->Collisions(prim, bcc, cons, 1.0, 0, 0, 0, 0, 0, 0);
     decode(decoded);
     const auto after = copy_to_host(cons);
     const auto cached = copy_to_host(prim);
@@ -1041,6 +1009,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckNonpositiveDensityFloor();
   CheckMagnetizationDensityFloor();
   CheckCollisionMap();
+  CheckStephenLimiterMap();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
 }
@@ -1050,7 +1019,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   if (restart) return;
   RunCglC2PPressureFloorChecks();
   if (!kSinglePrecision) {
-    CheckProductionWallEncoding(pmy_mesh_->pmb_pack, "wall_state.bin");
+    CheckProductionFiniteBackup(pmy_mesh_->pmb_pack, "collision_state.bin");
     CheckProductionTinyCollisionRates(pmy_mesh_->pmb_pack);
   }
   // Leave a finite uniform state for zero-step application startup.

@@ -618,7 +618,6 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
     peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju,
                                            kl, ku);
   }
-  // Entry walls were checked in A before conversion; moment recovery can round across them.
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
       pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before,
@@ -660,7 +659,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
   }
   cgl_slot_representation = CGLSlotRepresentation::anisotropy;
   if (peos->eos_data.passive) {
-    // Subsequent walls and restarts must decode the stored J/A in the same kernel.
+    // Subsequent evolution and restarts must decode stored J/A in the same kernel.
     peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
   }
   if (diagnose_nonfinite_rk_update) {
@@ -673,7 +672,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::STSPostSweepCGLCollisions()
-//! \brief Apply CGL walls after any parabolic sweep, and rates after the post LF sweep.
+//! \brief Synchronize CGL sweep state, applying rates once after the post LF sweep.
 //!
 //! Without LF, rates already advance once after RK. LF restores A before this hook.
 
@@ -689,23 +688,21 @@ TaskStatus MHD::STSPostSweepCGLCollisions(Driver *pdrive, int stage) {
     DiagnoseNonfiniteCGLState(stage, "post-sweep-collisions", "pre",
                               STSSweepName(pdrive), "anisotropy", u0);
   }
-  auto &indcs = pmy_pack->pmesh->mb_indcs;
-  const int ng = indcs.ng;
-  const int n1m1 = indcs.nx1 + 2*ng - 1;
-  const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
-  const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
-  {
+  if (has_cgl_lf_split && pdrive->sts.sweep == Driver::STSSweep::post) {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    const int ng = indcs.ng;
+    const int n1m1 = indcs.nx1 + 2*ng - 1;
+    const int n2m1 = (indcs.nx2 > 1) ? indcs.nx2 + 2*ng - 1 : 0;
+    const int n3m1 = (indcs.nx3 > 1) ? indcs.nx3 + 2*ng - 1 : 0;
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::post_sweep_collisions);
-    const auto mode = (has_cgl_lf_split && pdrive->sts.sweep == Driver::STSSweep::post)
-        ? CGLCollisionMode::full : CGLCollisionMode::walls_only;
-    peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_cycle, mode,
+    peos->Collisions(w0, bcc0, u0, pdrive->sts.dt_cycle,
                      0, n1m1, 0, n2m1, 0, n3m1);
+    if (peos->eos_data.passive) {
+      // Decode stored J/A with the restart kernel to preserve HIP rounding.
+      peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
+    }
   }
-  if (peos->eos_data.passive) {
-    // Use the restart decoder kernel to preserve HIP wall and restart rounding.
-    peos->ConsToPrim(u0, b0, w0, bcc0, false, 0, n1m1, 0, n2m1, 0, n3m1);
-  }
-  // Synchronize the coarse representation with the final rates/wall update.
+  // Synchronize coarse state after slot conversion, primitive recovery, and rates.
   RestrictU(pdrive, stage);
   if (pcgl_lf != nullptr) {
     pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
