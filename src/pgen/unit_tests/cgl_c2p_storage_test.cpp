@@ -17,6 +17,7 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
+#include "diffusion/cgl_landau_fluid.hpp"
 #include "eos/ideal_c2p_mhd.hpp"
 #include "mhd/mhd.hpp"
 #include "parameter_input.hpp"
@@ -46,7 +47,7 @@ auto Snapshot(const DvceArray5D<Real> &view) {
 }
 
 void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
-  Require("LF refresh fixture configuration", test_case >= 0 && test_case <= 6 &&
+  Require("LF refresh fixture configuration", test_case >= 0 && test_case <= 8 &&
           pack->pmhd->pcgl_lf != nullptr);
   auto *peos = pack->pmhd->peos;
   const int nmb = pack->nmb_thispack;
@@ -56,6 +57,10 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
   auto initial = Kokkos::create_mirror(cons);
   Kokkos::deep_copy(initial, 0.0);
   Kokkos::deep_copy(bcc, 0.0);
+  if (test_case >= 7) {
+    Kokkos::deep_copy(Kokkos::subview(bcc, Kokkos::ALL, static_cast<int>(IBZ),
+        Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), test_case == 7 ? 2.0 : 1.0);
+  }
   Kokkos::deep_copy(prim, 0.0);
   const Real invalid[] = {std::numeric_limits<Real>::quiet_NaN(),
                          std::numeric_limits<Real>::infinity(),
@@ -64,7 +69,13 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
     initial(m,IDN,0,0,0) = 1.0;
     initial(m,IEN,0,0,0) = 1.5;
     initial(m,IAN,0,0,0) = 1.0/peos->eos_data.bfloor;
-    if (test_case > 0) {
+    if (test_case == 7) {
+      initial(m,IEN,0,0,0) = 1.0;
+      initial(m,IAN,0,0,0) = 0.75*std::numeric_limits<Real>::max();
+    } else if (test_case == 8) {
+      initial(m,IEN,0,0,0) = -0.75*std::numeric_limits<Real>::max();
+      initial(m,IAN,0,0,0) = 1.0;
+    } else if (test_case > 0) {
       initial(m,test_case <= 3 ? IEN : IAN,0,0,0) = invalid[(test_case-1)%3];
     }
   }
@@ -72,7 +83,7 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
   const int dfloor_before = pack->pmesh->ecounter.neos_dfloor;
   const int pfloor_before = pack->pmesh->ecounter.neos_efloor;
   peos->CGLRefreshPrimFromMagneticMoment(cons, bcc, prim, 0, 0, 0, 0, 0, 0);
-  if (test_case == 0 || test_case >= 4) {
+  if (test_case == 0 || (test_case >= 4 && test_case <= 6)) {
     const auto recovered = Snapshot(prim);
     const auto stored = Snapshot(cons);
     for (int m = 0; m < nmb; ++m) {
@@ -87,6 +98,56 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
             pack->pmesh->ecounter.neos_efloor == pfloor_before);
   }
   std::cout << "CGL LF nonfinite refresh returned: case=" << test_case << std::endl;
+}
+
+// Use the production LF refresh and stage audit before ordinary time evolution.
+void InitializeLFRepairCase(MeshBlockPack *pack, const int test_case) {
+  auto *pmhd = pack->pmhd;
+  auto *peos = pmhd->peos;
+  Require("LF repair configuration", pmhd->pcgl_lf != nullptr &&
+          peos->eos_data.pfloor == 1.0 && peos->eos_data.dfloor == 1.0 &&
+          (test_case == 1 || test_case == 2));
+  auto cons = pmhd->u0;
+  const int ni = cons.extent_int(4), nj = cons.extent_int(3), nk = cons.extent_int(2);
+  const int is = pack->pmesh->mb_indcs.is;
+  const int js = pack->pmesh->mb_indcs.js, ks = pack->pmesh->mb_indcs.ks;
+  const Real magnetic = peos->eos_data.passive ? 0.0 : 0.5;
+  auto initial = Kokkos::create_mirror(cons);
+  Kokkos::deep_copy(initial, 0.0);
+  for (int m=0; m<pack->nmb_thispack; ++m) for (int k=0; k<nk; ++k) {
+    for (int j=0; j<nj; ++j) for (int i=0; i<ni; ++i) {
+      initial(m,IDN,k,j,i) = 1.0;
+      initial(m,IEN,k,j,i) = 2.5 + magnetic;
+      initial(m,IAN,k,j,i) = 2.0;
+    }
+  }
+  if (test_case == 1) initial(0,IEN,ks,js,is) -= 0.375;  // p_parallel=0.25.
+  if (test_case == 2) initial(0,IDN,ks,js,is) = 0.5;
+  Kokkos::deep_copy(cons, initial);
+  Kokkos::deep_copy(pmhd->b0.x1f, 0.0);
+  Kokkos::deep_copy(pmhd->b0.x2f, 0.0);
+  Kokkos::deep_copy(pmhd->b0.x3f, 1.0);
+  Kokkos::deep_copy(pmhd->bcc0, 0.0);
+  Kokkos::deep_copy(Kokkos::subview(pmhd->bcc0, Kokkos::ALL, static_cast<int>(IBZ),
+      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 1.0);
+  auto &events = pack->pmesh->ecounter;
+  const int old_density = events.neos_dfloor, old_pressure = events.neos_efloor;
+  peos->CGLRefreshPrimFromMagneticMoment(cons, pmhd->bcc0, pmhd->w0,
+                                        0,ni-1, 0,nj-1, 0,nk-1);
+  const int density_repairs = events.neos_dfloor-old_density;
+  const int pressure_repairs = events.neos_efloor-old_pressure;
+  Require("one isolated LF repair", density_repairs == (test_case == 2) &&
+          pressure_repairs == (test_case == 1));
+  pmhd->pcgl_lf->RecordAdmissibility(cons, pmhd->w0, pmhd->bcc0, peos->eos_data,
+                                    density_repairs, pressure_repairs, "fixture", 1, 1);
+  Require("strict density-floor audit must stop", test_case != 2);
+  const auto repaired = Snapshot(cons);
+  RequireClose("actual LF floor energy correction", repaired(0,IEN,ks,js,is)
+               -initial(0,IEN,ks,js,is), 0.375);
+  peos->CGLMagneticMomentToAnisotropy(cons, pmhd->bcc0, pmhd->w0,
+                                    0,ni-1, 0,nj-1, 0,nk-1);
+  std::cout << "CGL LF finite pressure repair recorded: count=1 energy=0.375"
+            << std::endl;
 }
 
 void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,
@@ -478,37 +539,46 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   if (restart) return;
   auto *pack = pmy_mesh_->pmb_pack;
   auto *pmhd = pack->pmhd;
-  Require("active CGL without scalars", pmhd != nullptr &&
-      pmhd->peos->eos_data.is_cgl && !pmhd->peos->eos_data.passive &&
-      pmhd->nscalars == 0);
+  const int lf_floor_case = pin->GetOrAddInteger("problem", "lf_floor_case", 0);
+  if (lf_floor_case != 0) {
+    InitializeLFRepairCase(pack, lf_floor_case);
+    return;
+  }
+  Require("CGL without scalars", pmhd != nullptr && pmhd->peos->eos_data.is_cgl &&
+          pmhd->nscalars == 0);
   const int lf_nonfinite_case = pin->GetOrAddInteger("problem", "lf_nonfinite_case", -1);
-  if (lf_nonfinite_case >= 0) CheckNonfiniteLFRefresh(pack, lf_nonfinite_case);
-  // Only the isolated views own a scalar; restore metadata before live mesh startup.
-  const int saved_nscalars = pmhd->nscalars;
-  pmhd->nscalars = 1;
-  const Real max_sigma = std::numeric_limits<Real>::max();
-  CheckFloorStorage(pack, "density-floor", 0.5, 2.0, 4.0, 1.0, max_sigma);
-  CheckFloorStorage(pack, "magnetization-floor", 0.5, 2.0, 4.0, 0.25, 1.0);
-  CheckFloorStorage(pack, "parallel-pressure-floor", 2.0, 0.25, 2.0, 0.25, max_sigma);
-  CheckFloorStorage(pack, "perpendicular-pressure-floor", 2.0, 2.0, 0.25, 0.25, max_sigma);
-  CheckFloorStorage(pack, "both-pressure-floor", 2.0, 0.25, 0.5, 0.25, max_sigma);
-  CheckFloorStorage(pack, "low-magnetic-field", 2.0, 4.0, 1.0, 0.25, max_sigma, 0.0);
-  const Real rounding_b = sizeof(Real) == sizeof(float) ? 41.0 : 49.0;
-  Require("moment division fixture rounds pressure down", (Real(1.0)/rounding_b)*rounding_b < 1.0);
-  CheckFloorStorage(pack, "moment-division-rounding", 1.0, 5.5, 0.25, 0.25,
-                    max_sigma, rounding_b);
-  CheckFloorStorage(pack, "unresolved-internal-energy", 2.0, 1.0, 1.0, 0.25,
-                    max_sigma, 1.0, true);
-  pmhd->nscalars = saved_nscalars;
-  CheckNonfiniteFOFC(pack);
-  CheckExtremeRatiosOnDevice();
+  if (lf_nonfinite_case >= 0) {
+    CheckNonfiniteLFRefresh(pack, lf_nonfinite_case);
+  } else {
+    Require("active storage fixtures", !pmhd->peos->eos_data.passive);
+    // Only the isolated views own a scalar; restore metadata before live mesh startup.
+    const int saved_nscalars = pmhd->nscalars;
+    pmhd->nscalars = 1;
+    const Real max_sigma = std::numeric_limits<Real>::max();
+    CheckFloorStorage(pack, "density-floor", 0.5, 2.0, 4.0, 1.0, max_sigma);
+    CheckFloorStorage(pack, "magnetization-floor", 0.5, 2.0, 4.0, 0.25, 1.0);
+    CheckFloorStorage(pack, "parallel-pressure-floor", 2.0, 0.25, 2.0, 0.25, max_sigma);
+    CheckFloorStorage(pack, "perpendicular-pressure-floor", 2.0, 2.0, 0.25, 0.25, max_sigma);
+    CheckFloorStorage(pack, "both-pressure-floor", 2.0, 0.25, 0.5, 0.25, max_sigma);
+    CheckFloorStorage(pack, "low-magnetic-field", 2.0, 4.0, 1.0, 0.25, max_sigma, 0.0);
+    const Real rounding_b = sizeof(Real) == sizeof(float) ? 41.0 : 49.0;
+    Require("moment division fixture rounds pressure down", (Real(1.0)/rounding_b)*rounding_b < 1.0);
+    CheckFloorStorage(pack, "moment-division-rounding", 1.0, 5.5, 0.25, 0.25,
+                      max_sigma, rounding_b);
+    CheckFloorStorage(pack, "unresolved-internal-energy", 2.0, 1.0, 1.0, 0.25,
+                      max_sigma, 1.0, true);
+    pmhd->nscalars = saved_nscalars;
+    CheckNonfiniteFOFC(pack);
+    CheckExtremeRatiosOnDevice();
+  }
 
   // Normal zero-step startup still needs a finite live state after the isolated fixture.
   Kokkos::deep_copy(pmhd->u0, 0.0);
   Kokkos::deep_copy(Kokkos::subview(pmhd->u0, Kokkos::ALL, static_cast<int>(IDN),
       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 1.0);
   Kokkos::deep_copy(Kokkos::subview(pmhd->u0, Kokkos::ALL, static_cast<int>(IEN),
-      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 8.0);
+      Kokkos::ALL, Kokkos::ALL, Kokkos::ALL),
+      pmhd->peos->eos_data.passive ? std::log(Real(5.0)) : 8.0);
   Kokkos::deep_copy(pmhd->b0.x1f, 0.0);
   Kokkos::deep_copy(pmhd->b0.x2f, 0.0);
   Kokkos::deep_copy(pmhd->b0.x3f, 1.0);

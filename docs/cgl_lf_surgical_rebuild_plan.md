@@ -800,7 +800,9 @@ is off, so this is not a comparison at matched LF settings.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
-strict LF admissibility still counts and rejects invalid/floor-repaired stages.
+strict LF admissibility rejects density repairs and invalid states. Finite
+pressure-floor repairs are counted without aborting (user decision, 2026-10-15);
+nonfinite decoded LF pressures must be rejected before repair can hide them.
 The event log covers repair activity outside LF. Investigate changed or dominant
 repair activity before treating the result as accurate physics, without imposing
 a universal zero-repair criterion on every turbulent case. Counts may include

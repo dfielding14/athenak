@@ -4,11 +4,13 @@ from pathlib import Path
 import os
 import shlex
 import subprocess
+import sys
 
 import pytest
 
-
 REPO_ROOT = Path(__file__).resolve().parents[3]
+sys.path.insert(0, str(REPO_ROOT / "vis/python"))
+import athena_read  # noqa: E402
 
 
 def _run(command, cwd=None):
@@ -162,8 +164,7 @@ bfloor = 1e-10
     assert (tmp_path / "collision_state.bin").stat().st_size == 4 * 6 * 8
 
 
-def test_cgl_strict_lf_rejects_nonfinite_state_before_weak_field_refresh(tmp_path):
-    """Exercise the actual lightweight EOS kernel, including HIP when supplied."""
+def _storage_executable(tmp_path):
     supplied = os.environ.get("ATHENAK_CGL_STORAGE_BINARY")
     if supplied:
         executable = Path(supplied).resolve()
@@ -176,28 +177,113 @@ def test_cgl_strict_lf_rejects_nonfinite_state_before_weak_field_refresh(tmp_pat
               "-DKokkos_ENABLE_SERIAL=ON", "-DCMAKE_BUILD_TYPE=Release"])
         _run(["cmake", "--build", str(build_dir), "--target", "athena", "-j4"])
         executable = build_dir / "src/athena"
+    return executable
+
+
+def test_cgl_strict_lf_rejects_nonfinite_state_before_weak_field_refresh(tmp_path):
+    """Exercise the actual lightweight EOS kernel, including HIP when supplied."""
+    executable = _storage_executable(tmp_path)
     launcher = shlex.split(os.environ.get("ATHENAK_CGL_STORAGE_LAUNCHER", ""))
     source = (REPO_ROOT / "inputs/unit_tests/cgl_lf_sts_grad_b.athinput").read_text()
-    source = source.replace("<mhd>", "<mhd>\ncgl_lf_strict_admissibility = false", 1)
+    source = source.replace("evolution = kinematic", "evolution = dynamic")
+    source = source.replace("rsolver = advect", "rsolver = hlle")
+    source = source.replace("<mhd>", "<mhd>\niso_sound_speed = 1\n"
+                            "cgl_lf_strict_admissibility = false", 1)
     source = source.replace("<problem>", "<problem>\nlf_nonfinite_case = 0", 1)
     input_file = tmp_path / "lf-nonfinite-refresh.athinput"
     input_file.write_text(source)
-    failure = "strict admissibility failed before primitive refresh"
-    for strict in (False, True):
-        # Healthy control, then E and moment each poisoned with NaN, +Inf, and -Inf.
-        for test_case in range(7):
+    failure = "strict admissibility failed"
+    for passive, strict in ((False, False), (False, True), (True, True)):
+        # Raw E/moment NaN/Inf plus finite inputs that overflow decoded pressures.
+        for test_case in range(9):
             command = launcher + [str(executable), "-i", str(input_file),
                                   "time/nlim=0", f"problem/lf_nonfinite_case={test_case}",
+                                  f"mhd/passive={str(passive).lower()}",
                                   f"mhd/cgl_lf_strict_admissibility={str(strict).lower()}"]
             result = subprocess.run(command, cwd=tmp_path, capture_output=True,
                                     text=True, check=False)
             output = result.stdout + result.stderr
-            (tmp_path / f"lf-refresh-{strict}-{test_case}.log").write_text(output)
+            (tmp_path / f"lf-refresh-{passive}-{strict}-{test_case}.log").write_text(output)
             if strict and test_case != 0:
                 assert result.returncode != 0, output
                 assert failure in output, output
                 assert "CGL LF nonfinite refresh returned" not in output
+                if test_case >= 7:
+                    assert "nonfinite decoded pressure" in output
             else:
                 assert result.returncode == 0, output
                 assert f"CGL LF nonfinite refresh returned: case={test_case}" in output
                 assert failure not in output
+
+
+def test_cgl_lf_pressure_floor_is_recorded_and_survives_restart(tmp_path):
+    executable = _storage_executable(tmp_path)
+    launcher = shlex.split(os.environ.get("ATHENAK_CGL_STORAGE_LAUNCHER", ""))
+    source = (REPO_ROOT / "inputs/unit_tests/cgl_lf_sts_grad_b.athinput").read_text()
+    source = source.replace("evolution = kinematic", "evolution = dynamic")
+    source = source.replace("rsolver = advect", "rsolver = hlle")
+    # The fixture field points along z; retain a z extent so LF stages run.
+    source = source.replace("nx1 = 64", "nx1 = 8")
+    source = source.replace("nx2 = 1", "nx2 = 4").replace("nx3 = 1", "nx3 = 4")
+    source += """
+<job>
+basename = floor
+<time>
+nlim = 2
+tlim = 1
+sts_max_dt_ratio = 1
+<mhd>
+cgl_lf_strict_admissibility = true
+cgl_lf_diagnostics = none
+iso_sound_speed = 1
+dfloor = 1
+pfloor = 1
+<problem>
+lf_floor_case = 1
+<output1>
+file_type = hst
+dcycle = 1
+data_format = %25.17e
+<output2>
+file_type = rst
+dcycle = 1
+<output3>
+file_type = log
+dcycle = 1
+"""
+    input_file = tmp_path / "lf-floor.athinput"
+    input_file.write_text(source)
+    for passive in (False, True):
+        run = tmp_path / ("passive" if passive else "active")
+        run.mkdir()
+        flags = [f"mhd/passive={str(passive).lower()}"]
+        result = _run(launcher + [str(executable), "-i", str(input_file), *flags], cwd=run)
+        (run / "run.log").write_text(result.stdout + result.stderr)
+        assert "CGL LF finite pressure repair recorded: count=1 energy=0.375" in result.stdout
+        history = athena_read.hst(str(run / "floor.mhd.hst"))
+        assert history["time"][-1] > history["time"][0]
+        assert history["lf_nstage"][-1] > history["lf_nstage"][0]
+        assert all(history["lf_pfloor"] == 1)
+        events = [list(map(int, line.split())) for line in (run / "floor.log").read_text().splitlines()
+                  if line.strip() and not line.startswith("#")]
+        assert len(events) == 1 and events[0][1:3] == [0, 1]  # Density, pressure repairs.
+        for name in ("lf_dfloor", "lf_nonfin", "lf_nonpos"):
+            assert all(history[name] == 0)
+        checkpoint = sorted((run / "rst").glob("*.rst"))[-1]
+        replay = run / "replay"
+        replay.mkdir()
+        result = _run(launcher + [str(executable), "-r", str(checkpoint), "time/nlim=3"],
+                      cwd=replay)
+        (replay / "run.log").write_text(result.stdout + result.stderr)
+        restored = athena_read.hst(str(replay / "floor.mhd.hst"))
+        assert restored["time"][-1] > history["time"][-1]
+        assert all(restored["lf_pfloor"] == 1)
+        for name in ("lf_dfloor", "lf_nonfin", "lf_nonpos"):
+            assert all(restored[name] == 0)
+        rejected = subprocess.run(launcher + [str(executable), "-i", str(input_file),
+                                  *flags, "problem/lf_floor_case=2"], cwd=run,
+                                  capture_output=True, text=True, check=False)
+        output = rejected.stdout + rejected.stderr
+        (run / "density-rejection.log").write_text(output)
+        assert rejected.returncode != 0, output
+        assert "strict admissibility failed" in output and "dfloor=1" in output

@@ -114,8 +114,10 @@ only conserved A and refreshes pressures from E/A. The passive operator
 re-encodes J/A at fixed thermal energy, up to representation roundoff.
 
 `RecordAdmissibility` counts each unprojected LF stage. Intermediate wall
-crossings are diagnostic; invalid pressures and floors remain fatal in strict
-mode. Entry and sweep-end checks retain finite/positive-state validation without
+crossings and finite pressure repairs are recorded without stopping. Density
+repairs and invalid states remain fatal in strict mode. Nonfinite decoded LF
+pressures are rejected before flooring can hide them. Entry and sweep-end checks
+retain finite/positive-state validation without
 incrementing stage counts or rejecting finite backup overshoots.
 
 ## LF Face Closure
@@ -214,8 +216,10 @@ appends LF columns when the closure is active:
   `cgl_lf_record_pressure_work = true`.
 
 Strict admissibility is controlled by `cgl_lf_strict_admissibility`. In strict
-mode, floors and non-finite or non-positive thermodynamic state are fatal at
-every LF stage and split checkpoint; threshold crossings remain diagnostic.
+mode, density repairs and nonfinite or nonpositive thermodynamic state are fatal
+at LF stages and split checkpoints. Finite pressure repairs are counted in
+`lf_pfloor` and the EOS event log without stopping; threshold crossings also
+remain diagnostic.
 Backup relaxation and scattering require an explicit `backup_limiters = true` in
 both strict and relaxed modes.
 

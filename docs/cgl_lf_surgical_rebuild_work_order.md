@@ -30,11 +30,21 @@ The four beta-16 inputs now explicitly enable the original backup thresholds in
 a separate `majeski_two_tier` setup. No production runs were submitted; long
 turbulent statistics and throughput have not been requalified for this model.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Next:** Measure the first pressure-floor repairs from the stopped beta-16 runs,
-then qualify recording those repairs without making them fatal, preserving
-nonfinite/nonpositive-state checks. Pressure-floor aborts remain in the limiter
-restoration build. Resume the revised campaign from fresh initial states after
-that correction. No numbered rebuild piece remains.
+**Pressure-floor policy (2026-10-15):** finite pressure repairs are now recorded
+without aborting; the campaign keeps `pfloor=1e-12` and strict density/invalid-state
+checks. LF decoders reject nonfinite pressures before repair can hide them.
+Existing `lf_pfloor` and per-cycle `eos_efloor` record conversion counts, including
+halos/repeats; no new diagnostic pass or restart field is added. Four host and
+11 HIP tests pass, including active/passive repair, continuation, native restart,
+and retained fatal guards. All four revised 384³ decks complete 40 cycles on
+two nodes/16 ranks with zero repair/invalid events. Build `5687717` and checks
+`5687751`, including corrected test/launcher/report setup, are retained in the
+[floor qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nonfatal-floor-20261015/REPORT.md).
+The revised setup contains the qualified executable; full production is unlaunched.
+**Next:** The original failed-run correction magnitudes remain unmeasured; exact
+reproduction needs the original limiter model. The revised campaign must start
+fresh. Its developed-turbulence repair frequency and energy impact remain to be
+measured, rather than inferred from startup checks. No numbered rebuild piece remains.
 The requested time-driven uniform refinement callback and separate scaling work
 remain production extensions;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.

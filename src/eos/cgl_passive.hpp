@@ -131,7 +131,7 @@ void PassiveP2C(const MHDPrim1D &w, const Real bfloor, HydCons1D &u) {
 KOKKOS_INLINE_FUNCTION
 void PassiveMomentC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
                        bool &dfloor_used, bool &efloor_used, bool &bfloor_used,
-                       const Real bmag) {
+                       const Real bmag, const bool reject_nonfinite = false) {
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   SingleC2P_IsothermalMHD(u, fmax(eos.dfloor, bsqr/eos.sigma_max), w, dfloor_used);
   const Real beff = fmax(bmag, eos.bfloor);
@@ -142,6 +142,10 @@ void PassiveMomentC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
     w.pp = w.e;
     u.mu = w.pp/beff;
     bfloor_used = true;
+  }
+  if (reject_nonfinite && (!Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp))) {
+    Kokkos::abort("CGL Landau-fluid strict admissibility failed before pressure repair: "
+                  "nonfinite decoded pressure");
   }
   if (!Kokkos::isfinite(w.e) || !(w.e >= eos.pfloor)) {
     w.e = eos.pfloor;

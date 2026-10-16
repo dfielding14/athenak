@@ -799,8 +799,9 @@ With LF active, normal MHD history output appends cumulative counters:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,
 `lf_mirror`, `lf_firehs`, `lf_hardbd`, `lf_qface`, `lf_qprcap`,
 `lf_qpr10`, `lf_qpecap`, `lf_qpe10`, `lf_qprwrk`, `lf_qpewrk`, and
-`lf_hwproj`. Strict checks reject floors and nonfinite/nonpositive states at
-each stage and operator checkpoint. Threshold crossings are counted in
+`lf_hwproj`. Strict checks reject density repairs and nonfinite/nonpositive
+states. Finite pressure repairs increment `lf_pfloor` without aborting; the EOS
+event log also records repairs outside LF. Threshold crossings are counted in
 `lf_hardbd`; finite backup residuals do not abort a sweep or completed cycle.
 `lf_mirror` and `lf_firehs` count soft-threshold occupancy with the configured
 numeric thresholds. `lf_hardbd` records excursions beyond the fluid-firehose

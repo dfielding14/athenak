@@ -345,7 +345,7 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     HydPrim1D w;
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
     SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
-                                       tfloor_used, bfloor_used);
+                                       tfloor_used, bfloor_used, strict_lf);
 
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;

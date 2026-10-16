@@ -105,9 +105,10 @@ oblique`, `mirror_threshold = 1`, `backup_limiters = true`,
 backup targets `[-1, +1] B^2`. These AthenaK settings differ from the parallel
 firehose onset used in the published MKS24 standard runs.
 
-LF histories count threshold crossings. Strict admissibility rejects floors
-and nonfinite/nonpositive state, while finite backup overshoots remain
-nonfatal at both intermediate stages and completed split states. Entry and
+LF histories count threshold crossings. Strict admissibility rejects density
+repairs and nonfinite/nonpositive state. Finite pressure-floor repairs and
+backup overshoots are recorded and remain nonfatal. Raw energy/moment and
+decoded pressures are checked for nonfinite values before LF pressure repair. Entry and
 sweep-end checks do not add LF RHS counts. Backup scattering requires explicit
 `backup_limiters`; relaxed admissibility does not enable it implicitly.
 
@@ -134,7 +135,7 @@ sweep-end checks do not add LF RHS counts. Backup scattering requires explicit
 | `firehose_backup_factor` | `1.0` | Finite factor >=1 multiplying the soft firehose threshold; backup target is no lower than `-B^2`. |
 | `mirror_backup_factor` | `2.0` | Finite factor >=1 multiplying the soft mirror threshold. |
 | `limiter_backup_nu` | `1e10` | Finite nonnegative backup relaxation/scattering rate, replacing the soft rate. |
-| `cgl_lf_strict_admissibility` | `false` | Reject invalid/floor-repaired states; threshold crossings are diagnostic, including finite backup residuals. |
+| `cgl_lf_strict_admissibility` | `false` | Reject density repairs and invalid states; pressure-floor repairs and threshold crossings are recorded without stopping. |
 | `cgl_lf_record_pressure_work` | `false` | Retain RK-integrated applied CGL pressure-traction work diagnostics. |
 | `cgl_lf_diagnostics` | `full` | `full` collects heat-flux face/cap/work diagnostics; `none` skips those reductions for production runs. |
 | `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |
@@ -186,6 +187,14 @@ selected soft or backup rate. Inclusive threshold tests match the original
 branch selection; a state on a backup threshold uses backup scattering. The
 original commit predates LF, so this shared rate selection is its extension to
 the heat-flux closure.
+
+Finite pressure-floor repairs use the existing `pfloor`; the relaxed stopping
+policy does not lower that numerical value. `lf_pfloor` counts LF stage repairs
+and survives restart. The per-cycle event log (`file_type=log`, `dcycle=1`) records
+`eos_efloor` across EOS conversions, including outside LF. These are conversion
+counts, which can include ghosts and repeated repairs, not unique-cell fractions
+or injected energy. Small floor-rounding adjustments in representation changes
+are not separately counted.
 
 Normal `.mhd.hst` output appends cumulative columns when LF is active:
 `lf_nstage`, `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`,

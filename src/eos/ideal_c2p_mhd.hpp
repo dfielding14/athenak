@@ -233,10 +233,12 @@ KOKKOS_INLINE_FUNCTION
 void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
                                         HydPrim1D &w, bool &dfloor_used,
                                         bool &efloor_used, bool &tfloor_used,
-                                        bool &bfloor_used) {
+                                        bool &bfloor_used,
+                                        const bool reject_nonfinite = false) {
   if (eos.passive) {
     const Real bmag = sqrt(SQR(u.bx) + SQR(u.by) + SQR(u.bz));
-    cgl::PassiveMomentC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used, bmag);
+    cgl::PassiveMomentC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used, bmag,
+                          reject_nonfinite);
     return;
   }
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
@@ -271,6 +273,10 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
     bfloor_used = true;
   }
 
+  if (reject_nonfinite && (!Kokkos::isfinite(w.e) || !Kokkos::isfinite(w.pp))) {
+    Kokkos::abort("CGL Landau-fluid strict admissibility failed before pressure repair: "
+                  "nonfinite decoded pressure");
+  }
   if (w.e < pfloor && w.pp < pfloor) {
     w.e = pfloor;
     w.pp = pfloor;
