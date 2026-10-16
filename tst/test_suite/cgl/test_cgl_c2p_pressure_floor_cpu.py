@@ -164,7 +164,7 @@ bfloor = 1e-10
     assert (tmp_path / "collision_state.bin").stat().st_size == 4 * 6 * 8
 
 
-def _storage_executable(tmp_path):
+def _storage_executable(tmp_path, mpi=False):
     supplied = os.environ.get("ATHENAK_CGL_STORAGE_BINARY")
     if supplied:
         executable = Path(supplied).resolve()
@@ -173,7 +173,7 @@ def _storage_executable(tmp_path):
         build_dir = tmp_path / "storage-build"
         _run(["cmake", "-S", str(REPO_ROOT), "-B", str(build_dir),
               "-DPROBLEM=unit_tests/cgl_c2p_storage_test",
-              "-DAthena_ENABLE_MPI=OFF", "-DKokkos_ENABLE_HIP=OFF",
+              f"-DAthena_ENABLE_MPI={'ON' if mpi else 'OFF'}", "-DKokkos_ENABLE_HIP=OFF",
               "-DKokkos_ENABLE_SERIAL=ON", "-DCMAKE_BUILD_TYPE=Release"])
         _run(["cmake", "--build", str(build_dir), "--target", "athena", "-j4"])
         executable = build_dir / "src/athena"
@@ -194,8 +194,8 @@ def test_cgl_strict_lf_rejects_nonfinite_state_before_weak_field_refresh(tmp_pat
     input_file.write_text(source)
     failure = "strict admissibility failed"
     for passive, strict in ((False, False), (False, True), (True, True)):
-        # Raw E/moment NaN/Inf plus finite inputs that overflow decoded pressures.
-        for test_case in range(9):
+        # Raw density/E/moment plus finite inputs that overflow decoded pressures.
+        for test_case in range(12 if strict else 9):
             command = launcher + [str(executable), "-i", str(input_file),
                                   "time/nlim=0", f"problem/lf_nonfinite_case={test_case}",
                                   f"mhd/passive={str(passive).lower()}",
@@ -208,8 +208,10 @@ def test_cgl_strict_lf_rejects_nonfinite_state_before_weak_field_refresh(tmp_pat
                 assert result.returncode != 0, output
                 assert failure in output, output
                 assert "CGL LF nonfinite refresh returned" not in output
-                if test_case >= 7:
+                if test_case in (7, 8):
                     assert "nonfinite decoded pressure" in output
+                elif test_case >= 9:
+                    assert "nonfinite density, energy or magnetic moment" in output
             else:
                 assert result.returncode == 0, output
                 assert f"CGL LF nonfinite refresh returned: case={test_case}" in output
@@ -254,36 +256,31 @@ dcycle = 1
     input_file = tmp_path / "lf-floor.athinput"
     input_file.write_text(source)
     for passive in (False, True):
-        run = tmp_path / ("passive" if passive else "active")
-        run.mkdir()
-        flags = [f"mhd/passive={str(passive).lower()}"]
-        result = _run(launcher + [str(executable), "-i", str(input_file), *flags], cwd=run)
-        (run / "run.log").write_text(result.stdout + result.stderr)
-        assert "CGL LF finite pressure repair recorded: count=1 energy=0.375" in result.stdout
-        history = athena_read.hst(str(run / "floor.mhd.hst"))
-        assert history["time"][-1] > history["time"][0]
-        assert history["lf_nstage"][-1] > history["lf_nstage"][0]
-        assert all(history["lf_pfloor"] == 1)
-        events = [list(map(int, line.split())) for line in (run / "floor.log").read_text().splitlines()
-                  if line.strip() and not line.startswith("#")]
-        assert len(events) == 1 and events[0][1:3] == [0, 1]  # Density, pressure repairs.
-        for name in ("lf_dfloor", "lf_nonfin", "lf_nonpos"):
-            assert all(history[name] == 0)
-        checkpoint = sorted((run / "rst").glob("*.rst"))[-1]
-        replay = run / "replay"
-        replay.mkdir()
-        result = _run(launcher + [str(executable), "-r", str(checkpoint), "time/nlim=3"],
-                      cwd=replay)
-        (replay / "run.log").write_text(result.stdout + result.stderr)
-        restored = athena_read.hst(str(replay / "floor.mhd.hst"))
-        assert restored["time"][-1] > history["time"][-1]
-        assert all(restored["lf_pfloor"] == 1)
-        for name in ("lf_dfloor", "lf_nonfin", "lf_nonpos"):
-            assert all(restored[name] == 0)
-        rejected = subprocess.run(launcher + [str(executable), "-i", str(input_file),
-                                  *flags, "problem/lf_floor_case=2"], cwd=run,
-                                  capture_output=True, text=True, check=False)
-        output = rejected.stdout + rejected.stderr
-        (run / "density-rejection.log").write_text(output)
-        assert rejected.returncode != 0, output
-        assert "strict admissibility failed" in output and "dfloor=1" in output
+        for test_case in (1, 2):
+            run = tmp_path / f"passive{passive}-floor{test_case}"
+            run.mkdir()
+            flags = [f"mhd/passive={str(passive).lower()}",
+                     f"problem/lf_floor_case={test_case}"]
+            result = _run(launcher + [str(executable), "-i", str(input_file), *flags], cwd=run)
+            (run / "run.log").write_text(result.stdout + result.stderr)
+            assert f"CGL LF finite repair recorded: case={test_case}" in result.stdout
+            history = athena_read.hst(str(run / "floor.mhd.hst"))
+            assert history["time"][-1] > history["time"][0]
+            assert history["lf_nstage"][-1] > history["lf_nstage"][0]
+            events = [list(map(int, line.split()))
+                      for line in (run / "floor.log").read_text().splitlines()
+                      if line.strip() and not line.startswith("#")]
+            assert len(events) == 1 and events[0][1:3] == [test_case == 2, test_case == 1]
+            checkpoint = sorted((run / "rst").glob("*.rst"))[-1]
+            replay = run / "replay"
+            replay.mkdir()
+            result = _run(launcher + [str(executable), "-r", str(checkpoint), "time/nlim=3"],
+                          cwd=replay)
+            (replay / "run.log").write_text(result.stdout + result.stderr)
+            restored = athena_read.hst(str(replay / "floor.mhd.hst"))
+            assert restored["time"][-1] > history["time"][-1]
+            for recorded in (history, restored):
+                assert all(recorded["lf_pfloor"] == (test_case == 1))
+                assert all(recorded["lf_dfloor"] == (test_case == 2))
+                for name in ("lf_nonfin", "lf_nonpos"):
+                    assert all(recorded[name] == 0)

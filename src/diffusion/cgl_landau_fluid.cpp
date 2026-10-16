@@ -1326,9 +1326,8 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
   }
 
   // Finite backup relaxation leaves a residual beyond its threshold: diagnostic only.
-  // Pressure repairs are recorded above; density repairs and invalid states remain fatal.
-  if (strict_admissibility &&
-      (dfloor_delta > 0 || nonfinite > 0 || nonpositive > 0)) {
+  // Finite floor repairs are recorded above; only invalid states remain fatal.
+  if (strict_admissibility && (nonfinite > 0 || nonpositive > 0)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
               << "CGL Landau-fluid strict admissibility failed "

@@ -30,9 +30,9 @@ The four beta-16 inputs now explicitly enable the original backup thresholds in
 a separate `majeski_two_tier` setup. No production runs were submitted; long
 turbulent statistics and throughput have not been requalified for this model.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
-**Pressure-floor policy (2026-10-15):** finite pressure repairs are now recorded
-without aborting; the campaign keeps `pfloor=1e-12` and strict density/invalid-state
-checks. LF decoders reject nonfinite pressures before repair can hide them.
+**Earlier pressure-floor qualification (2026-10-15):** finite pressure repairs were
+recorded without aborting, using `pfloor=1e-12` and fatal density/invalid-state
+checks. LF decoders rejected nonfinite pressures before repair could hide them.
 Existing `lf_pfloor` and per-cycle `eos_efloor` record conversion counts, including
 halos/repeats; no new diagnostic pass or restart field is added. Four host and
 11 HIP tests pass, including active/passive repair, continuation, native restart,
@@ -40,7 +40,24 @@ and retained fatal guards. All four revised 384³ decks complete 40 cycles on
 two nodes/16 ranks with zero repair/invalid events. Build `5687717` and checks
 `5687751`, including corrected test/launcher/report setup, are retained in the
 [floor qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nonfatal-floor-20261015/REPORT.md).
-The revised setup contains the qualified executable; full production is unlaunched.
+That executable remains frozen; full production is unlaunched.
+**Current floor policy:** the user selected provisional campaign
+`dfloor=pfloor=1e-6`. Finite density and pressure repairs are recorded without
+aborting; strict checks still reject nonfinite raw density/energy/moment and
+decoded pressures before repair, plus invalid recovered state. Existing restartable
+`lf_dfloor`/`lf_pfloor` and per-cycle `eos_dfloor`/`eos_efloor` count events,
+including halos/repeats; they are not unique-cell counts or mass/energy budgets.
+Stage 1 still exchanges the full state; identical owner/halo density repair with
+synchronized frozen B and EOS preserves later compact LF messages without an
+extra exchange or reduction. Two host checks and 13 HIP pytest cases pass:
+`5688074` covers existing regressions, `5688093` repair/invalid/restart checks,
+and `5688145` exact boundary-repair full/compact state and ghost comparisons
+across one/two ranks. The boundary fixture was moved above its pressure floor
+to isolate density repair; its initial failure is retained. All four revised
+384³ decks complete 40 cycles on two nodes with zero LF/EOS repairs or invalids.
+The qualified executable is installed in `majeski_two_tier`; full production
+remains unlaunched. See the
+[density-floor qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/density-floor-20261015/REPORT.md).
 **Next:** The original failed-run correction magnitudes remain unmeasured; exact
 reproduction needs the original limiter model. The revised campaign must start
 fresh. Its developed-turbulence repair frequency and energy impact remain to be

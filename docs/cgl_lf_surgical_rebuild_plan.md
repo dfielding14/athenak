@@ -416,12 +416,15 @@ LF-only flux-clear removal is accepted (`718901fa2`, measurements below).
 Select compact IEN/IAN cell messages (`920090906`, adapted from `6539bfbbc`):
 prior profiles show cell communication costs more than temperature preparation.
 Limit compaction to stage > 1 of strict LF on uniform periodic meshes without
-shear/orbital advection. Stage one synchronizes all frozen fields; strict checks
-reject density/scalar repairs before another stage. One predicate controls
+shear/orbital advection. Stage one synchronizes the full state. Owned cells and
+halos then apply identical density/scalar repairs using the same frozen B and EOS;
+later LF stages change only energy and magnetic moment, preserving that repair.
+No extra exchange or reduction is needed. One predicate controls
 receive sizes, packing and unpacking. Entry refreshes and all excluded cases
 retain full messages, and flux communication is unchanged. No new option or
-buffer is needed. CPU/HIP each pass nine focused checks, including exact native
-conserved/scalar/CT/ghost payloads across full/compact exchange and one/four ranks.
+buffer is needed. The original compact patch passed nine CPU and nine HIP checks,
+including exact native conserved/scalar/CT/ghost payloads across full/compact
+exchange and one/four ranks.
 Accepted Tier 1/2 comparisons improve throughput by 3.09%/8.73% against the
 immediate parent, with unchanged work counts and exact developed-state native
 fields/ghosts, forcing/RNG and ledgers. No-LF throughput is unchanged (+0.002%).
@@ -800,13 +803,14 @@ is off, so this is not a comparison at matched LF settings.
 
 For these scientific milestones, read the existing LF floor/invalid counters,
 endpoint pressure extrema, and EOS/FOFC event log. Q diagnostics can stay off;
-strict LF admissibility rejects density repairs and invalid states. Finite
-pressure-floor repairs are counted without aborting (user decision, 2026-10-15);
-nonfinite decoded LF pressures must be rejected before repair can hide them.
-The event log covers repair activity outside LF. Investigate changed or dominant
-repair activity before treating the result as accurate physics, without imposing
+strict LF admissibility rejects invalid states. Finite density and pressure-floor
+repairs are counted without aborting (user decision, 2026-10-15); nonfinite raw
+density, energy, magnetic moment and decoded LF pressures must be rejected before
+repair can hide them. Existing `lf_dfloor`/`lf_pfloor` restart counters are retained;
+the per-cycle EOS event log also covers repairs outside LF. Investigate changed
+or dominant repair activity before treating the result as accurate physics, without imposing
 a universal zero-repair criterion on every turbulent case. Counts may include
-ghosts and repeated refreshes; they are not distinct-cell fractions or an energy
+ghosts and repeated refreshes; they are not distinct-cell fractions or mass/energy
 budget. Read these in functional runs; add no hot-path instrumentation or new
 logging system.
 

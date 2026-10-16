@@ -47,7 +47,7 @@ auto Snapshot(const DvceArray5D<Real> &view) {
 }
 
 void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
-  Require("LF refresh fixture configuration", test_case >= 0 && test_case <= 8 &&
+  Require("LF refresh fixture configuration", test_case >= 0 && test_case <= 11 &&
           pack->pmhd->pcgl_lf != nullptr);
   auto *peos = pack->pmhd->peos;
   const int nmb = pack->nmb_thispack;
@@ -57,7 +57,7 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
   auto initial = Kokkos::create_mirror(cons);
   Kokkos::deep_copy(initial, 0.0);
   Kokkos::deep_copy(bcc, 0.0);
-  if (test_case >= 7) {
+  if (test_case == 7 || test_case == 8) {
     Kokkos::deep_copy(Kokkos::subview(bcc, Kokkos::ALL, static_cast<int>(IBZ),
         Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), test_case == 7 ? 2.0 : 1.0);
   }
@@ -75,6 +75,8 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
     } else if (test_case == 8) {
       initial(m,IEN,0,0,0) = -0.75*std::numeric_limits<Real>::max();
       initial(m,IAN,0,0,0) = 1.0;
+    } else if (test_case >= 9) {
+      initial(m,IDN,0,0,0) = invalid[test_case-9];
     } else if (test_case > 0) {
       initial(m,test_case <= 3 ? IEN : IAN,0,0,0) = invalid[(test_case-1)%3];
     }
@@ -100,29 +102,45 @@ void CheckNonfiniteLFRefresh(MeshBlockPack *pack, const int test_case) {
   std::cout << "CGL LF nonfinite refresh returned: case=" << test_case << std::endl;
 }
 
-// Use the production LF refresh and stage audit before ordinary time evolution.
+// Use production LF refresh, exchange and stage audit before ordinary time evolution.
 void InitializeLFRepairCase(MeshBlockPack *pack, const int test_case) {
   auto *pmhd = pack->pmhd;
   auto *peos = pmhd->peos;
   Require("LF repair configuration", pmhd->pcgl_lf != nullptr &&
           peos->eos_data.pfloor == 1.0 && peos->eos_data.dfloor == 1.0 &&
-          (test_case == 1 || test_case == 2));
+          test_case >= 1 && test_case <= 3);
+  const bool boundary = test_case == 3;
   auto cons = pmhd->u0;
   const int ni = cons.extent_int(4), nj = cons.extent_int(3), nk = cons.extent_int(2);
-  const int is = pack->pmesh->mb_indcs.is;
-  const int js = pack->pmesh->mb_indcs.js, ks = pack->pmesh->mb_indcs.ks;
-  const Real magnetic = peos->eos_data.passive ? 0.0 : 0.5;
+  const auto &idx = pack->pmesh->mb_indcs;
+  const int is = idx.is, ie = idx.ie, js = idx.js, ks = idx.ks;
+  if (boundary) {
+    Require("two periodic blocks for LF repair exchange", pmhd->nscalars == 1 &&
+            pack->pmesh->nmb_total == 2 && !pack->pmesh->multilevel &&
+            pack->pmesh->strictly_periodic && idx.ng == 2 &&
+            idx.nx1 == 8 && idx.nx2 == 4 && idx.nx3 == 4);
+  }
+  const Real momentum = test_case == 1 ? 0.0 : 0.25;
+  const Real mechanical = peos->eos_data.passive ? 0.0 : 0.5 + 0.5*SQR(momentum);
   auto initial = Kokkos::create_mirror(cons);
   Kokkos::deep_copy(initial, 0.0);
   for (int m=0; m<pack->nmb_thispack; ++m) for (int k=0; k<nk; ++k) {
     for (int j=0; j<nj; ++j) for (int i=0; i<ni; ++i) {
       initial(m,IDN,k,j,i) = 1.0;
-      initial(m,IEN,k,j,i) = 2.5 + magnetic;
+      initial(m,IM1,k,j,i) = momentum;
+      initial(m,IEN,k,j,i) = (boundary ? 3.0 : 2.5) + mechanical;
       initial(m,IAN,k,j,i) = 2.0;
+      if (boundary) initial(m,pmhd->nmhd,k,j,i) = 0.25;
     }
   }
   if (test_case == 1) initial(0,IEN,ks,js,is) -= 0.375;  // p_parallel=0.25.
   if (test_case == 2) initial(0,IDN,ks,js,is) = 0.5;
+  if (boundary && pack->gids == 0) {
+    for (int i=ie-1; i<=ie; ++i) {
+      initial(0,IDN,ks+1,js+1,i) = 0.5;
+      initial(0,pmhd->nmhd,ks+1,js+1,i) = -0.25;
+    }
+  }
   Kokkos::deep_copy(cons, initial);
   Kokkos::deep_copy(pmhd->b0.x1f, 0.0);
   Kokkos::deep_copy(pmhd->b0.x2f, 0.0);
@@ -130,24 +148,72 @@ void InitializeLFRepairCase(MeshBlockPack *pack, const int test_case) {
   Kokkos::deep_copy(pmhd->bcc0, 0.0);
   Kokkos::deep_copy(Kokkos::subview(pmhd->bcc0, Kokkos::ALL, static_cast<int>(IBZ),
       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 1.0);
+  pmhd->cgl_slot_representation = mhd::CGLSlotRepresentation::magnetic_moment;
+  auto exchange = [&](const int stage) {
+    while (pmhd->InitRecvParabolic(nullptr, stage) != TaskStatus::complete) {}
+    while (pmhd->SendU(nullptr, stage) != TaskStatus::complete) {}
+    while (pmhd->RecvU(nullptr, stage) != TaskStatus::complete) {}
+    while (pmhd->ClearSendParabolic(nullptr, stage) != TaskStatus::complete) {}
+    while (pmhd->ClearRecvParabolic(nullptr, stage) != TaskStatus::complete) {}
+  };
+  if (boundary) exchange(1);
   auto &events = pack->pmesh->ecounter;
   const int old_density = events.neos_dfloor, old_pressure = events.neos_efloor;
   peos->CGLRefreshPrimFromMagneticMoment(cons, pmhd->bcc0, pmhd->w0,
-                                        0,ni-1, 0,nj-1, 0,nk-1);
+      boundary ? is-1 : 0, boundary ? ie+1 : ni-1,
+      boundary ? js-1 : 0, boundary ? idx.je+1 : nj-1,
+      boundary ? ks-1 : 0, boundary ? idx.ke+1 : nk-1);
   const int density_repairs = events.neos_dfloor-old_density;
   const int pressure_repairs = events.neos_efloor-old_pressure;
-  Require("one isolated LF repair", density_repairs == (test_case == 2) &&
-          pressure_repairs == (test_case == 1));
+  if (!boundary) {
+    Require("one isolated LF repair", density_repairs == (test_case == 2) &&
+            pressure_repairs == (test_case == 1));
+  }
   pmhd->pcgl_lf->RecordAdmissibility(cons, pmhd->w0, pmhd->bcc0, peos->eos_data,
                                     density_repairs, pressure_repairs, "fixture", 1, 1);
-  Require("strict density-floor audit must stop", test_case != 2);
-  const auto repaired = Snapshot(cons);
-  RequireClose("actual LF floor energy correction", repaired(0,IEN,ks,js,is)
-               -initial(0,IEN,ks,js,is), 0.375);
+  if (boundary) {
+    exchange(2);
+    const auto shared = Snapshot(cons);
+    for (int m=0; m<pack->nmb_thispack; ++m) {
+      for (int k=ks-1; k<=idx.ke+1; ++k) for (int j=js-1; j<=idx.je+1; ++j) {
+        for (int i=is-1; i<=ie+1; ++i) {
+          RequireClose("next LF RHS synchronized density", shared(m,IDN,k,j,i), 1.0);
+          Require("next LF RHS nonnegative scalar", shared(m,pmhd->nmhd,k,j,i) >= 0.0);
+        }
+      }
+      if (pack->gids + m == 1) {
+        // Only compact messages leave the unused outer ghost unrepaired until exit.
+        const bool compact = pmhd->pcgl_lf->strict_admissibility;
+        RequireClose("stage-two density payload", shared(m,IDN,ks+1,js+1,is-2),
+                     compact ? 0.5 : 1.0);
+        RequireClose("stage-two scalar payload", shared(m,pmhd->nmhd,ks+1,js+1,is-2),
+                     compact ? -0.25 : 0.0);
+      }
+    }
+    const int before_final = events.neos_dfloor;
+    peos->CGLRefreshPrimFromMagneticMoment(cons, pmhd->bcc0, pmhd->w0,
+                                          0,ni-1, 0,nj-1, 0,nk-1);
+    pmhd->pcgl_lf->RecordAdmissibility(cons, pmhd->w0, pmhd->bcc0, peos->eos_data,
+                                     events.neos_dfloor-before_final, 0, "fixture", 2, 2);
+  } else {
+    const auto repaired = Snapshot(cons);
+    RequireClose("actual LF floor energy correction", repaired(0,IEN,ks,js,is)
+                 -initial(0,IEN,ks,js,is), test_case == 1 ? 0.375 : 0.0);
+    RequireClose("actual LF floor mass correction", repaired(0,IDN,ks,js,is)
+                 -initial(0,IDN,ks,js,is), test_case == 2 ? 0.5 : 0.0);
+    RequireClose("density floor preserves momentum", repaired(0,IM1,ks,js,is), momentum);
+    if (test_case == 2 && !peos->eos_data.passive) {
+      const auto prim = Snapshot(pmhd->w0);
+      const Real thermal_before = initial(0,IEN,ks,js,is)-SQR(momentum)-0.5;
+      RequireClose("kinetic release at fixed total energy",
+                   0.5*prim(0,IPR,ks,js,is)+prim(0,IPP,ks,js,is)-thermal_before,
+                   0.5*SQR(momentum));
+    }
+  }
   peos->CGLMagneticMomentToAnisotropy(cons, pmhd->bcc0, pmhd->w0,
                                     0,ni-1, 0,nj-1, 0,nk-1);
-  std::cout << "CGL LF finite pressure repair recorded: count=1 energy=0.375"
-            << std::endl;
+  pmhd->cgl_slot_representation = mhd::CGLSlotRepresentation::anisotropy;
+  std::cout << "CGL LF finite repair recorded: case=" << test_case << std::endl;
 }
 
 void CheckFloorStorage(MeshBlockPack *pack, const std::string &case_name,

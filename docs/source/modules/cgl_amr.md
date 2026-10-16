@@ -331,8 +331,10 @@ for production science:
 
 1. The requested terminal time is reached and all rank-local output groups are
    complete.
-2. `lf_dfloor`, `lf_pfloor`, `lf_nonfin`, `lf_nonpos`, and `lf_hardbd` remain
-   zero in strict validation.
+2. `lf_nonfin` and `lf_nonpos` remain zero. Strict LF checks reject invalid raw
+   or recovered states; finite density/pressure repairs and threshold crossings
+   are nonfatal. Assess `lf_dfloor`, `lf_pfloor`, `lf_hardbd` and EOS event counts
+   against the intended repair activity; counts are not mass/energy budgets.
 3. Density, energy, nonfinite, and empty-interval AMR primary-repair counters
    remain zero unless the run is explicitly designed as a repair stress test.
 4. Mass conservation meets a documented tolerance appropriate to the problem

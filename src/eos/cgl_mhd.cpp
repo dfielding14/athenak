@@ -337,10 +337,11 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     u.by = bcc(m,IBY,k,j,i);
     u.bz = bcc(m,IBZ,k,j,i);
 
-    // Weak-B recovery can overwrite an invalid moment before stage diagnostics see it.
-    if (strict_lf && (!Kokkos::isfinite(u.e) || !Kokkos::isfinite(u.mu))) {
+    // Density flooring and weak-B recovery must not hide nonfinite input.
+    if (strict_lf && (!Kokkos::isfinite(u.d) || !Kokkos::isfinite(u.e) ||
+                      !Kokkos::isfinite(u.mu))) {
       Kokkos::abort("CGL Landau-fluid strict admissibility failed before primitive refresh: "
-                    "nonfinite energy or magnetic moment");
+                    "nonfinite density, energy or magnetic moment");
     }
     HydPrim1D w;
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;

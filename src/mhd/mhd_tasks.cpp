@@ -834,7 +834,8 @@ TaskStatus MHD::RecvU(Driver *pdrive, int stage) {
 }
 
 bool MHD::UseCompactCGLLFExchange(int stage) const {
-  // Stage 1 synchronizes frozen fields; strict LF forbids repairs that could change them.
+  // Stage 1 synchronizes frozen fields; owned cells and halos floor rho identically
+  // with the same frozen B. Later LF stages change only IEN/IAN, preserving that repair.
   return has_cgl_lf_split && stage > 1 &&
       cgl_slot_representation == CGLSlotRepresentation::magnetic_moment &&
       pcgl_lf->strict_admissibility && !pmy_pack->pmesh->multilevel &&

@@ -105,6 +105,11 @@ inside the collision hook. Entry boundary refreshes use stage zero and do not
 increment `lf_nstage`. Ordinary MHD retains its last-stage `NewTimeStep` task.
 Initialization and regridding retain their existing boundary refreshes.
 
+On uniform periodic strict-LF runs without shear/orbital advection, stage 1
+exchanges the full state. Owner and halo density/scalar repairs are identical
+with synchronized frozen B and EOS. Later LF stages change only IEN/IAN, so
+compact communication remains valid without an extra exchange or reduction.
+
 The scalar rate map retains both the target anisotropy and its pressure exchange.
 `expm1` preserves tiny background kicks; the initially smaller pressure receives
 the exchange directly, and the larger pressure is recovered from the target.
@@ -113,9 +118,9 @@ two-tier map has jumps at backup thresholds. The active grid operator changes
 only conserved A and refreshes pressures from E/A. The passive operator
 re-encodes J/A at fixed thermal energy, up to representation roundoff.
 
-`RecordAdmissibility` counts each unprojected LF stage. Intermediate wall
-crossings and finite pressure repairs are recorded without stopping. Density
-repairs and invalid states remain fatal in strict mode. Nonfinite decoded LF
+`RecordAdmissibility` counts each unprojected LF stage. Threshold crossings and
+finite density/pressure repairs are recorded without stopping. Invalid states
+remain fatal in strict mode. Nonfinite raw density/energy/moment and decoded LF
 pressures are rejected before flooring can hide them. Entry and sweep-end checks
 retain finite/positive-state validation without
 incrementing stage counts or rejecting finite backup overshoots.
@@ -216,10 +221,13 @@ appends LF columns when the closure is active:
   `cgl_lf_record_pressure_work = true`.
 
 Strict admissibility is controlled by `cgl_lf_strict_admissibility`. In strict
-mode, density repairs and nonfinite or nonpositive thermodynamic state are fatal
-at LF stages and split checkpoints. Finite pressure repairs are counted in
-`lf_pfloor` and the EOS event log without stopping; threshold crossings also
-remain diagnostic.
+mode, nonfinite or nonpositive recovered state is fatal at LF stages and split
+checkpoints. Finite density/pressure repairs increment existing restartable
+`lf_dfloor`/`lf_pfloor`; the EOS event log records `eos_dfloor`/`eos_efloor` per
+completed cycle, including repairs outside LF. These event counts can include
+halos and repeated refreshes; they are not unique cells or mass/energy budgets.
+Threshold crossings also remain diagnostic. No restart field or diagnostic pass
+is added for the nonfatal repair policy.
 Backup relaxation and scattering require an explicit `backup_limiters = true` in
 both strict and relaxed modes.
 
