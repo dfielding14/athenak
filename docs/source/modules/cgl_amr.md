@@ -182,6 +182,43 @@ two additional levels. If no coarse/fine interface or AMR transfer is needed,
 setting the root mesh directly to the target resolution is simpler and avoids
 AMR overhead.
 
+### Uniform refinement at a physical time
+
+To double the resolution everywhere once, including on a restart, use:
+
+```ini
+<mesh_refinement>
+refinement = adaptive
+num_levels = 2
+ncycle_check = 1
+refinement_interval = 1
+prolong_primitives = true
+max_nmb_per_rank = 8
+
+<amr_criterion1>
+method = time
+time_start = 10.0
+```
+
+`time_start` must be finite and nonnegative. The criterion requests refinement
+at the first eligible AMR check with physical time at or above this value; it
+does not shorten a timestep to hit that time exactly. Before then it leaves
+other criteria unchanged. Afterwards it keeps requesting refinement up to
+`num_levels`, preventing derefinement even if other built-in criteria request it.
+With `num_levels = 2`, the root mesh gains one level: twice the resolution in
+each direction and eight times as many blocks in 3-D. Set `max_nmb_per_rank`
+for the chosen rank layout and available memory; eight is sufficient only
+when starting from one root block per rank with no extra load-balancing demand.
+Restart time and the mesh's existing levels determine the behavior without an
+additional trigger counter.
+
+For a coarse-to-fine handoff between allocations, set a future
+`time/tlim = time_start` and `time/nlim = -1` with the check intervals above.
+The final coarse cycle reaches that time, AMR refines the mesh, and final output
+writes the refined checkpoint before any fine-grid timestep. Use a time-based
+restart writer (a `dt` key without `dcycle`) and a shared checkpoint when the
+next allocation uses a different rank count.
+
 ### Adaptive current-based refinement
 
 The validated production workflow tags blocks using the maximum

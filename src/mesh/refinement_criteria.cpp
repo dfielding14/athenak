@@ -8,6 +8,7 @@
 
 #include <iostream>
 #include <algorithm> // max
+#include <cmath>     // isfinite
 #include <string>
 
 #include "athena.hpp"
@@ -43,6 +44,12 @@ RefinementCriteria::RefinementCriteria(Mesh *pm, ParameterInput *pin) :
         rcrit0.rmethod = RefCritMethod::second_deriv;
       } else if (method.compare("location") == 0) {
         rcrit0.rmethod = RefCritMethod::location;
+      } else if (method.compare("time") == 0) {
+        rcrit0.rmethod = RefCritMethod::time;
+        rcrit0.time_start = pin->GetReal(it->block_name, "time_start");
+        if (!std::isfinite(rcrit0.time_start) || rcrit0.time_start < 0.0) {
+          Kokkos::abort("AMR time_start must be finite and nonnegative");
+        }
       } else if (method.compare("user") == 0) {
         rcrit0.rmethod = RefCritMethod::user;
       } else {
@@ -50,7 +57,8 @@ RefinementCriteria::RefinementCriteria(Mesh *pm, ParameterInput *pin) :
         Kokkos::abort("Unknown refinement criterion");
       }
       // read refinement variable only when needed
-      if ((method.compare("location")!=0) && (method.compare("user")!=0)) {
+      if ((method.compare("location")!=0) && (method.compare("time")!=0) &&
+          (method.compare("user")!=0)) {
         rcrit0.rvariable = pin->GetString(it->block_name,"variable");
       }
       rcrit0.rvalue_min = pin->GetOrAddReal(it->block_name,"value_min",(-FLT_MAX));
@@ -123,6 +131,7 @@ void RefinementCriteria::SetRefinementData(MeshBlockPack* pmbp, bool count_deriv
   for (auto it = rcrit.begin(); it != rcrit.end(); ++it) {
     // Only load data for methods that need it
     if ((it->rmethod != RefCritMethod::location) &&
+        (it->rmethod != RefCritMethod::time) &&
         (it->rmethod != RefCritMethod::user)) {
       using Kokkos::ALL;
       // hydro (lab-frame) density
@@ -394,4 +403,18 @@ void RefinementCriteria::CheckLocation(MeshBlockPack* pmbp, RefCritData crit) {
   refine_flag.template modify<HostMemSpace>();
   refine_flag.template sync<DevExeSpace>();
   return;
+}
+
+//----------------------------------------------------------------------------------------
+//! Request uniform refinement from time_start onward; never request derefinement.
+void RefinementCriteria::CheckTime(MeshBlockPack* pmbp, RefCritData crit) {
+  if (pmbp->pmesh->time < crit.time_start) {return;}
+  auto &refine_flag = pmbp->pmesh->pmr->refine_flag;
+  int mbs = pmbp->pmesh->gids_eachrank[global_variable::my_rank];
+  for (int m = 0; m < pmbp->nmb_thispack; ++m) {
+    refine_flag.h_view(m + mbs) = 1;
+  }
+  // Other criteria may consume these flags on device before max-level clipping.
+  refine_flag.template modify<HostMemSpace>();
+  refine_flag.template sync<DevExeSpace>();
 }

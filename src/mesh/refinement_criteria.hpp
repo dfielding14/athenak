@@ -13,6 +13,7 @@
 //!   (2) gradient of selected variable
 //!   (3) second derivative of selected variable
 //!   (4) region with specified radius of a selected point
+//!   (5) all blocks after a specified physical time
 //! Any number of refinement criteria can be specified using multiple
 //! <refinement_criteriaN> blocks in the input file.  Each block can select a different
 //! method and/or hydro/MHD/radiation variables can be selected.
@@ -27,7 +28,7 @@
 #include "athena.hpp"
 
 // identifiers for refinement criteria methods
-enum class RefCritMethod {min_max, slope, second_deriv, location, user};
+enum class RefCritMethod {min_max, slope, second_deriv, location, time, user};
 
 using DvceArray5DnSlice = Kokkos::Subview<DvceArray5D<Real>,
                           std::remove_const_t<decltype(Kokkos::ALL)>,
@@ -46,6 +47,7 @@ struct RefCritData {
   Real rvalue_min, rvalue_max;     // min/max criteria for refinement
   Real rloc_x1, rloc_x2, rloc_x3;  // x1-,x2-,x3-locations of point to refine around
   Real rloc_rad;                   // radius of region around point to be refined
+  Real time_start = 0.0;           // first physical time to request uniform refinement
   DvceArray5DnSlice rdata;         // slice of variable "n" in 5D array(m,n,k,j,i)
 };
 
@@ -69,6 +71,7 @@ class RefinementCriteria {
   void CheckSlope(MeshBlockPack* pmbp, RefCritData crit);
   void CheckSecondDeriv(MeshBlockPack* pmbp, RefCritData crit);
   void CheckLocation(MeshBlockPack* pmbp, RefCritData crit);
+  void CheckTime(MeshBlockPack* pmbp, RefCritData crit);
 
  private:
   // data

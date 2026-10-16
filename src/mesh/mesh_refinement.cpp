@@ -320,6 +320,9 @@ void MeshRefinement::CheckForRefinement(MeshBlockPack* pmbp) {
       case RefCritMethod::location:
         pmrc->CheckLocation(pmbp, *it);
         break;
+      case RefCritMethod::time:
+        pmrc->CheckTime(pmbp, *it);
+        break;
       case RefCritMethod::user:
         pmy_mesh->pgen->user_ref_func(pmbp);
         break;
