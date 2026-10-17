@@ -1728,8 +1728,8 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
   }
   const Real bdt = pm->dt;
 
-  Real forcing_energy_before = 0.0;
-  auto integrated_energy = [&]() {
+  Real forcing_energy[2] = {0.0, 0.0};
+  auto integrated_local_energy = [&]() {
     DvceArray5D<Real> u0;
     if (pmy_pack->phydro != nullptr) u0 = pmy_pack->phydro->u0;
     if (pmy_pack->pmhd != nullptr) u0 = pmy_pack->pmhd->u0;
@@ -1762,11 +1762,6 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
               u0(m, IEN, k, j, i));
         },
         Kokkos::Sum<Real>(total));
-#if MPI_PARALLEL_ENABLED
-    Real global_total = 0.0;
-    MPI_Allreduce(&total, &global_total, 1, MPI_ATHENA_REAL, MPI_SUM, MPI_COMM_WORLD);
-    total = global_total;
-#endif
     return total;
   };
 
@@ -1779,13 +1774,18 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
       FatalTurbulenceError(
           "record_injected_work requires a single nonrelativistic fluid");
     }
-    forcing_energy_before = integrated_energy();
+    forcing_energy[0] = integrated_local_energy();
   }
 
   ApplyForcingWithStep(bdt);
 
   if (record_injected_work) {
-    injected_work += integrated_energy() - forcing_energy_before;
+    forcing_energy[1] = integrated_local_energy();
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, forcing_energy, 2, MPI_ATHENA_REAL, MPI_SUM,
+                  MPI_COMM_WORLD);
+#endif
+    injected_work += forcing_energy[1] - forcing_energy[0];
   }
   return TaskStatus::complete;
 }
