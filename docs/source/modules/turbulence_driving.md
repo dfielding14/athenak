@@ -114,7 +114,8 @@ numerous.
 ### Energy Injection
 
 With `normalization=edot`, `dedt` specifies the target volume-averaged energy
-injection rate. For a scale factor \(s\), the driver evaluates
+injection rate. A zero target disables forcing, including when the field opposes
+the flow. For a scale factor \(s\), the driver evaluates
 
 ```{math}
 m_0=\frac{1}{V}\int \frac{1}{2}\rho|\boldsymbol{a}|^2\Delta t\,dV,
