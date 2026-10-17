@@ -103,8 +103,9 @@ class CGLLandauFluid {
                      DvceFaceFld5D<Real> &f);
   void AdvanceHeatFluxWorkDiagnostics(const parabolic::RKL2Coefficients &coeffs,
                                       int stage, int nstages);
-  void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, int stage,
-                                      Real pressure_power, Real anisotropic_power);
+  void AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1, Real delta,
+                                      int stage, Real pressure_power,
+                                      Real anisotropic_power);
   void ResetHeatFluxDiagnostics();
   void NewTimeStep(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
                    const DvceFaceFld4D<Real> &b, const EOS_Data &eos);
@@ -144,8 +145,8 @@ class CGLLandauFluid {
   Real sweep_qperp_work2_ = 0.0;
   Real sweep_qpar_rhs_ = 0.0;
   Real sweep_qperp_rhs_ = 0.0;
-  Real pressure_work_cycle_start_ = 0.0;
-  Real anisotropic_pressure_work_cycle_start_ = 0.0;
+  Real pressure_work_register_ = 0.0;
+  Real anisotropic_pressure_work_register_ = 0.0;
 };
 
 class CGLLFProfileRegion {

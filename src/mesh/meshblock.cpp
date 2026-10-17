@@ -140,6 +140,16 @@ MeshBlock::MeshBlock(MeshBlockPack* ppack, int igids, int nmb) :
 // Based on SearchAndSetNeighbors() function in /src/bvals/bvals_base.cpp in C++ version
 
 void MeshBlock::SetNeighbors(std::unique_ptr<MeshBlockTree> &ptree, int *ranklist) {
+  // Every rank has the full leaf list; refresh eligibility after restart or regridding.
+  auto *pm = pmy_pack->pmesh;
+  pm->uniform_level = true;
+  for (int m=1; m<pm->nmb_total; ++m) {
+    if (pm->lloc_eachmb[m].level != pm->lloc_eachmb[0].level) {
+      pm->uniform_level = false;
+      break;
+    }
+  }
+
   // min number of array elements needed to store MeshBlock neighbors withe SMR/AMR
   // Note not all buffers will be allocated for all nghbrs
   if (pmy_pack->pmesh->one_d) {nnghbr = 8;}

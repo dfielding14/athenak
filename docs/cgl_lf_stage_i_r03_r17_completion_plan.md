@@ -1,5 +1,9 @@
 # CGL-LF MKS24 Stage I Rapid Completion Plan: R03 Through R17
 
+Historical Stage I campaign record. For the current `CGL-STS-LF`
+branch, use the [rebuild work order](cgl_lf_surgical_rebuild_work_order.md);
+the operational instructions below apply only to the archived campaign.
+
 ## 1. Purpose
 
 This document is the execution-focused plan for completing the corrected

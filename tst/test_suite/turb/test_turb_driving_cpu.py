@@ -542,3 +542,13 @@ def test_two_fluid_once_per_step_power(tmp_path, integrator, ifield):
     np.testing.assert_array_equal(work[dt == 0.0], 0.0)
     np.testing.assert_allclose(work[dt > 0.0] / dt[dt > 0.0], 0.1,
                                rtol=2e-7, atol=2e-8)
+
+
+def test_zero_power_with_opposing_flow(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {})
+    text = path.read_text().replace("pgen_name = turb", "pgen_name = turb_forcing")
+    path.write_text(text[:text.index("<output1>")] +
+                    "\n<turb_driving>\nspectrum = power_law\n")
+    result = run_athena(tmp_path / "run", path, "time/nlim=0", "turb_driving/dedt=0")
+    require_success(result)
+    assert "zero power with opposing flow passed" in result.stdout

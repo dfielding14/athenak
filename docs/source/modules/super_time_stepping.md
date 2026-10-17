@@ -140,6 +140,7 @@ All non-STS stability limits continue to restrict the cycle as usual.
 | `<time>/sts_integrator` | `none` | `none` or `rkl2` global STS controller |
 | `<time>/sts_safety` | Current `cfl_number` | Optional finite factor in `(0, 1]` applied only to STS diffusion budgets |
 | `<time>/sts_max_dt_ratio` | `-1.0` | Optional positive limit `dt <= ratio * dt_diff`; `-1.0` disables the cap |
+| `<time>/cgl_lf_max_chunk_ratio` | `0.0` | LF-only RKL2: zero leaves each half-sweep whole; a positive value limits each chunk to this multiple of the current safety-scaled explicit LF timestep |
 
 An absent `sts_safety` retains the legacy CFL multiplier, including on restart;
 it is not inserted into the parameter record. An explicit value is retained by
@@ -149,6 +150,13 @@ advective budgets still use `cfl_number`. Inactive diffusion remains inactive
 after scaling. The ratio cap uses the safety-scaled `dt_diff`, so increasing
 `sts_safety` can increase the outer step as well as reduce STS work. A larger
 value requires accuracy checks for the chosen problem; it is not a new default.
+
+LF chunking refreshes the parabolic bound between chunks without changing the
+outer timestep or repeating collisions and forcing. It requires uniform,
+periodic LF-only RKL2 with no shear, orbital advection, or user boundaries;
+AMR/SMR is rejected. Zero is also the recommended [passive default](cgl_passive.md).
+This control is distinct from `sts_max_dt_ratio`, which limits the outer cycle.
+Existing explicit chunk settings in inputs and restarts are preserved.
 
 The optional ratio cap is useful for validation and for runs where operator
 splitting accuracy, rather than explicit stability, should limit large STS

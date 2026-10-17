@@ -77,6 +77,58 @@ void ProblemGenerator::TurbForcing(ParameterInput *pin, const bool restart) {
   }
   pm->time = 0.0;
 
+  if (metadata.normalization == static_cast<int>(TurbNormalization::edot) &&
+      metadata.dedt == 0.0) {
+    const Real saved_dt = pm->dt;
+    pm->dt = 0.125;
+    // Render the same modes with positive power to construct an opposing flow.
+    pin->SetReal("turb_driving", "dedt", 1.0);
+    TurbulenceDriver reference(pack, pin);
+    pin->SetReal("turb_driving", "dedt", 0.0);
+    reference.mode_amp_real = turb->mode_amp_real;
+    reference.mode_amp_imag = turb->mode_amp_imag;
+    reference.UpdateForcing(nullptr, 0);
+    auto force = Kokkos::create_mirror_view_and_copy(HostMemSpace(), reference.force);
+    auto state = (pack->phydro != nullptr) ? pack->phydro->u0 : pack->pmhd->u0;
+    auto saved = Kokkos::create_mirror(state);
+    Kokkos::deep_copy(saved, state);
+    auto u = Kokkos::create_mirror(state);
+    Kokkos::deep_copy(u, saved);
+    const auto &in = pm->mb_indcs;
+    for (int m = 0; m < pack->nmb_thispack; ++m) {
+      for (int k = in.ks; k <= in.ke; ++k) {
+        for (int j = in.js; j <= in.je; ++j) {
+          for (int i = in.is; i <= in.ie; ++i) {
+            for (int d = 0; d < 3; ++d) {
+              u(m,IM1+d,k,j,i) = -u(m,IDN,k,j,i)*force(m,d,k,j,i);
+            }
+          }
+        }
+      }
+    }
+    Kokkos::deep_copy(state, u);
+    turb->AddForcing(nullptr, 0);
+    Kokkos::deep_copy(force, turb->force);
+    for (int m = 0; m < pack->nmb_thispack; ++m) {
+      for (int k = in.ks; k <= in.ke; ++k) {
+        for (int j = in.js; j <= in.je; ++j) {
+          for (int i = in.is; i <= in.ie; ++i) {
+            for (int d = 0; d < 3; ++d) {
+              Require(force(m,d,k,j,i) == 0.0,
+                      "zero power produced a kick against opposing flow");
+            }
+          }
+        }
+      }
+    }
+    auto kicked = Kokkos::create_mirror_view_and_copy(HostMemSpace(), state);
+    Require(std::memcmp(kicked.data(), u.data(), u.size()*sizeof(Real)) == 0,
+            "zero power changed conserved state");
+    pm->dt = saved_dt;
+    Kokkos::deep_copy(state, saved);
+    std::cout << "turb_forcing: zero power with opposing flow passed\n";
+  }
+
   // Deliberately inconsistent primitives detect accidental use of stale velocities.
   // Isothermal inputs allocate one passive scalar at IEN to catch unguarded writes.
   auto force = Kokkos::create_mirror_view(turb->force);

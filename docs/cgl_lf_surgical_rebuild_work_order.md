@@ -5,17 +5,32 @@ and passive support separately. Follow the
 [rebuild plan](cgl_lf_surgical_rebuild_plan.md) for equations, source scope,
 test selectors, and GPU recipes; this checklist tracks execution.
 
-Branch: `c/cgl-lf-surgical-rebuild`.
+Branch: `CGL-STS-LF`.
 Controls: pre-WO1 `8222de3aa`, post-WO1 `9a4030b09`.
 Corrected reference: `2afaa0fa1`.
 Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the completed
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
 
+**Branch promotion (2026-10-17):** the qualified rebuild is integrated into
+`dfielding14/athenak:CGL-STS-LF`, preserving both branch histories and retaining
+`c/cgl-lf-surgical-rebuild` on origin. The zero-power forcing and RK4 register
+fixes are carried over, with associated pressure-work and FOFC halo corrections.
+All 54 focused Serial and 54 HIP checks pass; debug job `5700866` also passes
+the two-rank RK4/FOFC check. Evidence is in
+`CGL/surgical-rebuild/analysis/promotion-20261017/README.md`. These checks cover
+registers, uniform states, MHD temporal order, LF decay, and forcing/work ledgers;
+they do not establish nonlinear RK4 shock or AMR convergence. The LF split remains
+second order. Frozen production executables and campaign settings are unchanged.
+
 **Status:** pieces 0–15 and both uniform-grid milestones are complete within their
 recorded scopes. Passive Tier 3 reached t=14 with clean numerical health and the
 [6,14] descriptive analysis; this does not establish turbulent convergence.
 Piece 14's active-parent bitwise comparison remains failed (details below).
+**Current passive default (2026-10-17):** cap 0, selected after the corrected-face
+comparison below. It is already the runtime default when
+`time/cgl_lf_max_chunk_ratio` is absent. Explicit deck/restart values still apply;
+override an inherited cap 32 when preparing a new cap-0 continuation.
 **Limiter correction (2026-10-15):** the user requested Stephen Majeski's
 original finite two-tier rule, without exact clamps. This changes the model
 used by the earlier milestones; their wall-related results remain historical.
@@ -28,8 +43,8 @@ Source, binary and results are retained in the
 [limiter qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/majeski-limiter-20261015/REPORT.md).
 The four beta-16 inputs now explicitly enable the original backup thresholds in
 a separate `majeski_two_tier` setup. Production was unlaunched during that
-qualification; long turbulent statistics and throughput have not been requalified
-for this model.
+qualification; those focused tests did not requalify long turbulent statistics
+or throughput. Subsequent production evidence is recorded below.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
 **Earlier pressure-floor qualification (2026-10-15):** finite pressure repairs were
 recorded without aborting, using `pfloor=1e-12` and fatal density/invalid-state
@@ -73,7 +88,7 @@ pair is an older-executable baseline; its statistical analysis does not qualify
 the bounded-face correction. Separate scaling work remains pending;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
 Speed and scaling take priority over pointwise agreement; strict health remains
-required. Larger refresh/cache and logarithm changes remain deferred. The
+required. Larger refresh/cache and directional launch fusion remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
 retains reproduction commands and links to the completed milestone evidence.
 Reuse accepted physics and reference evidence unless a relevant change or concrete
@@ -186,7 +201,7 @@ source/binary bindings and results are in the
   [qualification results](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nu20_stall_20261016/bounded_face_20261017/evidence/RESULTS.md).
 
 - [x] **7 — Transverse slopes.** Apply VL4 to temperature gradients, retaining
-  unlimited magnetic-magnitude slopes and consistent diagnostic/profile copies.
+  unlimited magnetic-magnitude slopes and consistent q-on/off directional paths.
   Gate: hotspot minima/energy, oblique convergence, exceptional slopes, and a
   separate paired timing of the added arithmetic.
 
@@ -293,9 +308,30 @@ source/binary bindings and results are in the
   Retain the change: 22 net production lines and one 51-line regression.
   Failed Slurm allocations `5656757`/`5656928` remain recorded separately;
   successful replays were reused without repeating physics checks.
-  Defer the larger refresh/cache fusion and
-  upwind-log changes; details and artifacts are in the
+  The 2026-10-17 follow-up revisits upwind logarithms and uniform-leaf AMR;
+  larger refresh/cache fusion remains deferred. Historical details are in the
   [Piece 13 report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece13/README.md).
+
+  **Uniform-AMR follow-up (2026-10-17):** combine forcing-work MPI sums, compute
+  only the active HLLE donor logarithm, extend compact exchange to uniform AMR
+  leaves, and skip their unused coarse LF boundary work. Owned-cell recovery,
+  repairs and shared-face flux exchange remain active. Job `5699659` measures
+  37.876→44.586M zone-cycles/s/node on the developed 768³ active nu=0 state,
+  16 nodes/128 ranks: +17.72% throughput, 15.05% less time, three pairs and
+  unchanged 68 LF evaluations/cycle. Compact exchange contributes +6.05%; the
+  separate coarse-work change adds +10.78%. All five native 41-cycle endpoints
+  match exactly in conserved/CT/ghost fields, clock, topology, forcing/RNG and
+  injected work, with zero new LF/EOS/AMR events. Energy-minus-work residual is
+  2.66e-15. Final HIP qualification passes 20 selected tests across `5699658`
+  and `5700758`, including AMR transitions, changed-rank restart and boundary
+  density repairs. The fixture needed a uniform-AMR guard and completion of its
+  posted flux exchange; both failed attempts are retained in the workspace.
+  Reject the narrowed halo: its preparation kernel is 15–17% slower in the
+  two-node controls. Upwind-only logs improve the uniform no-LF control by
+  2.11%; the forcing/upwind developed-state changes are within timing variation.
+  Directional fusion remains deferred. Production executables remain frozen;
+  these short replays establish neither long-time convergence nor broader scaling.
+  See the [performance record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/performance-20261017/README.md).
 
   **Authorized cleanup (2026-10-10):** dead code `e763f1d10` passes three host and
   seven HIP checks (`5647261`); environment-override/replay removal `1e8c02c37`
@@ -389,7 +425,7 @@ source/binary bindings and results are in the
   at most 1.403% in integrated q-gradient work, despite a 10.374% local maximum;
   only 0.01046% of cells differ by more than 1%. Mechanics/clock/forcing match
   exactly and all repair/invalid counters remain zero. Q-off timings `5659344`
-  select cap 32 at safety 0.3: 24.717 versus 6.836 million zone-cycles/s/node,
+  historically selected cap 32 at safety 0.3: 24.717 versus 6.836 million zone-cycles/s/node,
   3.616 times faster than cap 4 over three alternating pairs. Timed LF work is
   119.029 versus 411.286 RHS/cycle; all eight q-off/full-q endpoints match in
   physical state and non-q ledgers. The initial runner's q-counter assertion
@@ -402,8 +438,10 @@ source/binary bindings and results are in the
   continuations (`5698012`, 685 cycles each) with zero new LF/EOS repairs or
   invalids. Cap 0 delivers 50.228 versus 22.344 million zone-cycles/s/node
   (2.248×), with pressure-spectrum integrals within 1.85% over k=4–32.
-  Exact-threshold occupancy remains sensitive to subdivision; this supports
-  fast bulk comparisons, not interchangeable threshold statistics. See the
+  Cap 0 is now the passive default. Exact-threshold occupancy remains sensitive
+  to subdivision; retain the cap setting when comparing threshold statistics.
+  The endpoint check finds no resolved backup-wall excess above 1e-3 in beta*Delta.
+  See the
   [corrected passive screen](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_majeski_beta10_matched_20261016/passive_cap_comparison_20261017/runs/5698012/RESULTS.md).
 
 **Measurement and acceptance**
@@ -441,13 +479,15 @@ boxes are separate work.
   refinement examples and cost screen do not select historical 0.9 for turbulent
   accuracy. Chunking requires piece 15.
 
-Use safe/none/weighted LF with strict checks and explicit environment-override
-control. Keep pressure-work and injected-work recording enabled on Tiers 2 and 3;
+Use explicit safe/none/weighted LF with strict checks. LF mode environment
+overrides have been removed; clear them when testing older binaries.
+Keep pressure-work and injected-work recording enabled on Tiers 2 and 3;
 Tier 1 is the core-cost control without them or forcing. For Tiers 1 and 2, use
 warmup and matching output-free intervals: one alternating pair screens a patch;
 three establish a baseline or support a speedup. Tier 3 is one run per member
 at its milestone, repeated for changed settings or failed gates. Run timing jobs
-without competition; profile separately with detail off initially.
+without competition; use ordinary profiling separately. Detailed replay kernels
+were removed; `cgl_lf_profile_detail=false` remains an accepted compatibility key.
 
 Report the tier, zone-cycles/s/node, LF evaluations/cycle, elapsed/physical time,
 and amortized whole-step time/RHS. A change in Tier 1 evaluations/cycle is a

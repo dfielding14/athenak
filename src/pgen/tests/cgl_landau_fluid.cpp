@@ -55,6 +55,7 @@ enum class TestMode {
   face_geometry,
   transverse_flux,
   closure_response,
+  pressure_work_registers,
   hotspot,
   field_reversal,
   density_contact,
@@ -158,6 +159,7 @@ TestMode ParseMode(ParameterInput *pin) {
   if (mode == "face_geometry") return TestMode::face_geometry;
   if (mode == "transverse_flux") return TestMode::transverse_flux;
   if (mode == "closure_response") return TestMode::closure_response;
+  if (mode == "pressure_work_registers") return TestMode::pressure_work_registers;
   if (mode == "hotspot") return TestMode::hotspot;
   if (mode == "field_reversal") return TestMode::field_reversal;
   if (mode == "density_contact") return TestMode::density_contact;
@@ -170,7 +172,7 @@ TestMode ParseMode(ParameterInput *pin) {
        "collision_relaxation, grad_b, grad_b_wall, flux_limiter, "
        "limiter_heat_flux_suppression, limiter_stress, "
        "field_aligned_wave, paper_oblique_wave, paper_eigen_wave, rotated_decay, "
-       "transverse_flux, closure_response, hotspot, "
+       "transverse_flux, closure_response, pressure_work_registers, hotspot, "
        "face_geometry, field_reversal, density_contact, staggered_checkerboard, "
        "timestep_stencil, local_speed, low_field, or timestep_refresh");
 }
@@ -192,6 +194,7 @@ const char *ModeName(const TestMode mode) {
     case TestMode::face_geometry: return "face_geometry";
     case TestMode::transverse_flux: return "transverse_flux";
     case TestMode::closure_response: return "closure_response";
+    case TestMode::pressure_work_registers: return "pressure_work_registers";
     case TestMode::hotspot: return "hotspot";
     case TestMode::field_reversal: return "field_reversal";
     case TestMode::density_contact: return "density_contact";
@@ -1062,6 +1065,44 @@ void CheckDeviceClosureResponse() {
     }
   }
   std::cout << "CGL LF closure_response passed: checks=" << 2*count << std::endl;
+}
+
+void CheckPressureWorkRegisters(CGLLandauFluid *lf) {
+  Require(lf != nullptr, "pressure-work register test requires LF");
+  // Each stage supplies (gam0, gam1, beta, delta); compare with the exact constant-power ODE.
+  const Real coefficients[4][4][4] = {
+      {{0, 1, 1, 0}},
+      {{0, 1, 1, 0}, {0.5, 0.5, 0.5, 0}},
+      {{0, 1, 1, 0}, {0.25, 0.75, 0.25, 0}, {2.0/3, 1.0/3, 2.0/3, 0}},
+      {{0, 1, 1.193743905974738, 0},
+       {0.121098479554482, 0.721781678111411, 0.099279895495783, 0.217683334308543},
+       {-3.843833699660025, 2.121209265338722, 1.131678018054042, 1.065841341361089},
+       {0.546370891121863, 0.198653035682705, 0.310665766509336, 0}}};
+  const auto saved = lf->diagnostics;
+  for (int rk=0; rk<4; ++rk) {
+    Real expected = 3.0, expected_anisotropic = -7.0;
+    lf->diagnostics.pressure_work = expected;
+    lf->diagnostics.anisotropic_pressure_work = expected_anisotropic;
+    const Real powers[] = {0.0, 2.0, -0.5};
+    for (int cycle=0; cycle<3; ++cycle) {
+      const Real dt = 0.25*(cycle+1), power = powers[cycle];
+      for (int stage=1; stage<=rk+1; ++stage) {
+        const auto &c = coefficients[rk][stage-1];
+        lf->AdvancePressureWorkDiagnostics(dt*c[2], c[0], c[1], c[3], stage,
+                                           power, -3.0*power);
+      }
+      expected += dt*power;
+      expected_anisotropic -= 3.0*dt*power;
+      const Real tolerance = 256.0*std::numeric_limits<Real>::epsilon();
+      RequireRelative("pressure work RK"+std::to_string(rk+1),
+                      lf->diagnostics.pressure_work, expected, tolerance);
+      RequireRelative("anisotropic pressure work RK"+std::to_string(rk+1),
+                      lf->diagnostics.anisotropic_pressure_work,
+                      expected_anisotropic, tolerance);
+    }
+  }
+  lf->diagnostics = saved;
+  std::cout << "CGL LF pressure_work_registers passed: RK1-4, three cycles" << std::endl;
 }
 
 void CheckDeviceSlopeMeans() {
@@ -2394,6 +2435,9 @@ void FinalizeCGLLFQuantitative(ParameterInput *pin, Mesh *pm) {
   } else if (mode == TestMode::closure_response) {
     Require(pm->ncycle == 0, "closure_response requires nlim=0");
     CheckDeviceClosureResponse();
+  } else if (mode == TestMode::pressure_work_registers) {
+    Require(pm->ncycle == 0, "pressure_work_registers requires nlim=0");
+    CheckPressureWorkRegisters(pmhd->pcgl_lf);
   } else if (mode == TestMode::transverse_flux) {
     CheckTransverseFlux(pm);
   } else if (mode == TestMode::hotspot) {

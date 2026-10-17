@@ -1,5 +1,9 @@
 # CGL Landau-Fluid Physical-Correctness and MKS24 Reproduction Implementation Plan
 
+Historical Stage I campaign record. For the current `CGL-STS-LF`
+branch, use the [rebuild work order](cgl_lf_surgical_rebuild_work_order.md);
+the operational instructions below apply only to the archived campaign.
+
 ## Status and Purpose
 
 Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production

@@ -143,11 +143,16 @@ Complete list of all input parameters by block, extracted from source code.
 | `nu_coll` | Real | 0.0 | cgl_mhd.cpp |
 | `mirror_limiter` | bool | false | cgl_mhd.cpp |
 | `firehose_limiter` | bool | false | cgl_mhd.cpp |
-| `cgl_firehose_threshold` | string | oblique (`oblique` or `parallel`) | cgl_mhd.cpp |
-| `limiter_nu_coll` | Real | 0.0 | cgl_mhd.cpp |
-| `limiter_hardwall` | bool | false | cgl_mhd.cpp |
+| `cgl_firehose_threshold` | string | absent; numeric threshold defaults to 2.0 (`parallel`); `oblique` selects 1.4 | cgl_mhd.cpp |
+| `firehose_threshold` | Real | 2.0; soft threshold is `-firehose_threshold*B^2/2` | cgl_mhd.cpp |
+| `mirror_threshold` | Real | 1.0; soft threshold is `mirror_threshold*B^2/2` | cgl_mhd.cpp |
+| `limiter_nu_coll` | Real | required when either soft limiter is enabled | cgl_mhd.cpp |
+| `limiter_hardwall` | bool | false; true is rejected | cgl_mhd.cpp |
 | `backup_limiters` | bool | false | cgl_mhd.cpp |
-| `cgl_lf_strict_admissibility` | bool | false | cgl_landau_fluid.cpp |
+| `firehose_backup_factor` | Real | 1.0; target is bounded below by `-B^2` | cgl_mhd.cpp |
+| `mirror_backup_factor` | Real | 2.0 | cgl_mhd.cpp |
+| `limiter_backup_nu` | Real | 1e10; replaces the soft rate beyond an enabled backup threshold | cgl_mhd.cpp |
+| `cgl_lf_strict_admissibility` | bool | false; true rejects invalid states, while finite floor repairs remain nonfatal and recorded | cgl_landau_fluid.cpp |
 | `cgl_lf_record_pressure_work` | bool | false | mhd.cpp |
 | `cgl_lf_diagnostics` | string | full (`full` or `none`) | cgl_landau_fluid.cpp |
 | `cgl_lf_arithmetic` | string | safe (`safe` or `fast`) | cgl_landau_fluid.cpp |
@@ -420,6 +425,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `sts_integrator` | string | none | build_tree.cpp |
 | `sts_safety` | Real | current `cfl_number` when absent; explicit values in `(0, 1]` | build_tree.cpp |
 | `sts_max_dt_ratio` | Real | -1.0 | build_tree.cpp |
+| `cgl_lf_max_chunk_ratio` | Real | 0.0; no LF chunk subdivision (active and passive); positive caps require uniform periodic LF-only RKL2 | driver.cpp |
 | `tlim` | Real | required | driver.cpp:L93 |
 
 ## Input Block: `<turb_driving>`

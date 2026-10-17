@@ -485,7 +485,7 @@ TaskStatus MHD::ClearRecvParabolic(Driver *pdrive, int stage) {
 
 //----------------------------------------------------------------------------------------
 //! \fn TaskStatus MHD::CopyCons
-//! \brief Simple task list function that copies u0 --> u1, and b0 --> b1 in first stage
+//! \brief Copy the initial state and accumulate the secondary RK4 registers.
 
 TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
   if (stage == 1) {
@@ -493,6 +493,40 @@ TaskStatus MHD::CopyCons(Driver *pdrive, int stage) {
     Kokkos::deep_copy(DevExeSpace(), b1.x1f, b0.x1f);
     Kokkos::deep_copy(DevExeSpace(), b1.x2f, b0.x2f);
     Kokkos::deep_copy(DevExeSpace(), b1.x3f, b0.x3f);
+  } else if (pdrive->integrator == "rk4") {
+    auto &indcs = pmy_pack->pmesh->mb_indcs;
+    int is = indcs.is, ie = indcs.ie;
+    int js = indcs.js, je = indcs.je;
+    int ks = indcs.ks, ke = indcs.ke;
+    // FOFC predicts updates in the one-cell halo as well as owned cells.
+    if (use_fofc) {
+      --is; ++ie;
+      if (pmy_pack->pmesh->multi_d) { --js; ++je; }
+      if (pmy_pack->pmesh->three_d) { --ks; ++ke; }
+    }
+    int nmb1 = pmy_pack->nmb_thispack - 1;
+    Real delta = pdrive->delta[stage-1];
+    auto u0_ = u0;
+    auto u1_ = u1;
+    auto b0_ = b0;
+    auto b1_ = b1;
+    par_for("rk4_copy_cons", DevExeSpace(), 0, nmb1, 0, nmhd+nscalars-1,
+            ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int n, int k, int j, int i) {
+      u1_(m,n,k,j,i) += delta*u0_(m,n,k,j,i);
+    });
+    par_for("rk4_copy_b1", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie+1,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x1f(m,k,j,i) += delta*b0_.x1f(m,k,j,i);
+    });
+    par_for("rk4_copy_b2", DevExeSpace(), 0, nmb1, ks, ke, js, je+1, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x2f(m,k,j,i) += delta*b0_.x2f(m,k,j,i);
+    });
+    par_for("rk4_copy_b3", DevExeSpace(), 0, nmb1, ks, ke+1, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      b1_.x3f(m,k,j,i) += delta*b0_.x3f(m,k,j,i);
+    });
   }
   return TaskStatus::complete;
 }
@@ -665,7 +699,8 @@ TaskStatus MHD::CGLPressureWork(Driver *pdrive, int stage) {
 
   const Real beta_dt = pdrive->beta[stage-1]*pmy_pack->pmesh->dt;
   pcgl_lf->AdvancePressureWorkDiagnostics(
-      beta_dt, pdrive->gam0[stage-1], pdrive->gam1[stage-1], stage,
+      beta_dt, pdrive->gam0[stage-1], pdrive->gam1[stage-1],
+      pdrive->integrator == "rk4" ? pdrive->delta[stage-1] : 0.0, stage,
       pressure_power, anisotropic_power);
   return TaskStatus::complete;
 }
@@ -772,6 +807,7 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {
     TraceCGLLFTaskList(pmy_pack, "RestrictU", "begin", stage);
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_restrict_u);
+    const bool prepare_coarse = !UseCompactCGLLFExchange(stage);
     if (pmy_pack->pmesh->pmr->prolong_prims && peos->eos_data.is_cgl) {
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       const int is = indcs.is, ie = indcs.ie;
@@ -798,10 +834,13 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
         peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
       }
 
-      pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
-      pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(
-          this, MeshRefinement::CGLAMRRestrictionScope::coarse_boundary);
-    } else {
+      // Retain owned-cell repairs before exchange even without coarse neighbors.
+      if (prepare_coarse) {
+        pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
+        pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(
+            this, MeshRefinement::CGLAMRRestrictionScope::coarse_boundary);
+      }
+    } else if (prepare_coarse) {
       pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
     }
     TraceCGLLFTaskList(pmy_pack, "RestrictU", "end", stage);
@@ -838,7 +877,8 @@ bool MHD::UseCompactCGLLFExchange(int stage) const {
   // with the same frozen B. Later LF stages change only IEN/IAN, preserving that repair.
   return has_cgl_lf_split && stage > 1 &&
       cgl_slot_representation == CGLSlotRepresentation::magnetic_moment &&
-      pcgl_lf->strict_admissibility && !pmy_pack->pmesh->multilevel &&
+      pcgl_lf->strict_admissibility &&
+      (!pmy_pack->pmesh->multilevel || pmy_pack->pmesh->uniform_level) &&
       pmy_pack->pmesh->strictly_periodic && porb_u == nullptr &&
       psbox_u == nullptr && psbox_b == nullptr;
 }
@@ -1058,6 +1098,8 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
 
 TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
+    // Same-level LF halos are complete after exchange; coarse scratch is unused.
+    if (UseCompactCGLLFExchange(stage)) return TaskStatus::complete;
     TraceCGLLFTaskList(pmy_pack, "Prolongate", "begin", stage);
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_prolongate);
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);

@@ -1,5 +1,8 @@
 # Temporary CGL AMR Implementation Guide
 
+Historical implementation plan, superseded by the [CGL AMR guide](../modules/cgl_amr.md).
+Its proposed hard-wall projection is no longer the limiter model.
+
 This is a temporary engineering guide for hardening CGL-aware AMR support.
 Do not add this page to the Sphinx toctree or public documentation index. It is
 intended to be removed once the implementation, tests, and permanent docs are

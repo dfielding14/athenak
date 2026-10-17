@@ -73,3 +73,29 @@ def test_driven_cgl_lf_amr_is_reproducible_across_mpi_decomposition(prolong_prim
         shutil.rmtree("bin", ignore_errors=True)
         shutil.rmtree("rst", ignore_errors=True)
         testutils.cleanup()
+
+
+@pytest.mark.parametrize("model", ["active", "passive"])
+def test_forcing_work_ledger_closes_across_mpi_decomposition(tmp_path, model):
+    """The first uniform-state kick records global total/kinetic energy gain."""
+    input_file = (Path(__file__).resolve().parents[3] / "inputs" / "cgl_lf_paper" /
+                  f"cgl_lf_paper_smoke_{model}_beta10.athinput")
+    work_by_ranks = []
+    for ranks in (1, 4):
+        output_dir = tmp_path / f"ranks_{ranks}"
+        output_dir.mkdir()
+        assert testutils.run_command([
+            "mpirun", "-np", str(ranks), "./athena", "-i", str(input_file),
+            "-d", str(output_dir), "job/basename=forcing_work",
+            "meshblock/nx1=4", "meshblock/nx2=4", "time/nlim=1",
+        ])
+        mhd = testutils.athena_read.hst(str(output_dir / "forcing_work.mhd.hst"))
+        user = testutils.athena_read.hst(str(output_dir / "forcing_work.user.hst"))
+        work = user["force_work"] - user["force_work"][0]
+        energy = user["kinetic"] if model == "passive" else mhd["tot-E"]
+        assert work[-1] > 0.0
+        np.testing.assert_allclose(work, energy - energy[0], rtol=1e-10, atol=1e-12)
+        np.testing.assert_allclose(work, 0.32 * 2.0 * (user["time"] - user["time"][0]),
+                                   rtol=1e-10, atol=1e-12)
+        work_by_ranks.append(work)
+    np.testing.assert_allclose(*work_by_ranks, rtol=1e-12, atol=1e-12)

@@ -143,6 +143,12 @@ sweep-end checks do not add LF RHS counts. Backup scattering requires explicit
 | `cgl_lf_profile` | `false` | Enable coarse LF timing regions with Kokkos fences; for profiling only. |
 | `cgl_lf_profile_detail` | `false` | Compatibility key: `false` is accepted; the removed replay mode (`true`) is rejected. |
 
+The `<time>/cgl_lf_max_chunk_ratio` default is `0`, including passive runs.
+This keeps each LF half-sweep whole; positive values opt into repeated bound
+refresh and shorter RKL2 intervals on supported uniform grids. See
+[STS timestep controls](super_time_stepping.md) for the distinction from an
+outer-cycle cap and [passive thermodynamics](cgl_passive.md) for the recommendation.
+
 CGL requires finite positive `dfloor`, `pfloor`, `bfloor`, and `sigma_max`, and
 finite nonnegative `tfloor` and `sfloor`. Zero collision rates remain valid.
 These input guards do not qualify single-precision evolution or the numerical
@@ -256,7 +262,7 @@ pressures are not applied to flow momentum.
   LF split lifecycle with a one-stage Euler half-sweep. It requires
   `sts_integrator = none` and cannot yet be combined with another active MHD
   parabolic process.
-- CGL LF with mesh refinement supports both conserved prolongation and
+- Active CGL LF with mesh refinement supports both conserved prolongation and
   CGL-aware primitive prolongation. With
   `<mesh_refinement>/prolong_primitives = true`, fine/coarse primitive
   boundaries and active block creation/deletion rebuild the CGL thermodynamic
@@ -271,6 +277,7 @@ pressures are not applied to flow momentum.
   the local frozen stencil; it does not compose derivatives through prolongation
   and shared-face reconciliation. Finite convergence checks qualify tested AMR
   states, not a general nonlinear AMR stability envelope.
+- Passive CGL and positive LF chunk caps do not support AMR/SMR.
 - CGL LF pressure-work recording remains disabled with AMR primitive
   prolongation because that diagnostic flux-communication path has not been
   separately audited. Keep `<mhd>/cgl_lf_record_pressure_work = false` for

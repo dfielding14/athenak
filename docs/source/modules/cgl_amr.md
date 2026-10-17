@@ -2,7 +2,7 @@
 
 ## Scope
 
-AthenaK supports adaptive and static mesh refinement for nonrelativistic CGL
+AthenaK supports adaptive and static mesh refinement for active nonrelativistic CGL
 MHD, including the Landau-fluid (LF) heat-flux closure integrated with RKL2
 super-time-stepping (STS). The implementation has been exercised with uniform
 refinement, static coarse/fine interfaces, repeated adaptive refinement and
@@ -18,6 +18,12 @@ The strongest validation applies to Cartesian, periodic, nonrelativistic CGL
 MHD using PLM reconstruction, the HLLE solver, primitive AMR prolongation, and
 LF+RKL2 STS. Other combinations may share the same implementation but should
 be qualified separately.
+
+Passive CGL rejects AMR/SMR. LF chunking must remain off
+(`time/cgl_lf_max_chunk_ratio = 0`) on refined meshes. Historical rehearsals
+below predate the restored finite two-tier limiter; current qualification and
+the 384³-to-768³ continuations are recorded in the
+[rebuild work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md).
 
 ## Why CGL Needs A Specialized AMR Path
 
@@ -86,6 +92,12 @@ LF stages operate while `IAN` stores magnetic moment. AMR boundary operations
 on that path explicitly require the magnetic-moment representation. At the end
 of the split LF sweep, AthenaK converts back to conserved anisotropy before
 ordinary hyperbolic evolution, output, or restart.
+
+On periodic strict-LF meshes without shear/orbital advection, uniform leaf levels
+allow compact IEN/IAN exchange and omission of unused coarse boundary work after
+stage 1. Neighbor setup refreshes this eligibility after restart or regridding;
+mixed levels retain the full path, and owned-cell repairs and shared-face flux
+communication remain active in both cases.
 
 Representation guards fail fast if an ordinary physical or user boundary
 would interpret the temporary LF representation as conserved anisotropy.
@@ -339,7 +351,7 @@ creations and 413 deletions.
 The run passed the following gates:
 
 - no density, energy, nonfinite, or empty-interval AMR primary repairs;
-- zero fatal LF density-floor, pressure-floor, nonfinite, nonpositive, and
+- zero LF density-floor, pressure-floor, nonfinite, nonpositive, and
   hard-bound counters;
 - complete 64-rank restart and full-state output groups;
 - populated level-1 and level-2 leaf topology within the per-rank cap;
@@ -382,10 +394,10 @@ for production science:
    uniform or static-reference problem.
 7. At least one restart crosses a period of active refinement or derefinement.
 
-Mirror, firehose, anisotropy, and hard-wall projection counters are not
-automatically failures in limiter-active physics. Interpret them according to
-the configured closure. Primary repairs and fatal LF counters are the stronger
-numerical safety indicators.
+Mirror, firehose, and hard-bound crossing counts are not automatically failures
+with finite-rate limiters. Interpret them according to the configured closure;
+legacy hard-wall projection counters are now reserved and zero. Primary repairs
+and invalid-state counters are the stronger numerical safety indicators.
 
 ## Validated Envelope And Remaining Gaps
 
