@@ -20,6 +20,12 @@ def test_cgl_lf_closure_device_endpoints(tmp_path):
     assert "closure_response passed" in output
 
 
+def test_cgl_pressure_work_rk_registers(tmp_path):
+    output = _run(tmp_path / "registers", "cgl_lf_uniform_timestep.athinput",
+                  "problem/test_mode=pressure_work_registers")
+    assert "pressure_work_registers passed: RK1-4, three cycles" in output
+
+
 @pytest.mark.parametrize("seed", [0, 1], ids=["parallel", "perpendicular"])
 def test_cgl_lf_sts_collisionless_efold(tmp_path, seed):
     """Resolve a full damping time in each channel with the actual STS driver."""

@@ -972,18 +972,23 @@ void CGLLandauFluid::AdvanceHeatFluxWorkDiagnostics(
 }
 
 void CGLLandauFluid::AdvancePressureWorkDiagnostics(Real beta_dt, Real gam0, Real gam1,
-                                                     int stage, Real pressure_power,
-                                                     Real anisotropic_power) {
+                                                    Real delta, int stage,
+                                                    Real pressure_power,
+                                                    Real anisotropic_power) {
   if (stage == 1) {
-    pressure_work_cycle_start_ = diagnostics.pressure_work;
-    anisotropic_pressure_work_cycle_start_ = diagnostics.anisotropic_pressure_work;
+    pressure_work_register_ = diagnostics.pressure_work;
+    anisotropic_pressure_work_register_ = diagnostics.anisotropic_pressure_work;
+  } else if (delta != 0.0) {
+    // The diagnostic follows the same secondary RK4 register as the conserved state.
+    pressure_work_register_ += delta*diagnostics.pressure_work;
+    anisotropic_pressure_work_register_ += delta*diagnostics.anisotropic_pressure_work;
   }
   diagnostics.pressure_work =
-      gam0*diagnostics.pressure_work + gam1*pressure_work_cycle_start_
+      gam0*diagnostics.pressure_work + gam1*pressure_work_register_
       + beta_dt*pressure_power;
   diagnostics.anisotropic_pressure_work =
       gam0*diagnostics.anisotropic_pressure_work
-      + gam1*anisotropic_pressure_work_cycle_start_
+      + gam1*anisotropic_pressure_work_register_
       + beta_dt*anisotropic_power;
 }
 
