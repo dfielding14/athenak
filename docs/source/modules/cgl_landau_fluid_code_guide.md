@@ -109,6 +109,11 @@ On uniform periodic strict-LF runs without shear/orbital advection, stage 1
 exchanges the full state. Owner and halo density/scalar repairs are identical
 with synchronized frozen B and EOS. Later LF stages change only IEN/IAN, so
 compact communication remains valid without an extra exchange or reduction.
+This includes AMR meshes whose leaves all share one level, determined from the
+global leaf list during neighbor setup after initialization, restart or regridding.
+Those later LF stages also skip unused coarse restriction and prolongation,
+while retaining owned-cell primitive recovery and repairs, and shared-face flux
+communication. Mixed-level meshes retain the full boundary path.
 
 The scalar rate map retains both the target anisotropy and its pressure exchange.
 `expm1` preserves tiny background kicks; the initially smaller pressure receives

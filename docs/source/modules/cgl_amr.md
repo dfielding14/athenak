@@ -93,6 +93,12 @@ on that path explicitly require the magnetic-moment representation. At the end
 of the split LF sweep, AthenaK converts back to conserved anisotropy before
 ordinary hyperbolic evolution, output, or restart.
 
+On periodic strict-LF meshes without shear/orbital advection, uniform leaf levels
+allow compact IEN/IAN exchange and omission of unused coarse boundary work after
+stage 1. Neighbor setup refreshes this eligibility after restart or regridding;
+mixed levels retain the full path, and owned-cell repairs and shared-face flux
+communication remain active in both cases.
+
 Representation guards fail fast if an ordinary physical or user boundary
 would interpret the temporary LF representation as conserved anisotropy.
 Periodic boundaries are covered by the production validation described below;

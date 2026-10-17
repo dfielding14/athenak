@@ -77,7 +77,7 @@ pair is an older-executable baseline; its statistical analysis does not qualify
 the bounded-face correction. Separate scaling work remains pending;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
 Speed and scaling take priority over pointwise agreement; strict health remains
-required. Larger refresh/cache and logarithm changes remain deferred. The
+required. Larger refresh/cache and directional launch fusion remain deferred. The
 [workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/active-milestone/README.md)
 retains reproduction commands and links to the completed milestone evidence.
 Reuse accepted physics and reference evidence unless a relevant change or concrete
@@ -297,9 +297,30 @@ source/binary bindings and results are in the
   Retain the change: 22 net production lines and one 51-line regression.
   Failed Slurm allocations `5656757`/`5656928` remain recorded separately;
   successful replays were reused without repeating physics checks.
-  Defer the larger refresh/cache fusion and
-  upwind-log changes; details and artifacts are in the
+  The 2026-10-17 follow-up revisits upwind logarithms and uniform-leaf AMR;
+  larger refresh/cache fusion remains deferred. Historical details are in the
   [Piece 13 report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece13/README.md).
+
+  **Uniform-AMR follow-up (2026-10-17):** combine forcing-work MPI sums, compute
+  only the active HLLE donor logarithm, extend compact exchange to uniform AMR
+  leaves, and skip their unused coarse LF boundary work. Owned-cell recovery,
+  repairs and shared-face flux exchange remain active. Job `5699659` measures
+  37.876→44.586M zone-cycles/s/node on the developed 768³ active nu=0 state,
+  16 nodes/128 ranks: +17.72% throughput, 15.05% less time, three pairs and
+  unchanged 68 LF evaluations/cycle. Compact exchange contributes +6.05%; the
+  separate coarse-work change adds +10.78%. All five native 41-cycle endpoints
+  match exactly in conserved/CT/ghost fields, clock, topology, forcing/RNG and
+  injected work, with zero new LF/EOS/AMR events. Energy-minus-work residual is
+  2.66e-15. Final HIP qualification passes 20 selected tests across `5699658`
+  and `5700758`, including AMR transitions, changed-rank restart and boundary
+  density repairs. The fixture needed a uniform-AMR guard and completion of its
+  posted flux exchange; both failed attempts are retained in the workspace.
+  Reject the narrowed halo: its preparation kernel is 15–17% slower in the
+  two-node controls. Upwind-only logs improve the uniform no-LF control by
+  2.11%; the forcing/upwind developed-state changes are within timing variation.
+  Directional fusion remains deferred. Production executables remain frozen;
+  these short replays establish neither long-time convergence nor broader scaling.
+  See the [performance record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/performance-20261017/README.md).
 
   **Authorized cleanup (2026-10-10):** dead code `e763f1d10` passes three host and
   seven HIP checks (`5647261`); environment-override/replay removal `1e8c02c37`

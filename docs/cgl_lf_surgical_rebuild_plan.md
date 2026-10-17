@@ -439,8 +439,9 @@ model or LF chunking on AMR.
 LF-only flux-clear removal is accepted (`718901fa2`, measurements below).
 Select compact IEN/IAN cell messages (`920090906`, adapted from `6539bfbbc`):
 prior profiles show cell communication costs more than temperature preparation.
-Limit compaction to stage > 1 of strict LF on uniform periodic meshes without
-shear/orbital advection. Stage one synchronizes the full state. Owned cells and
+Limit compaction to stage > 1 of strict LF on periodic meshes with uniform leaf
+levels, including uniformly refined AMR, without shear/orbital advection.
+Stage one synchronizes the full state. Owned cells and
 halos then apply identical density/scalar repairs using the same frozen B and EOS;
 later LF stages change only energy and magnetic moment, preserving that repair.
 No extra exchange or reduction is needed. One predicate controls
@@ -456,13 +457,22 @@ Tier 1 is `5656691`; Tier 2 uses qualified replays from `5656928` and timings
 from `5656954` after scheduler failures interrupted the original allocation.
 The work order and workspace `analysis/piece13/README.md` retain all evidence.
 
+The 2026-10-17 follow-up determines uniform leaf levels during neighbor setup,
+including restart and regridding. Eligible later LF stages also skip unused
+coarse restriction/prolongation while retaining owned-cell recovery and repairs
+and shared-face flux communication. It combines the two forcing-work MPI sums
+and evaluates only the active HLLE donor's anisotropy logarithm, preserving the
+stable weak-field expression and neighboring-field rule. Measurements and
+qualification are recorded in `analysis/performance-20261017/README.md`.
+The one-halo scratch-preparation experiment was rejected: preparation became
+17.2%/14.9% slower on the uniform/developed controls, despite visiting fewer cells.
+
 Defer primitive/temperature fusion (`d02bb714d`): its small measured preparation
 cost does not justify duplicating EOS recovery and adding a magnetic-cache
-lifetime. Defer upwind-only HLLE logarithms (`31b739890`) and speculative timestep
-refresh removal. Implementing every historical optimization is not the goal.
+lifetime. Defer directional launch fusion and speculative timestep refresh
+removal. Implementing every historical optimization is not the goal.
 If revisited, preserve raw/scaled B rounding, all repairs/counters and final halos;
-the old logarithm patch must retain piece 5's stable weak-field expression and
-neighboring-field rule. Keep only a measured benefit or independently useful
+keep only a measured benefit or independently useful
 simplification, and report reduction-order differences explicitly.
 
 **14. Add passive thermodynamics as a separate model series.**
@@ -891,7 +901,7 @@ from the base and needed for the current piece.
 | 11 | In `turb/test_turb_driving_cpu.py`: `test_type_two_has_nonzero_force`, `test_conservative_forcing_kick`, `test_once_per_step_power`; `L::test_cgl_lf_paper_multicycle_forcing_work_matches_full_kicks` | Existing `tst/inputs/turb_driving_edot.athinput`; register the retained `turb_forcing` pgen for direct production tests |
 | Active milestone | `cgl/test_cgl_lf_waves_cpu.py`; `cgl/test_cgl_lf_closure_cpu.py`; `cgl/test_cgl_lf_transverse_cpu.py::test_cgl_lf_local_hotspot_temporal_refinement` | Qualified wave/e-fold checks and local-hotspot window 8, 4, 2, 1 (`5647113`); fixed grid/endpoint, full-precision pressures, actual work and decreasing adjacent differences. Retain the finer 1-to-0.125 precision stress failures and reference-sensitivity evidence; no rung is an exact oracle |
 | 12 | `cgl/test_cgl_lf_smr_outflow_mpi_gpu.py::test_cgl_lf_smr_outflow_mpi_gpu[4]`; `cgl/test_cgl_lf_smr_conservation_mpi_gpu.py::test_cgl_lf_smr_conservation_mpi_gpu[2-False-sts]` | Each already compares one/four ranks; other parameters run at the mesh milestone |
-| 13 | `cgl/test_cgl_lf_compact_mpicpu.py::test_cgl_lf_compact_exchange_matches_full_exchange` | Existing nonuniform 3D scalar fixture; exact full native payload across strict/full exchange and one/four ranks, positive pressures, nonzero LF work and zero repairs; run on CPU/HIP |
+| 13 | `cgl/test_cgl_lf_compact_mpicpu.py` | Exact native state/ghost payloads across full/compact exchange and MPI layouts; uniform AMR, uniform→mixed→uniform transitions, changed-rank restart and recorded boundary density repairs; run on CPU/HIP |
 | 14 | `cgl/test_cgl_passive_gpu.py::test_cgl_passive_gpu`; `cgl/test_cgl_c2p_pressure_floor_cpu.py::test_cgl_finite_backup_survives_independent_c2p` | Identity, heating, linear, advection, restart, fences and nonlinear temporal refinement; `passive_acceptance.py` and `cgl_passive_validation` pgen; forced four-rank identity/restart through `--suite forced` |
 | 15 | `cgl/test_cgl_lf_chunks.py`: `test_default_absent_and_zero_are_identical`, `test_uniform_collision_and_zero_operator_cadence`, `test_smooth_chunk_refinement_and_conservation`, `test_chunked_restart_matches_uninterrupted`, `test_chunked_mpi_state_and_schedule`, `test_invalid_chunk_configurations` | Prebuilt executable; existing passive and conservation fixtures; active threshold and failing passive checkpoint refinements remain separate accuracy checks |
 
