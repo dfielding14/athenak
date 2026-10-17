@@ -62,10 +62,12 @@ the four-case production campaign. See the
 **Next:** No numbered rebuild piece remains. The nu=20 stall investigation
 identified excessive LF face-direction amplification; the bounded-face correction
 passes early and late GPU qualification. Replay `5696681` reaches t=8.90
-with zero new LF/EOS repairs and normal timesteps. Proceed with active nu=0/20
-uniform AMR at t=10 and continuation to t=14; production AMR acceptance remains open.
-The time-driven uniform refinement criterion passes CPU and small GPU/rank-change
-handoff checks; production handoffs and separate scaling work remain pending;
+with zero new LF/EOS repairs and normal timesteps. Both active nu=0/20 cases
+have refined from 384³ to 768³ at t=10 and restarted on 16 nodes/128 ranks,
+with zero new LF/EOS/AMR repairs through the completed segments. Finish their
+t=14 continuations and compare the resolved diagnostics. The completed Majeski
+pair is an older-executable baseline; its statistical analysis does not qualify
+the bounded-face correction. Separate scaling work remains pending;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
 Speed and scaling take priority over pointwise agreement; strict health remains
 required. Larger refresh/cache and logarithm changes remain deferred. The
@@ -177,7 +179,7 @@ source/binary bindings and results are in the
   timesteps and energy-minus-work residual 1.36e-12. Its 12 network timeouts
   limit timing interpretation; the old run never reached this endpoint. These
   are continuations with inherited history, not fresh statistical qualification.
-  Production AMR remains pending. See the
+  Production 384³-to-768³ handoffs now pass; t=14 acceptance remains in progress. See the
   [qualification results](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nu20_stall_20261016/bounded_face_20261017/evidence/RESULTS.md).
 
 - [x] **7 — Transverse slopes.** Apply VL4 to temperature gradients, retaining
@@ -261,7 +263,12 @@ source/binary bindings and results are in the
   uniform LF checkpoint -> 8 blocks -> 64 blocks at separate final-time thresholds,
   with no early second refinement and successful reload. Job `5696626` passes
   small active-LF refinement on one GPU followed by an eight-rank restart and
-  advance. Production forcing/conservation handoffs remain pending; passive and
+  advance. Production jobs `5696772`/`5696773` save 128-block t=10 checkpoints;
+  both reload and advance on 128 ranks with zero new LF/EOS/AMR repairs.
+  Whole-bootstrap energy-minus-work residuals are 5.12e-13 and 2.94e-12,
+  including coarse evolution and transfer. See the
+  [production handoff analysis](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_beta16_uniform_amr_20261016/handoff10_to14/analysis_20261017/history/RESULTS.md).
+  Endpoint/statistical acceptance remains open; passive and
   chunked LF on AMR remain unsupported.
 
 - [x] **13 — Optional optimizations.** Profile the corrected target and select

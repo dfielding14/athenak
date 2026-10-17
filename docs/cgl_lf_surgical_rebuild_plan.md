@@ -415,7 +415,12 @@ loading, refinement at the final time, a later second refinement and reload.
 Set `time_start=tlim` to save the refined endpoint before changing rank count;
 advance both the threshold and level ceiling for the next handoff. Job `5696626`
 passes small active-LF refinement on one GPU followed by an eight-rank restart
-and advance; production forcing/conservation handoffs remain pending. PPM4 requires
+and advance. Production jobs `5696772`/`5696773` refine both beta-16 active
+cases from 384³ to 768³ at t=10, then successfully restart on 128 ranks.
+Both handoffs and completed continuations have zero new LF/EOS/AMR repairs;
+the whole-bootstrap energy-minus-work residuals are 5.12e-13 and 2.94e-12.
+These budgets include coarse evolution and transfer, not an isolated transfer
+jump. The t=14 endpoints and statistical comparison remain in progress. PPM4 requires
 four ghosts for AMR; primitive prolongation currently excludes pressure-work
 recording. Active mesh support does not automatically qualify the later passive
 model or LF chunking on AMR.

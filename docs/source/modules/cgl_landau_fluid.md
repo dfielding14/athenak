@@ -163,10 +163,13 @@ cgl_lf_profile = false
 Fast/physical mode remains available for separately labeled historical controls.
 
 LF faces use the CT normal field and arithmetic means of the adjacent
-cell-centered tangential components. They divide this vector by
-$\bar B=(|\boldsymbol B_L|+|\boldsymbol B_R|)/2$, without renormalizing it
-to unit length. The same $\bar B$ supplies inverse-field factors and the
-magnetic pressure in the effective scattering rate. Faces with
+cell-centered tangential components to form $\boldsymbol B_{\rm face}$.
+The effective direction is
+$\boldsymbol B_{\rm face}/\max(\bar B,|\boldsymbol B_{\rm face}|)$, where
+$\bar B=(|\boldsymbol B_L|+|\boldsymbol B_R|)/2$. Its magnitude is at most
+one, while cancellation across reversals can attenuate it below one.
+The same $\bar B$ still supplies inverse-field factors and the magnetic
+pressure in the effective scattering rate. Faces with
 $\bar B\le B_{\rm floor}$ contribute zero heat flux.
 
 For neighboring fields $(g,+B,0)$ and $(g,-B,0)$, the normal thermal
@@ -175,7 +178,9 @@ Normalizing the canceled vector instead would incorrectly give unity.
 This is a discrete regularization of unresolved reversals; a smooth sheet
 of fixed physical width and nonzero guide field recovers the continuum
 direction under refinement. The CT normal component is a separate staggered
-value, so the resulting vector is not universally bounded by unit length.
+value and can exceed $\bar B$ when cell-centered fields cancel; the maximum
+in the denominator prevents this mismatch from amplifying the direction.
+The timestep bound uses the same bounded direction.
 This geometry alone does not establish a stability bound for the full stencil.
 
 The default soft thresholds match `beta Delta = -2` and `+1`. Shipped decks
