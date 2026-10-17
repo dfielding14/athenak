@@ -115,8 +115,8 @@ void InitializeLFRepairCase(MeshBlockPack *pack, const int test_case) {
   const auto &idx = pack->pmesh->mb_indcs;
   const int is = idx.is, ie = idx.ie, js = idx.js, ks = idx.ks;
   if (boundary) {
-    Require("two periodic blocks for LF repair exchange", pmhd->nscalars == 1 &&
-            pack->pmesh->nmb_total == 2 && !pack->pmesh->multilevel &&
+    Require("two uniform periodic blocks for LF repair exchange", pmhd->nscalars == 1 &&
+            pack->pmesh->nmb_total == 2 && pack->pmesh->uniform_level &&
             pack->pmesh->strictly_periodic && idx.ng == 2 &&
             idx.nx1 == 8 && idx.nx2 == 4 && idx.nx3 == 4);
   }
@@ -149,8 +149,12 @@ void InitializeLFRepairCase(MeshBlockPack *pack, const int test_case) {
   Kokkos::deep_copy(Kokkos::subview(pmhd->bcc0, Kokkos::ALL, static_cast<int>(IBZ),
       Kokkos::ALL, Kokkos::ALL, Kokkos::ALL), 1.0);
   pmhd->cgl_slot_representation = mhd::CGLSlotRepresentation::magnetic_moment;
+  pmhd->ClearSTSFlux(nullptr, 0);
   auto exchange = [&](const int stage) {
     while (pmhd->InitRecvParabolic(nullptr, stage) != TaskStatus::complete) {}
+    // Multilevel receive setup also posts shared-face flux receives.
+    while (pmhd->SendFlux(nullptr, stage) != TaskStatus::complete) {}
+    while (pmhd->RecvFlux(nullptr, stage) != TaskStatus::complete) {}
     while (pmhd->SendU(nullptr, stage) != TaskStatus::complete) {}
     while (pmhd->RecvU(nullptr, stage) != TaskStatus::complete) {}
     while (pmhd->ClearSendParabolic(nullptr, stage) != TaskStatus::complete) {}

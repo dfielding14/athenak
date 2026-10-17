@@ -838,7 +838,8 @@ bool MHD::UseCompactCGLLFExchange(int stage) const {
   // with the same frozen B. Later LF stages change only IEN/IAN, preserving that repair.
   return has_cgl_lf_split && stage > 1 &&
       cgl_slot_representation == CGLSlotRepresentation::magnetic_moment &&
-      pcgl_lf->strict_admissibility && !pmy_pack->pmesh->multilevel &&
+      pcgl_lf->strict_admissibility &&
+      (!pmy_pack->pmesh->multilevel || pmy_pack->pmesh->uniform_level) &&
       pmy_pack->pmesh->strictly_periodic && porb_u == nullptr &&
       psbox_u == nullptr && psbox_b == nullptr;
 }
