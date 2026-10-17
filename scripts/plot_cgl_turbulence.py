@@ -129,9 +129,11 @@ def make_plots(curves, output, labels=None, annotation="", reference="passive",
 
     def ratio(ax, case, key, denominator, label, marker=None):
         data = curves[case]
-        visible = (data["k"] >= kmin) & (data["k"] <= kmax)
-        visible &= (denominator > 0) & (data[key] > 0)
-        ax.plot(data["k"][visible], data[key][visible]/denominator[visible],
+        # Resolution comparisons share low-k shells, while their cutoffs differ.
+        count = min(len(data["k"]), len(denominator))
+        k, numerator, denominator = data["k"][:count], data[key][:count], denominator[:count]
+        visible = (k >= kmin) & (k <= kmax) & (denominator > 0) & (numerator > 0)
+        ax.plot(k[visible], numerator[visible]/denominator[visible],
                 color=colors[case], linestyle=styles[case], label=label,
                 marker=marker, markersize=3, markevery=12)
 
@@ -242,7 +244,8 @@ def make_plots(curves, output, labels=None, annotation="", reference="passive",
     for case in cases:
         if case == reference:
             continue
-        np.testing.assert_array_equal(curves[case]["k"], curves[reference]["k"])
+        count = min(len(curves[case]["k"]), len(curves[reference]["k"]))
+        np.testing.assert_array_equal(curves[case]["k"][:count], curves[reference]["k"][:count])
         for key, symbol, marker in (("PS", "S", None), ("Pupar", r"u_\parallel", "o")):
             ratio(axes[1, 2], case, key, curves[reference][key],
                   labels[case] + rf": ${symbol}$", marker)

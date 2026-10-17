@@ -30,6 +30,8 @@ paths and a nominal output `time`. Plotting reads `cases`, each containing
 manifest. Optional `reference`, `k_label`, `kmax`, and `dissipation_start` control
 comparison figures. Keep case files on a common time grid. A changing resolution
 requires separate windows, since unlike Fourier grids cannot be averaged.
+Different resolutions can be plotted together when their physical low-k shells
+match; ratios stop at the common cutoff. Average each resolution separately.
 
 The short discovery scripts and actual campaign manifests are retained in
 [CGL/analysis/turbulence_20261017](/lustre/orion/ast207/proj-shared/dfielding/CGL/analysis/turbulence_20261017/README.md).
@@ -84,3 +86,39 @@ no field is synthesized. This pair used frozen pre-fix source `795c2e180c`.
 The active beta-16 AMR continuations use bounded-face source `197bafc0f` and have
 separate manifests/results. Preserve that distinction when interpreting the
 comparison or selecting the next qualification run.
+
+## Pressure-balance supplement
+
+`scripts/analyze_cgl_pressure_balance.py` computes the signed cross spectrum
+between perpendicular pressure and magnetic pressure, using two FFTs per field.
+Give it a manifest with the same `tasks`/`cases` structure, new cache paths, and
+only the matched times to average; it leaves the full turbulence caches intact.
+Its plotting needs no history file. Use absolute cache paths in this supplement.
+
+```bash
+python scripts/analyze_cgl_pressure_balance.py --self-check
+python scripts/analyze_cgl_pressure_balance.py pressure_manifest.json
+python scripts/analyze_cgl_pressure_balance.py pressure_manifest.json --plot
+```
+
+The signed co-spectrum is `Re[p_perp_hat conjugate((B²/2)_hat)]`, with the same
+physical shells and real-FFT weights as the auto-spectra. The band correlation
+integrates cross power and normalizes by the square root of the two integrated
+auto-powers. It is calculated from time-averaged spectra, not by averaging the
+correlation coefficient. The total-pressure residual is
+`E(p_perp+B²/2)/(E(p_perp)+E(B²/2))`: zero means exact cancellation, one means
+uncorrelated fields, and two means equal in-phase fluctuations. Both phase and
+amplitude therefore matter. The default reported band is `4 <= k Lx/(2 pi) <= 32`.
+
+The summary separately records snapshot correlations, temporal scatter and
+early/late windows; these are not independent-sample confidence intervals.
+Self-checks cover exact anti-phase/in-phase/quadrature fields and a rectangular
+box Fourier mode. Every field checks Parseval and total-pressure spectral
+closure. This is a pressure-balance diagnostic, not a complete perpendicular
+force balance: magnetic tension and inertia are not evaluated here.
+
+Job `5698013` qualified all 58 Majeski fields in the common [6.25,14] window
+and two full-resolution 768³ fields. The latter took 43/50 seconds and 30.85 GiB
+peak RSS per process, using two 16-thread processes on one node. Their pressure
+auto-spectra exactly match the existing full-analysis caches. The complete job,
+including plots, took 1m38s on one node; no gradient FFTs were repeated.

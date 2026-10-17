@@ -420,7 +420,13 @@ cases from 384³ to 768³ at t=10, then successfully restart on 128 ranks.
 Both handoffs and completed continuations have zero new LF/EOS/AMR repairs;
 the whole-bootstrap energy-minus-work residuals are 5.12e-13 and 2.94e-12.
 These budgets include coarse evolution and transfer, not an isolated transfer
-jump. The t=14 endpoints and statistical comparison remain in progress. PPM4 requires
+jump. The t=14 endpoints and statistical comparison remain in progress. Matched
+384³ controls now follow the same coarse sources and t=10 stop with refinement
+delayed; compare [11,14] statistics and measured cost before another refinement,
+retaining [10,11] as adjustment. The external
+[comparison workflow](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_beta16_uniform_amr_20261016/handoff10_to14/analysis_20261017/README.md)
+waits for all four endpoints and reuses the qualified full-resolution analysis.
+PPM4 requires
 four ghosts for AMR; primitive prolongation currently excludes pressure-work
 recording. Active mesh support does not automatically qualify the later passive
 model or LF chunking on AMR.
@@ -510,6 +516,16 @@ reaches t=14 with zero LF floor/invalid or EOS repair events; analysis `5661309`
 completes the descriptive [6,14] comparison. The milestone is complete within
 this numerical-health scope; the work order records cost and physical findings.
 Workspace `analysis/piece14/README.md` retains the qualification and measurements.
+
+The later bounded-face correction changes the passive performance choice:
+same-state cap-0/cap-32 continuations (`5698012`, 685 cycles to t=6.169934965)
+both finish without new LF/EOS repairs or invalids. Repeated output-free rates
+are 50.228/22.344 million zone-cycles/s/node, while k=4–32 pressure-spectrum
+integrals differ by at most 1.85%. Exact-threshold occupancy is sensitive to
+subdivision; retain that limitation when using the faster cap 0 for quick bulk
+comparisons. The frozen earlier cap-32 milestone remains intact. The
+[corrected screen](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_majeski_beta10_matched_20261016/passive_cap_comparison_20261017/runs/5698012/RESULTS.md)
+records the separate timing and physical comparisons.
 
 **15. LF interval refinement: implemented; passive milestone setting selected.**
 Hold the outer step, forcing and collision cadence fixed while refining LF

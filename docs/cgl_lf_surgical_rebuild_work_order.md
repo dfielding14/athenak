@@ -65,7 +65,10 @@ passes early and late GPU qualification. Replay `5696681` reaches t=8.90
 with zero new LF/EOS repairs and normal timesteps. Both active nu=0/20 cases
 have refined from 384³ to 768³ at t=10 and restarted on 16 nodes/128 ranks,
 with zero new LF/EOS/AMR repairs through the completed segments. Finish their
-t=14 continuations and compare the resolved diagnostics. The completed Majeski
+t=14 continuations and matched 384³ controls, then compare [11,14] statistics
+and measured cost before another refinement. The
+[automatic comparison](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_beta16_uniform_amr_20261016/handoff10_to14/analysis_20261017/README.md)
+retains [10,11] separately as refinement adjustment. The completed Majeski
 pair is an older-executable baseline; its statistical analysis does not qualify
 the bounded-face correction. Separate scaling work remains pending;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
@@ -395,6 +398,13 @@ source/binary bindings and results are in the
   turbulent accuracy, active chunk accuracy, AMR and scaling remain separate.
   Measurements and limitations are in the
   [Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md).
+  Later bounded-face source `197bafc0f` passes corrected passive cap-0/cap-32
+  continuations (`5698012`, 685 cycles each) with zero new LF/EOS repairs or
+  invalids. Cap 0 delivers 50.228 versus 22.344 million zone-cycles/s/node
+  (2.248×), with pressure-spectrum integrals within 1.85% over k=4–32.
+  Exact-threshold occupancy remains sensitive to subdivision; this supports
+  fast bulk comparisons, not interchangeable threshold statistics. See the
+  [corrected passive screen](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_majeski_beta10_matched_20261016/passive_cap_comparison_20261017/runs/5698012/RESULTS.md).
 
 **Measurement and acceptance**
 
