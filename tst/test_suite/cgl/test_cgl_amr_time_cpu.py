@@ -98,12 +98,28 @@ def test_cgl_amr_time_overlay_on_uniform_lf_checkpoint(tmp_path):
     with checkpoint.open("rb") as stream:
         assert b"cgl_amr_repair_restart_version" in stream.read(20000)
     resumed = tmp_path / "resumed"
-    result = run(resumed, "-r", str(checkpoint), f"time/nlim={final_cycle + 1}",
-                 "time/tlim=0.02")
+    # Raising the level ceiling must not refine again until the later threshold.
+    result = run(resumed, "-r", str(checkpoint), "time/tlim=0.02",
+                 "amr_criterion1/time_start=0.02", "mesh_refinement/num_levels=3",
+                 "mesh_refinement/max_nmb_per_rank=64")
     assert result.returncode == 0, result.stdout + result.stderr
-    state = bin_convert.read_binary(str(sorted((resumed / "bin").glob("*.state.*.bin"))[-1]))
-    assert state["cycle"] == final_cycle + 1 and state["n_mbs"] == 8
-    assert state["time"] > 0.01
+    states = [bin_convert.read_binary(str(path))
+              for path in sorted((resumed / "bin").glob("*.state.*.bin"))]
+    assert all(state["n_mbs"] == 8 for state in states[:-1])
+    assert any(0.01 < state["time"] < 0.02 for state in states)
+    assert states[-2]["time"] == states[-1]["time"] == 0.02
+    assert states[-2]["cycle"] == states[-1]["cycle"]
+    assert states[-1]["n_mbs"] == 64
+    assert len(list((resumed / "rst").rglob("*.rst"))) == 1
+    checkpoint = sorted((resumed / "rst").rglob("*.rst"))[-1]
+    final_cycle = states[-1]["cycle"]
+    held = tmp_path / "held"
+    result = run(held, "-r", str(checkpoint), f"time/nlim={final_cycle + 1}",
+                 "time/tlim=0.03")
+    assert result.returncode == 0, result.stdout + result.stderr
+    state = bin_convert.read_binary(str(sorted((held / "bin").glob("*.state.*.bin"))[-1]))
+    assert state["cycle"] == final_cycle + 1 and state["n_mbs"] == 64
+    assert state["time"] > 0.02
 
 
 @pytest.mark.parametrize("start", ["-1", "nan", "inf"])
