@@ -236,20 +236,43 @@ void MeshBoundaryValues::InitializeBuffers(const int nvar) {
 
 particles::ParticlesBoundaryValues::ParticlesBoundaryValues(
   particles::Particles *pp, ParameterInput *pin) :
+    nprtcl_send(0),
+    nprtcl_recv(0),
     sendlist("sendlist",1),
+    rsend_capacity(1),
+    isend_capacity(1),
+    rrecv_capacity(1),
+    irecv_capacity(1),
+    nsends(0),
+    nrecvs(0),
+    particle_lookup_gid_table("particle_lookup_gid",1),
+    particle_lookup_rank_table("particle_lookup_rank",1),
+    particle_lookup_valid(false),
+    particle_lookup_nloc1(0),
+    particle_lookup_nloc2(0),
+    particle_lookup_nloc3(0),
+    particle_lookup_nmb_total(-1),
+    particle_lookup_max_level(-1),
+    particle_lookup_root_level(-1),
+    particle_lookup_rootx1(-1),
+    particle_lookup_rootx2(-1),
+    particle_lookup_rootx3(-1),
 #if MPI_PARALLEL_ENABLED
     prtcl_rsendbuf("rsend",1),
     prtcl_rrecvbuf("rrecv",1),
     prtcl_isendbuf("isend",1),
     prtcl_irecvbuf("irecv",1),
+    prtcl_rsendbuf_h("rsend_h",1),
+    prtcl_rrecvbuf_h("rrecv_h",1),
+    prtcl_isendbuf_h("isend_h",1),
+    prtcl_irecvbuf_h("irecv_h",1),
 #endif
     pmy_part(pp) {
 #if MPI_PARALLEL_ENABLED
-  // Guess that no more than 10% of particles will be communicated to set size of buffer
-  int npart = pmy_part->nprtcl_thispack;
-
   //resize vectors over number of ranks
   nsends_eachrank.resize(global_variable::nranks);
+  send_counts_eachrank.resize(global_variable::nranks);
+  recv_counts_eachrank.resize(global_variable::nranks);
 
   // create unique communicator for particles
   MPI_Comm_dup(MPI_COMM_WORLD, &mpi_comm_part);

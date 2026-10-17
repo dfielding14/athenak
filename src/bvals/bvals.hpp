@@ -259,18 +259,30 @@ class ParticlesBoundaryValues {
 
   int nprtcl_send, nprtcl_recv;
   DualArray1D<ParticleLocationData> sendlist;
+  int rsend_capacity, isend_capacity, rrecv_capacity, irecv_capacity;
 
   // Data needed to count number of messages and particles to send between ranks
   int nsends; // number of MPI sends to neighboring ranks on this rank
   int nrecvs; // number of MPI recvs from neighboring ranks on this rank
   std::vector<int> nsends_eachrank;                // length nranks
+  std::vector<int> send_counts_eachrank;           // length nranks
+  std::vector<int> recv_counts_eachrank;           // length nranks
   std::vector<ParticleMessageData> sends_thisrank; // length nsends
   std::vector<ParticleMessageData> recvs_thisrank; // length nrecvs
   std::vector<ParticleMessageData> sends_allranks; // length ncounts summed over ranks
 
+  DvceArray1D<int> particle_lookup_gid_table;
+  DvceArray1D<int> particle_lookup_rank_table;
+  bool particle_lookup_valid;
+  int particle_lookup_nloc1, particle_lookup_nloc2, particle_lookup_nloc3;
+  int particle_lookup_nmb_total, particle_lookup_max_level, particle_lookup_root_level;
+  int particle_lookup_rootx1, particle_lookup_rootx2, particle_lookup_rootx3;
+
 #if MPI_PARALLEL_ENABLED
   DvceArray1D<Real> prtcl_rsendbuf, prtcl_rrecvbuf;
   DvceArray1D<int>  prtcl_isendbuf, prtcl_irecvbuf;
+  HostArray1D<Real> prtcl_rsendbuf_h, prtcl_rrecvbuf_h;
+  HostArray1D<int>  prtcl_isendbuf_h, prtcl_irecvbuf_h;
   std::vector<MPI_Request> rrecv_req, rsend_req;  // vectors of requests for Reals
   std::vector<MPI_Request> irecv_req, isend_req;  // vectors of requests for ints
   MPI_Comm mpi_comm_part;                       // unique MPI communicators for particles
@@ -284,6 +296,8 @@ class ParticlesBoundaryValues {
   TaskStatus PackAndSendPrtcls();
   TaskStatus ClearPrtclSend();
   TaskStatus RecvAndUnpackPrtcls();
+  void EnsureBufferCapacity(int nsend, int nrecv);
+  void InvalidateLookupCache();
 
  protected:
   particles::Particles* pmy_part;

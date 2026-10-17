@@ -598,7 +598,7 @@ void Mesh::NewTimeStep(const Real tlim) {
     }
   }
   // MHD timestep
-  if (pmb_pack->pmhd != nullptr) {
+  if (pmb_pack->pmhd != nullptr && !pmb_pack->frozen_mhd) {
     dt_legacy = std::min(dt_legacy, (cfl_no)*(pmb_pack->pmhd->dtnew) );
     dt_cycle_candidate = std::min(dt_cycle_candidate, (cfl_no)*(pmb_pack->pmhd->dtnew) );
     // source terms timestep
@@ -611,6 +611,7 @@ void Mesh::NewTimeStep(const Real tlim) {
 
   // Parabolic-process timestep budgets
   for (const auto &process : pmb_pack->parabolic_processes) {
+    if (pmb_pack->frozen_mhd) break;
     const Real raw_dt = process.ExplicitDt();
     // Scaling the inactive sentinel can otherwise enable a zero-operator sweep.
     if (raw_dt >= std::numeric_limits<float>::max()) continue;
@@ -698,6 +699,7 @@ void Mesh::NewTimeStep(const Real tlim) {
 
 void Mesh::RefreshSTSParabolicTimeStep() {
   dt_parabolic_sts = std::numeric_limits<float>::max();
+  if (pmb_pack->frozen_mhd) return;
   for (const auto &process : pmb_pack->parabolic_processes) {
     const Real raw_dt = process.ExplicitDt();
     if (raw_dt >= std::numeric_limits<float>::max()) continue;
@@ -725,19 +727,7 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   // Determine total number of particles across all ranks
   particles::Particles *ppart = pmb_pack->ppart;
   if (ppart != nullptr) {
-    nprtcl_thisrank = 0;
-    for (int n=0; n<nmb_packs_thisrank; ++n) {
-      nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
-    }
-    nprtcl_eachrank = new int[global_variable::nranks];
-    nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
-#if MPI_PARALLEL_ENABLED
-    // Share number of particles on each rank with all ranks
-    MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
-#endif
-    for (int n=0; n<global_variable::nranks; ++n) {
-      nprtcl_total += nprtcl_eachrank[n];
-    }
+    UpdateParticleCounts();
     // Assign particle IDs
     if (pmb_pack->ppart != nullptr) {
       pmb_pack->ppart->CreateParticleTags(pinput);
@@ -749,4 +739,76 @@ void Mesh::AddCoordinatesAndPhysics(ParameterInput *pinput) {
   if (adaptive) {
     pmr->pmrc = new RefinementCriteria(this, pinput);
   }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::UpdateParticleCountsLocal
+
+void Mesh::UpdateParticleCountsLocal() {
+  particles::Particles *ppart = pmb_pack->ppart;
+  if (ppart == nullptr) {return;}
+
+  nprtcl_thisrank = 0;
+  for (int n=0; n<nmb_packs_thisrank; ++n) {
+    nprtcl_thisrank += pmb_pack->ppart->nprtcl_thispack;
+  }
+  if (nprtcl_eachrank != nullptr) {
+    nprtcl_eachrank[global_variable::my_rank] = nprtcl_thisrank;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::UpdateParticleCounts
+
+void Mesh::UpdateParticleCounts() {
+  particles::Particles *ppart = pmb_pack->ppart;
+  if (ppart == nullptr) {return;}
+
+  if (nprtcl_eachrank == nullptr) {
+    nprtcl_eachrank = new int[global_variable::nranks];
+  }
+  UpdateParticleCountsLocal();
+#if MPI_PARALLEL_ENABLED
+  MPI_Allgather(&nprtcl_thisrank,1,MPI_INT,nprtcl_eachrank,1,MPI_INT,MPI_COMM_WORLD);
+#endif
+
+  nprtcl_total = 0;
+  for (int n=0; n<global_variable::nranks; ++n) {
+    nprtcl_total += nprtcl_eachrank[n];
+  }
+}
+
+//----------------------------------------------------------------------------------------
+// \fn Mesh::FindMeshBlockContainingPosition
+
+int Mesh::FindMeshBlockContainingPosition(Real x1, Real x2, Real x3) {
+  auto location_index = [](Real x, Real xmin, Real xmax, std::int32_t nloc) {
+    Real frac = (x - xmin)/(xmax - xmin);
+    std::int64_t ix = static_cast<std::int64_t>(std::floor(frac*nloc));
+    ix = std::max<std::int64_t>(0, ix);
+    ix = std::min<std::int64_t>(nloc - 1, ix);
+    return static_cast<std::int32_t>(ix);
+  };
+
+  const int lev_offset = max_level - root_level;
+  LogicalLocation floc;
+  floc.level = max_level;
+  std::int32_t nloc1 = nmb_rootx1 << lev_offset;
+  floc.lx1 = location_index(x1, mesh_size.x1min, mesh_size.x1max, nloc1);
+  if (multi_d) {
+    std::int32_t nloc2 = nmb_rootx2 << lev_offset;
+    floc.lx2 = location_index(x2, mesh_size.x2min, mesh_size.x2max, nloc2);
+  } else {
+    floc.lx2 = 0;
+  }
+  if (three_d) {
+    std::int32_t nloc3 = nmb_rootx3 << lev_offset;
+    floc.lx3 = location_index(x3, mesh_size.x3min, mesh_size.x3max, nloc3);
+  } else {
+    floc.lx3 = 0;
+  }
+
+  MeshBlockTree *bt = ptree->FindLeafContaining(floc);
+  if (bt == nullptr) {return -1;}
+  return bt->GetGID();
 }

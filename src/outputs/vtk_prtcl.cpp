@@ -41,6 +41,7 @@ ParticleVTKOutput::ParticleVTKOutput(ParameterInput *pin, Mesh *pm, OutputParame
 // Copies real and integer particle data to host for outputs
 
 void ParticleVTKOutput::LoadOutputData(Mesh *pm) {
+  pm->UpdateParticleCounts();
   particles::Particles *pp = pm->pmb_pack->ppart;
   npout_thisrank = pm->nprtcl_thisrank;
   npout_total = pm->nprtcl_total;
@@ -159,7 +160,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t datasize = sizeof(float);
     std::size_t myoffset=header_offset + 3*rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
-    if (partfile.Write_any_type_at_all(&(data[0]),3*npout_min,myoffset,"float")
+    if (partfile.Write_any_type_at_all(data,3*npout_min,myoffset,"float")
           != 3*npout_min) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "particle data not written correctly to vtk particle file, "
@@ -199,6 +200,9 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     } else if (n == static_cast<int>(PTAG)) {
       msg << std::endl << "SCALARS ptag float" << std::endl
           << "LOOKUP_TABLE default" << std::endl;
+    } else if (n == static_cast<int>(PSP)) {
+      msg << std::endl << "SCALARS species float" << std::endl
+          << "LOOKUP_TABLE default" << std::endl;
     }
 
     if (global_variable::my_rank == 0) {
@@ -220,7 +224,7 @@ void ParticleVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t datasize = sizeof(float);
     std::size_t myoffset=header_offset + rank_offset[global_variable::my_rank]*datasize;
     // collective writes for minimum number of particles across ranks
-    if (partfile.Write_any_type_at_all(&(data[0]),npout_min,myoffset,"float")
+    if (partfile.Write_any_type_at_all(data,npout_min,myoffset,"float")
           != npout_min) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
           << std::endl << "particle data not written correctly to vtk particle file, "

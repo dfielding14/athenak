@@ -448,6 +448,21 @@ class EventLogOutput : public BaseTypeOutput {
 };
 
 //----------------------------------------------------------------------------------------
+//! \class ParticleRestartOutput
+//  \brief per-rank particle checkpoints
+
+class ParticleRestartOutput : public BaseTypeOutput {
+ public:
+  ParticleRestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  void LoadOutputData(Mesh *pm) override;
+  void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
+ protected:
+  int npout_thisrank;
+  HostArray2D<Real> outpart_rdata;
+  HostArray2D<int> outpart_idata;
+};
+
+//----------------------------------------------------------------------------------------
 //! \class TrackedParticleOutput
 //  \brief derived BaseTypeOutput class for tracked particle data in binary format
 
