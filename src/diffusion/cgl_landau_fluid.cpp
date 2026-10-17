@@ -244,12 +244,14 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                    static_cast<Real>(0.5)*ppar_r, eos.pfloor);
   face.pperp = fmax(static_cast<Real>(0.5)*pperp_l +
                     static_cast<Real>(0.5)*pperp_r, eos.pfloor);
-  // Do not renormalize the averaged vector: conduction must weaken when
-  // neighboring fields reverse, while all inverse-field factors use Bbar.
+  // Retain reversal attenuation, but CT face fields must not amplify a unit direction.
+  const Real bscale = fmax(bbar, fmax(fabs(bx), fmax(fabs(by), fabs(bz))));
+  const Real sx = bx/bscale, sy = by/bscale, sz = bz/bscale;
+  const Real direction_norm = fmax(bbar/bscale, sqrt(sx*sx + sy*sy + sz*sz));
   face.bmag_inv = static_cast<Real>(1.0)/bbar;
-  face.bhx = bx/bbar;
-  face.bhy = by/bbar;
-  face.bhz = bz/bbar;
+  face.bhx = sx/direction_norm;
+  face.bhy = sy/direction_norm;
+  face.bhz = sz/direction_norm;
   face.bhdir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
   face.cparallel = cparallel0;
   if (coeff_local) {
@@ -1196,7 +1198,10 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
           // Keep conductivity, normalization, density and spacing together;
           // a finite row need not have a representable intermediate chi or b_n.
           const Real log_bar = CGLLFLogAbs(bbar);
-          const Real log_bn = CGLLFLogAbs(bv[dir])-log_bar;
+          const Real log_direction = fmax(log_bar, 0.5*CGLLFLogAdd(
+              CGLLFLogAdd(2.0*CGLLFLogAbs(bv[0]), 2.0*CGLLFLogAbs(bv[1])),
+              2.0*CGLLFLogAbs(bv[2])));
+          const Real log_bn = CGLLFLogAbs(bv[dir])-log_direction;
           Real log_grad_parallel = 1.0+log_bn-CGLLFLogAbs(dx[dir]);
           Real log_grad_perp = log_grad_parallel;
           Real log_grad_b = log_bn +
@@ -1204,7 +1209,7 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
           for (int t=0; t<ndim; ++t) {
             if (t == dir || bv[t] == 0.0) continue;
             const int di=(t==0), dj=(t==1), dk=(t==2);
-            const Real log_bt = CGLLFLogAbs(bv[t])-log_bar;
+            const Real log_bt = CGLLFLogAbs(bv[t])-log_direction;
             const Real log_h = CGLLFLogAbs(dx[t]);
             log_grad_parallel = CGLLFLogAdd(log_grad_parallel,
                 log_bt+CGLLFLogAbs(derivative_parallel[t])-log_h);

@@ -1207,10 +1207,10 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
   const DvceArray4D<Real> device_fields[] = {pmhd->b0.x1f, pmhd->b0.x2f, pmhd->b0.x3f};
   const DvceArray5D<Real> flux[] = {pmhd->uflx.x1f, pmhd->uflx.x2f, pmhd->uflx.x3f};
   const char *cases[] = {"reversal", "ct", "grad_b", "zero", "low", "floor",
-                         "above_floor", "scattering"};
+                         "above_floor", "scattering", "ct_cancellation"};
   const std::string selected = pin->GetOrAddString("problem", "geometry_case", "all");
   int checked = 0;
-  for (int kind=0; kind<8; ++kind) {
+  for (int kind=0; kind<9; ++kind) {
     if (selected != "all" && selected != cases[kind]) continue;
     for (int dir=0; dir<3; ++dir) {
       for (const Real scale : {Real(1.0), Real(-1.0), Real(4.0)}) {
@@ -1223,7 +1223,8 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
         const int tangent = (dir+1)%3;
         const int third = (dir+2)%3;
         const Real pperp = kind == 2 ? 0.7 : (kind == 7 ? 1.75 : 1.0);
-        const Real gradient = kind == 2 ? 0.0 : 0.02;
+        const Real gradient = kind == 8 ? (2.0-2.0e-6)/h[dir] :
+            (kind == 2 ? 0.0 : 0.02);
         // The scattering threshold check isolates the parallel collisional response.
         const Real perp_gradient = kind == 7 ? 0.0 : gradient;
         const Real uniform_b = kind == 4 ? 0.5*eos.bfloor :
@@ -1249,6 +1250,13 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
                 } else if (kind == 2) {
                   if (component == dir) value = 0.4;
                   if (component == tangent) value = 1.0+0.2*x;
+                } else if (kind == 8) {
+                  // CT checkerboard has divB=0 and Bcc=(0,0,0.01) in this basis.
+                  // Its normal face field is much larger than the cell magnitude.
+                  const Real parity = (index[dir]+index[tangent])%2 == 0 ? 1.0 : -1.0;
+                  if (component == dir) value = parity;
+                  if (component == tangent) value = -parity*h[tangent]/h[dir];
+                  if (component == third) value = 0.01;
                 } else if (kind >= 4 && component == dir) {
                   value = uniform_b;
                 }
@@ -1266,6 +1274,10 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
               w(0,IVX,k,j,i) = w(0,IVY,k,j,i) = w(0,IVZ,k,j,i) = 0.0;
               w(0,IPR,k,j,i) = 1.0+gradient*x;
               w(0,IPP,k,j,i) = pperp+perp_gradient*x;
+              if (kind == 8) {
+                // Positive step: mean face temperature is one, without negative ghosts.
+                w(0,IPR,k,j,i) = w(0,IPP,k,j,i) = x < 0.0 ? 1.0e-6 : 2.0-1.0e-6;
+              }
               bcc(0,IBX,k,j,i) = 0.5*(fields[0](0,k,j,i)+fields[0](0,k,j,i+1));
               bcc(0,IBY,k,j,i) = 0.5*(fields[1](0,k,j,i)+fields[1](0,k,j+1,i));
               bcc(0,IBZ,k,j,i) = 0.5*(fields[2](0,k,j,i)+fields[2](0,k+1,j,i));
@@ -1302,13 +1314,17 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
           const Real right = std::hypot(0.4, 1.0+0.1*h[dir]);
           bbar = 0.5*std::abs(scale)*(left+right);
           db = std::abs(scale)*(right-left)/h[dir];
+        } else if (kind == 8) {
+          bn = scale*((center[dir]+center[tangent])%2 == 0 ? 1.0 : -1.0);
+          bbar = 0.01*std::abs(scale);
         } else if (kind >= 4) {
           bn = scale*uniform_b;
           bbar = std::abs(bn);
         }
         Real expected_e=0.0, expected_m=0.0;
         if (bbar > eos.bfloor) {
-          const Real direction = bn/bbar;
+          const Real direction = kind == 8 ? bn/(std::abs(scale)*std::hypot(1.0, 0.01))
+                                          : bn/bbar;
           const Real nu = kind == 7 && pperp-1.0 > 0.5*bbar*bbar ? 7.0 : 0.0;
           const Real c = lf->lf_c_parallel0, k = lf->lf_k_parallel;
           const Real chi_par = 8.0*c*c/(std::sqrt(8.0*M_PI)*c*k+(3.0*M_PI-8.0)*nu);
@@ -1327,6 +1343,13 @@ void CheckFaceGeometry(ParameterInput *pin, Mesh *pm) {
         const Real got_m = actual(0,IAN,center[2],center[1],center[0]);
         const std::string label = std::string("face_geometry ")+cases[kind]+" dir="+
             std::to_string(dir)+" scale="+std::to_string(scale);
+        if (kind == 8) {
+          const Real qperp_normal = got_m*bbar;
+          const Real qpar_normal = 2.0*(got_e-qperp_normal);
+          Require(std::abs(qpar_normal) <= std::sqrt(8.0/M_PI)*lf->lf_c_parallel0 &&
+                  std::abs(qperp_normal) <= std::sqrt(2.0/M_PI)*lf->lf_c_parallel0,
+                  label+" exceeds the normal free-streaming heat-flux cap");
+        }
         RequireRelative(label+" energy", got_e, expected_e, 2.0e-11);
         RequireRelative(label+" moment", got_m, expected_m, 2.0e-11);
         ++checked;

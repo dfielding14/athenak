@@ -27,8 +27,9 @@ derefinement at cycle 3; stopping at its actual time trigger fixes that test.
 Source, binary and results are retained in the
 [limiter qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/majeski-limiter-20261015/REPORT.md).
 The four beta-16 inputs now explicitly enable the original backup thresholds in
-a separate `majeski_two_tier` setup. No production runs were submitted; long
-turbulent statistics and throughput have not been requalified for this model.
+a separate `majeski_two_tier` setup. Production was unlaunched during that
+qualification; long turbulent statistics and throughput have not been requalified
+for this model.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
 **Earlier pressure-floor qualification (2026-10-15):** finite pressure repairs were
 recorded without aborting, using `pfloor=1e-12` and fatal density/invalid-state
@@ -40,7 +41,7 @@ and retained fatal guards. All four revised 384³ decks complete 40 cycles on
 two nodes/16 ranks with zero repair/invalid events. Build `5687717` and checks
 `5687751`, including corrected test/launcher/report setup, are retained in the
 [floor qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nonfatal-floor-20261015/REPORT.md).
-That executable remains frozen; full production is unlaunched.
+That executable remains frozen; production had not launched at that stage.
 **Current floor policy:** the user selected provisional campaign
 `dfloor=pfloor=1e-6`. Finite density and pressure repairs are recorded without
 aborting; strict checks still reject nonfinite raw density/energy/moment and
@@ -55,15 +56,16 @@ and `5688145` exact boundary-repair full/compact state and ghost comparisons
 across one/two ranks. The boundary fixture was moved above its pressure floor
 to isolate density repair; its initial failure is retained. All four revised
 384³ decks complete 40 cycles on two nodes with zero LF/EOS repairs or invalids.
-The qualified executable is installed in `majeski_two_tier`; full production
-remains unlaunched. See the
+The qualified executable was installed in `majeski_two_tier` and used to launch
+the four-case production campaign. See the
 [density-floor qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/density-floor-20261015/REPORT.md).
-**Next:** The original failed-run correction magnitudes remain unmeasured; exact
-reproduction needs the original limiter model. The revised campaign must start
-fresh. Its developed-turbulence repair frequency and energy impact remain to be
-measured, rather than inferred from startup checks. No numbered rebuild piece remains.
-The requested time-driven uniform refinement callback and separate scaling work
-remain production extensions;
+**Next:** No numbered rebuild piece remains. The nu=20 stall investigation
+identified excessive LF face-direction amplification; the bounded-face correction
+passes early and late GPU qualification. Replay `5696681` reaches t=8.90
+with zero new LF/EOS repairs and normal timesteps. Proceed with active nu=0/20
+uniform AMR at t=10 and continuation to t=14; production AMR acceptance remains open.
+The time-driven uniform refinement criterion passes CPU and small GPU/rank-change
+handoff checks; production handoffs and separate scaling work remain pending;
 passive/chunked LF on AMR and active chunk accuracy need separate qualification.
 Speed and scaling take priority over pointwise agreement; strict health remains
 required. Larger refresh/cache and logarithm changes remain deferred. The
@@ -155,9 +157,28 @@ source/binary bindings and results are in the
   retaining A. Gate: first-update contamination, both contact orientations, smooth
   interface convergence, and unchanged predicates for the two B4 expected failures.
 
-- [x] **6 — LF geometry.** Use CT normal B and mean adjacent cell magnitudes;
-  do not renormalize to unit length. Gate: independent face fluxes, reversals,
+- [x] **6 — LF geometry.** Use CT normal B and normalize by
+  `max(Bbar, |B_face|)` to preserve reversal attenuation and bound the direction.
+  Gate: independent face fluxes, reversals,
   frozen-field conservation, and oblique decay.
+
+  **Bounded-face follow-up (qualified):** the old direction
+  norm reached 9.22 in developed nu=20 states before any pressure repair. The
+  correction retains Bbar in focusing, moment conversion and limiter rates.
+  All 44 CPU checks pass (12 bound, 25 active application, five time-AMR, two
+  passive); job `5696626` passes four HIP geometry cases with 81 checks each.
+  The matched 359-cycle replay from t=2.808875 to 2.90 reduces LF evaluations/cycle
+  from 152.60 to 38.63 and pressure repairs from 1,125 to zero, with energy-minus-work
+  residual -8.44e-15. Wall time falls from 400.074 to 135.619 s (2.95x observed,
+  single runs in separate allocations). The uniform screen gives 140.89 -> 146.12M
+  zone-cycles/s/node with 26 RHS/cycle each; one control network timeout precludes
+  a precise performance claim. Late replay `5696681` reaches t=8.90 in 2,581
+  cycles with zero new LF/EOS repairs, 41.31 RHS/cycle (maximum 46), normal
+  timesteps and energy-minus-work residual 1.36e-12. Its 12 network timeouts
+  limit timing interpretation; the old run never reached this endpoint. These
+  are continuations with inherited history, not fresh statistical qualification.
+  Production AMR remains pending. See the
+  [qualification results](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nu20_stall_20261016/bounded_face_20261017/evidence/RESULTS.md).
 
 - [x] **7 — Transverse slopes.** Apply VL4 to temperature gradients, retaining
   unlimited magnetic-magnitude slopes and consistent diagnostic/profile copies.
@@ -234,10 +255,14 @@ source/binary bindings and results are in the
   one ulp after restart regrouping. See the completion record and workspace
   [Piece 12 report](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece12/README.md).
 
-  Requested follow-up: a monotonic physical-time target level for uniform
-  refinement in the turbulence problem, using the existing AMR hook. Qualify
-  forcing/restart and conservation through refinement; passive and chunked LF
-  support require their own checks. This callback is not implemented yet.
+  **Time-driven refinement:** `e750ff130` adds generic `method=time` with a finite,
+  nonnegative `time_start`; it refines up to the existing level ceiling and never
+  requests derefinement. Five Serial tests pass, including `9726d30fe`'s original
+  uniform LF checkpoint -> 8 blocks -> 64 blocks at separate final-time thresholds,
+  with no early second refinement and successful reload. Job `5696626` passes
+  small active-LF refinement on one GPU followed by an eight-rank restart and
+  advance. Production forcing/conservation handoffs remain pending; passive and
+  chunked LF on AMR remain unsupported.
 
 - [x] **13 — Optional optimizations.** Profile the corrected target and select
   the smallest useful removal/fusion/message change. Compact communication follows

@@ -16,7 +16,7 @@ import pytest
 
 
 @pytest.mark.parametrize("precision", ["double", "float"])
-def test_face_sound_speed_extremes(tmp_path, precision):
+def test_face_state_extremes(tmp_path, precision):
     # Compile the actual anonymous-TU helper; scattering is disabled in this
     # check, so its unrelated EOS callback can be replaced by zero.
     source = (Path(__file__).resolve().parents[3] / "src/diffusion/cgl_landau_fluid.cpp").read_text()
@@ -58,6 +58,29 @@ int main() {
       std::cerr << "sound speed relative error " << relative << '\\n';
       return 2;
     }
+  }
+  // Preserve cancellation attenuation and bound CT directions, including norms
+  // which overflow Real even though every supplied field component is finite.
+  const Real fields[][4] = {
+    {Real(.3),Real(.4),0,1}, {1,-2,2,Real(1e-4)},
+    {maximum,maximum,maximum,maximum},
+    {maximum,-maximum/4,maximum/8,minimum}, {minimum,minimum,0,1}
+  };
+  for (const auto &field : fields) {
+    EOS_Data eos{};
+    CGLLFFaceState face{};
+    if (!BuildCGLLFFaceState(1,1,1,1,1,1,field[0],field[1],field[2],
+                            field[3],0,1,false,1,false,eos,face)) return 3;
+    const long double x=field[0],y=field[1],z=field[2];
+    const long double norm=std::sqrt(x*x+y*y+z*z);
+    const long double denom=norm>field[3] ? norm : field[3];
+    const Real actual[3]={face.bhx,face.bhy,face.bhz};
+    for (int d=0;d<3;++d) {
+      if (!std::isfinite(actual[d]) ||
+          std::abs(actual[d]-static_cast<long double>(field[d])/denom) >
+              8*std::numeric_limits<Real>::epsilon()) return 4;
+    }
+    if (face.bmag_inv != Real(1)/field[3]) return 5;
   }
 }
 """)
@@ -148,7 +171,8 @@ int main() {
         assert result.returncode == 0, result.stdout+result.stderr
 
 
-def test_cold_grad_b_envelope_matches_flux(tmp_path):
+@pytest.mark.parametrize("normal_field", [.1, 10.])
+def test_cold_grad_b_envelope_matches_flux(tmp_path, normal_field):
     root = Path(__file__).resolve().parents[3]
     source = (root / "src/diffusion/cgl_landau_fluid.cpp").read_text()
     physics = (root / "src/eos/cgl_physics.hpp").read_text()
@@ -169,7 +193,7 @@ def test_cold_grad_b_envelope_matches_flux(tmp_path):
                     timestep.index("log_perp + CGLLFLogAbs(bi) - log_bar;")+
                     len("log_perp + CGLLFLogAbs(bi) - log_bar;")]
     unit = tmp_path / "cold_grad_b.cpp"
-    unit.write_text("""
+    unit.write_text(("""
 #include <cmath>
 #include <limits>
 #include <iostream>
@@ -194,11 +218,15 @@ int main() {
   const Real h=1e-160,cp=1e-310,kpar=1e307,nu=0,rho=1;
   Real z=std::sqrt(.98),za=z;
   for (int n=0;n<6;++n) za=std::nextafter(za,INFINITY);
-  // Constant Bx/By and Bz(x,y) give a divergence-free CT field.
+  // Begin with a canceled grad-B projection, then also cover a CT normal
+  // component larger than the cell-centered magnetic magnitudes.
   const Real a=ScaledMagneticMagnitude(.1,.1,za);
   const Real b=ScaledMagneticMagnitude(.1,.1,z);
   const Real c=ScaledMagneticMagnitude(.1,.1,std::sqrt(16-.02));
-  const Real bbar=b,bi=b,beta=bi/bbar,bn=.1/bbar;
+  const Real bbar=b,bi=b,beta=bi/bbar;
+  const Real normal_field=NORMAL_FIELD;
+  const Real direction=std::fmax(bbar,std::sqrt(normal_field*normal_field+.01));
+  const Real bn=normal_field/direction,bt=.1/direction;
   Real pp,pt;
   const Real magnetic_energy=.5*(.02+z*z);
   const Real energy=1+magnetic_energy;
@@ -207,8 +235,9 @@ int main() {
       1,energy-magnetic_energy,anisotropy,b,pp,pt);
   if (!(pp>0 && pt>0)) return 1;
   struct Face { Real bhx,bhy,bhz,bhdir,ppar,pperp,rho; };
-  const Face face{bn,bn,0,bn,pp,pt,1};
-  const Real dx[3]={h,h,1},bv[3]={.1,.1,0},bh[3]={bn,bn,0};
+  const Face face{bn,bt,0,bn,pp,pt,1};
+  const Real dx[3]={h,h,1},bh[3]={bn,bt,0};
+  Real bv[3]={normal_field,.1,0};
   const int m=0,kl=0,jl=0,il=0,kr=0,jr=0,ir=1,ndim=2,dir=0;
   const Real minimum=std::numeric_limits<Real>::min();
   Real grad_parallel=0,grad_perp=0,derivative_parallel[3]={},derivative_perp[3]={};
@@ -243,8 +272,14 @@ int main() {
   if (!(row(0)>0 && std::isfinite(row(0)))) return 3;
   if (!std::isinf(row(INFINITY))) return 4;
   if (!std::isnan(row(std::numeric_limits<Real>::quiet_NaN()))) return 5;
+  // Once the direction is bounded, scaling the entire face vector changes
+  // neither its direction nor the cold row; Bbar still controls focusing.
+  if (normal_field>bbar) {
+    bv[0]*=2; bv[1]*=2;
+    if (std::abs(row(grad_b)/bound-1)>3e-12) return 6;
+  }
 }
-""")
+""").replace("NORMAL_FIELD", repr(normal_field)))
     executable = tmp_path / "cold_grad_b"
     compiler = shlex.split(os.environ.get("CXX", "c++"))
     for command in [compiler+["-std=c++17", "-O2", "-ffp-contract=off", str(unit), "-o", str(executable)],
@@ -274,7 +309,7 @@ class _FrozenStencil:
                     continue
                 bv = (bcc[:, l]+bcc[:, r])/2
                 bv[d] = face_b[(d,)+c]
-                bh = bv/bar
+                bh = bv/max(bar, np.linalg.norm(bv))
                 rf = (self.rho[l]+self.rho[r])/2
                 mean = np.zeros(self.n)
                 mean[[l, r]] = self.rho[[l, r]]/(2*rf)

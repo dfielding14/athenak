@@ -335,8 +335,9 @@ def test_cgl_lf_staggered_checkerboard_timestep_and_stability(dimension, guide):
         history = testutils.athena_read.hst(f"{basename}.mhd.hst")
         chi = np.sqrt(8.0/np.pi)/(2.0*np.pi)
         # Bcc=(0,0,guide), but the x/y face fields have magnitude one.
+        # Their direction vectors are normalized by sqrt(1+guide**2), not guide.
         # The checkerboard seed turns off all transverse limiter derivatives.
-        radius = 4.0*chi*8**2*(2.0/guide**2 + (dimension == 3))
+        radius = 4.0*chi*8**2*(2.0/(1.0+guide**2) + (dimension == 3))
         expected_initial_dt = 20.0*0.4*2.0/radius
         np.testing.assert_allclose(history["dt"][0], expected_initial_dt,
                                    rtol=2.0e-12, atol=0.0)

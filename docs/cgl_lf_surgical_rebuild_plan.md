@@ -225,8 +225,11 @@ not solve that formulation's sharp-contact limitation.
 **6. Correct LF face geometry.**
 Scope: `BuildCGLLFFaceState`, `AddHeatFluxes`, the header and
 `MHD::AddSelectedDiffusionFluxes`, plus reference consumers (`910023601`).
-Use CT normal B and the mean of adjacent cell magnitudes
-for normalization; do not renormalize this vector to unit length.
+Use CT normal B and normalize the face vector by
+`max(Bbar, |B_face|)`, where Bbar is the mean adjacent cell magnitude.
+This preserves reversal attenuation while bounding the direction norm by one;
+retain Bbar for focusing, moment conversion and limiter rates. The work order
+records the completed early GPU qualification and pending late-state replay.
 Gate: independent face fluxes, reversal-sheet perturbations, frozen-field
 conservation, and smooth oblique decay. Use a small explicit reference timestep
 while the final stability controller is still pending.
@@ -404,12 +407,18 @@ count entry refreshes as RHS evaluations. Add fixed-mesh STS-to-explicit pressur
 convergence for both prolongation modes, plus exact shearing restart checks.
 These finite checks do not prove a composed nonlinear AMR stability bound.
 
-Requested follow-up: spatially uniform refinement increasing with physical time.
-Reuse the existing user-refinement hook with a monotonic target level in the
-turbulence problem, between completed cycles, and qualify forcing/restart and
-conservation across refinement. PPM4 requires four ghosts for AMR; primitive
-prolongation currently excludes pressure-work recording. Active mesh support
-does not automatically qualify the later passive model or LF chunking on AMR.
+Time-driven uniform refinement is implemented by the generic `method=time`
+criterion (`e750ff130`, repeated-handoff check `9726d30fe`): at `time_start`,
+request refinement up to the existing level ceiling without requesting
+derefinement. Five Serial tests pass, including original uniform LF checkpoint
+loading, refinement at the final time, a later second refinement and reload.
+Set `time_start=tlim` to save the refined endpoint before changing rank count;
+advance both the threshold and level ceiling for the next handoff. Job `5696626`
+passes small active-LF refinement on one GPU followed by an eight-rank restart
+and advance; production forcing/conservation handoffs remain pending. PPM4 requires
+four ghosts for AMR; primitive prolongation currently excludes pressure-work
+recording. Active mesh support does not automatically qualify the later passive
+model or LF chunking on AMR.
 
 **13. Apply only measured, equivalent optimizations.**
 LF-only flux-clear removal is accepted (`718901fa2`, measurements below).

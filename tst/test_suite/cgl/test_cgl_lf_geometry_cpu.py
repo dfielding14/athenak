@@ -63,9 +63,9 @@ def test_cgl_lf_face_geometry(tmp_path, arithmetic, diagnostics):
     assert "face_geometry passed" in output
 
 
-@pytest.mark.parametrize("geometry", ["reversal", "ct"])
+@pytest.mark.parametrize("geometry", ["reversal", "ct", "ct_cancellation"])
 def test_cgl_lf_geometry_negative_control(tmp_path, geometry):
-    """Keep the two defects independently selectable before applying the correction."""
+    """Keep the geometry defects independently selectable for negative controls."""
     output = _run(tmp_path / geometry, "cgl_lf_geometry.athinput",
                   f"problem/geometry_case={geometry}")
     assert "face_geometry passed" in output
