@@ -23,7 +23,7 @@ Passive CGL rejects AMR/SMR. LF chunking must remain off
 (`time/cgl_lf_max_chunk_ratio = 0`) on refined meshes. Historical rehearsals
 below predate the restored finite two-tier limiter; current qualification and
 the 384³-to-768³ continuations are recorded in the
-[rebuild work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md).
+[rebuild work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md).
 
 ## Why CGL Needs A Specialized AMR Path
 

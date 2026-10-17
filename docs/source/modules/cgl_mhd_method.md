@@ -96,7 +96,7 @@ This face regularization suppresses contamination by the arbitrary magnetic
 floor. Its reference changes at the floor, and nonlinear mixing of $A$, density,
 and field can still generate anisotropy at unresolved contacts. The two strict
 sharp-contact expected failures remain in the
-[rebuild work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md).
+[rebuild work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md).
 Smooth-interface convergence tests use a fully magnetized profile and qualify
 that resolved limit separately. Shared face fluxes conserve $A$ during transport;
 weak-field EOS recovery and collisional relaxation can subsequently re-encode it.

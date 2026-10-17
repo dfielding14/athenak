@@ -1,6 +1,6 @@
 # CGL-LF Phase I Production Handoff
 
-Historical Stage I campaign record. For the current `c/cgl-lf-surgical-rebuild`
+Historical Stage I campaign record. For the current `CGL-STS-LF`
 branch, use the [rebuild work order](cgl_lf_surgical_rebuild_work_order.md);
 the operational instructions below apply only to the archived campaign.
 

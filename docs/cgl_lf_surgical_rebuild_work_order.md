@@ -5,12 +5,23 @@ and passive support separately. Follow the
 [rebuild plan](cgl_lf_surgical_rebuild_plan.md) for equations, source scope,
 test selectors, and GPU recipes; this checklist tracks execution.
 
-Branch: `c/cgl-lf-surgical-rebuild`.
+Branch: `CGL-STS-LF`.
 Controls: pre-WO1 `8222de3aa`, post-WO1 `9a4030b09`.
 Corrected reference: `2afaa0fa1`.
 Here pre-WO1 is this rebuild's starting implementation; post-WO1 is the completed
 historical first work order, not the candidate on this branch. The older scaling
 archive uses a third revision, `f2d0a259`.
+
+**Branch promotion (2026-10-17):** the qualified rebuild is integrated into
+`dfielding14/athenak:CGL-STS-LF`, preserving both branch histories and retaining
+`c/cgl-lf-surgical-rebuild` on origin. The zero-power forcing and RK4 register
+fixes are carried over, with associated pressure-work and FOFC halo corrections.
+All 54 focused Serial and 54 HIP checks pass; debug job `5700866` also passes
+the two-rank RK4/FOFC check. Evidence is in
+`CGL/surgical-rebuild/analysis/promotion-20261017/README.md`. These checks cover
+registers, uniform states, MHD temporal order, LF decay, and forcing/work ledgers;
+they do not establish nonlinear RK4 shock or AMR convergence. The LF split remains
+second order. Frozen production executables and campaign settings are unchanged.
 
 **Status:** pieces 0–15 and both uniform-grid milestones are complete within their
 recorded scopes. Passive Tier 3 reached t=14 with clean numerical health and the

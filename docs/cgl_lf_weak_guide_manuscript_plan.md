@@ -1,7 +1,7 @@
 # MKS24 Reproduction-First CGL-LF Manuscript and Later Extension Plan
 
 Historical Stage I campaign and manuscript plan. For the current
-`c/cgl-lf-surgical-rebuild` branch, use the
+`CGL-STS-LF` branch, use the
 [rebuild work order](cgl_lf_surgical_rebuild_work_order.md); the operational
 instructions below apply only to the archived campaign.
 

@@ -4,7 +4,8 @@ This document records the rebuild from pre-WO1 source, its focused qualification
 and the remaining scientific comparisons. The numbered sections retain the
 implementation contracts and historical evidence.
 
-Branch: `c/cgl-lf-surgical-rebuild`.
+Branch: `CGL-STS-LF`; the completed `c/cgl-lf-surgical-rebuild` branch remains
+on origin as a development archive.
 Base: `8222de3aae4aaebd886653e7c61846e5f17987b4`.
 Status (2026-10-17): pieces 0–15 and both uniform-grid milestones are complete
 within their recorded scopes. The matched 384³/768³ comparison through t=14
@@ -30,12 +31,14 @@ are not instructions to repeat the full CPU/GPU/MPI matrix after every edit.
 | --- | --- |
 | `8222de3aae4aaebd886653e7c61846e5f17987b4` | Exact pre-WO1 implementation baseline. Contains known defects; not a qualified production model. |
 | `f2d0a25978e4fad9beae6874f279148c0460533b` | Older historical scaling reference. Do not substitute its throughput for a measurement of the rebuild baseline. |
-| `9a4030b09307bc43865d5e597638f8645a6388f8` | Completed WO1, now the tip of `CGL-STS-LF`. Compare against it to isolate WO1. |
+| `9a4030b09307bc43865d5e597638f8645a6388f8` | Historical completed WO1 reference. Compare against it to isolate WO1; it is no longer the `CGL-STS-LF` tip. |
 | `7a37710f6c224e24e7c7f364e7e0b812b3a9494c` | WO2 release reference. |
 | `2afaa0fa1e4985c313c132cd97ba3938e8c2040c` | Preserved newer implementation and evidence, including subsequent numerical fixes. |
 | `197bafc0f` | Bounded-face LF correction used by the current AMR continuations and corrected passive cap comparison. |
 
-Read old files with `git show <revision>:<path>`; do not merge the old branch.
+Read old files with `git show <revision>:<path>`; do not reintroduce superseded
+source wholesale. Promotion to `CGL-STS-LF` deliberately preserves both branch
+histories while retaining the qualified rebuild and the separately checked fixes.
 The newer reference contains `WO2_CGL_LF_followups.md`,
 `docs/cgl_lf_changes.md`, `docs/validation/wo1/`, `docs/validation/wo2/`,
 `docs/source/modules/cgl_lf_timestep.md`, `docs/source/modules/cgl_passive.md`,

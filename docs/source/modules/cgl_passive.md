@@ -47,7 +47,7 @@ Use `<time>/cgl_lf_max_chunk_ratio = 0` for new passive runs. This is the
 runtime default: LF remains enabled, with one RKL2 sequence per half-cycle
 sweep. A positive value such as `32` subdivides each sweep and refreshes the
 LF bound between chunks; it does not cap the heat-flux amplitude or stage count.
-The corrected-geometry [continuation comparison](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_turbulence_analysis.md)
+The corrected-geometry [continuation comparison](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_turbulence_analysis.md)
 supports cap 0 for quick passive comparisons, while instability-threshold
 populations remain sensitive to the choice. Existing inputs and restarts
 with an explicit positive cap retain it; override that existing key to adopt 0.
@@ -98,5 +98,5 @@ reference, checking the explicit method's first-order convergence and reference
 uncertainty. These smooth checks do not certify accuracy in depleted turbulent
 cells. The retained depleted-pressure stress failure, subsequent LF interval
 refinement, and passive turbulent milestone used the earlier limiter operator;
-see the [work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md) for their evidence
+see the [work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md) for their evidence
 and the separate qualification of the restored finite two-tier model.

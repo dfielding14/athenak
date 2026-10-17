@@ -7,8 +7,8 @@ implementation map and runtime performance modes, see
 operator reference, see [CGL Landau-Fluid Heat Flux](cgl_landau_fluid.md).
 
 This page retains earlier operator and Stage I campaign evidence. Current
-branch qualification is recorded in the [rebuild work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md);
-use the [current turbulence analysis](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_turbulence_analysis.md) for
+branch qualification is recorded in the [rebuild work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md);
+use the [current turbulence analysis](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_turbulence_analysis.md) for
 the completed Majeski comparison and corrected passive cap screen. Historical
 hard-wall results do not qualify the restored finite two-tier limiter.
 
@@ -837,7 +837,7 @@ and mirror 1 by default. Legacy `parallel`/`oblique` map to 2/1.4 respectively.
 `limiter_hardwall=true` is rejected; migrated stiff-relaxation decks explicitly
 set their rate. Validate the finite-rate map and once-per-cycle cadence, then
 check finite-backup encoding through a separate production C2P and an actual restart.
-The [rebuild work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md) records
+The [rebuild work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md) records
 current qualification; historical evidence below retains its original model.
 
 The pre-existing `aam-D` label is retained for compatibility. In ordinary
