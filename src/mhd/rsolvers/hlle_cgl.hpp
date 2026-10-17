@@ -104,7 +104,7 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
 
     Real bxi = bx(m,k,j,i);
 
-    // Compute the conserved anisotropy A stored in the IAN slot.
+    // Magnetic pressure and magnitude on each side of the face.
     Real pbl = 0.5*(bxi*bxi + SQR(wl_iby) + SQR(wl_ibz));
     Real pbr = 0.5*(bxi*bxi + SQR(wr_iby) + SQR(wr_ibz));
     Real bmagl = sqrt(2.*pbl);
@@ -118,24 +118,17 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     // Isotropize only weak states at fixed thermal energy; their transported A
     // uses the neighboring field to avoid injecting the arbitrary floor into it.
     Real fhl = 1.0, fhr = 1.0;
-    Real anis_l, anis_r;
     if (bmagl > bfloor) {
       fhl += (wl_ipp - wl_ipr)/(2.0*pbl);
-      anis_l = wl_idn*log(wl_ipp/wl_ipr*SQR(wl_idn)/(bmagl*SQR(bmagl)));
     } else {
       wl_ipr = TWO_3RDS*wl_ipp + ONE_3RD*wl_ipr;
       wl_ipp = wl_ipr;
-      const Real bref = fmax(bmagr, bfloor);
-      anis_l = wl_idn*(2.0*log(wl_idn) - 3.0*log(bref));
     }
     if (bmagr > bfloor) {
       fhr += (wr_ipp - wr_ipr)/(2.0*pbr);
-      anis_r = wr_idn*log(wr_ipp/wr_ipr*SQR(wr_idn)/(bmagr*SQR(bmagr)));
     } else {
       wr_ipr = TWO_3RDS*wr_ipp + ONE_3RD*wr_ipr;
       wr_ipp = wr_ipr;
-      const Real bref = fmax(bmagl, bfloor);
-      anis_r = wr_idn*(2.0*log(wr_idn) - 3.0*log(bref));
     }
 
     //--- Step 3. Compute fast magnetosonic speed in L,R states (MHD used Roe-averaged)
@@ -276,10 +269,6 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     //fl.e  -= bxi*(wl_iby*wl_ivy + wl_ibz*wl_ivz);
     //fr.e  -= bxi*(wr_iby*wr_ivy + wr_ibz*wr_ivz);
 
-    // Conserved-anisotropy fluxes.
-    fl.mu = anis_l*vxl;
-    fr.mu = anis_r*vxr;
-
     //B/E field fluxes for CT
     fl.by = wl_iby*vxl - bxi*wl_ivy;
     fr.by = wr_iby*vxr - bxi*wr_ivy;
@@ -294,9 +283,20 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
 
     // Treat A/rho as the advected scalar, flux is mass_flx*A/rho from upwind side.
     Real fdtmp = 0.5*(fl.d  + fr.d ) + (fl.d  - fr.d )*tmp;
-    anis_l /= wl_idn;
-    anis_r /= wr_idn;
-    Real fmutmp = ( fdtmp >= 0.0 ) ? fdtmp*anis_l : fdtmp*anis_r;
+    const bool left = fdtmp >= 0.0;
+    const Real rho = left ? wl_idn : wr_idn;
+    const Real ppar = left ? wl_ipr : wr_ipr;
+    const Real pperp = left ? wl_ipp : wr_ipp;
+    const Real bmag = left ? bmagl : bmagr;
+    Real anis;
+    if (bmag > bfloor) {
+      anis = rho*log(pperp/ppar*SQR(rho)/(bmag*SQR(bmag)));
+    } else {
+      const Real bref = fmax(left ? bmagr : bmagl, bfloor);
+      anis = rho*(2.0*log(rho) - 3.0*log(bref));
+    }
+    anis /= rho;
+    Real fmutmp = fdtmp*anis;
 
     flx(m,IDN,k,j,i) = fdtmp;
     flx(m,ivx,k,j,i) = 0.5*(fl.mx + fr.mx) + (fl.mx - fr.mx)*tmp;
