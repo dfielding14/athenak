@@ -1,5 +1,9 @@
 # CGL-LF Paper Reproduction and Stress-Test Plan
 
+Historical plan for the predecessor branch. Its implementation status is
+archived; use the [rebuild work order](cgl_lf_surgical_rebuild_work_order.md)
+for current passive support, limiter behavior and qualification.
+
 This plan targets the CGL-Landau-fluid method on the `CGL-STS-LF` branch after
 adding the Squire heat-flux cap and finite-collision heat-flux coefficients.
 The goals are to reproduce the paper results as closely as this fluid model can

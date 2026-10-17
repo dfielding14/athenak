@@ -2,6 +2,8 @@
 
 Welcome to the documentation toolkit for AthenaK. This folder now contains a conventional Sphinx project that is easy to extend and rebuild locally.
 
+For current CGL/LF behavior, use the [method reference](source/modules/cgl_landau_fluid.md), [passive model](source/modules/cgl_passive.md), [AMR guide](source/modules/cgl_amr.md), and [turbulence driver](source/modules/turbulence_driving.md). Branch status lives in the [rebuild work order](cgl_lf_surgical_rebuild_work_order.md), with current plots and analysis in [turbulence analysis](cgl_turbulence_analysis.md). The earlier Stage I plans and handoff are historical campaign records, not instructions for this branch.
+
 ## Quick Start
 
 ```bash

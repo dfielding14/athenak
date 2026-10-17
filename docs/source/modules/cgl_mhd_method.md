@@ -16,8 +16,7 @@ magneto-immutability literature:
 - Landau-fluid closures approximate collisionless, field-aligned heat fluxes
   using a prescribed parallel closure scale.
 - Microinstability regulation represents unresolved mirror and firehose
-  scattering through finite-rate limiters or energy-preserving hard-wall
-  projections.
+  scattering through two tiers of finite-rate relaxation at fixed thermal energy.
 
 The Squire et al. and Majeski et al. turbulence studies use this model class to
 study how pressure anisotropy changes high-beta MHD turbulence. AthenaK is an
@@ -97,7 +96,7 @@ This face regularization suppresses contamination by the arbitrary magnetic
 floor. Its reference changes at the floor, and nonlinear mixing of $A$, density,
 and field can still generate anisotropy at unresolved contacts. The two strict
 sharp-contact expected failures remain in the
-[rebuild work order](../../cgl_lf_surgical_rebuild_work_order.md).
+[rebuild work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md).
 Smooth-interface convergence tests use a fully magnetized profile and qualify
 that resolved limit separately. Shared face fluxes conserve $A$ during transport;
 weak-field EOS recovery and collisional relaxation can subsequently re-encode it.
@@ -213,8 +212,10 @@ $$
 \frac{2\Delta p}{B^2}=-2,
 $$
 
-corresponding to $\Delta p=-B^2$. AthenaK also supports an oblique-firehose
-activation policy at $2\Delta p/B^2=-1.4$ for legacy or diagnostic studies.
+corresponding to $\Delta p=-B^2$. The optional oblique-firehose onset is
+$2\Delta p/B^2=-1.4$; the current finite-rate turbulence setup uses this onset
+with looser backup targets at $\Delta p=\pm B^2$. See the
+[limiter settings](cgl_landau_fluid.md) for the required explicit parameters.
 
 Background relaxation and finite-rate limiters act once per full cycle.
 Background relaxation first multiplies $\Delta p$ by $\exp(-\nu_{\rm coll}dt)$;

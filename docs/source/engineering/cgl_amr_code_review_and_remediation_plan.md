@@ -1,5 +1,9 @@
 # CGL+LF+STS AMR Code Review and Remediation Plan
 
+Historical review of the source revision below. Current behavior and limitations
+are documented in the [CGL AMR guide](../modules/cgl_amr.md); the former
+hard-wall projection is no longer the limiter model.
+
 - Status: review complete; F1 through F5, F7, and F8 implemented
 - Review date: 2026-07-08
 - Reviewed source: `40fe047f9ffe74795acea3116caad1cb94e6a796`

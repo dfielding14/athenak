@@ -24,6 +24,8 @@ The numerical algorithms implemented in AthenaK are all based on higher-order fi
 
 The code is designed to be user-friendly with as few external dependencies as possible.
 
+For this CGL/LF development branch, start with the [method and input guide](docs/source/modules/cgl_landau_fluid.md), [passive model](docs/source/modules/cgl_passive.md), and [AMR guide](docs/source/modules/cgl_amr.md). The [rebuild work order](docs/cgl_lf_surgical_rebuild_work_order.md) records current qualification and remaining work; [turbulence analysis](docs/cgl_turbulence_analysis.md) describes the current analysis scripts. Earlier Stage I campaign documents are retained as historical records.
+
 Documention is permanently under construction on the [wiki](https://github.com/IAS-Astrophysics/athenak/wiki) pages.
 
 In particular, see the complete list of [requirements](https://github.com/IAS-Astrophysics/athenak/wikis/Requirements), or

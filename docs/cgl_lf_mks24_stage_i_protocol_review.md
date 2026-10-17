@@ -1,5 +1,9 @@
 # MKS24 Stage I Protocol Review: Stop-The-Line Audit
 
+Historical Stage I campaign record. For the current `c/cgl-lf-surgical-rebuild`
+branch, use the [rebuild work order](cgl_lf_surgical_rebuild_work_order.md);
+the operational instructions below apply only to the archived campaign.
+
 ## Decision
 
 Read `docs/cgl_lf_phase_i_handoff.md` first for the durable current production

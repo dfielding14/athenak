@@ -129,10 +129,12 @@ incrementing stage counts or rejecting finite backup overshoots.
 
 `BuildCGLLFFaceState` is the face-level admission gate. It averages density and
 pressures to the face, applies floors, and divides the CT-normal/averaged-tangential
-field vector by the mean adjacent cell magnitudes. It selects local or background
+field vector by the larger of its own magnitude and the mean adjacent cell
+magnitudes. This retains cancellation attenuation while keeping its magnitude
+at most one. It selects local or background
 `c_parallel`, combines background and limiter collision frequencies, and returns
 false when the mean magnitude is at or below `bfloor`. Transport, diagnostics,
-and profile probes all use this geometry; see the
+and the timestep bound all use this geometry; see the
 [face regularization](cgl_landau_fluid.md) for its physical limits.
 
 The closure formulas are shared through `src/eos/cgl_physics.hpp`:
@@ -251,19 +253,22 @@ Current restrictions are intentionally conservative:
 - CGL LF STS cannot be combined with another MHD STS process in the same run.
 - Explicit LF is a reference mode and cannot be combined with another active
   MHD parabolic process.
-- CGL LF with AMR supports primitive fine/coarse boundary prolongation in both
+- Active CGL LF with AMR supports primitive fine/coarse boundary prolongation in both
   the ordinary anisotropy representation and the temporary LF STS magnetic-
   moment representation. Mesh creation and deletion use CGL-specific primitive
   rebuild wrappers rather than treating `IAN` as a passive scalar. Active block
-  creation now prolongates `rho`, velocity, CGL internal energy `U`, and
-  pressure anisotropy `Delta`, then slope-scales child states before final
-  positivity repair. AMR does not apply a limiter projection.
+  creation conservatively prolongates density, momentum, total energy, and
+  scalar densities, then rebuilds the CGL encoding from prolonged pressure
+  anisotropy and the finalized magnetic field. Valid primary conserved fields
+  are preserved. AMR does not apply a limiter projection.
 - Earlier LF/STS AMR refine-up and forced moving-pattern refine/derefine
   smokes passed on GPUs with the former scheduled-wall operator; they do not
   qualify the restored finite-backup model.
   Dedicated CGL AMR repair counters report whether AMR transfer needed density,
   energy, pressure, low-field, anisotropy, interval, or slope-scaling repairs.
   The legacy hard-wall counters remain reserved and zero.
+- Passive CGL and positive LF chunk caps reject AMR/SMR; see the
+  [passive contract](cgl_passive.md) and [STS controls](super_time_stepping.md).
 - CGL LF pressure-work recording is disabled for AMR primitive prolongation.
   Keep `<mhd>/cgl_lf_record_pressure_work = false` for LF/STS AMR runs until
   the diagnostic flux-communication path is separately audited.

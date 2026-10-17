@@ -16,6 +16,10 @@ archive uses a third revision, `f2d0a259`.
 recorded scopes. Passive Tier 3 reached t=14 with clean numerical health and the
 [6,14] descriptive analysis; this does not establish turbulent convergence.
 Piece 14's active-parent bitwise comparison remains failed (details below).
+**Current passive default (2026-10-17):** cap 0, selected after the corrected-face
+comparison below. It is already the runtime default when
+`time/cgl_lf_max_chunk_ratio` is absent. Explicit deck/restart values still apply;
+override an inherited cap 32 when preparing a new cap-0 continuation.
 **Limiter correction (2026-10-15):** the user requested Stephen Majeski's
 original finite two-tier rule, without exact clamps. This changes the model
 used by the earlier milestones; their wall-related results remain historical.
@@ -28,8 +32,8 @@ Source, binary and results are retained in the
 [limiter qualification record](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/majeski-limiter-20261015/REPORT.md).
 The four beta-16 inputs now explicitly enable the original backup thresholds in
 a separate `majeski_two_tier` setup. Production was unlaunched during that
-qualification; long turbulent statistics and throughput have not been requalified
-for this model.
+qualification; those focused tests did not requalify long turbulent statistics
+or throughput. Subsequent production evidence is recorded below.
 **Workspace:** `/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild`.
 **Earlier pressure-floor qualification (2026-10-15):** finite pressure repairs were
 recorded without aborting, using `pfloor=1e-12` and fatal density/invalid-state
@@ -186,7 +190,7 @@ source/binary bindings and results are in the
   [qualification results](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_turb_384cube_beta16_accel1_nulim64_20261015/diagnostics/nu20_stall_20261016/bounded_face_20261017/evidence/RESULTS.md).
 
 - [x] **7 — Transverse slopes.** Apply VL4 to temperature gradients, retaining
-  unlimited magnetic-magnitude slopes and consistent diagnostic/profile copies.
+  unlimited magnetic-magnitude slopes and consistent q-on/off directional paths.
   Gate: hotspot minima/energy, oblique convergence, exceptional slopes, and a
   separate paired timing of the added arithmetic.
 
@@ -389,7 +393,7 @@ source/binary bindings and results are in the
   at most 1.403% in integrated q-gradient work, despite a 10.374% local maximum;
   only 0.01046% of cells differ by more than 1%. Mechanics/clock/forcing match
   exactly and all repair/invalid counters remain zero. Q-off timings `5659344`
-  select cap 32 at safety 0.3: 24.717 versus 6.836 million zone-cycles/s/node,
+  historically selected cap 32 at safety 0.3: 24.717 versus 6.836 million zone-cycles/s/node,
   3.616 times faster than cap 4 over three alternating pairs. Timed LF work is
   119.029 versus 411.286 RHS/cycle; all eight q-off/full-q endpoints match in
   physical state and non-q ledgers. The initial runner's q-counter assertion
@@ -402,8 +406,10 @@ source/binary bindings and results are in the
   continuations (`5698012`, 685 cycles each) with zero new LF/EOS repairs or
   invalids. Cap 0 delivers 50.228 versus 22.344 million zone-cycles/s/node
   (2.248×), with pressure-spectrum integrals within 1.85% over k=4–32.
-  Exact-threshold occupancy remains sensitive to subdivision; this supports
-  fast bulk comparisons, not interchangeable threshold statistics. See the
+  Cap 0 is now the passive default. Exact-threshold occupancy remains sensitive
+  to subdivision; retain the cap setting when comparing threshold statistics.
+  The endpoint check finds no resolved backup-wall excess above 1e-3 in beta*Delta.
+  See the
   [corrected passive screen](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_majeski_beta10_matched_20261016/passive_cap_comparison_20261017/runs/5698012/RESULTS.md).
 
 **Measurement and acceptance**
@@ -441,13 +447,15 @@ boxes are separate work.
   refinement examples and cost screen do not select historical 0.9 for turbulent
   accuracy. Chunking requires piece 15.
 
-Use safe/none/weighted LF with strict checks and explicit environment-override
-control. Keep pressure-work and injected-work recording enabled on Tiers 2 and 3;
+Use explicit safe/none/weighted LF with strict checks. LF mode environment
+overrides have been removed; clear them when testing older binaries.
+Keep pressure-work and injected-work recording enabled on Tiers 2 and 3;
 Tier 1 is the core-cost control without them or forcing. For Tiers 1 and 2, use
 warmup and matching output-free intervals: one alternating pair screens a patch;
 three establish a baseline or support a speedup. Tier 3 is one run per member
 at its milestone, repeated for changed settings or failed gates. Run timing jobs
-without competition; profile separately with detail off initially.
+without competition; use ordinary profiling separately. Detailed replay kernels
+were removed; `cgl_lf_profile_detail=false` remains an accepted compatibility key.
 
 Report the tier, zone-cycles/s/node, LF evaluations/cycle, elapsed/physical time,
 and amortized whole-step time/RHS. A change in Tier 1 evaluations/cycle is a

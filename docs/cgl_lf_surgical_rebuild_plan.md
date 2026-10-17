@@ -1,14 +1,15 @@
 # CGL LF surgical rebuild plan
 
-Reconstruct the required physics from pre-WO1 source, measuring each correction
-and optimization separately. Keep the existing AthenaK structure. A previously
-accepted physical requirement does not justify copying its entire implementation.
+This document records the rebuild from pre-WO1 source, its focused qualification,
+and the remaining scientific comparisons. The numbered sections retain the
+implementation contracts and historical evidence.
 
 Branch: `c/cgl-lf-surgical-rebuild`.
 Base: `8222de3aae4aaebd886653e7c61846e5f17987b4`.
-Status: execution has begun on Frontier. Track completed checks, measurements,
-commits, and the next piece in the [work order](cgl_lf_surgical_rebuild_work_order.md).
-The numbered solver repairs remain pending until recorded there.
+Status (2026-10-17): pieces 0–15 and both uniform-grid milestones are complete
+within their recorded scopes. The matched 384³/768³ comparison through t=14
+remains in progress. Track checks, measurements and current work in the
+[work order](cgl_lf_surgical_rebuild_work_order.md).
 
 The first deliverable is a correct active solver with attributable cost. The
 passive model is a separate scientific deliverable. Optimizations are candidates,
@@ -32,6 +33,7 @@ are not instructions to repeat the full CPU/GPU/MPI matrix after every edit.
 | `9a4030b09307bc43865d5e597638f8645a6388f8` | Completed WO1, now the tip of `CGL-STS-LF`. Compare against it to isolate WO1. |
 | `7a37710f6c224e24e7c7f364e7e0b812b3a9494c` | WO2 release reference. |
 | `2afaa0fa1e4985c313c132cd97ba3938e8c2040c` | Preserved newer implementation and evidence, including subsequent numerical fixes. |
+| `197bafc0f` | Bounded-face LF correction used by the current AMR continuations and corrected passive cap comparison. |
 
 Read old files with `git show <revision>:<path>`; do not merge the old branch.
 The newer reference contains `WO2_CGL_LF_followups.md`,
@@ -59,7 +61,8 @@ exist at the base; their cost cannot simply be attributed to WO1.
   2026-10-15): background decay, then one selected soft or backup branch once
   with the full outer timestep. No exact anisotropy projection at split
   boundaries, in pressure encoding, or after regridding. Threshold crossings
-  remain diagnostic; nonpositive/nonfinite states remain distinct errors.
+  remain diagnostic; finite floor repairs are recorded, while nonfinite or
+  invalid recovered states remain errors.
 - Preserve forcing power, its random-process cadence, and exact kinetic-work
   accounting. Keep checks that prevent invalid states; detailed q diagnostics can
   be off for performance measurements.
@@ -95,7 +98,8 @@ does not depend on optional optimizations or multilevel work in 12. The uniform
 active milestone is a usable stopping point; add refinement or passive support
 when that model is needed. Nonlinear temporal qualification applies to both
 models; piece 15 provides optional chunking and a short passive setting screen.
-Full passive turbulent acceptance remains with its Tier 3 milestone.
+Completed uniform milestones and their model provenance are recorded below;
+long-time statistical convergence remains open.
 Keep separate commits at the performance suspects, even when their functional
 checks share a single GPU allocation.
 
@@ -229,10 +233,10 @@ Use CT normal B and normalize the face vector by
 `max(Bbar, |B_face|)`, where Bbar is the mean adjacent cell magnitude.
 This preserves reversal attenuation while bounding the direction norm by one;
 retain Bbar for focusing, moment conversion and limiter rates. The work order
-records the completed early GPU qualification and pending late-state replay.
+records the completed early GPU qualification and late-state replay `5696681`.
 Gate: independent face fluxes, reversal-sheet perturbations, frozen-field
 conservation, and smooth oblique decay. Use a small explicit reference timestep
-while the final stability controller is still pending.
+to separate geometry errors from the STS controller.
 
 **7. Limit transverse temperature gradients.**
 Scope: existing directional face arithmetic and the smallest reusable VL4 helper
@@ -240,9 +244,9 @@ Scope: existing directional face arithmetic and the smallest reusable VL4 helper
 Gate: hotspot minimum and energy, oblique convergence, and exceptional-slope
 checks. Measure this change alone: it replaces centered sums with several
 harmonic means at every face and is a leading WO1 cost suspect.
-Use the retained `VanLeerLimiter`/`VL4Limiter` arithmetic. Update existing
-diagnostic/profile copies of the directional expressions when they consume the
-same gradients; do not introduce a new general stencil abstraction.
+Use the retained `VanLeerLimiter`/`VL4Limiter` arithmetic. Keep q-on/off paths
+consistent in the shared directional implementation; profiling replay copies
+were removed during cleanup.
 
 **8. Correct the perpendicular BGK response.**
 Scope: `cgl::PerpendicularHeatFluxRatio` in `src/eos/cgl_physics.hpp`, its normal
@@ -372,7 +376,7 @@ Qualify the analytic final impulse, power, thermal invariance, restart and both
 AMR prolongation modes on CPU/HIP and multiple ranks. Measure the forced Tier 2
 state with independent health/q-mode gates and each binary's own work counts;
 cross-binary trajectories need not match. Unforced Tier 1 cannot exercise this
-change. Keep the frozen milestones intact; the beta-25 campaign remains a plan.
+change. Keep the frozen milestones intact.
 Completed qualification: CPU/HIP jobs `5685579`/`5685580` each pass 37 focused
 tests and the four-rank passive forced identity/restart gate. Tier 2 `5685581`
 measures +1.14% throughput with +0.23% LF work per cycle over three alternating
@@ -510,14 +514,19 @@ passive speedup; turbulent threshold accuracy remains unresolved.
 The retained depleted-pressure replay `5657268` still fails at safety 0.3:
 cycle 10312, t approximately 4.396717, post-LF stage 25/27, one pressure-floor
 event. Its old checkpoint is a stress state, not a current-model physical result.
-Piece 15's short continuation and production cost screens select cap 32
+The historical Piece 15 continuation and production cost screens selected cap 32
 without relaxing strict checks. The fresh passive Tier 3 run `5661298` subsequently
 reaches t=14 with zero LF floor/invalid or EOS repair events; analysis `5661309`
 completes the descriptive [6,14] comparison. The milestone is complete within
 this numerical-health scope; the work order records cost and physical findings.
 Workspace `analysis/piece14/README.md` retains the qualification and measurements.
 
-The later bounded-face correction changes the passive performance choice:
+**Current passive default (2026-10-17):** use
+`time/cgl_lf_max_chunk_ratio=0`. This is already the runtime default when the key
+is absent, for both active and passive models; zero disables subdivision while
+retaining LF transport. Explicit input/restart values still take precedence.
+An old cap-32 checkpoint therefore needs an explicit override to select zero.
+The later bounded-face correction supports this passive performance choice:
 same-state cap-0/cap-32 continuations (`5698012`, 685 cycles to t=6.169934965)
 both finish without new LF/EOS repairs or invalids. Repeated output-free rates
 are 50.228/22.344 million zone-cycles/s/node, while k=4–32 pressure-spectrum
@@ -596,7 +605,7 @@ and keeps the existing physical model and production integrator. The
 [Piece 15 workspace record](/lustre/orion/ast207/proj-shared/dfielding/CGL/surgical-rebuild/analysis/piece15/README.md)
 retains the measurements and limitations; frozen active Tier 3 artifacts remain intact.
 
-**Production selection priority (2026-10-12):** prioritize speed and eventual
+**Historical Piece 15 selection (2026-10-12):** prioritize speed and eventual
 scaling, accepting local pressure differences when bulk distributions and
 integrated transport remain adequate. The short passive continuations use
 predeclared tolerances: 1% for pressure/thermal means and normalized temperature
@@ -629,7 +638,8 @@ Cap 32 at safety 0.3 also completes the fresh passive Tier 3 run to t=14 in
 6.807 node-hours including I/O. This extends its clean-health evidence beyond
 the short stress window; stationary and spatial turbulent statistics remain
 unqualified. Active chunk qualification, AMR
-support and many-node scaling remain separate; the production default stays off.
+support and many-node scaling remain separate. The current corrected passive
+default is cap 0, as recorded above.
 
 ## Deferred work
 
@@ -703,7 +713,7 @@ non-integer-period waves, an e-folding of parallel/perpendicular decay, oblique
 transport, finite-rate relaxation, heating/timestep refresh, forcing/restart,
 and the Tier 3 matched active run to t=14 with nonzero LF work. Run an actual HIP
 finite-backup encoding fixture; CPU scalar helpers cannot substitute for it. Run the
-small safe/fast and diagnostic/profile branch checks once after all face changes,
+small safe/fast and q-on/off branch checks once after all face changes,
 not after each constant edit. Production timings keep detailed q diagnostics off.
 Use the existing 64-by-64 hotspot with `lf_coefficient_mode=local`,
 kinematic/advect evolution, zero velocity and no forcing/collisions. Its accepted

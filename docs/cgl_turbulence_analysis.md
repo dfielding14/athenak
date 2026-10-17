@@ -32,6 +32,8 @@ comparison figures. Keep case files on a common time grid. A changing resolution
 requires separate windows, since unlike Fourier grids cannot be averaged.
 Different resolutions can be plotted together when their physical low-k shells
 match; ratios stop at the common cutoff. Average each resolution separately.
+Keep comparisons below the coarser axis Nyquist limit: the 384³/768³ figures
+stop at kLx/(2 pi)=128, and quantitative band comparisons use 4–32.
 
 The short discovery scripts and actual campaign manifests are retained in
 [CGL/analysis/turbulence_20261017](/lustre/orion/ast207/proj-shared/dfielding/CGL/analysis/turbulence_20261017/README.md).
@@ -82,10 +84,19 @@ Job `5697978` processed the 110 smaller Majeski snapshots in 4m07s on four nodes
 The [completed Majeski comparison](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_majeski_beta10_matched_20261016/analysis_20261017/RESULTS.md)
 retains 110 canonical snapshots, full histories, endpoint figures and a
 29-time [6.25,14] field average. Missing restart-boundary snapshots are explicit;
-no field is synthesized. This pair used frozen pre-fix source `795c2e180c`.
+no field is synthesized. This pair used frozen pre-fix source `795c2e180c`,
+with active cap 0 and passive cap 32. New passive runs default to cap 0;
+the completed figures retain their original settings and provenance. The
+[corrected cap comparison](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_majeski_beta10_matched_20261016/passive_cap_comparison_20261017/RESULTS.md)
+supports faster bulk comparisons but shows setting-dependent populations near
+the limiter thresholds. Exact inequalities in history count those populations;
+they do not measure the size of a threshold excursion.
 The active beta-16 AMR continuations use bounded-face source `197bafc0f` and have
 separate manifests/results. Preserve that distinction when interpreting the
 comparison or selecting the next qualification run.
+Their [matched resolution comparison](/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_beta16_uniform_amr_20261016/handoff10_to14/analysis_20261017/README.md)
+waits for all four t=14 endpoints, compares [11,14], and retains [10,11] separately
+as refinement adjustment. Further refinement remains disabled pending that review.
 
 ## Pressure-balance supplement
 

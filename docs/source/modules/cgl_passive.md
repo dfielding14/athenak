@@ -39,8 +39,18 @@ forcing realization, boundaries, and **outer timestep sequence**. LF explicit
 stability limits or `sts_max_dt_ratio` can shorten that sequence. For a pure
 flow-identity comparison with STS, set `sts_max_dt_ratio=-1` so its optional
 cycle cap is inactive; explicit comparisons must keep the LF stability bound
-above the shared advective step, for example with a weak heat-flux fixture. LF substeps themselves do not modify density, momentum,
-or magnetic fields.
+above the shared advective step, for example with a weak heat-flux fixture.
+LF transport does not modify density, momentum, or magnetic fields; finite
+density-floor repairs remain recorded exceptions to the frozen-density state.
+
+Use `<time>/cgl_lf_max_chunk_ratio = 0` for new passive runs. This is the
+runtime default: LF remains enabled, with one RKL2 sequence per half-cycle
+sweep. A positive value such as `32` subdivides each sweep and refreshes the
+LF bound between chunks; it does not cap the heat-flux amplitude or stage count.
+The corrected-geometry [continuation comparison](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_turbulence_analysis.md)
+supports cap 0 for quick passive comparisons, while instability-threshold
+populations remain sensitive to the choice. Existing inputs and restarts
+with an explicit positive cap retain it; override that existing key to adopt 0.
 
 Passive histories label the conserved integrals `cgl-J` and `cgl-A`, and add
 `thermal-U` for physical thermal energy. Kinetic and magnetic columns keep
@@ -88,5 +98,5 @@ reference, checking the explicit method's first-order convergence and reference
 uncertainty. These smooth checks do not certify accuracy in depleted turbulent
 cells. The retained depleted-pressure stress failure, subsequent LF interval
 refinement, and passive turbulent milestone used the earlier limiter operator;
-see the [work order](../../cgl_lf_surgical_rebuild_work_order.md) for their evidence
+see the [work order](https://github.com/dfielding14/athenak/blob/c/cgl-lf-surgical-rebuild/docs/cgl_lf_surgical_rebuild_work_order.md) for their evidence
 and the separate qualification of the restored finite two-tier model.
