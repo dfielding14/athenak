@@ -772,6 +772,7 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {
     TraceCGLLFTaskList(pmy_pack, "RestrictU", "begin", stage);
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_restrict_u);
+    const bool prepare_coarse = !UseCompactCGLLFExchange(stage);
     if (pmy_pack->pmesh->pmr->prolong_prims && peos->eos_data.is_cgl) {
       auto &indcs = pmy_pack->pmesh->mb_indcs;
       const int is = indcs.is, ie = indcs.ie;
@@ -798,10 +799,13 @@ TaskStatus MHD::RestrictU(Driver *pdrive, int stage) {
         peos->ConsToPrim(u0, b0, w0, bcc0, false, is, ie, js, je, ks, ke);
       }
 
-      pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
-      pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(
-          this, MeshRefinement::CGLAMRRestrictionScope::coarse_boundary);
-    } else {
+      // Retain owned-cell repairs before exchange even without coarse neighbors.
+      if (prepare_coarse) {
+        pmy_pack->pmesh->pmr->RestrictFC(b0, coarse_b0);
+        pmy_pack->pmesh->pmr->RestrictCGLMHDPrimitivesToCons(
+            this, MeshRefinement::CGLAMRRestrictionScope::coarse_boundary);
+      }
+    } else if (prepare_coarse) {
       pmy_pack->pmesh->pmr->RestrictCC(u0, coarse_u0);
     }
     TraceCGLLFTaskList(pmy_pack, "RestrictU", "end", stage);
@@ -1059,6 +1063,8 @@ TaskStatus MHD::ApplyPhysicalBCs(Driver *pdrive, int stage) {
 
 TaskStatus MHD::Prolongate(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->multilevel) {  // only prolongate with SMR/AMR
+    // Same-level LF halos are complete after exchange; coarse scratch is unused.
+    if (UseCompactCGLLFExchange(stage)) return TaskStatus::complete;
     TraceCGLLFTaskList(pmy_pack, "Prolongate", "begin", stage);
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::parabolic_prolongate);
     pbval_u->FillCoarseInBndryCC(u0, coarse_u0);
