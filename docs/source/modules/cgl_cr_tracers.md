@@ -66,7 +66,29 @@ For position and velocity tracks, add an unused output block with `file_type=trk
 `dt`, and `nparticles`. It tracks the first `nparticles` global tags. Particle
 checkpoints also retain species, gyro parameter, and accumulated displacement.
 Tags are grouped by species, so a short track list can contain only the lightest
-bin; use particle checkpoints to compare all bins.
+bin. For balanced samples in frozen Boris runs, use `particles_per_species`
+instead of `nparticles`:
+
+```ini
+<output98>
+file_type = trk
+particles_per_species = 1024
+dt = 0.001
+```
+
+This writes buffered `rich_v1` files under `trk/rank_*/`, with named fields for
+compact output tag, original global tag, species, mass, position, velocity,
+endpoint magnetic field, unwrapped displacement, and signed displacement along
+the local field. The endpoint field uses the pusher's interpolation. It requires
+`assign_tag=index_order`, enough particles in every bin, and at most 2²⁴ total
+particles so the float32 tag fields remain exact. Particle checkpoints retain
+the full ensemble in double precision. Track cadence controls saved samples,
+not the Boris timestep; resolve the gyroperiod when studying individual events.
+
+Restart initialization emits no initial outputs. For an exact initial track and
+particle sample, run a separate zero-cycle replay with the same seed and combine
+its output with the advancing run. Read actual saved times rather than assuming
+outputs land exactly on the requested cadence.
 
 For a wide range of gyro parameters, per-particle gyro subcycling avoids making
 every bin take the lightest bin's number of substeps. The 768³ pilot used these
@@ -119,14 +141,16 @@ built-in `divb_amr` generator. They create their own small CGL checkpoint:
 ```sh
 ATHENAK_TEST_EXE=/absolute/path/build/src/athena PYTHONPATH=tst \
   python3 -m pytest -q tst/test_suite/cgl/test_cgl_cr_cpu.py \
-  tst/test_suite/cgl/test_cgl_cr_smr_cpu.py
+  tst/test_suite/cgl/test_cgl_cr_smr_cpu.py \
+  tst/test_suite/cgl/test_cgl_cr_tracks_cpu.py
 ```
 
 For an MPI-enabled executable and a working `mpirun`:
 
 ```sh
 ATHENAK_TEST_EXE=/absolute/path/build-mpi/src/athena PYTHONPATH=tst \
-  python3 -m pytest -q tst/test_suite/cgl/test_cgl_cr_mpicpu.py
+  python3 -m pytest -q tst/test_suite/cgl/test_cgl_cr_mpicpu.py \
+  tst/test_suite/cgl/test_cgl_cr_tracks_mpicpu.py
 ```
 
 The checks cover frozen active and passive CGL fields, a particle-free evolving

@@ -8,6 +8,7 @@
 //! \file outputs.hpp
 //  \brief provides classes to handle ALL types of data output
 
+#include <cstdio>
 #include <string>
 #include <vector>
 
@@ -469,6 +470,7 @@ class ParticleRestartOutput : public BaseTypeOutput {
 class TrackedParticleOutput : public BaseTypeOutput {
  public:
   TrackedParticleOutput(ParameterInput *pin, Mesh *pm, OutputParameters oparams);
+  ~TrackedParticleOutput() override;
   void LoadOutputData(Mesh *pm) override;
   void WriteOutputFile(Mesh *pm, ParameterInput *pin) override;
  protected:
@@ -478,6 +480,11 @@ class TrackedParticleOutput : public BaseTypeOutput {
   bool header_written;
   std::vector<int> npout_eachrank;
   HostArray1D<TrackedParticleData> outpart;
+  int particles_per_species = 0;
+  int last_output_cycle = -1;
+  DualArray2D<Real> track_records;
+  FILE *track_file = nullptr;
+  std::vector<char> track_buffer;
 };
 
 //----------------------------------------------------------------------------------------

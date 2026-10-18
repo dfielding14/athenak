@@ -436,6 +436,65 @@ void Particles::InitializeFieldAndTimestep() {
 }
 
 //----------------------------------------------------------------------------------------
+// Sample saved endpoints with the pusher's gather without modifying particle state.
+void Particles::LoadTrackedData(int per_species, DualArray2D<Real> &records, int &count) {
+  if (!frozen_field_ready_) {
+    std::cout << "### FATAL ERROR: initialize frozen fields before loading rich tracks"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (records.extent_int(0) < nprtcl_thispack) {
+    Kokkos::realloc(records, nprtcl_thispack, 17);
+  }
+  auto data = records.d_view;
+  auto pr = prtcl_rdata;
+  auto pi = prtcl_idata;
+  auto mbsize = pmy_pack->pmb->mb_size;
+  auto b0 = pmy_pack->pmhd->b0;
+  auto bcc = pmy_pack->pmhd->bcc0;
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
+  int gids = pmy_pack->gids;
+  int population = pmy_pack->pmesh->nprtcl_total/nspecies;
+  bool multi_d = pmy_pack->pmesh->multi_d;
+  bool three_d = pmy_pack->pmesh->three_d;
+  ParticleInterpolation gather = interpolation;
+  DvceArray1D<int> counter("rich_track_count", 1);
+  Kokkos::deep_copy(counter, 0);
+  par_for("particle_rich_tracks", DevExeSpace(), 0, nprtcl_thispack-1,
+    KOKKOS_LAMBDA(const int p) {
+      int species = pi(PSP,p), tag = pi(PTAG,p);
+      int within_species = tag - species*population;
+      if (within_species < 0 || within_species >= per_species) {return;}
+      int row = Kokkos::atomic_fetch_add(&counter(0), 1);
+      int m = pi(PGID,p) - gids;
+      Real x = pr(IPX,p), y = pr(IPY,p), z = pr(IPZ,p);
+      ParticleBField bf;
+      if (gather == ParticleInterpolation::tsc) {
+        bf = TSCGather::Gather(b0, bcc, mbsize, m, x, y, z, is, js, ks,
+                               nx1, nx2, nx3, multi_d, three_d);
+      } else {
+        bf = TrilinearGather::Gather(b0, bcc, mbsize, m, x, y, z, is, js, ks,
+                                     nx1, nx2, nx3, multi_d, three_d);
+      }
+      data(row,0) = species*per_species + within_species;
+      data(row,1) = tag;
+      data(row,2) = species;
+      data(row,3) = pr(IPM,p);
+      data(row,4) = x; data(row,5) = y; data(row,6) = z;
+      data(row,7) = pr(IPVX,p); data(row,8) = pr(IPVY,p); data(row,9) = pr(IPVZ,p);
+      data(row,10) = bf.x; data(row,11) = bf.y; data(row,12) = bf.z;
+      data(row,13) = pr(IPDX,p); data(row,14) = pr(IPDY,p);
+      data(row,15) = pr(IPDZ,p); data(row,16) = pr(IPDB,p);
+    });
+  auto host_counter = Kokkos::create_mirror_view_and_copy(HostMemSpace(), counter);
+  count = host_counter(0);
+  records.template modify<DevExeSpace>();
+  records.template sync<HostMemSpace>();
+}
+
+//----------------------------------------------------------------------------------------
 // ComputeSubcycleSteps()
 // Determine the global number of particle substeps required by active motion constraints.
 

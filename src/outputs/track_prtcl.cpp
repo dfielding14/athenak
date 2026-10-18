@@ -31,6 +31,39 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   BaseTypeOutput(pin, pm, op) {
   // create new directory for this output. Comments in binary.cpp constructor explain why
   mkdir("trk",0775);
+  particles_per_species = pin->GetOrAddInteger(op.block_name,"particles_per_species",0);
+  if (particles_per_species < 0) {
+    std::cout << "### FATAL ERROR: trk particles_per_species must be nonnegative"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  if (particles_per_species > 0) {
+    auto pp = pm->pmb_pack->ppart;
+    if (pp == nullptr || !pm->pmb_pack->frozen_mhd ||
+        pp->pusher != ParticlesPusher::boris ||
+        pin->GetOrAddString("particles","assign_tag","index_order") != "index_order" ||
+        particles_per_species > pm->nprtcl_total/pp->nspecies ||
+        pm->nprtcl_total > (1 << 24)) {
+      std::cout << "### FATAL ERROR: rich trk requires frozen Boris particles, index_order, "
+                << "particles_per_species <= available particles per bin, and "
+                << "at most 2^24 particles for exact float32 IDs" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    ntrack = particles_per_species*pp->nspecies;
+    char rank_dir[32];
+    std::snprintf(rank_dir, sizeof(rank_dir), "trk/rank_%08d", global_variable::my_rank);
+    mkdir(rank_dir,0775);
+    std::string fname = std::string(rank_dir) + "/" + op.file_basename + ".trk";
+    track_file = std::fopen(fname.c_str(), "ab");
+    track_buffer.resize(1024*1024);
+    if (track_file == nullptr ||
+        std::setvbuf(track_file, track_buffer.data(), _IOFBF, track_buffer.size()) != 0) {
+      std::cout << "### FATAL ERROR: cannot open buffered track output " << fname
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    return;
+  }
   // allocate arrays
   npout_eachrank.resize(global_variable::nranks);
   ntrack = pin->GetInteger(op.block_name,"nparticles");
@@ -43,11 +76,22 @@ TrackedParticleOutput::TrackedParticleOutput(ParameterInput *pin, Mesh *pm,
   ntrack_thisrank = ntrack;
 }
 
+TrackedParticleOutput::~TrackedParticleOutput() {
+  if (track_file != nullptr && std::fclose(track_file) != 0) {
+    std::cout << "### FATAL ERROR: failed to flush rich particle tracks" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+}
+
 //----------------------------------------------------------------------------------------
 // TrackedParticleOutput::LoadOutputData()
 // Copies data for tracked particles on this rank to host outpart array
 
 void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
+  if (particles_per_species > 0) {
+    pm->pmb_pack->ppart->LoadTrackedData(particles_per_species, track_records, npout);
+    return;
+  }
   // Load data for tracked particles on this rank into new device array
   DualArray1D<TrackedParticleData> tracked_prtcl("d_trked",ntrack_thisrank);
   int npart = pm->pmb_pack->ppart->nprtcl_thispack;
@@ -96,6 +140,32 @@ void TrackedParticleOutput::LoadOutputData(Mesh *pm) {
 //! With MPI, all particles are written to the same file.
 
 void TrackedParticleOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+  if (particles_per_species > 0) {
+    if (last_output_cycle == pm->ncycle) {return;}
+    std::vector<float> records(static_cast<std::size_t>(npout)*17);
+    for (int p=0; p<npout; ++p) {
+      for (int field=0; field<17; ++field) {
+        records[17*p + field] = static_cast<float>(track_records.h_view(p,field));
+      }
+    }
+    int header = std::fprintf(track_file,
+        "\n# AthenaK tracked particle data at time= %.17g  nranks= %d  cycle=%d"
+        "  ntracked_prtcls=%d  ntrack_per_species=%d  record_count=%d\n"
+        "# trk_format=rich_v1  nfields=17  layout=per_rank  rank=%d\n"
+        "# fields=tag,track_tag,species,mass,x,y,z,vx,vy,vz,bx,by,bz,dx,dy,dz,dpar\n\n",
+        static_cast<double>(pm->time), global_variable::nranks, pm->ncycle,
+        ntrack, particles_per_species, npout, global_variable::my_rank);
+    if (header < 0 || std::fwrite(records.data(), sizeof(float), records.size(),
+                                track_file) != records.size()) {
+      std::cout << "### FATAL ERROR: failed to write rich particle tracks" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    last_output_cycle = pm->ncycle;
+    out_params.last_time = (out_params.last_time < 0.0) ? pm->time :
+                          out_params.last_time + out_params.dt;
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+    return;
+  }
 
   // create filename: "trk/file_basename".trk
   std::string fname;

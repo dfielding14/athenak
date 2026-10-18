@@ -113,6 +113,7 @@ class Particles {
   // functions...
   void InitializeFromSnapshot(ParameterInput *pin);
   void InitializeFieldAndTimestep();
+  void LoadTrackedData(int per_species, DualArray2D<Real> &records, int &count);
   void CreateParticleTags(ParameterInput *pin);
   void SetConsistencyReference();
   void CheckConsistency(const std::string &label, bool check_rank=true);
