@@ -24,6 +24,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
+#include "particles/particles.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
 #include "coordinates/adm.hpp"
 #include "z4c/compact_object_tracker.hpp"
@@ -705,6 +706,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   // call problem generator again to re-initialize data, fn ptrs, as needed
   // second argument true since this IS a restart
   CallProblemGenerator(pin, true);
+  if (pm->pmb_pack->frozen_mhd) {
+    pm->pmb_pack->ppart->InitializeFromSnapshot(pin);
+  }
 
   // Check that user defined BCs were enrolled if needed
   if (user_bcs) {

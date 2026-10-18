@@ -1,0 +1,38 @@
+# Overlay for -r CURRENT_CGL_CHECKPOINT -i frozen_cgl.athinput.
+# Supply time/tlim explicitly: it is an absolute simulation time, not a duration.
+
+<time>
+evolution = dynamic
+nlim = -1
+
+<particles>
+particle_type = cosmic_ray
+frozen_mhd = true
+seed_on_restart = true
+pusher = boris
+interpolation = tsc
+ppc = 0.01
+nspecies = 1
+min_mass = 0.1
+mass_log_spacing = 1.0
+cfl_part = 0.05
+subcycle = false
+check_consistency_mode = none
+update_global_counts_each_exchange = false
+
+<problem>
+particle_position = tag_random
+particle_velocity = isotropic_tag_random
+particle_seed = 314159
+particle_x1 = 0.5
+particle_x2 = 0.5
+particle_x3 = 0.5
+v0x = 1.0
+v0y = 0.0
+v0z = 0.0
+prtcl_rst_flag = 0
+prtcl_res_file = unused
+
+<output99>
+file_type = prst
+dt = 0.01

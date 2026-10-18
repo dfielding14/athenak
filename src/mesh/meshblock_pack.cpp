@@ -104,6 +104,26 @@ void MeshBlockPack::AddCoordinates(ParameterInput *pin) {
 void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   int nphysics = 0;
   TaskID none(0);
+  if (pin->DoesBlockExist("particles")) {
+    frozen_mhd = pin->GetOrAddBoolean("particles", "frozen_mhd", false);
+    if (pin->DoesBlockExist("mhd") && pin->GetString("mhd", "eos") == "cgl" &&
+        !frozen_mhd) {
+      std::cout << "### FATAL ERROR: CGL particles require "
+                << "<particles>/frozen_mhd = true" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  if (frozen_mhd &&
+      (!pin->DoesBlockExist("mhd") || pin->DoesBlockExist("hydro") ||
+       pin->DoesBlockExist("radiation") || pin->DoesBlockExist("ion-neutral") ||
+       pin->DoesBlockExist("adm") || pin->DoesBlockExist("z4c") ||
+       pin->DoesBlockExist("shearing_box") || !pmesh->three_d ||
+       !pmesh->strictly_periodic || pcoord->is_special_relativistic ||
+       pcoord->is_general_relativistic || pcoord->is_dynamical_relativistic)) {
+    std::cout << "### FATAL ERROR: frozen particles require 3D periodic "
+              << "Newtonian single-fluid MHD without shear" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
 
   // (1) Units.  Create first so that they can be used in other physics constructors
   // Default units are simply code units
@@ -132,7 +152,8 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   if (pin->DoesBlockExist("mhd")) {
     pmhd = new mhd::MHD(this, pin);
     nphysics++;
-    if (!(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation")) &&
+    if (!frozen_mhd &&
+        !(pin->DoesBlockExist("hydro")) && !(pin->DoesBlockExist("radiation")) &&
         !(pin->DoesBlockExist("adm")) && !(pin->DoesBlockExist("z4c")) ) {
       pmhd->AssembleMHDTasks(tl_map);
     }
@@ -183,8 +204,11 @@ void MeshBlockPack::AddPhysics(ParameterInput *pin) {
   // before the integrator and applied once at the final fluid stage.
   if (pin->DoesBlockExist("turb_driving")) {
     pturb = new TurbulenceDriver(this, pin);
-    pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
-    pturb->IncludeAddForcingTask(tl_map["stagen"]);
+    // Keep the object for native restart metadata, but never advance its state.
+    if (!frozen_mhd) {
+      pturb->IncludeInitializeModesTask(tl_map["before_timeintegrator"], none);
+      pturb->IncludeAddForcingTask(tl_map["stagen"]);
+    }
   } else {
     pturb = nullptr;
   }

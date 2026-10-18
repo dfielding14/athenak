@@ -27,6 +27,7 @@
 #include "dyn_grmhd/dyn_grmhd.hpp"
 #include "ion-neutral/ion-neutral.hpp"
 #include "radiation/radiation.hpp"
+#include "particles/particles.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "driver.hpp"
 
@@ -326,6 +327,7 @@ void Driver::ResetSTSController() {
 //! \brief Validates the global STS configuration against registered parabolic processes.
 
 void Driver::ValidateSTSConfiguration(Mesh *pm) {
+  if (pm->pmb_pack->frozen_mhd) return;
   int nsts_processes = 0;
   const parabolic::ParabolicProcessDescriptor *first_sts_process = nullptr;
   const bool has_explicit_cgl_lf =
@@ -393,6 +395,7 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
 
 void Driver::RefreshSTSCycleState(Mesh *pm) {
   ResetSTSController();
+  if (pm->pmb_pack->frozen_mhd) return;
   sts.integrator = pm->sts_integrator;
   sts.dt_cycle = pm->dt;
   sts.dt_parabolic_min = pm->dt_parabolic_sts;
@@ -539,8 +542,18 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
 //  outputting ICs, and computing initial time step
 
 void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool res_flag) {
+  const bool frozen_mhd = pmesh->pmb_pack->frozen_mhd;
+  if (frozen_mhd && (!res_flag || time_evolution == TimeEvolution::tstatic)) {
+    DriverFatalError(__FILE__, __LINE__,
+                     "Frozen MHD particles require a restart and non-static evolution");
+  }
   //---- Step 1.  Set conserved variables in ghost zones for all physics
   InitBoundaryValuesAndPrimitives(pmesh);
+  if (frozen_mhd) {
+    pmesh->pmb_pack->ppart->InitializeFieldAndTimestep();
+    // The background checkpoint's fluid timestep does not constrain tracer motion.
+    pmesh->dt = std::numeric_limits<float>::max();
+  }
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
   hydro::Hydro *phydro = pmesh->pmb_pack->phydro;
@@ -551,7 +564,7 @@ void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool re
     if (phydro != nullptr) {
       (void) pmesh->pmb_pack->phydro->NewTimeStep(this, nexp_stages);
     }
-    if (pmhd != nullptr) {
+    if (pmhd != nullptr && !frozen_mhd) {
       (void) pmesh->pmb_pack->pmhd->NewTimeStep(this, nexp_stages);
     }
     if (prad != nullptr) {
@@ -637,6 +650,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       // Work before time integrator indicated by "0" in stage
       ExecuteTaskList(pmesh, "before_timeintegrator", 0);
       if (pmesh->pmb_pack->pturb != nullptr &&
+          !pmesh->pmb_pack->frozen_mhd &&
           !pmesh->pmb_pack->pturb->UsesStageKick()) {
         // The forcing kick changed conserved momenta and energy. Refresh primitives
         // and ghost zones before CopyCons and the first hyperbolic flux evaluation.
@@ -652,7 +666,8 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
       // Work after time integrator indicated by "1" in stage
       ExecuteTaskList(pmesh, "after_timeintegrator", 1);
-      if (pmhd != nullptr && pmhd->NeedsCGLLFBoundaryRefresh()) {
+      if (!pmesh->pmb_pack->frozen_mhd && pmhd != nullptr &&
+          pmhd->NeedsCGLLFBoundaryRefresh()) {
         pmhd->RefreshCGLLFBoundaryState(this, pmesh->time + pmesh->dt);
         pmhd->NewTimeStep(this, nexp_stages);
       }
@@ -660,8 +675,9 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       const bool has_explicit_cgl_lf =
           (pmesh->pmb_pack->pmhd != nullptr &&
            pmesh->pmb_pack->pmhd->has_explicit_cgl_lf);
-      if (pmesh->sts_integrator != parabolic::STSIntegrator::none ||
-          has_explicit_cgl_lf) {
+      if (!pmesh->pmb_pack->frozen_mhd &&
+          (pmesh->sts_integrator != parabolic::STSIntegrator::none ||
+           has_explicit_cgl_lf)) {
         if (pmesh->sts_integrator != parabolic::STSIntegrator::none) {
           pmesh->RefreshSTSParabolicTimeStep();
         }
@@ -688,7 +704,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       pmesh->time = pmesh->time + pmesh->dt;
       pmesh->ncycle++;
       pmesh->dt_last_completed = pmesh->dt;
-      nmb_updated_ += pmesh->nmb_total;
+      if (!pmesh->pmb_pack->frozen_mhd) nmb_updated_ += pmesh->nmb_total;
       npart_updated_ += pmesh->nprtcl_total;
       // load balancing efficiency
       if (global_variable::nranks > 1) {
@@ -716,7 +732,9 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
       }
 
       // AMR
-      if (pmesh->adaptive) {pmesh->pmr->AdaptiveMeshRefinement(this, pin);}
+      if (pmesh->adaptive && !pmesh->pmb_pack->frozen_mhd) {
+        pmesh->pmr->AdaptiveMeshRefinement(this, pin);
+      }
       // compute new timestep AFTER all Meshblocks refined/derefined
       pmesh->NewTimeStep(tlim);
       RefreshSTSCycleState(pmesh);
@@ -738,7 +756,7 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // The last cycle can end with AMR after the normal output point. Refresh a
   // rendered turbulence field only when it no longer matches the final mesh.
-  if (pmesh->pmb_pack->pturb != nullptr) {
+  if (pmesh->pmb_pack->pturb != nullptr && !pmesh->pmb_pack->frozen_mhd) {
     pmesh->pmb_pack->pturb->RefreshForceAfterMeshChange(this);
   }
 

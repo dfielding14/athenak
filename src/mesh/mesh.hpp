@@ -148,7 +148,7 @@ class Mesh {
   int *gids_eachrank;      // starting global ID of MeshBlocks in each rank
   int *nmb_eachrank;       // number of MeshBlocks on each rank
   // following 1x arrays allocated with length [nranks] in AddCoordinatesAndPhysics()
-  int *nprtcl_eachrank;    // number of particles on each rank
+  int *nprtcl_eachrank=nullptr;    // number of particles on each rank
 
   Real time, dt, dtold, dt_last_completed, dt_parabolic_sts, sts_max_dt_ratio, cfl_no;
   Real sts_safety;
@@ -170,6 +170,9 @@ class Mesh {
   void NewTimeStep(const Real tlim);
   void RefreshSTSParabolicTimeStep();
   void AddCoordinatesAndPhysics(ParameterInput *pinput);
+  void UpdateParticleCountsLocal();
+  void UpdateParticleCounts();
+  int FindMeshBlockContainingPosition(Real x1, Real x2, Real x3);
   BoundaryFlag GetBoundaryFlag(const std::string& input_string);
   std::string GetBoundaryString(BoundaryFlag input_flag);
 

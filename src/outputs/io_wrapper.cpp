@@ -32,7 +32,8 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
       mode = "wb";
       break;
     case FileMode::append:
-      mode = "ab";
+      // Track records use explicit offsets after the appended frame header.
+      mode = "r+b";
       break;
     default:
       return false;
@@ -77,6 +78,7 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
                 << std::endl;
       std::exit(EXIT_FAILURE);
     }
+    if (rw == FileMode::append) {std::fseek(local_fh, 0, SEEK_END);}
     fh_ = reinterpret_cast<IOWrapperFile>(local_fh);
   }
 #else
@@ -88,6 +90,7 @@ int IOWrapper::Open(const char* fname, FileMode rw, bool single_file_per_rank) {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
+  if (rw == FileMode::append) {std::fseek(local_fh, 0, SEEK_END);}
   fh_ = local_fh;
 #endif
 

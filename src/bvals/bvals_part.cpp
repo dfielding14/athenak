@@ -7,6 +7,7 @@
 //! \brief
 
 #include <cstdlib>
+#include <cstdint>
 #include <iostream>
 #include <utility>
 #include <vector>
@@ -23,6 +24,86 @@
 #include "bvals.hpp"
 
 namespace particles {
+
+namespace {
+
+KOKKOS_INLINE_FUNCTION
+void WrapParticleCoordinate(Real &x, Real xmin, Real xmax) {
+  Real len = xmax - xmin;
+  if (len <= 0.0) {return;}
+  while (x < xmin) {x += len;}
+  while (x >= xmax) {x -= len;}
+}
+
+KOKKOS_INLINE_FUNCTION
+int ParticleLocationIndex(Real x, Real xmin, Real xmax, int nloc) {
+  Real frac = (x - xmin)/(xmax - xmin);
+  std::int64_t ix = static_cast<std::int64_t>(frac*static_cast<Real>(nloc));
+  ix = (ix < 0) ? 0 : ix;
+  ix = (ix > nloc - 1) ? nloc - 1 : ix;
+  return static_cast<int>(ix);
+}
+
+bool BuildParticleLookupTable(Mesh *pm, int max_entries, DvceArray1D<int> &gid_table,
+                              DvceArray1D<int> &rank_table, int &nloc1, int &nloc2,
+                              int &nloc3) {
+  int lev_offset = pm->max_level - pm->root_level;
+  nloc1 = pm->nmb_rootx1 << lev_offset;
+  nloc2 = pm->multi_d ? (pm->nmb_rootx2 << lev_offset) : 1;
+  nloc3 = pm->three_d ? (pm->nmb_rootx3 << lev_offset) : 1;
+
+  int64_t ntable = static_cast<int64_t>(nloc1)*static_cast<int64_t>(nloc2)*
+                   static_cast<int64_t>(nloc3);
+  if (ntable > static_cast<int64_t>(max_entries)) {return false;}
+
+  HostArray1D<int> gid_h("particle_lookup_gid_h", ntable);
+  HostArray1D<int> rank_h("particle_lookup_rank_h", ntable);
+  Kokkos::deep_copy(gid_h, -1);
+  Kokkos::deep_copy(rank_h, -1);
+
+  for (int gid=0; gid<pm->nmb_total; ++gid) {
+    LogicalLocation &lloc = pm->lloc_eachmb[gid];
+    int shift = pm->max_level - lloc.level;
+    int ilo = lloc.lx1 << shift;
+    int ihi = (lloc.lx1 + 1) << shift;
+    int jlo = pm->multi_d ? (lloc.lx2 << shift) : 0;
+    int jhi = pm->multi_d ? ((lloc.lx2 + 1) << shift) : 1;
+    int klo = pm->three_d ? (lloc.lx3 << shift) : 0;
+    int khi = pm->three_d ? ((lloc.lx3 + 1) << shift) : 1;
+
+    for (int k=klo; k<khi; ++k) {
+      for (int j=jlo; j<jhi; ++j) {
+        for (int i=ilo; i<ihi; ++i) {
+          std::int64_t idx = static_cast<std::int64_t>(i) +
+                             static_cast<std::int64_t>(nloc1)*
+                             (static_cast<std::int64_t>(j) +
+                              static_cast<std::int64_t>(nloc2)*
+                              static_cast<std::int64_t>(k));
+          gid_h(idx) = gid;
+          rank_h(idx) = pm->rank_eachmb[gid];
+        }
+      }
+    }
+  }
+
+  for (std::int64_t idx=0; idx<ntable; ++idx) {
+    if (gid_h(idx) < 0 || rank_h(idx) < 0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Particle lookup table has an unfilled logical slot"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+
+  gid_table = DvceArray1D<int>("particle_lookup_gid", ntable);
+  rank_table = DvceArray1D<int>("particle_lookup_rank", ntable);
+  Kokkos::deep_copy(gid_table, gid_h);
+  Kokkos::deep_copy(rank_table, rank_h);
+  return true;
+}
+
+} // namespace
+
 //----------------------------------------------------------------------------------------
 //! \fn void ParticlesBoundaryValues::UpdateGID()
 //! \brief Updates GID of particles that cross boundary of their parent MeshBlock.  If
@@ -30,12 +111,12 @@ namespace particles {
 //! particle in prtcl array, (2) destination GID, and (3) destination rank.
 
 KOKKOS_INLINE_FUNCTION
-void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank, int *pcounter,
+void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank, DvceArray1D<int> counter,
                DualArray1D<ParticleLocationData> slist, int p) {
   newgid = nghbr.gid;
 #if MPI_PARALLEL_ENABLED
   if (nghbr.rank != myrank) {
-    int index = Kokkos::atomic_fetch_add(pcounter,1);
+    int index = Kokkos::atomic_fetch_add(&counter(0),1);
     slist.d_view(index).prtcl_indx = p;
     slist.d_view(index).dest_gid   = nghbr.gid;
     slist.d_view(index).dest_rank  = nghbr.rank;
@@ -50,22 +131,173 @@ void UpdateGID(int &newgid, NeighborBlock nghbr, int myrank, int *pcounter,
 
 TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
   // create local references for variables in kernel
+  Mesh *pm = pmy_part->pmy_pack->pmesh;
   auto gids = pmy_part->pmy_pack->gids;
   auto &pr = pmy_part->prtcl_rdata;
   auto &pi = pmy_part->prtcl_idata;
   int npart = pmy_part->nprtcl_thispack;
+  nprtcl_send = 0;
+  if (npart <= 0) {return TaskStatus::complete;}
+
+  if (pm->multilevel) {
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::device_table) {
+      bool table_matches_mesh =
+          particle_lookup_valid &&
+          particle_lookup_nmb_total == pm->nmb_total &&
+          particle_lookup_max_level == pm->max_level &&
+          particle_lookup_root_level == pm->root_level &&
+          particle_lookup_rootx1 == pm->nmb_rootx1 &&
+          particle_lookup_rootx2 == pm->nmb_rootx2 &&
+          particle_lookup_rootx3 == pm->nmb_rootx3;
+      if (!table_matches_mesh) {
+        particle_lookup_valid =
+            BuildParticleLookupTable(pm, pmy_part->amr_lookup_max_cells,
+                                     particle_lookup_gid_table,
+                                     particle_lookup_rank_table,
+                                     particle_lookup_nloc1,
+                                     particle_lookup_nloc2,
+                                     particle_lookup_nloc3);
+        if (particle_lookup_valid) {
+          particle_lookup_nmb_total = pm->nmb_total;
+          particle_lookup_max_level = pm->max_level;
+          particle_lookup_root_level = pm->root_level;
+          particle_lookup_rootx1 = pm->nmb_rootx1;
+          particle_lookup_rootx2 = pm->nmb_rootx2;
+          particle_lookup_rootx3 = pm->nmb_rootx3;
+        }
+      }
+      if (particle_lookup_valid) {
+        Kokkos::realloc(sendlist, std::max(1,npart));
+        auto &slist = sendlist;
+        auto gid_table = particle_lookup_gid_table;
+        auto rank_table = particle_lookup_rank_table;
+        int nloc1 = particle_lookup_nloc1;
+        int nloc2 = particle_lookup_nloc2;
+        int nloc3 = particle_lookup_nloc3;
+        DvceArray1D<int> atom_count("particle_lookup_send_count", 2);
+        Kokkos::deep_copy(atom_count, 0);
+        int myrank = global_variable::my_rank;
+        bool multi_d = pm->multi_d;
+        bool three_d = pm->three_d;
+        Real x1min = pm->mesh_size.x1min;
+        Real x1max = pm->mesh_size.x1max;
+        Real x2min = pm->mesh_size.x2min;
+        Real x2max = pm->mesh_size.x2max;
+        Real x3min = pm->mesh_size.x3min;
+        Real x3max = pm->mesh_size.x3max;
+
+        par_for("part_update_lookup",DevExeSpace(),0,(npart-1),
+        KOKKOS_LAMBDA(const int p) {
+          Real x1 = pr(IPX,p);
+          Real x2 = pr(IPY,p);
+          Real x3 = pr(IPZ,p);
+          WrapParticleCoordinate(x1, x1min, x1max);
+          if (multi_d) {WrapParticleCoordinate(x2, x2min, x2max);}
+          if (three_d) {WrapParticleCoordinate(x3, x3min, x3max);}
+
+          int ix = ParticleLocationIndex(x1, x1min, x1max, nloc1);
+          int iy = multi_d ? ParticleLocationIndex(x2, x2min, x2max, nloc2) : 0;
+          int iz = three_d ? ParticleLocationIndex(x3, x3min, x3max, nloc3) : 0;
+          std::int64_t idx = static_cast<std::int64_t>(ix) +
+                             static_cast<std::int64_t>(nloc1)*
+                             (static_cast<std::int64_t>(iy) +
+                              static_cast<std::int64_t>(nloc2)*
+                              static_cast<std::int64_t>(iz));
+          int dest_gid = gid_table(idx);
+          int dest_rank = rank_table(idx);
+          if (dest_gid < 0 || dest_rank < 0) {
+            Kokkos::atomic_fetch_add(&atom_count(1), 1);
+            return;
+          }
+
+          pr(IPX,p) = x1;
+          pr(IPY,p) = x2;
+          pr(IPZ,p) = x3;
+          pi(PGID,p) = dest_gid;
+#if MPI_PARALLEL_ENABLED
+          if (dest_rank != myrank) {
+            int index = Kokkos::atomic_fetch_add(&atom_count(0), 1);
+            slist.d_view(index).prtcl_indx = p;
+            slist.d_view(index).dest_gid = dest_gid;
+            slist.d_view(index).dest_rank = dest_rank;
+          }
+#endif
+        });
+        HostArray1D<int> count_h("particle_lookup_send_count_h", 2);
+        Kokkos::deep_copy(count_h, atom_count);
+        if (count_h(1) != 0) {
+          std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                    << std::endl << count_h(1)
+                    << " particles mapped outside the particle lookup table"
+                    << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        nprtcl_send = count_h(0);
+        sendlist.template modify<DevExeSpace>();
+        Kokkos::resize(sendlist, nprtcl_send);
+        sendlist.template sync<HostMemSpace>();
+        return TaskStatus::complete;
+      }
+    }
+
+    auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pr);
+    auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pi);
+    std::vector<ParticleLocationData> host_sendlist;
+    host_sendlist.reserve(npart);
+    int myrank = global_variable::my_rank;
+    for (int p=0; p<npart; ++p) {
+      WrapParticleCoordinate(pr_h(IPX,p), pm->mesh_size.x1min, pm->mesh_size.x1max);
+      if (pm->multi_d) {
+        WrapParticleCoordinate(pr_h(IPY,p), pm->mesh_size.x2min, pm->mesh_size.x2max);
+      }
+      if (pm->three_d) {
+        WrapParticleCoordinate(pr_h(IPZ,p), pm->mesh_size.x3min, pm->mesh_size.x3max);
+      }
+      int dest_gid = pm->FindMeshBlockContainingPosition(pr_h(IPX,p), pr_h(IPY,p),
+                                                         pr_h(IPZ,p));
+      if (dest_gid < 0) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "Particle host lookup failed for particle " << p
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+      pi_h(PGID,p) = dest_gid;
+#if MPI_PARALLEL_ENABLED
+      int dest_rank = pm->rank_eachmb[dest_gid];
+      if (dest_rank != myrank) {
+        ParticleLocationData loc;
+        loc.prtcl_indx = p;
+        loc.dest_gid = dest_gid;
+        loc.dest_rank = dest_rank;
+        host_sendlist.push_back(loc);
+      }
+#endif
+    }
+    Kokkos::deep_copy(pr, pr_h);
+    Kokkos::deep_copy(pi, pi_h);
+    nprtcl_send = static_cast<int>(host_sendlist.size());
+    Kokkos::realloc(sendlist, std::max(1,nprtcl_send));
+    for (int n=0; n<nprtcl_send; ++n) {
+      sendlist.h_view(n) = host_sendlist[n];
+    }
+    sendlist.template modify<HostMemSpace>();
+    Kokkos::resize(sendlist, nprtcl_send);
+    sendlist.template sync<DevExeSpace>();
+    return TaskStatus::complete;
+  }
+
   auto &mbsize = pmy_part->pmy_pack->pmb->mb_size;
   auto &mblev = pmy_part->pmy_pack->pmb->mb_lev;
-  auto &meshsize = pmy_part->pmy_pack->pmesh->mesh_size;
+  auto &meshsize = pm->mesh_size;
   auto myrank = global_variable::my_rank;
   auto &nghbr = pmy_part->pmy_pack->pmb->nghbr;
   auto &psendl = sendlist;
-  int counter=0;
-  int *pcounter = &counter;
+  DvceArray1D<int> atom_count("particle_send_count",1);
+  Kokkos::deep_copy(atom_count, 0);
   bool &multi_d = pmy_part->pmy_pack->pmesh->multi_d;
   bool &three_d = pmy_part->pmy_pack->pmesh->three_d;
 
-  Kokkos::realloc(sendlist, static_cast<int>(0.1*npart));
+  Kokkos::realloc(sendlist, std::max(1,npart));
   par_for("part_update",DevExeSpace(),0,(npart-1), KOKKOS_LAMBDA(const int p) {
     int m = pi(PGID,p) - gids;
     int mylevel = mblev.d_view(m);
@@ -100,7 +332,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(ix,0,0,fy,fz);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}  // neighbor at coarser level
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         } else if (ix == 0) {
           // x2 face
           int indx = NeighborIndex(0,iy,0,0,0);
@@ -108,7 +340,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(0,iy,0,fx,fz);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         } else {
           // x1x2 edge
           int indx = NeighborIndex(ix,iy,0,0,0);
@@ -116,7 +348,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(ix,iy,0,fz,0);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         }
       } else if (iy == 0) {
         if (ix == 0) {
@@ -126,7 +358,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(0,0,iz,fx,fy);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         } else {
           // x3x1 edge
           int indx = NeighborIndex(ix,0,iz,0,0);
@@ -134,7 +366,7 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(ix,0,iz,fy,0);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         }
       } else {
         if (ix == 0) {
@@ -144,39 +376,90 @@ TaskStatus ParticlesBoundaryValues::SetNewPrtclGID() {
             indx = NeighborIndex(0,iy,iz,fx,0);
           }
           while (nghbr.d_view(m,indx).gid < 0) {indx++;}
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         } else {
           // corners
           int indx = NeighborIndex(ix,iy,iz,0,0);
-          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, pcounter, psendl, p);
+          UpdateGID(pi(PGID,p), nghbr.d_view(m,indx), myrank, atom_count, psendl, p);
         }
       }
 
       // reset x,y,z positions if particle crosses Mesh boundary using periodic BCs
       if (x1 < meshsize.x1min) {
         pr(IPX,p) += (meshsize.x1max - meshsize.x1min);
-      } else if (x1 > meshsize.x1max) {
+      } else if (x1 >= meshsize.x1max) {
         pr(IPX,p) -= (meshsize.x1max - meshsize.x1min);
       }
       if (x2 < meshsize.x2min) {
         pr(IPY,p) += (meshsize.x2max - meshsize.x2min);
-      } else if (x2 > meshsize.x2max) {
+      } else if (x2 >= meshsize.x2max) {
         pr(IPY,p) -= (meshsize.x2max - meshsize.x2min);
       }
       if (x3 < meshsize.x3min) {
         pr(IPZ,p) += (meshsize.x3max - meshsize.x3min);
-      } else if (x3 > meshsize.x3max) {
+      } else if (x3 >= meshsize.x3max) {
         pr(IPZ,p) -= (meshsize.x3max - meshsize.x3min);
       }
     }
   });
+  int counter = 0;
+  auto atom_count_h = Kokkos::create_mirror_view(atom_count);
+  Kokkos::deep_copy(atom_count_h, atom_count);
+  counter = atom_count_h(0);
   nprtcl_send = counter;
-  Kokkos::resize(sendlist, nprtcl_send);
-  // sync sendlist device array with host
+  // Preserve the device writes when resizing the DualView.
   sendlist.template modify<DevExeSpace>();
+  Kokkos::resize(sendlist, nprtcl_send);
   sendlist.template sync<HostMemSpace>();
 
   return TaskStatus::complete;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void ParticlesBoundaryValues::InvalidateLookupCache()
+//! \brief Invalidate cached AMR ownership table after mesh topology or rank ownership changes.
+
+void ParticlesBoundaryValues::InvalidateLookupCache() {
+  particle_lookup_valid = false;
+  particle_lookup_nmb_total = -1;
+  particle_lookup_max_level = -1;
+  particle_lookup_root_level = -1;
+  particle_lookup_rootx1 = -1;
+  particle_lookup_rootx2 = -1;
+  particle_lookup_rootx3 = -1;
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void ParticlesBoundaryValues::EnsureBufferCapacity()
+//! \brief Grow particle MPI buffers only when the current capacity is too small.
+
+void ParticlesBoundaryValues::EnsureBufferCapacity(int nsend, int nrecv) {
+#if MPI_PARALLEL_ENABLED
+  int rsend_needed = std::max(1, (pmy_part->nrdata)*nsend);
+  int isend_needed = std::max(1, (pmy_part->nidata)*nsend);
+  int rrecv_needed = std::max(1, (pmy_part->nrdata)*nrecv);
+  int irecv_needed = std::max(1, (pmy_part->nidata)*nrecv);
+  if (rsend_needed > rsend_capacity) {
+    Kokkos::realloc(prtcl_rsendbuf, rsend_needed);
+    Kokkos::realloc(prtcl_rsendbuf_h, rsend_needed);
+    rsend_capacity = rsend_needed;
+  }
+  if (isend_needed > isend_capacity) {
+    Kokkos::realloc(prtcl_isendbuf, isend_needed);
+    Kokkos::realloc(prtcl_isendbuf_h, isend_needed);
+    isend_capacity = isend_needed;
+  }
+  if (rrecv_needed > rrecv_capacity) {
+    Kokkos::realloc(prtcl_rrecvbuf, rrecv_needed);
+    Kokkos::realloc(prtcl_rrecvbuf_h, rrecv_needed);
+    rrecv_capacity = rrecv_needed;
+  }
+  if (irecv_needed > irecv_capacity) {
+    Kokkos::realloc(prtcl_irecvbuf, irecv_needed);
+    Kokkos::realloc(prtcl_irecvbuf_h, irecv_needed);
+    irecv_capacity = irecv_needed;
+  }
+#endif
 }
 
 //----------------------------------------------------------------------------------------
@@ -188,9 +471,11 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
   // Sort sendlist on host by destrank.
   namespace KE = Kokkos::Experimental;
   std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByRank);
-  // sync sendlist host array with device.  This results in sorted array on device
-  sendlist.template modify<HostMemSpace>();
-  sendlist.template sync<DevExeSpace>();
+  if (pmy_part->amr_remap_mode != ParticlesAMRRemapMode::host_tree) {
+    // sync sendlist host array with device.  This results in sorted array on device
+    sendlist.template modify<HostMemSpace>();
+    sendlist.template sync<DevExeSpace>();
+  }
 
   // load STL::vector of ParticleMessageData with <sendrank, recvrank, nprtcls> for sends
   // from this rank. Length will be nsends; initially this length is unknown
@@ -212,6 +497,28 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
     sends_thisrank.emplace_back(ParticleMessageData(myrank,rank,nprtcl));
   }
   nsends = sends_thisrank.size();
+
+  if (pmy_part->exchange_mode == ParticlesExchangeMode::alltoall_counts) {
+    std::fill(send_counts_eachrank.begin(), send_counts_eachrank.end(), 0);
+    std::fill(recv_counts_eachrank.begin(), recv_counts_eachrank.end(), 0);
+    for (int n=0; n<nsends; ++n) {
+      send_counts_eachrank[sends_thisrank[n].recvrank] = sends_thisrank[n].nprtcls;
+    }
+    MPI_Alltoall(send_counts_eachrank.data(), 1, MPI_INT,
+                 recv_counts_eachrank.data(), 1, MPI_INT, mpi_comm_part);
+
+    recvs_thisrank.clear();
+    int myrank = global_variable::my_rank;
+    for (int rank=0; rank<global_variable::nranks; ++rank) {
+      if (recv_counts_eachrank[rank] > 0) {
+        recvs_thisrank.emplace_back(ParticleMessageData(rank, myrank,
+                                                        recv_counts_eachrank[rank]));
+      }
+    }
+    nrecvs = recvs_thisrank.size();
+    sends_allranks.clear();
+    return TaskStatus::complete;
+  }
 
   // Share number of ranks to send to amongst all ranks
   nsends_eachrank[global_variable::my_rank] = nsends;
@@ -240,6 +547,7 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
   MPI_Allgatherv(MPI_IN_PLACE, nsends_eachrank[global_variable::my_rank],
                    mpi_ituple, sends_allranks.data(), nsends_eachrank.data(),
                    nsends_displ.data(), mpi_ituple, mpi_comm_part);
+  MPI_Type_free(&mpi_ituple);
 #endif
   return TaskStatus::complete;
 }
@@ -249,28 +557,28 @@ TaskStatus ParticlesBoundaryValues::CountSendsAndRecvs() {
 //! \brief
 
 TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
+  nprtcl_recv=0;
 #if MPI_PARALLEL_ENABLED
-  // load STL::vector of ParticleMessageData with <sendrank,recvrank,nprtcl_recv> for
-  // receives // on this rank. Length will be nrecvs, initially this length is unknown
-  recvs_thisrank.clear();
+  if (pmy_part->exchange_mode == ParticlesExchangeMode::allgather) {
+    // load STL::vector of ParticleMessageData with <sendrank,recvrank,nprtcl_recv> for
+    // receives // on this rank. Length will be nrecvs, initially this length is unknown
+    recvs_thisrank.clear();
 
-  int nsends_allranks = sends_allranks.size();
-  for (int n=0; n<nsends_allranks; ++n) {
-    if (sends_allranks[n].recvrank == global_variable::my_rank) {
-      recvs_thisrank.emplace_back(sends_allranks[n]);
+    int nsends_allranks = sends_allranks.size();
+    for (int n=0; n<nsends_allranks; ++n) {
+      if (sends_allranks[n].recvrank == global_variable::my_rank) {
+        recvs_thisrank.emplace_back(sends_allranks[n]);
+      }
     }
+    nrecvs = recvs_thisrank.size();
   }
-  nrecvs = recvs_thisrank.size();
 
   // Figure out how many particles will be received from all ranks
-  nprtcl_recv=0;
   for (int n=0; n<nrecvs; ++n) {
     nprtcl_recv += recvs_thisrank[n].nprtcls;
   }
 
-  // Allocate receive buffer
-  Kokkos::realloc(prtcl_rrecvbuf, (pmy_part->nrdata)*nprtcl_recv);
-  Kokkos::realloc(prtcl_irecvbuf, (pmy_part->nidata)*nprtcl_recv);
+  EnsureBufferCapacity(nprtcl_send, nprtcl_recv);
 
   // Post non-blocking receives
   bool no_errors=true;
@@ -286,14 +594,23 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
   for (int n=0; n<nrecvs; ++n) {
     // calculate amount of data to be passed, get pointer to variables
     int data_size = (pmy_part->nrdata)*(recvs_thisrank[n].nprtcls);
-    int data_end = data_start + (pmy_part->nrdata)*(recvs_thisrank[n].nprtcls - 1);
-    auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf, std::make_pair(data_start, data_end));
+    int data_end = data_start + (pmy_part->nrdata)*recvs_thisrank[n].nprtcls;
     int drank = recvs_thisrank[n].sendrank;
     int tag = 0; // 0 for Reals, 1 for ints
 
     // Post non-blocking receive
-    int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                         mpi_comm_part, &(rrecv_req[n]));
+    int ierr;
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+      auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf_h,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                       mpi_comm_part, &(rrecv_req[n]));
+    } else {
+      auto recv_ptr = Kokkos::subview(prtcl_rrecvbuf,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                       mpi_comm_part, &(rrecv_req[n]));
+    }
     if (ierr != MPI_SUCCESS) {no_errors=false;}
     data_start += data_size;
   }
@@ -302,14 +619,23 @@ TaskStatus ParticlesBoundaryValues::InitPrtclRecv() {
   for (int n=0; n<nrecvs; ++n) {
     // calculate amount of data to be passed, get pointer to variables
     int data_size = (pmy_part->nidata)*(recvs_thisrank[n].nprtcls);
-    int data_end = data_start + (pmy_part->nidata)*(recvs_thisrank[n].nprtcls - 1);
-    auto recv_ptr = Kokkos::subview(prtcl_irecvbuf, std::make_pair(data_start, data_end));
+    int data_end = data_start + (pmy_part->nidata)*recvs_thisrank[n].nprtcls;
     int drank = recvs_thisrank[n].sendrank;
     int tag = 1; // 0 for Reals, 1 for ints
 
     // Post non-blocking receive
-    int ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
-                         mpi_comm_part, &(irecv_req[n]));
+    int ierr;
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+      auto recv_ptr = Kokkos::subview(prtcl_irecvbuf_h,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
+                       mpi_comm_part, &(irecv_req[n]));
+    } else {
+      auto recv_ptr = Kokkos::subview(prtcl_irecvbuf,
+                                      std::make_pair(data_start, data_end));
+      ierr = MPI_Irecv(recv_ptr.data(), data_size, MPI_INT, drank, tag,
+                       mpi_comm_part, &(irecv_req[n]));
+    }
     if (ierr != MPI_SUCCESS) {no_errors=false;}
     data_start += data_size;
   }
@@ -337,28 +663,42 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
   }
 
   bool no_errors=true;
+  EnsureBufferCapacity(nprtcl_send, nprtcl_recv);
   if (nprtcl_send > 0) {
-    // Allocate send buffer
-    Kokkos::realloc(prtcl_rsendbuf, (pmy_part->nrdata)*nprtcl_send);
-    Kokkos::realloc(prtcl_isendbuf, (pmy_part->nidata)*nprtcl_send);
-
     // sendlist on device is already sorted by destrank in CountSendAndRecvs()
     // Use sendlist on device to load particles into send buffer ordered by dest_rank
     int nrdata = pmy_part->nrdata;
     int nidata = pmy_part->nidata;
-    auto &pr = pmy_part->prtcl_rdata;
-    auto &pi = pmy_part->prtcl_idata;
-    auto &rsendbuf = prtcl_rsendbuf;
-    auto &isendbuf = prtcl_isendbuf;
-    par_for("ppack",DevExeSpace(),0,(nprtcl_send-1), KOKKOS_LAMBDA(const int n) {
-      int p = sendlist.d_view(n).prtcl_indx;
-      for (int i=0; i<nidata; ++i) {
-        isendbuf(nidata*n + i) = pi(i,p);
+    if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+      auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                      pmy_part->prtcl_rdata);
+      auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                      pmy_part->prtcl_idata);
+      for (int n=0; n<nprtcl_send; ++n) {
+        int p = sendlist.h_view(n).prtcl_indx;
+        for (int i=0; i<nidata; ++i) {
+          prtcl_isendbuf_h(nidata*n + i) = pi_h(i,p);
+        }
+        for (int i=0; i<nrdata; ++i) {
+          prtcl_rsendbuf_h(nrdata*n + i) = pr_h(i,p);
+        }
       }
-      for (int i=0; i<nrdata; ++i) {
-        rsendbuf(nrdata*n + i) = pr(i,p);
-      }
-    });
+    } else {
+      auto &pr = pmy_part->prtcl_rdata;
+      auto &pi = pmy_part->prtcl_idata;
+      auto &rsendbuf = prtcl_rsendbuf;
+      auto &isendbuf = prtcl_isendbuf;
+      auto &slist = sendlist;
+      par_for("ppack",DevExeSpace(),0,(nprtcl_send-1), KOKKOS_LAMBDA(const int n) {
+        int p = slist.d_view(n).prtcl_indx;
+        for (int i=0; i<nidata; ++i) {
+          isendbuf(nidata*n + i) = pi(i,p);
+        }
+        for (int i=0; i<nrdata; ++i) {
+          rsendbuf(nrdata*n + i) = pr(i,p);
+        }
+      });
+    }
 
     // Post non-blocking sends
     Kokkos::fence();
@@ -374,14 +714,23 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
     for (int n=0; n<nsends; ++n) {
       // calculate amount of data to be passed, get pointer to variables
       int data_size = nrdata*(sends_thisrank[n].nprtcls);
-      int data_end = data_start + nrdata*(sends_thisrank[n].nprtcls - 1);
-      auto send_ptr = Kokkos::subview(prtcl_rsendbuf,std::make_pair(data_start,data_end));
+      int data_end = data_start + nrdata*sends_thisrank[n].nprtcls;
       int drank = sends_thisrank[n].recvrank;
       int tag = 0; // 0 for Reals, 1 for ints
 
       // Post non-blocking sends
-      int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
-                           mpi_comm_part, &(rsend_req[n]));
+      int ierr;
+      if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+        auto send_ptr = Kokkos::subview(prtcl_rsendbuf_h,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                         mpi_comm_part, &(rsend_req[n]));
+      } else {
+        auto send_ptr = Kokkos::subview(prtcl_rsendbuf,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_ATHENA_REAL, drank, tag,
+                         mpi_comm_part, &(rsend_req[n]));
+      }
       if (ierr != MPI_SUCCESS) {no_errors=false;}
       data_start += data_size;
     }
@@ -390,14 +739,23 @@ TaskStatus ParticlesBoundaryValues::PackAndSendPrtcls() {
     for (int n=0; n<nsends; ++n) {
       // calculate amount of data to be passed, get pointer to variables
       int data_size = nidata*(sends_thisrank[n].nprtcls);
-      int data_end = data_start + nidata*(sends_thisrank[n].nprtcls - 1);
-      auto send_ptr = Kokkos::subview(prtcl_isendbuf,std::make_pair(data_start,data_end));
+      int data_end = data_start + nidata*sends_thisrank[n].nprtcls;
       int drank = sends_thisrank[n].recvrank;
       int tag = 1; // 0 for Reals, 1 for ints
 
       // Post non-blocking sends
-      int ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
-                           mpi_comm_part, &(isend_req[n]));
+      int ierr;
+      if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+        auto send_ptr = Kokkos::subview(prtcl_isendbuf_h,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
+                         mpi_comm_part, &(isend_req[n]));
+      } else {
+        auto send_ptr = Kokkos::subview(prtcl_isendbuf,
+                                        std::make_pair(data_start, data_end));
+        ierr = MPI_Isend(send_ptr.data(), data_size, MPI_INT, drank, tag,
+                         mpi_comm_part, &(isend_req[n]));
+      }
       if (ierr != MPI_SUCCESS) {no_errors=false;}
       data_start += data_size;
     }
@@ -422,12 +780,15 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   // Sort sendlist on host by index in particle array
   namespace KE = Kokkos::Experimental;
   std::sort(KE::begin(sendlist.h_view), KE::end(sendlist.h_view), SortByIndex);
-  // sync sendlist host array with device.  This results in sorted array on device
-  sendlist.template modify<HostMemSpace>();
-  sendlist.template sync<DevExeSpace>();
+  if (pmy_part->amr_remap_mode != ParticlesAMRRemapMode::host_tree) {
+    // sync sendlist host array with device.  This results in sorted array on device
+    sendlist.template modify<HostMemSpace>();
+    sendlist.template sync<DevExeSpace>();
+  }
 
   // increase size of particle arrays if needed
-  int new_npart = pmy_part->nprtcl_thispack + (nprtcl_recv - nprtcl_send);
+  int old_npart = pmy_part->nprtcl_thispack;
+  int new_npart = old_npart + (nprtcl_recv - nprtcl_send);
   if (nprtcl_recv > nprtcl_send) {
     Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
     Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
@@ -459,6 +820,72 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   // exit if particle communications have not completed
   if (bflag) {return TaskStatus::incomplete;}
 
+  if (pmy_part->amr_remap_mode == ParticlesAMRRemapMode::host_tree) {
+    int nrdata = pmy_part->nrdata;
+    int nidata = pmy_part->nidata;
+    auto pr_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                    pmy_part->prtcl_rdata);
+    auto pi_h = Kokkos::create_mirror_view_and_copy(HostMemSpace(),
+                                                    pmy_part->prtcl_idata);
+    if (nprtcl_recv > 0) {
+      for (int n=0; n<nprtcl_recv; ++n) {
+        int p = (n < nprtcl_send) ? sendlist.h_view(n).prtcl_indx :
+                old_npart + (n - nprtcl_send);
+        for (int i=0; i<nidata; ++i) {
+          pi_h(i,p) = prtcl_irecvbuf_h(nidata*n + i);
+        }
+        for (int i=0; i<nrdata; ++i) {
+          pr_h(i,p) = prtcl_rrecvbuf_h(nrdata*n + i);
+        }
+      }
+    }
+
+    int nremain = nprtcl_send - nprtcl_recv;
+    if (nremain > 0) {
+      std::vector<char> drop(old_npart, 0);
+      for (int n=nprtcl_recv; n<nprtcl_send; ++n) {
+        drop[sendlist.h_view(n).prtcl_indx] = 1;
+      }
+      HostArray2D<Real> new_pr_h("particle_compact_rdata_h", nrdata, new_npart);
+      HostArray2D<int> new_pi_h("particle_compact_idata_h", nidata, new_npart);
+      int offset = 0;
+      for (int p=0; p<old_npart; ++p) {
+        if (drop[p] == 0) {
+          for (int i=0; i<nidata; ++i) {
+            new_pi_h(i,offset) = pi_h(i,p);
+          }
+          for (int i=0; i<nrdata; ++i) {
+            new_pr_h(i,offset) = pr_h(i,p);
+          }
+          ++offset;
+        }
+      }
+      DvceArray2D<Real> new_pr("particle_compact_rdata", nrdata, new_npart);
+      DvceArray2D<int> new_pi("particle_compact_idata", nidata, new_npart);
+      Kokkos::deep_copy(new_pr, new_pr_h);
+      Kokkos::deep_copy(new_pi, new_pi_h);
+      pmy_part->prtcl_rdata = new_pr;
+      pmy_part->prtcl_idata = new_pi;
+    } else {
+      Kokkos::deep_copy(pmy_part->prtcl_rdata, pr_h);
+      Kokkos::deep_copy(pmy_part->prtcl_idata, pi_h);
+    }
+
+    pmy_part->nprtcl_thispack = new_npart;
+    if (pmy_part->update_global_counts_each_exchange) {
+      pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+    } else {
+      pmy_part->pmy_pack->pmesh->UpdateParticleCountsLocal();
+    }
+    int64_t bytes_sent = static_cast<int64_t>(nprtcl_send)*
+                         (static_cast<int64_t>(pmy_part->nrdata)*sizeof(Real) +
+                          static_cast<int64_t>(pmy_part->nidata)*sizeof(int));
+    pmy_part->LogPerformance("particle_mpi_exchange", 0, nprtcl_send, nprtcl_recv,
+                             0, 0, static_cast<int64_t>(2*nsends), bytes_sent);
+    pmy_part->CheckConsistency("particle MPI exchange");
+    return TaskStatus::complete;
+  }
+
   // unpack particles into positions of sent particles
   if (nprtcl_recv > 0) {
     int nrdata = pmy_part->nrdata;
@@ -467,13 +894,15 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
     auto &pi = pmy_part->prtcl_idata;
     auto &rrecvbuf = prtcl_rrecvbuf;
     auto &irecvbuf = prtcl_irecvbuf;
-    int &npart = pmy_part->nprtcl_thispack;
+    int npart = old_npart;
+    int nsend = nprtcl_send;
+    auto &slist = sendlist;
     par_for("punpack",DevExeSpace(),0,(nprtcl_recv-1), KOKKOS_LAMBDA(const int n) {
       int p;
-      if (n < nprtcl_send) {
-        p = sendlist.d_view(n).prtcl_indx; // place particles in holes created by sends
+      if (n < nsend) {
+        p = slist.d_view(n).prtcl_indx; // place particles in holes created by sends
       } else {
-        p = npart + (n - nprtcl_send);     // place particle at end of arrays
+        p = npart + (n - nsend);        // place particle at end of arrays
       }
       for (int i=0; i<nidata; ++i) {
         pi(i,p) = irecvbuf(nidata*n + i);
@@ -489,37 +918,54 @@ TaskStatus ParticlesBoundaryValues::RecvAndUnpackPrtcls() {
   // remaining holes
   int nremain = nprtcl_send - nprtcl_recv;
   if (nremain > 0) {
-    int &npart = pmy_part->nprtcl_thispack;
-    int i_last_hole = nprtcl_send-1;
-    int i_next_hole = nprtcl_recv;
-    for (int n=1; n<=nremain; ++n) {
-      int nend = npart-n;
-      if (nend > sendlist.h_view(i_last_hole).prtcl_indx) {
-        // copy particle from end into hole
-        int next_hole = sendlist.h_view(i_next_hole).prtcl_indx;
-        auto rdest = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, next_hole);
-        auto rsrc  = Kokkos::subview(pmy_part->prtcl_rdata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(rdest, rsrc);
-        auto idest = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, next_hole);
-        auto isrc  = Kokkos::subview(pmy_part->prtcl_idata, Kokkos::ALL, nend);
-        Kokkos::deep_copy(idest, isrc);
-        i_next_hole += 1;
-      } else {
-        // this index contains a hole, so do nothing except find new index of last hole
-        i_last_hole -= 1;
-      }
-    }
+    DvceArray1D<int> drop("particle_drop_mask", old_npart);
+    Kokkos::deep_copy(drop, 0);
+    auto &slist = sendlist;
+    int nrecv = nprtcl_recv;
+    par_for("particle_mark_drops",DevExeSpace(),0,(nremain-1),
+    KOKKOS_LAMBDA(const int n) {
+      int send_index = nrecv + n;
+      drop(slist.d_view(send_index).prtcl_indx) = 1;
+    });
 
-    // shrink size of particle data arrays
-    Kokkos::resize(pmy_part->prtcl_idata, pmy_part->nidata, new_npart);
-    Kokkos::resize(pmy_part->prtcl_rdata, pmy_part->nrdata, new_npart);
+    int nrdata = pmy_part->nrdata;
+    int nidata = pmy_part->nidata;
+    auto old_pr = pmy_part->prtcl_rdata;
+    auto old_pi = pmy_part->prtcl_idata;
+    DvceArray2D<Real> new_pr("particle_compact_rdata", nrdata, new_npart);
+    DvceArray2D<int> new_pi("particle_compact_idata", nidata, new_npart);
+    Kokkos::parallel_scan("particle_compact",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, old_npart),
+      KOKKOS_LAMBDA(const int p, int &offset, const bool final) {
+        if (drop(p) == 0) {
+          if (final) {
+            for (int i=0; i<nidata; ++i) {
+              new_pi(i,offset) = old_pi(i,p);
+            }
+            for (int i=0; i<nrdata; ++i) {
+              new_pr(i,offset) = old_pr(i,p);
+            }
+          }
+          offset += 1;
+        }
+      });
+    pmy_part->prtcl_idata = new_pi;
+    pmy_part->prtcl_rdata = new_pr;
   }
 
   // Update nparticles_thisrank.  Update cost array (use npart_thismb[nmb]?)
   pmy_part->nprtcl_thispack = new_npart;
-  pmy_part->pmy_pack->pmesh->nprtcl_thisrank = new_npart;
-  MPI_Allgather(&new_npart,1,MPI_INT,(pmy_part->pmy_pack->pmesh->nprtcl_eachrank),1,
-                MPI_INT,MPI_COMM_WORLD);
+  if (pmy_part->update_global_counts_each_exchange) {
+    pmy_part->pmy_pack->pmesh->UpdateParticleCounts();
+  } else {
+    pmy_part->pmy_pack->pmesh->UpdateParticleCountsLocal();
+  }
+  int64_t bytes_sent = static_cast<int64_t>(nprtcl_send)*
+                       (static_cast<int64_t>(pmy_part->nrdata)*sizeof(Real) +
+                        static_cast<int64_t>(pmy_part->nidata)*sizeof(int));
+  pmy_part->LogPerformance("particle_mpi_exchange", 0, nprtcl_send, nprtcl_recv,
+                           0, 0, static_cast<int64_t>(2*nsends), bytes_sent);
+  pmy_part->CheckConsistency("particle MPI exchange");
 #endif
   return TaskStatus::complete;
 }

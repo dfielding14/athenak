@@ -3,6 +3,8 @@
 ## Overview
 The Particles module implements Lagrangian particle tracking with various pusher algorithms, interpolation schemes, and particle-mesh coupling. The module supports two **mutually exclusive** particle types: star particles (from brent_test branch) and cosmic ray particles (from athenak-PK branch).
 
+For magnetic-only CR tracers in saved CGL fields, use the [frozen CGL checkpoint guide](cgl_cr_tracers.md).
+
 ## Source Location
 `src/particles/`
 
