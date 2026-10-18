@@ -6,7 +6,8 @@ import numpy as np
 import pytest
 
 from test_suite.cgl.test_cgl_cr_cpu import (
-    OVERLAY, background, checkpoint, check_tracks, frozen, latest, particles,
+    OVERLAY, TEMPLATE, background, checkpoint, check_tracks, frozen, latest, particles,
+    run, state,
 )
 
 
@@ -57,3 +58,28 @@ def test_frozen_cgl_boris_crosses_mpi_boundary(tmp_path, monkeypatch):
         assert species
         np.testing.assert_array_equal(np.frombuffer(data, dtype=">f4", count=2,
                                                     offset=species.end()), [0, 0])
+
+
+def test_frozen_cgl_uneven_rank_particle_tags(tmp_path, monkeypatch):
+    source = tmp_path / "source"
+    source.mkdir()
+    deck = source / "background.athinput"
+    text = TEMPLATE.read_text().replace("nx2 = 24", "nx2 = 8")
+    text = text.replace("variable = turb_force", "variable = mhd_w_bcc")
+    text = text.replace("id = force", "id = state")
+    deck.write_text(text.replace("nx3 = 1", "nx3 = 8"))
+    run(source, "-i", deck, "time/nlim=0", "time/tlim=0.1", ranks=2)
+    assert state(source)["n_mbs"] == 3
+    flags = ("particles/ppc=0.001953125", "particles/nspecies=2",
+             "particles/mass_log_spacing=2", "output98/nparticles=6", "time/nlim=0")
+    accepted = tmp_path / "index_order"
+    frozen(accepted, checkpoint(source), 0.02, *flags, ranks=2)
+    _, rows = particles(accepted)
+    np.testing.assert_array_equal(rows[:, 1], np.arange(6))
+    np.testing.assert_array_equal(np.bincount(rows[:, 2].astype(int)), [3, 3])
+
+    overlay = tmp_path / "rank_order.athinput"
+    overlay.write_text(OVERLAY.read_text() + "\n<particles>\nassign_tag = rank_order\n")
+    monkeypatch.setattr("test_suite.cgl.test_cgl_cr_cpu.OVERLAY", overlay)
+    frozen(tmp_path / "rank_order", checkpoint(source), 0.02, *flags, ranks=2,
+           error="use particles/assign_tag=index_order")

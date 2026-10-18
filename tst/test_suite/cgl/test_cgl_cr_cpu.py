@@ -216,17 +216,21 @@ def test_frozen_cgl_gathers_loaded_field_and_gyro_phase_converges(tmp_path, inte
         np.testing.assert_allclose(rows[:, 3:], fine_steps[:, 3:], rtol=2e-12, atol=2e-12)
 
 
-def test_frozen_cgl_particle_checkpoint_continuation(tmp_path):
+@pytest.mark.parametrize("per_particle", [False, True])
+def test_frozen_cgl_particle_checkpoint_continuation(tmp_path, per_particle):
     restart = background(tmp_path / "source", uniform=True)
     uninterrupted = tmp_path / "uninterrupted"
     partial = tmp_path / "partial"
     resumed = tmp_path / "resumed"
     flags = ("particles/cfl_part=0.04", "problem/particle_position=tag_random",
              "particles/nspecies=2", "particles/mass_log_spacing=2",
+             f"particles/subcycle={str(per_particle).lower()}",
+             f"particles/subcycle_per_particle_gyro={str(per_particle).lower()}",
+             f"particles/exchange_gyro_only_substeps={str(not per_particle).lower()}",
              "output98/dt=0.01")
     frozen(uninterrupted, restart, 0.08, *flags)
     # Stop by cycle so checkpointing does not insert a shortened physical step.
-    frozen(partial, restart, 0.08, *flags, "time/nlim=10")
+    frozen(partial, restart, 0.08, *flags, f"time/nlim={2 if per_particle else 10}")
     assert particles(partial)[0] < 0.08
     particle_restart = latest(partial / "prst", "rank_00000000", "*.prst")
     # Particle array order is arbitrary after migration or a GPU packing kernel.
@@ -244,6 +248,12 @@ def test_frozen_cgl_particle_checkpoint_continuation(tmp_path):
     np.testing.assert_allclose(result[:, 3:], reference[:, 3:], rtol=2e-12, atol=2e-12)
     np.testing.assert_array_equal(np.bincount(result[:, 2].astype(int)), [16, 16])
     np.testing.assert_array_equal(result[:, 9], 0.1 * 2 ** result[:, 2])
+    np.testing.assert_allclose(np.linalg.norm(result[:, 6:9], axis=1),
+                               np.sqrt(1.04), rtol=2e-13)
+    phase = 2 * ref_time / result[:, 9]
+    expected = np.column_stack((np.cos(phase), -np.sin(phase), np.full(len(result), 0.2)))
+    # Boris phase error is O(phase * gyro_fraction**2 / 12).
+    np.testing.assert_allclose(result[:, 6:9], expected, rtol=0, atol=2.2e-4)
     check_tracks(uninterrupted, reference, 17)
     check_tracks(resumed, result, 17)
 

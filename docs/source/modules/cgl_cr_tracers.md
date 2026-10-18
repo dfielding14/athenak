@@ -39,6 +39,8 @@ The supplied overlay seeds deterministic positions and isotropic directions.
 `particles/ppc` sets particles per active cell per species; the global count
 must be nonzero. Empty ranks are supported. `particles/nspecies`, `min_mass`, and
 `mass_log_spacing` set $m_s=m_{\min}(\mathrm{mass\_log\_spacing})^s$.
+The default `assign_tag=index_order` supports uneven rank populations;
+`rank_order` requires equal initial particle counts on every rank.
 Masses must be positive. The speed is
 $\sqrt{v_{0x}^2+v_{0y}^2+v_{0z}^2}$ from `problem/v0x`, `v0y`, and `v0z`.
 `particle_velocity=uniform` uses those vector components directly.
@@ -63,6 +65,32 @@ particle study.
 For position and velocity tracks, add an unused output block with `file_type=trk`,
 `dt`, and `nparticles`. It tracks the first `nparticles` global tags. Particle
 checkpoints also retain species, gyro parameter, and accumulated displacement.
+Tags are grouped by species, so a short track list can contain only the lightest
+bin; use particle checkpoints to compare all bins.
+
+For a wide range of gyro parameters, per-particle gyro subcycling avoids making
+every bin take the lightest bin's number of substeps. The 768³ pilot used these
+overrides to the supplied overlay:
+
+```ini
+<particles>
+ppc = 1e-4
+nspecies = 19
+min_mass = 0.00025
+mass_log_spacing = 1.41421356
+cfl_part = 0.3
+subcycle = true
+subcycle_max_steps = 64
+subcycle_gyro_fraction = 0.05
+subcycle_per_particle_gyro = true
+exchange_gyro_only_substeps = false
+```
+
+The outer timestep still limits travel to half the finest cell, with ownership
+exchange after each outer step. The gyro bound uses the maximum saved field;
+each mass bin takes enough inner steps to satisfy that bound. Validate with
+`check_consistency_mode=full`, `check_motion_bounds=true`, and
+`log_performance=true` on short runs, then disable those checks for timing.
 
 ## Resume particles
 
@@ -107,11 +135,38 @@ methods, both subcycling paths, multi-species checkpoint continuation, binary
 tracks and VTK output, mismatched checkpoint rejection, and ownership across MPI and
 static coarse/fine boundaries.
 
-Validation on 2026-10-17 used Release, double-precision Kokkos Serial builds,
+Initial port validation on 2026-10-17 used Release, double-precision Kokkos Serial builds,
 with MPI enabled and separately with MPI disabled and bounds checking enabled.
 All nine checks passed with the MPI build; all eight serial checks passed with
 bounds checking.
 A separate build of the original `3293b6188` produced a byte-identical final
 fluid checkpoint and identical histories to the port with particles disabled,
 including CGL/LF evolution, forcing, and refinement from two to sixteen blocks.
-No GPU validation or turbulent transport convergence study was performed.
+The subsequent qualification passed all nine serial checks and all eleven
+Frontier HIP/MPI checks, including uneven-rank tag validation and analytic
+two-mass gyro motion with per-particle subcycling. These checks do not establish
+turbulent transport convergence.
+
+The native pilot used the completed active ν=0 and ν=20 snapshots at t=14:
+768³ cells in 128 uniformly refined 192×96×192 blocks, on 16 Frontier nodes
+with eight ranks/GPUs per node. Each snapshot seeded 858,496 particles, with
+45,184 in each of 19 bins spanning gyro parameters 0.00025–0.128 at unit speed.
+Original, zero-cycle loaded, and pushed fluid/face/ghost payloads were bitwise
+identical, as were topology, forcing/RNG state, LF ledgers and AMR counters.
+Particle tags, bin membership, mass, ownership and accumulated displacement
+passed their checks. Maximum speed error remained below 9×10⁻¹⁴ through the
+2048-cycle timing runs.
+
+For ν=0 at particle time 0.02, halving the gyro fraction from 0.05 to 0.025 changed the
+worst bin's mean-square displacement by 0.0017% and its velocity second-moment
+components by at most 9.2×10⁻⁶. The predeclared limits were 1% and 0.01,
+respectively; this qualifies a short push, not long-time diffusion coefficients.
+
+Two alternating ν=0 timing pairs measured 17.04–17.08 million outer particle
+updates/s/node with per-particle subcycling, versus 3.16 million with global
+subcycling: a 5.39–5.41× gain. The ν=20 fast run measured 17.11 million.
+These are output-free intervals after warmup, excluding checkpoint loading and
+final output; an outer update can contain multiple Boris steps. No node-count
+scaling sweep was performed. Inputs, binaries, logs and per-bin results are
+retained in
+`/lustre/orion/ast207/proj-shared/dfielding/CGL/cgl_cr_frozen_768_20261017/`.

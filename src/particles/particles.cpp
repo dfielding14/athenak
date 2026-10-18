@@ -339,6 +339,16 @@ void Particles::CreateParticleTags(ParameterInput *pin) {
   } else if (assign.compare("rank_order") == 0) {
     int myrank = global_variable::my_rank;
     int nranks = global_variable::nranks;
+    const auto counts = pmy_pack->pmesh->nprtcl_eachrank;
+    for (int rank=1; rank<nranks; ++rank) {
+      if (counts[rank] != counts[0]) {
+        std::cout << "### FATAL ERROR: particles/assign_tag=rank_order requires equal "
+                  << "initial particle counts on all ranks; use "
+                  << "particles/assign_tag=index_order for uneven populations"
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
+    }
     auto &pi = prtcl_idata;
     int nper = nprtcl_perspec_thispack;
     par_for("ptags",DevExeSpace(),0,(nprtcl_thispack-1),
