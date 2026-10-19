@@ -4,7 +4,9 @@ This directory contains source term implementations for AthenaK, including CGM c
 
 ## CGM Cooling
 
-The CGM cooling source term uses the shared helper in `cgm_cooling.hpp` for the energy update, optional cooling timestep estimate, and `cooling_time` derived output. This keeps the radiative cooling, heating profile, shielding mix, and temperature-cap logic in one place.
+The CGM cooling source term uses the shared helper in `cgm_cooling.hpp` for the energy update, optional cooling timestep estimate, and `cooling_time` derived output. This keeps the radiative cooling, heating profile, and shielding mix in one place.
+
+Cooling is operator split: `SourceTerms::CGMCoolingSplit` runs once per step in the `after_timeintegrator` task list (not inside the RK stages, where a stiff source loses half its effect to the RK averaging). In every cell, ghosts included, `cgm_cooling::IntegrateTemperature` integrates T exactly over dt with the net rate taken linear in T between table nodes (Townsend 2009, generalized as in Tan & Fielding 2023, App. C), clamped to [`tfloor`, `T_max`]. The one-zone regression test is `tst/scripts/hydro/cgm_cooling_onezone.py`.
 
 The explicit cooling timestep limiter is opt-in with `cgm_cooling_limit_dt = true`. When enabled, `cgm_cooling_dt_frac` sets the fraction of the local net-cooling time used for the source-term timestep. Gotham-scale production inputs keep this off by default because a single pathological cell can otherwise force a very small global timestep.
 

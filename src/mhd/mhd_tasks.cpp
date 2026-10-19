@@ -80,6 +80,15 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   // task list anyways to catch potential bugs in MPI communication logic
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
 
+  // assemble "after_timeintegrator" task list: operator-split CGM cooling of the
+  // end-of-step state (ConToPrim set w0 in all cells), then dt from the cooled state
+  if (psrc->cgm_cooling) {
+    tl["after_timeintegrator"]->AddTask([this](Driver *pdrive, int) {
+      psrc->CGMCoolingSplit(w0, u0, peos->eos_data, pmy_pack->pmesh->dt);
+      return NewTimeStep(pdrive, pdrive->nexp_stages);
+    }, none);
+  }
+
   return;
 }
 
@@ -254,7 +263,6 @@ TaskStatus MHD::MHDSrcTerms(Driver *pdrive, int stage) {
   // Add source terms for various physics
   if (psrc->const_accel)  psrc->ConstantAccel(w0, peos->eos_data, beta_dt, u0);
   if (psrc->ism_cooling)  psrc->ISMCooling(w0, peos->eos_data, beta_dt, u0);
-  if (psrc->cgm_cooling)  psrc->CGMCooling(w0, peos->eos_data, beta_dt, u0);
   if (psrc->rel_cooling)  psrc->RelCooling(w0, peos->eos_data, beta_dt, u0);
   if (psrc->shearing_box) psrc->ShearingBox(w0, bcc0, peos->eos_data, beta_dt, u0);
 

@@ -78,8 +78,8 @@ class SourceTerms {
                      const Real dt, DvceArray5D<Real> &u0);
   void ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);
-  void CGMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
-                  const Real dt, DvceArray5D<Real> &u0);
+  void CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
+                       const EOS_Data &eos, const Real dt);
   void RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);
   void BeamSource(DvceArray5D<Real> &i0, const Real dt);

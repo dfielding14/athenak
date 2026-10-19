@@ -18,7 +18,6 @@ namespace cgm_cooling {
 struct CGMCoolingResult {
   Real temp;
   Real net_cooling_rate;
-  Real cap_energy_change;
   Real cap_active;
 };
 
@@ -55,9 +54,14 @@ CGMCoolingResult CalculateRates(const Real rho, const Real eint, const Real meta
   const Real m_PIE = m_Tin*m_Nin;
   const Real m_CIE = m_Tin;
 
-  int iT = 0, jN = 0;
-  while (iT < Tbins_DIM_0 - 2 && Tbins(iT + 1) < log_temp) ++iT;
-  while (jN < nHbins_DIM_0 - 2 && nHbins(jN + 1) < log_nH) ++jN;
+  // Bins are uniform (to 2e-5 dex), so the bin index is arithmetic rather than a scan.
+  // Clamping before the cast also maps NaN and +-inf to a valid bin.
+  const Real dlogT = (Tbins(Tbins_DIM_0 - 1) - Tbins(0))/(Tbins_DIM_0 - 1);
+  const Real dlognH = (nHbins(nHbins_DIM_0 - 1) - nHbins(0))/(nHbins_DIM_0 - 1);
+  const int iT = static_cast<int>(fmin(fmax(floor((log_temp - Tbins(0))/dlogT), 0.0),
+                                       Tbins_DIM_0 - 2.0));
+  const int jN = static_cast<int>(fmin(fmax(floor((log_nH - nHbins(0))/dlognH), 0.0),
+                                       nHbins_DIM_0 - 2.0));
 
   const Real log_T0 = Tbins(iT);
   const Real log_T1 = Tbins(iT + 1);
@@ -124,7 +128,6 @@ CGMCoolingResult CalculateRates(const Real rho, const Real eint, const Real meta
   result.temp = temp;
   result.net_cooling_rate =
       X*rho*(X*rho*(lambda_cooling/cooling_unit) - (gamma_heating/heating_unit));
-  result.cap_energy_change = -((temp - T_max)/temp_unit)*rho/gm1;
   result.cap_active = m_cap;
   return result;
 }
@@ -135,6 +138,86 @@ Real CoolingTime(const CGMCoolingResult &result, const Real eint) {
                    ? result.net_cooling_rate + FLT_MIN
                    : result.net_cooling_rate - FLT_MIN;
   return (result.cap_active > 0.0) ? 0.0 : eint/denom;
+}
+
+// phi(x) = (1 - e^-x)/x and psi(u) = ln(1 + u)/u, both -> 1 as their argument -> 0
+KOKKOS_INLINE_FUNCTION
+Real Phi(const Real x) {
+  return (fabs(x) < 1.0e-8) ? 1.0 : -expm1(-x)/x;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real Psi(const Real u) {
+  return (fabs(u) < 1.0e-8) ? 1.0 : log1p(u)/u;
+}
+
+//! \fn Real IntegrateTemperature()
+//! \brief Returns T [K] after cooling/heating from T0 for dt at fixed rho, Z, position
+//! and dx. The net rate R(T) (CalculateRates at e = c_V*T) is taken linear in T between
+//! nodes T_k = 10^(Tbins(0) + k*dlogT), on which de/dt = -R integrates exactly: the
+//! Townsend (2009) scheme generalized as in Tan & Fielding (2023, App. C), simplified.
+//! T stays in [T_lo, T_hi]. Costs two rate evaluations plus one per node crossed.
+template<typename View1D, typename View2D>
+KOKKOS_INLINE_FUNCTION
+Real IntegrateTemperature(const Real T0, const Real dt, const Real rho,
+                          const Real metallicity, const Real x1v, const Real x2v,
+                          const Real x3v, const Real dx1, const Real gm1,
+                          const Real temp_unit, const Real nH_unit,
+                          const Real cooling_unit, const Real heating_unit,
+                          const Real length_unit, const Real h_rate, const Real h_norm,
+                          const Real h_height, const Real h_radius, const Real T_lo,
+                          const Real T_hi, const Real Tfloor, const Real Tceil,
+                          const Real nHfloor, const Real nHceil, const View1D &Tbins,
+                          const View1D &nHbins, const View2D &Metal_Cooling,
+                          const View2D &H_He_Cooling, const View1D &Metal_Cooling_CIE,
+                          const View1D &H_He_Cooling_CIE) {
+  const Real c_V = rho/(gm1*temp_unit);  // de/dT
+  auto rate = [&](const Real T) {
+    return CalculateRates(rho, c_V*T, metallicity, x1v, x2v, x3v, dx1, gm1, temp_unit,
+                          nH_unit, cooling_unit, heating_unit, length_unit, h_rate,
+                          h_norm, h_height, h_radius, T_hi, Tfloor, Tceil, nHfloor,
+                          nHceil, Tbins, nHbins, Metal_Cooling, H_He_Cooling,
+                          Metal_Cooling_CIE, H_He_Cooling_CIE).net_cooling_rate;
+  };
+  const Real logT_0 = Tbins(0);
+  const Real dlogT = (Tbins(Tbins_DIM_0 - 1) - logT_0)/(Tbins_DIM_0 - 1);
+  auto node = [&](const int k) { return pow(10.0, logT_0 + k*dlogT); };
+
+  Real T = fmin(fmax(T0, T_lo), T_hi);
+  int k = static_cast<int>(floor((log10(T) - logT_0)/dlogT));  // T in [T_k, T_k+1]
+  Real Ta = node(k), Tb = node(k + 1);
+  Real Ra = rate(Ta), Rb = rate(Tb);
+  Real R0 = Ra + (Rb - Ra)/(Tb - Ta)*(T - Ta);
+  Real rem = dt;
+  while (R0 != 0.0) {
+    const Real s = (Rb - Ra)/(Tb - Ta);
+    const bool down = (R0 > 0.0);  // net cooling lowers T
+    const Real Te = down ? fmax(Ta, T_lo) : fmin(Tb, T_hi);
+    // interpolate from the edge's own node, so Re is exact when the edge is a node
+    const Real Re = down ? Ra + s*(Te - Ta) : Rb + s*(Te - Tb);
+    if (Re*R0 > 0.0) {  // R keeps its sign up to the edge: T reaches it after te
+      const Real te = c_V*(T - Te)/R0*Psi(s*(Te - T)/R0);
+      if (te < rem) {
+        rem -= te;
+        T = Te;
+        if (down ? (Ta <= T_lo) : (Tb >= T_hi)) break;  // at the floor or the cap
+        if (down) {
+          --k;
+          Tb = Ta; Rb = Ra;
+          Ta = node(k); Ra = rate(Ta);
+        } else {
+          ++k;
+          Ta = Tb; Ra = Rb;
+          Tb = node(k + 1); Rb = rate(Tb);
+        }
+        R0 = Re;  // exact node value, so round-off cannot flip the direction
+        continue;
+      }
+    }
+    T -= R0*rem/c_V*Phi(s*rem/c_V);  // ends inside this bin
+    break;
+  }
+  return T;
 }
 
 } // namespace cgm_cooling
