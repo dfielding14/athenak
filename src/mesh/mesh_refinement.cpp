@@ -138,10 +138,52 @@ MeshRefinement::~MeshRefinement() {
 //! \brief Simple driver function for adaptive mesh refinement
 
 void MeshRefinement::AdaptiveMeshRefinement(Driver *pdriver, ParameterInput *pin) {
-  // first check refinement criteria
   CheckForRefinement(pmy_mesh->pmb_pack);
+  ApplyRefineFlags(pdriver, pin);
+}
 
-  // then update mesh tree if MeshBlock anywhere (on any rank) is flagged for refinement
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::DerefineToLevel()
+//! \brief Derefines every MeshBlock finer than logical 'level', so a restart can
+//! continue with a lower <mesh_refinement>/num_levels. One level per pass keeps the 2:1
+//! nesting the tree requires.
+
+void MeshRefinement::DerefineToLevel(Driver *pdriver, ParameterInput *pin, int level) {
+  const int nmb_old = pmy_mesh->nmb_total, level_old = pmy_mesh->max_level;
+  for (int l = level_old; l > level; --l) {
+    // every rank holds all logical locations, so the flags need no communication
+    Kokkos::realloc(refine_flag, pmy_mesh->nmb_total);
+    for (int m=0; m<pmy_mesh->nmb_total; ++m) {
+      refine_flag.h_view(m) = (pmy_mesh->lloc_eachmb[m].level == l) ? -1 : 0;
+    }
+    refine_flag.template modify<HostMemSpace>();
+    refine_flag.template sync<DevExeSpace>();
+    ApplyRefineFlags(pdriver, pin);
+  }
+  for (int m=0; m<pmy_mesh->nmb_total; ++m) {
+    if (pmy_mesh->lloc_eachmb[m].level > level) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Restart could not be derefined to physical level "
+                << level - pmy_mesh->root_level << "." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
+  pmy_mesh->max_level = level;
+  if (global_variable::my_rank == 0) {
+    std::cout << "Restart derefined from physical level "
+              << level_old - pmy_mesh->root_level << " to "
+              << level - pmy_mesh->root_level << ": " << nmb_old << " -> "
+              << pmy_mesh->nmb_total << " MeshBlocks" << std::endl;
+  }
+}
+
+//----------------------------------------------------------------------------------------
+//! \fn void MeshRefinement::ApplyRefineFlags()
+//! \brief Updates the tree from refine_flag, (de)refines and redistributes MeshBlocks and
+//! their data, and sets boundary conditions and timestep on the new mesh.
+
+void MeshRefinement::ApplyRefineFlags(Driver *pdriver, ParameterInput *pin) {
+  // update mesh tree if MeshBlock anywhere (on any rank) is flagged for refinement
   int nnew = 0, ndel = 0;
   UpdateMeshBlockTree(nnew, ndel);
 

@@ -457,6 +457,13 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   delete [] idlist;
   if (!adaptive) max_level = current_level;
 
+  // num_levels lowered on restart: level-indexed arrays assume no MeshBlock is finer than
+  // max_level, so keep the file's depth until Driver::Initialize derefines the mesh.
+  if (adaptive && current_level > max_level) {
+    restart_meta.derefine_to_level = max_level;
+    max_level = current_level;
+  }
+
   restart_meta.rank_eachmb.assign(nmb_total, 0);
   if (restart_meta.original_nranks > 0) {
     restart_meta.gids_eachrank.assign(restart_meta.original_nranks, 0);

@@ -87,6 +87,7 @@ struct RestartMetaData {
   std::uint64_t payload_stride = 0;
   int original_nranks = 0;
   int original_nnodes = 1;
+  int derefine_to_level = -1;  // >= 0: num_levels lowered, derefine in Driver::Initialize
   std::vector<int> gids_eachrank;
   std::vector<int> nmb_eachrank;
   std::vector<int> rank_eachmb;

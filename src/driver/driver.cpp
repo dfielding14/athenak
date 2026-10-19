@@ -311,6 +311,10 @@ void Driver::ExecuteTaskList(Mesh *pm, std::string tl, int stage) {
 void Driver::Initialize(Mesh *pmesh, ParameterInput *pin, Outputs *pout, bool res_flag) {
   //---- Step 1.  Set conserved variables in ghost zones for all physics
   InitBoundaryValuesAndPrimitives(pmesh);
+  // A restart deeper than num_levels is derefined before dt is set
+  if (res_flag && pmesh->restart_meta.derefine_to_level >= 0) {
+    pmesh->pmr->DerefineToLevel(this, pin, pmesh->restart_meta.derefine_to_level);
+  }
 
   //---- Step 2.  Compute time step (if problem involves time evolution)
   // NOTE: For new simulations (!res_flag), the initial conditions haven't been set yet
