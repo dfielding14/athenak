@@ -94,6 +94,12 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   exp_prl = pin->GetOrAddReal("turb_driving", "exp_prl", 0.0);
   // energy injection rate
   dedt = pin->GetOrAddReal("turb_driving", "dedt", 0.0);
+  if (!std::isfinite(dedt) || dedt < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<turb_driving>/dedt must be finite and non-negative."
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   // correlation time
   tcorr = pin->GetOrAddReal("turb_driving", "tcorr", 0.0);
   // update time for the turbulence driver
@@ -438,10 +444,13 @@ void TurbulenceDriver::Initialize() {
 
 void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
                                                   TaskID start) {
-  //  We check for mesh changes, then initialize modes and update the forcing
+  // Check for mesh changes and evolve the modes once per cycle. The Newtonian kick
+  // normalizes the forcing itself (AddForcing); only the relativistic source needs this.
   auto id_resize = tl->AddTask(&TurbulenceDriver::EnsureBasisSize, this, start);
   auto id_init   = tl->AddTask(&TurbulenceDriver::InitializeModes, this, id_resize);
-  auto id_add    = tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  if (pmy_pack->pcoord->is_special_relativistic) {
+    tl->AddTask(&TurbulenceDriver::UpdateForcing, this, id_init);
+  }
   return;
 }
 
@@ -452,21 +461,25 @@ void TurbulenceDriver::IncludeInitializeModesTask(std::shared_ptr<TaskList> tl,
 //  Called by MeshBlockPack::AddPhysics() function
 
 void TurbulenceDriver::IncludeAddForcingTask(std::shared_ptr<TaskList> tl, TaskID start) {
-  // These must be inserted after update task, but before the source terms
-  // We apply the forcing in each step of the time integration,
-  // note that we do not update the forcing in each RK stage
+  // The Newtonian kick follows the fluid update and source terms (and orbital remapping),
+  // before restriction and boundary exchange. The relativistic source keeps its original
+  // place between the update and the source terms.
+  bool sr = pmy_pack->pcoord->is_special_relativistic;
   if (pmy_pack->pionn == nullptr) {
     if (pmy_pack->phydro != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->phydro->id.rkupdt, pmy_pack->phydro->id.srctrms);
+      auto &id = pmy_pack->phydro->id;
+      tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                     sr ? id.rkupdt : id.recvu_oa, sr ? id.srctrms : id.restu);
     }
     if (pmy_pack->pmhd != nullptr) {
-      auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                              pmy_pack->pmhd->id.rkupdt, pmy_pack->pmhd->id.srctrms);
+      auto &id = pmy_pack->pmhd->id;
+      tl->InsertTask(&TurbulenceDriver::AddForcing, this,
+                     sr ? id.rkupdt : id.recvu_oa, sr ? id.srctrms : id.restu);
     }
   } else {
-    auto id = tl->InsertTask(&TurbulenceDriver::AddForcing, this,
-                            pmy_pack->pionn->id.n_rkupdt, pmy_pack->pionn->id.n_flux);
+    // both fluids finish their implicit update before the common kick
+    auto &id = pmy_pack->pionn->id;
+    tl->InsertTask(&TurbulenceDriver::AddForcing, this, id.impl, id.i_restu);
   }
   return;
 }
@@ -772,7 +785,8 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
   // perform operations such as normalisation,
   // momentum subtraction directly on the force array
 
-  if ((pm->ncycle >=1) && (current_time >= tdriv_start) &&
+  if ((!pmy_pack->pcoord->is_special_relativistic || pm->ncycle >= 1) &&
+      (current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1))
   {
     // Update the forcing and add momentum and energy only if the driving is continuous or t < tdriv_duration
@@ -909,19 +923,26 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
     Real m0 = t0;
     Real m1 = t1;
 
-    Real s;
+    Real s = 0.0;
     if (constant_edot) {
-      // 1/2 rho (s vdot dt)^2 / dt + rho (s vdot dt).v / dt = dedt
-      if (m1 >= 0) {
-        s = -m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
-      } else {
-        s = m1/2./m0 + sqrt(m1*m1/4./m0/m0 + dedt/m0);
+      // 1/2 rho (s vdot dt)^2 / dt + rho (s vdot dt).v / dt = dedt, i.e.
+      // m0*s^2 + m1*s = dedt: take the non-negative root without subtracting nearly
+      // equal numbers. Zero dedt disables forcing, including when it opposes the flow.
+      if (dedt > 0.0) {
+        Real disc = sqrt(m1*m1 + 4.0*m0*dedt);
+        s = (m1 >= 0.0) ? 2.0*dedt/(m1 + disc) : (disc - m1)/(2.0*m0);
       }
     } else {
       // 1/2 rho (s vdot dt)^2 / dt = dedt
       // s = sqrt(dedt * dt / (1/2 rho (vdot dt)^2))
       // s = sqrt(dedt / (1/2 rho vdot^2 dt))
       s = sqrt(dedt/m0);
+    }
+    if (!std::isfinite(s)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Non-finite turbulence forcing normalization; check the "
+                << "fluid state and forcing field." << std::endl;
+      std::exit(EXIT_FAILURE);
     }
     if (scale_forcing){
       par_for("force_norm", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
@@ -1008,10 +1029,21 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
     u0_ = (pmy_pack->pmhd->u0);
     w0 = (pmy_pack->phydro->w0);
     w0_ = (pmy_pack->pmhd->w0);
+    peos = pmy_pack->phydro->peos;  // u0 is the neutral fluid
     flag_twofl = true;
   }
+  bool second_ideal = flag_twofl && pmy_pack->pmhd->peos->eos_data.is_ideal;
 
   bool flag_relativistic = pmy_pack->pcoord->is_special_relativistic;
+  if (!flag_relativistic) {
+    // Newtonian forcing is one kick per step after the last stage's fluid update,
+    // normalized against the state being kicked.
+    // shortcut: first-order fluid/forcing splitting; use symmetric kicks if higher
+    // coupling accuracy is ever needed.
+    if (stage != pdrive->nexp_stages) return TaskStatus::complete;
+    UpdateForcing(pdrive, stage);
+    bdt = dt;
+  }
 
   auto force_ = force;
   const int nmkji = nmb*nx3*nx2*nx1;
@@ -1028,6 +1060,32 @@ TaskStatus TurbulenceDriver::AddForcing(Driver *pdrive, int stage) {
       Real a1 = force_(m,0,k,j,i);
       Real a2 = force_(m,1,k,j,i);
       Real a3 = force_(m,2,k,j,i);
+
+      if (!flag_relativistic) {
+        // dE = m.dv + rho|dv|^2/2 with the momentum before the kick, so the thermal
+        // energy is unchanged
+        Real dv1 = a1*bdt, dv2 = a2*bdt, dv3 = a3*bdt;
+        Real dv_sq = dv1*dv1 + dv2*dv2 + dv3*dv3;
+        Real den = u0(m,IDN,k,j,i);
+        if (eos.is_ideal) {
+          u0(m,IEN,k,j,i) += u0(m,IM1,k,j,i)*dv1 + u0(m,IM2,k,j,i)*dv2
+                           + u0(m,IM3,k,j,i)*dv3 + 0.5*den*dv_sq;
+        }
+        u0(m,IM1,k,j,i) += den*dv1;
+        u0(m,IM2,k,j,i) += den*dv2;
+        u0(m,IM3,k,j,i) += den*dv3;
+        if (flag_twofl) {
+          den = u0_(m,IDN,k,j,i);
+          if (second_ideal) {
+            u0_(m,IEN,k,j,i) += u0_(m,IM1,k,j,i)*dv1 + u0_(m,IM2,k,j,i)*dv2
+                              + u0_(m,IM3,k,j,i)*dv3 + 0.5*den*dv_sq;
+          }
+          u0_(m,IM1,k,j,i) += den*dv1;
+          u0_(m,IM2,k,j,i) += den*dv2;
+          u0_(m,IM3,k,j,i) += den*dv3;
+        }
+        return;
+      }
 
       Real den = w0(m,IDN,k,j,i);
       auto &ux = w0(m,IVX,k,j,i);
