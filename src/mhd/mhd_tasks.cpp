@@ -81,10 +81,12 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
   id.crecv = tl["after_stagen"]->AddTask(&MHD::ClearRecv, this, id.csend);
 
   // assemble "after_timeintegrator" task list: operator-split CGM cooling of the
-  // end-of-step state (ConToPrim set w0 in all cells), then dt from the cooled state
+  // end-of-step state in active cells; then restriction, ghost zones and primitives are
+  // refreshed as after a stage (AMR and the next fluxes read them), and dt recomputed
   if (psrc->cgm_cooling) {
     tl["after_timeintegrator"]->AddTask([this](Driver *pdrive, int) {
       psrc->CGMCoolingSplit(w0, u0, peos->eos_data, pmy_pack->pmesh->dt);
+      pdrive->InitBoundaryValuesAndPrimitives(pmy_pack->pmesh);
       return NewTimeStep(pdrive, pdrive->nexp_stages);
     }, none);
   }

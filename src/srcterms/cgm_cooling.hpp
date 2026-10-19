@@ -156,7 +156,10 @@ Real Psi(const Real u) {
 //! and dx. The net rate R(T) (CalculateRates at e = c_V*T) is taken linear in T between
 //! nodes T_k = 10^(Tbins(0) + k*dlogT), on which de/dt = -R integrates exactly: the
 //! Townsend (2009) scheme generalized as in Tan & Fielding (2023, App. C), simplified.
-//! T stays in [T_lo, T_hi]. Costs two rate evaluations plus one per node crossed.
+//! CalculateRates jumps at the table edges Tfloor (node 0) and Tceil (node N-1), so these
+//! are segment boundaries with one-sided rates; T rests on an edge if the rate beyond it
+//! pushes back. T stays in [T_lo, T_hi]. Costs about one rate evaluation per node
+//! crossed.
 template<typename View1D, typename View2D>
 KOKKOS_INLINE_FUNCTION
 Real IntegrateTemperature(const Real T0, const Real dt, const Real rho,
@@ -182,11 +185,20 @@ Real IntegrateTemperature(const Real T0, const Real dt, const Real rho,
   const Real logT_0 = Tbins(0);
   const Real dlogT = (Tbins(Tbins_DIM_0 - 1) - logT_0)/(Tbins_DIM_0 - 1);
   auto node = [&](const int k) { return pow(10.0, logT_0 + k*dlogT); };
+  // segment k lies below the table (k < 0), in it, or above it (k >= N-1); rates are
+  // taken on the segment's own side of the edges, with a margin against T->e->T round-off
+  auto side = [](const int k) { return (k < 0) ? 0 : ((k < Tbins_DIM_0 - 1) ? 1 : 2); };
+  auto side_rate = [&](const Real T, const int k) {
+    constexpr Real eps = 1.0e-12;
+    if (side(k) == 0) return rate(fmin(T, Tfloor*(1.0 - eps)));
+    if (side(k) == 2) return rate(fmax(T, Tceil*(1.0 + eps)));
+    return rate(fmin(fmax(T, Tfloor*(1.0 + eps)), Tceil*(1.0 - eps)));
+  };
 
   Real T = fmin(fmax(T0, T_lo), T_hi);
   int k = static_cast<int>(floor((log10(T) - logT_0)/dlogT));  // T in [T_k, T_k+1]
   Real Ta = node(k), Tb = node(k + 1);
-  Real Ra = rate(Ta), Rb = rate(Tb);
+  Real Ra = side_rate(Ta, k), Rb = side_rate(Tb, k);
   Real R0 = Ra + (Rb - Ra)/(Tb - Ta)*(T - Ta);
   Real rem = dt;
   while (R0 != 0.0) {
@@ -201,14 +213,24 @@ Real IntegrateTemperature(const Real T0, const Real dt, const Real rho,
         rem -= te;
         T = Te;
         if (down ? (Ta <= T_lo) : (Tb >= T_hi)) break;  // at the floor or the cap
+        const int kn = down ? k - 1 : k + 1;
+        if (side(kn) != side(k)) {
+          // crossing a table edge: re-evaluate both ends on the new side, and rest on the
+          // edge if the rate there pushes T back
+          k = kn;
+          Ta = node(k); Tb = node(k + 1);
+          Ra = side_rate(Ta, k); Rb = side_rate(Tb, k);
+          R0 = down ? Rb : Ra;
+          if (down ? (R0 <= 0.0) : (R0 >= 0.0)) break;
+          continue;
+        }
+        k = kn;
         if (down) {
-          --k;
           Tb = Ta; Rb = Ra;
-          Ta = node(k); Ra = rate(Ta);
+          Ta = node(k); Ra = side_rate(Ta, k);
         } else {
-          ++k;
           Ta = Tb; Ra = Rb;
-          Tb = node(k + 1); Rb = rate(Tb);
+          Tb = node(k + 1); Rb = side_rate(Tb, k);
         }
         R0 = Re;  // exact node value, so round-off cannot flip the direction
         continue;

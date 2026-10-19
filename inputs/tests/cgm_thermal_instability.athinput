@@ -1,0 +1,87 @@
+# Thermal-instability test of the CGM cooling, built with
+#   -D PROBLEM=cgm_cooling_flow_tests/cgm_thermal_instability
+# 2D periodic box at nH = 100 cm^-3, T = 3000 K (isobarically unstable branch), seeded with
+# one isobaric mode, lambda = L/4 ~ lambda_cool/8. The pgen sets hrate so the background is
+# an exact equilibrium and prints the predicted isobaric growth rate.
+# Units: length pc, time Myr, density m_p cm^-3.
+
+<job>
+basename = cgm_ti
+
+<mesh>
+nghost = 2
+nx1    = 128
+x1min  = 0.0
+x1max  = 0.3
+ix1_bc = periodic
+ox1_bc = periodic
+nx2    = 128
+x2min  = 0.0
+x2max  = 0.3
+ix2_bc = periodic
+ox2_bc = periodic
+nx3    = 1
+x3min  = -0.5
+x3max  = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 32
+nx2 = 32
+nx3 = 1
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 2.0
+ndiag      = 1000
+
+<hydro>
+eos           = ideal
+reconstruct   = plm
+rsolver       = hllc
+gamma         = 1.66666666667
+nscalars      = 1           # metallicity
+tfloor        = 0.1392517   # 10 K
+cgm_cooling   = true
+hrate         = 1.0e-30     # replaced by the pgen to make (nH0, T0) an equilibrium
+hscale_norm   = 1.0
+hscale_radius = 1.0e9       # uniform heating
+hscale_height = 1.0e9
+T_max         = 1.0e8
+cgm_cooling_limit_dt = false  # true + small cgm_cooling_dt_frac: reference runs
+cgm_cooling_dt_frac  = 0.5
+
+<problem>
+user_hist   = true          # mode amplitude, cold mass and volume
+nH0         = 100.0
+T0          = 3000.0
+metallicity = 0.0066666667  # Zsol/3
+mode_x      = 4
+mode_y      = 0
+amp         = 1.0e-3
+noise       = 0.0
+seed        = 1
+T_cold      = 1000.0
+balance     = true          # false: keep <hydro>/hrate (a cooling medium)
+churn_speed = 0.0           # > 0: refine a band in x1 moving at this speed (needs AMR)
+churn_width = 0.0           # half width of that band
+
+<units>
+length_cgs = 3.0856775809623245e+18  # pc
+mass_cgs   = 4.91416144649125e+31    # m_p pc^3
+time_cgs   = 3.15576e+13             # Myr
+mu         = 0.62
+
+<output1>
+file_type   = hst
+dt          = 0.002
+data_format = %.10e
+
+<output2>
+file_type = bin
+variable  = hydro_w
+dt        = 0.25

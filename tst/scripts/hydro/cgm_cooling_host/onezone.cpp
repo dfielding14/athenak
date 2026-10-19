@@ -49,21 +49,27 @@ int main() {
   const Real nHfloor = pow(10.0, nHbins_ARR[0]);
   const Real nHceil = pow(10.0, nHbins_ARR[nHbins_DIM_0 - 1]);
 
-  struct Case { Real nH, x1, T0, dt_yr, T_ref; };  // nH [cm^-3], x1 [kpc], T [K]
+  // nH [cm^-3], Z (metal mass fraction), x1 [kpc], T [K]
+  struct Case { Real nH, Z, x1, T0, dt_yr, T_ref; };
   const Case cases[] = {
-    {100.0, 3.0, 1.0e5, 300.0, 1.154e4},   // stiff: t_cool ~ 64 yr
-    {10.0, 3.0, 1.0e6, 3.0e4, 1.061e4},
-    {62.4, 0.0, 2.0e4, 1.0e4, 1.003e4},
-    {1.0e-3, 50.0, 150.0, 1.0e6, 1084.0},  // photoheated from below the table
-    {1.0e-3, 50.0, 150.0, 1.0e8, 1.023e4}, // ... up to equilibrium
-    {1.0e-2, 3.0, 1.0e6, 300.0, 1.0e6},    // t_cool >> dt
+    {100.0, metallicity, 3.0, 1.0e5, 300.0, 1.154e4},   // stiff: t_cool ~ 64 yr
+    {10.0, metallicity, 3.0, 1.0e6, 3.0e4, 1.061e4},
+    {62.4, metallicity, 0.0, 2.0e4, 1.0e4, 1.003e4},
+    {1.0e-3, metallicity, 50.0, 150.0, 1.0e6, 1084.0},  // photoheated from below the table
+    {1.0e-3, metallicity, 50.0, 150.0, 1.0e8, 1.023e4}, // ... up to equilibrium
+    {1.0e-2, metallicity, 3.0, 1.0e6, 300.0, 1.0e6},    // t_cool >> dt
+    // the 100 K table edge, where CalculateRates switches to the low-T fit (no UVB)
+    {1.0e-4, 0.006, 50.0, 99.0, 1.0e6, 98.99997},       // just below: stays put
+    {1.0e-4, 0.006, 50.0, 101.0, 1.0e6, 353.4144},      // just above: photoheated
+    {100.0, metallicity, 50.0, 150.0, 1.0e5, 30.50961}, // cools down across the edge
+    {1.0, metallicity, 3.0, 50.0, 1.0e5, 407.6917},     // heats up across the edge
   };
 
   int nfail = 0;
   for (const Case &c : cases) {
     const Real rho = c.nH/(0.75*nH_unit);  // nH = X*nH_unit*rho, as in CalculateRates
     const Real T1 = cgm_cooling::IntegrateTemperature(
-        c.T0, c.dt_yr*yr_cgs/time_cgs, rho, metallicity, c.x1, 0.0, 0.0, dx1, gm1,
+        c.T0, c.dt_yr*yr_cgs/time_cgs, rho, c.Z, c.x1, 0.0, 0.0, dx1, gm1,
         temp_unit, nH_unit, cooling_unit, heating_unit, length_unit, h_rate, h_norm,
         h_height, h_radius, T_lo, T_hi, Tfloor, Tceil, nHfloor, nHceil, Tbins, nHbins,
         Metal, H_He, Metal_CIE, H_He_CIE);

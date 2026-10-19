@@ -1,0 +1,83 @@
+# AMR consistency test of the operator-split CGM cooling, built with
+#   -D PROBLEM=cgm_cooling_flow_tests/cgm_thermal_instability
+# A uniform 1e6 K, nH = 1 cm^-3 medium cools (no heating) while a refined band sweeps
+# across the box, so MeshBlocks refine and derefine every few cycles. T has no dx
+# dependence above ~2e4 K, so every cell must keep the same temperature: the spread
+# max/min(eint/dens) - 1 in the hydro_w outputs stays at round-off. If cooling is not
+# followed by restriction (coarse_u0), derefined blocks lag by a step (~1% here).
+# Units: length pc, time Myr, density m_p cm^-3.
+
+<job>
+basename = cgm_churn
+
+<mesh>
+nghost = 2
+nx1    = 64
+x1min  = 0.0
+x1max  = 100.0
+ix1_bc = periodic
+ox1_bc = periodic
+nx2    = 64
+x2min  = 0.0
+x2max  = 100.0
+ix2_bc = periodic
+ox2_bc = periodic
+nx3    = 1
+x3min  = -0.5
+x3max  = 0.5
+ix3_bc = periodic
+ox3_bc = periodic
+
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 1
+
+<mesh_refinement>
+refinement          = adaptive
+num_levels          = 2
+refinement_interval = 1
+max_nmb_per_rank    = 64
+
+<time>
+evolution  = dynamic
+integrator = rk2
+cfl_number = 0.3
+nlim       = -1
+tlim       = 0.1
+ndiag      = 10
+
+<hydro>
+eos           = ideal
+reconstruct   = plm
+rsolver       = hllc
+gamma         = 1.66666666667
+nscalars      = 1           # metallicity
+tfloor        = 0.1392517   # 10 K
+cgm_cooling   = true
+hrate         = 0.0         # pure cooling
+hscale_norm   = 1.0
+hscale_radius = 1.0e9
+hscale_height = 1.0e9
+T_max         = 1.0e8
+
+<problem>
+nH0         = 1.0
+T0          = 1.0e6
+metallicity = 0.0066666667  # Zsol/3
+amp         = 0.0
+noise       = 0.0
+balance     = false         # keep hrate = 0
+churn_speed = 1000.0        # the band crosses the box once per 0.1 Myr
+churn_width = 15.0          # refines one or two columns of root blocks
+
+<units>
+length_cgs = 3.0856775809623245e+18  # pc
+mass_cgs   = 4.91416144649125e+31    # m_p pc^3
+time_cgs   = 3.15576e+13             # Myr
+mu         = 0.62
+
+<output1>
+file_type = bin
+variable  = hydro_w
+dt        = 0.025

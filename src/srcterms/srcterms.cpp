@@ -272,18 +272,17 @@ void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 //! \fn void SourceTerms::CGMCoolingSplit()
 //! \brief Operator-split CGM cooling/heating, applied once per step after the RK stages.
 //! Integrates T exactly over dt (cgm_cooling::IntegrateTemperature), clamped to
-//! [tfloor, T_max], and adds the energy change to both w0 and u0. Ghost cells are
-//! included, so they stay consistent without another boundary exchange.
+//! [tfloor, T_max], and adds the energy change to u0 in active cells. The caller must
+//! then refresh coarse_u0, ghost zones and primitives (InitBoundaryValuesAndPrimitives).
 void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
                                   const EOS_Data &eos_data, const Real dt) {
   auto &indcs = pmy_pack->pmesh->mb_indcs;
-  int is = indcs.is, js = indcs.js, ks = indcs.ks;
+  int is = indcs.is, ie = indcs.ie;
+  int js = indcs.js, je = indcs.je;
+  int ks = indcs.ks, ke = indcs.ke;
   int nx1 = indcs.nx1;
   int nx2 = indcs.nx2;
   int nx3 = indcs.nx3;
-  int n1m1 = nx1 + 2*indcs.ng - 1;
-  int n2m1 = (nx2 > 1)? (nx2 + 2*indcs.ng - 1) : 0;
-  int n3m1 = (nx3 > 1)? (nx3 + 2*indcs.ng - 1) : 0;
   auto &size = pmy_pack->pmb->mb_size;
   int nmb1 = pmy_pack->nmb_thispack - 1;
   Real gm1 = eos_data.gamma - 1.0;
@@ -317,7 +316,7 @@ void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
   Real T_lo = fmax(eos_data.tfloor, FLT_MIN)*temp_unit;
   Real T_max_ = T_max;
 
-  par_for("cgm_cooling_split", DevExeSpace(), 0, nmb1, 0, n3m1, 0, n2m1, 0, n1m1,
+  par_for("cgm_cooling_split", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const Real x1min = size.d_view(m).x1min, x1max = size.d_view(m).x1max;
     const Real x2min = size.d_view(m).x2min, x2max = size.d_view(m).x2max;
@@ -336,9 +335,7 @@ void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
         h_height, h_radius, T_lo, T_max_, Tfloor, Tceil, nHfloor, nHceil, Tbins_,
         nHbins_, Metal_Cooling_, H_He_Cooling_, Metal_Cooling_CIE_, H_He_Cooling_CIE_);
 
-    const Real de = c_V*(T1 - T0);
-    w0(m,IEN,k,j,i) += de;
-    u0(m,IEN,k,j,i) += de;
+    u0(m,IEN,k,j,i) += c_V*(T1 - T0);
   });
 
   return;
