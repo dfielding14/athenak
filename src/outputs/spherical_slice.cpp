@@ -479,7 +479,7 @@ void SphericalSliceOutput::LoadOutputData(Mesh *pm) {
 //   per-rank mode:  <P int32 angle indices a> <nv * P float32 values>  (var-major)
 //                   recover (it, ip) via it = a/nphi, ip = a%nphi
 
-void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   int ntheta = psph->ntheta;
   int nphi = psph->nphi;
   Real radius = psph->radius;
@@ -565,12 +565,15 @@ void SphericalSliceOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::fclose(pfile);
   }
 
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+
 }

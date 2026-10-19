@@ -38,8 +38,6 @@ ParticleRestartOutput::ParticleRestartOutput(ParameterInput *pin, Mesh *pm,
     size_t last_period = prst_fname.rfind('.');
     std::string outnumber_str = prst_fname.substr(last_period-5,5);
     int outnumber = std::stoi(outnumber_str);
-    out_params.file_number = outnumber + 1;
-    out_params.last_time = pm->time;
   }
 
 }
@@ -79,20 +77,22 @@ void ParticleRestartOutput::LoadOutputData(Mesh *pm) {
 // ParticleRestartOutput::WriteOutputFile()
 // Writes particle restart file for this rank
 
-void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   std::string fname;
   char number[7];
   std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
   fname = std::string("rst_prtcl/") + out_params.file_basename + number + ".rst_prtcl";         
   // increment counters for next output
-  out_params.file_number++;
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    out_params.file_number++;
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetInteger(out_params.block_name, "file_number", out_params.file_number);
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
 
   // Gather particle counts from all ranks
   std::vector<int> nprtcl_eachrank(global_variable::nranks);
@@ -116,34 +116,28 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   nrdata = max_nrdata;
   nidata = max_nidata;
 
-  // Rank 0 creates file
+  // All ranks open the file collectively for writing (no append — avoids MPI
+  // append-mode locking that causes hangs at scale on parallel filesystems).
+  IOWrapper prtcl_file;
+  prtcl_file.Open(fname.c_str(), IOWrapper::FileMode::write);
+
+  // Rank 0 writes the header through the shared file handle.
   if (global_variable::my_rank == 0) {
-    FILE *pfile;
-    if ((pfile = std::fopen(fname.c_str(),"wb")) == nullptr) {
-      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-        << std::endl << "Restart file '" << fname << "' could not be opened" << std::endl;
-      exit(EXIT_FAILURE);
-    }
-    
-    std::fwrite(&(pm->time), sizeof(Real), 1, pfile);
-    std::fwrite(&(pm->ncycle), sizeof(int), 1, pfile);
-    std::fwrite(&total_particles, sizeof(int), 1, pfile);
-    
+    prtcl_file.Write_any_type(&(pm->time), 1, "Real");
+    prtcl_file.Write_any_type(&(pm->ncycle), 1, "int");
+    prtcl_file.Write_any_type(&total_particles, 1, "int");
     if (total_particles > 0) {
-      std::fwrite(&nrdata, sizeof(int), 1, pfile);
-      std::fwrite(&nidata, sizeof(int), 1, pfile);
+      prtcl_file.Write_any_type(&nrdata, 1, "int");
+      prtcl_file.Write_any_type(&nidata, 1, "int");
     }
-    
-    std::fclose(pfile);
   }
 
-  // All ranks open the file with IOWrapper in append mode
+  // Header size is fully determined by the writes above — no GetPosition() needed.
+  std::size_t header_offset = sizeof(Real) + 2*sizeof(int);
   if (total_particles > 0) {
-    IOWrapper prtcl_file;
-    prtcl_file.Open(fname.c_str(), IOWrapper::FileMode::append);
-    std::size_t header_offset = prtcl_file.GetPosition();
+    header_offset += 2*sizeof(int);
 
-    // Calculate displacements
+    // Calculate prefix-sum displacements for each rank's particle data.
     int my_rdata_offset = 0;
     int my_idata_offset = 0;
     for (int i = 0; i < global_variable::my_rank; ++i) {
@@ -154,7 +148,7 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     std::size_t rdata_start = header_offset;
     std::size_t idata_start = header_offset + total_particles * nrdata * sizeof(Real);
 
-    // Each rank writes its own data at computed offset
+    // Each rank writes its own data at computed offset.
     if (nprtcl_thisrank > 0) {
       // Transpose rdata to row-major for writing
       std::vector<Real> rdata_transposed(nprtcl_thisrank * nrdata);
@@ -163,7 +157,7 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
           rdata_transposed[p * nrdata + i] = outpart_rdata(i, p);
         }
       }
-  
+
       // Transpose idata to row-major for writing
       std::vector<int> idata_transposed(nprtcl_thisrank * nidata);
       for (int p = 0; p < nprtcl_thisrank; ++p) {
@@ -175,13 +169,13 @@ void ParticleRestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       prtcl_file.Write_any_type_at(rdata_transposed.data(),
                                    nprtcl_thisrank * nrdata,
                                    rdata_start + my_rdata_offset * sizeof(Real),
-				   "double");
+                                   "double");
       prtcl_file.Write_any_type_at(idata_transposed.data(),
                                    nprtcl_thisrank * nidata,
-				   idata_start + my_idata_offset * sizeof(int),
+                                   idata_start + my_idata_offset * sizeof(int),
                                    "int");
     }
-
-    prtcl_file.Close();
   }
+
+  prtcl_file.Close();
 }

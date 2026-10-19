@@ -339,11 +339,12 @@ void CoarsenedBinaryOutput::LoadOutputData(Mesh *pm) {
 //  \brief Cycles over all MeshBlocks and writes OutputData in Coarsenedbinary format
 //   All MeshBlocks are written to the same file.
 
-void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void CoarsenedBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   // check if slicing
   bool bin_slice = (out_params.slice1 || out_params.slice2 || out_params.slice3 ||
                     out_params.gid >= 0);
   auto AdvanceOutputCounters = [&]() {
+    if (is_final) return;
     out_params.file_number++;
     if (out_params.last_time < 0.0) {
       out_params.last_time = pm->time;

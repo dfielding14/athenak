@@ -112,6 +112,7 @@ namespace {
   Real m_ej;
   Real Z_ej;
   Real sn_delay;
+  bool sn_feedback_enabled = false;
 
   // Constants for dust
   Real d_z_init;
@@ -208,15 +209,31 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   v_circ    = pin->GetReal("problem", "v_circ");
   Z         = pin->GetOrAddReal("problem", "metallicity", 1.0/3);
 
-  // Read in SN injection radius and compute energy and mass injection densities
-  r_inj = pin->GetReal("SN","r_inj"); // Input in code unis
-  const Real sphere_vol = (4.0/3.0)*M_PI*std::pow(r_inj,3);
-  const Real E_def = 1e51; // Default 10^51 ergs
-  const Real M_def = 8.4;  // Default 8.4 solar masses
-  e_sn  = pin->GetOrAddReal("SN","E_sn",E_def)*pmbp->punit->erg()/sphere_vol;
-  m_ej  = pin->GetOrAddReal("SN","M_ej",M_def)*pmbp->punit->msun()/sphere_vol;
-  Z_ej  = pin->GetOrAddReal("SN","Z_ej",0.1);
-  sn_delay = pin->GetOrAddReal("SN","delay",0.0);
+  // Supernova feedback is optional and enabled by the presence of an <SN> block.
+  // Particle modules remain independent when no <SN> block is present.
+  sn_feedback_enabled = pin->DoesBlockExist("SN");
+  r_inj = 0.0;
+  e_sn = 0.0;
+  m_ej = 0.0;
+  Z_ej = 0.0;
+  sn_delay = 0.0;
+  if (sn_feedback_enabled) {
+    if (pmbp->ppart == nullptr) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl
+                << "GOTHAM supernova feedback requires a <particles> block."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    r_inj = pin->GetReal("SN", "r_inj");
+    const Real sphere_vol = (4.0/3.0)*M_PI*std::pow(r_inj, 3);
+    const Real E_def = 1e51; // Default 10^51 ergs
+    const Real M_def = 8.4;  // Default 8.4 solar masses
+    e_sn = pin->GetOrAddReal("SN", "E_sn", E_def)*pmbp->punit->erg()/sphere_vol;
+    m_ej = pin->GetOrAddReal("SN", "M_ej", M_def)*pmbp->punit->msun()/sphere_vol;
+    Z_ej = pin->GetOrAddReal("SN", "Z_ej", 0.1);
+    sn_delay = pin->GetOrAddReal("SN", "delay", 0.0);
+  }
 
   // Set passive scalar indices
   const bool use_mhd = (pmbp->pmhd != nullptr);
@@ -299,14 +316,19 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     std::cout << "metallicity         : " << Z                    << std::endl;
     std::cout << "ddens_threshold     : " << ddens_threshold      << std::endl;
     std::cout << std::endl;
-    std::cout << "==============================================" << std::endl;
-    std::cout << "Supernova Parameters                          " << std::endl;
-    std::cout << "==============================================" << std::endl;
-    std::cout << "r_inj               : " << r_inj                << std::endl;
-    std::cout << "e_sn                : " << e_sn                 << std::endl;
-    std::cout << "m_ej                : " << m_ej                 << std::endl;
-    std::cout << "Z_ej                : " << Z_ej                 << std::endl;
-    std::cout << std::endl;
+    if (sn_feedback_enabled) {
+      std::cout << "==============================================" << std::endl;
+      std::cout << "Supernova Parameters                          " << std::endl;
+      std::cout << "==============================================" << std::endl;
+      std::cout << "r_inj               : " << r_inj                << std::endl;
+      std::cout << "e_sn                : " << e_sn                 << std::endl;
+      std::cout << "m_ej                : " << m_ej                 << std::endl;
+      std::cout << "Z_ej                : " << Z_ej                 << std::endl;
+      std::cout << std::endl;
+    } else {
+      std::cout << "Supernova feedback  : disabled (<SN> block absent)" << std::endl;
+      std::cout << std::endl;
+    }
     std::cout << "==============================================" << std::endl;
     std::cout << "Dust Parameters                               " << std::endl;
     std::cout << "==============================================" << std::endl;
@@ -383,13 +405,17 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     }
   }
 
-  // Count total particles and initialize SN event buffer
-  pmy_mesh_->CountParticles();
-  sn_events_buffer = DvceArray2D<Real>("sn_events_buffer", 6, pmy_mesh_->nprtcl_total);
-  sn_counter = Kokkos::View<int>("sn_counter");
-  if (global_variable::my_rank==0) {
-    std::cout << "Successfully initialized " << pmy_mesh_->nprtcl_total
-              << " particles!" << std::endl;
+  // Allocate event storage only when supernova feedback is active.
+  if (sn_feedback_enabled) {
+    pmy_mesh_->CountParticles();
+    sn_events_buffer = DvceArray2D<Real>("sn_events_buffer", 6, pmy_mesh_->nprtcl_total);
+    sn_counter = Kokkos::View<int>("sn_counter");
+    last_sn_detect_cycle = -1;
+    num_sn_this_cycle = 0;
+    if (global_variable::my_rank == 0) {
+      std::cout << "Successfully initialized " << pmy_mesh_->nprtcl_total
+                << " particles for supernova feedback!" << std::endl;
+    }
   }
 
   if (restart) return;
@@ -1163,7 +1189,7 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
 void UserSource(Mesh* pm, const Real bdt) {
   GravitySource(pm, bdt);
   DustSource(pm, bdt);
-  SNSource(pm, bdt);
+  if (sn_feedback_enabled) SNSource(pm, bdt);
   return;
 }
 
@@ -1262,6 +1288,8 @@ Real GravPot(Real x1, Real x2, Real x3,
 }
 
 void SNSource(Mesh* pm, const Real bdt) {
+  if (!sn_feedback_enabled) return;
+
   MeshBlockPack *pmbp = pm->pmb_pack;
   auto &indcs = pm->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
@@ -2109,6 +2137,7 @@ void RefinementCondition(MeshBlockPack* pmbp) {
 
 void FreeProfile(ParameterInput *pin, Mesh *pm) {
   // Free Kokkos views before Kokkos::finalize is called
+  sn_feedback_enabled = false;
   profile_reader = ProfileReader();
   disk_profile_reader = ProfileReader();
   sn_events_buffer = DvceArray2D<Real>();

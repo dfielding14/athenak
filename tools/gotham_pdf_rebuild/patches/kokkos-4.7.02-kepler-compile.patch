@@ -1,0 +1,12 @@
+diff --git a/core/src/Cuda/Kokkos_Cuda_KernelLaunch.hpp b/core/src/Cuda/Kokkos_Cuda_KernelLaunch.hpp
+index 61b890089..237946b63 100644
+--- a/core/src/Cuda/Kokkos_Cuda_KernelLaunch.hpp
++++ b/core/src/Cuda/Kokkos_Cuda_KernelLaunch.hpp
+@@ -234,7 +234,6 @@ inline void configure_shmem_preference(const CudaInternal* cuda_instance,
+ #else
+   // Use the parameters so we don't get a warning
+   (void)func;
+-  (void)device_props;
+   (void)block_size;
+   (void)occupancy;
+ #endif

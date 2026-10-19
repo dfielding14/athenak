@@ -68,7 +68,7 @@ void EventLogOutput::LoadOutputData(Mesh *pm) {
 //! \fn void EventLogOutput::WriteOutputFile()
 //! \brief writes event counter data to log file
 
-void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   if (header_written && no_output) return;
 
   // only the master rank writes the file
@@ -121,11 +121,14 @@ void EventLogOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   pm->ecounter.nfofc = 0;
 
   // increment output time, clean up
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
+
   return;
 }

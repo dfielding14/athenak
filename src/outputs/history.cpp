@@ -327,7 +327,7 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
 //! \fn void HistoryOutput::WriteOutputFile()
 //  \brief Cycles through hist_data vector and writes history file for each component
 
-void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   for (auto &data : hist_data) {
     // first, perform in-place sum over all MPI ranks
 #if MPI_PARALLEL_ENABLED
@@ -395,11 +395,13 @@ void HistoryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   } // End loop over hist_data vector
 
   // increment counters, clean up
-  if (out_params.last_time < 0.0) {
-    out_params.last_time = pm->time;
-  } else {
-    out_params.last_time += out_params.dt;
+  if (!is_final) {
+    if (out_params.last_time < 0.0) {
+      out_params.last_time = pm->time;
+    } else {
+      out_params.last_time += out_params.dt;
+    }
+    pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   }
-  pin->SetReal(out_params.block_name, "last_time", out_params.last_time);
   return;
 }

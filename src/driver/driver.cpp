@@ -501,18 +501,20 @@ void Driver::Execute(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
 
 void Driver::Finalize(Mesh *pmesh, ParameterInput *pin, Outputs *pout) {
   // cycle through output Types and load data / write files
-  //  This design allows for asynchronous outputs to implemented in the future.
+  // This design allows for asynchronous outputs to implemented in the future.
   Kokkos::fence();
   double load_time = 0.0;
   double write_time = 0.0;
 
   for (auto &out : pout->pout_list) {
+    if (out->out_params.file_type != "rst" &&
+        out->out_params.file_type != "rst_prtcl") continue;
     Kokkos::Timer load_timer;
     out->LoadOutputData(pmesh);
     Kokkos::fence();
     load_time += load_timer.seconds();
     Kokkos::Timer write_timer;
-    out->WriteOutputFile(pmesh, pin);
+    out->WriteOutputFile(pmesh, pin, true);
     Kokkos::fence();
     write_time += write_timer.seconds();
   }

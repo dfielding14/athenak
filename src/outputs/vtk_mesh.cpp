@@ -52,7 +52,7 @@ MeshVTKOutput::MeshVTKOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
 //!  4. Dataset structure, including type and dimensions of data, and coordinates.
 //!  5. Data.  An arbitrary number of scalars and vectors can be written
 
-void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
+void MeshVTKOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin, bool is_final) {
   int big_end = IsBigEndian(); // =1 on big endian machine
   // create filename: "vtk/file_basename"."file_id"."gid"."XXXXX".vtk
   // where XXXXX = 5-digit file_number, and gid only added if specified
