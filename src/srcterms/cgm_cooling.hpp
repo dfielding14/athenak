@@ -45,12 +45,13 @@ CGMCoolingResult CalculateRates(const Real rho, const Real eint, const Real meta
   const Real nH = X*nH_unit*rho;
   const Real Z = metallicity/Zsol;
   const Real log_temp = log10(temp);
-  const Real log_nH = log10(nH);
+  // Above the table's top row (nH = 1) reuse that row: PIE has converged to CIE there.
+  const Real log_nH = fmin(log10(nH), log10(nHceil));
 
   const Real m_cap = (temp >= T_max) ? 1.0 : 0.0;
   const Real m_lowT = (temp < Tfloor) ? 1.0 : 0.0;
   const Real m_Tin = (temp >= Tfloor && temp <= Tceil) ? 1.0 : 0.0;
-  const Real m_Nin = (nH >= nHfloor && nH <= nHceil) ? 1.0 : 0.0;
+  const Real m_Nin = (nH >= nHfloor) ? 1.0 : 0.0;
   const Real m_PIE = m_Tin*m_Nin;
   const Real m_CIE = m_Tin;
 
