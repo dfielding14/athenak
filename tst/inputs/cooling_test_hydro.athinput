@@ -109,6 +109,8 @@ timestep_density_max = 1.0
 history = true
 history_gross = true
 history_net = true
+integrator = explicit
+exact_dlogT = 0.001
 
 <output1>
 file_type = hst

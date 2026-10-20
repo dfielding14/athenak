@@ -119,8 +119,8 @@ void SourceTerms::ApplySrcTerms(const DvceArray5D<Real> &w0, const EOS_Data &eos
                                 DvceArray5D<Real> &u0) {
   // NOTE source terms must be computed using primitive (w0) and NOT conserved (u0) vars
   if (const_accel) ConstantAccel(w0, eos_data,  bdt, u0);
-  if (pcooling != nullptr && pcooling->Enabled()) {
-    pcooling->Apply(w0, eos_data, bdt, history_bdt, u0);
+  if (pcooling != nullptr && pcooling->Enabled() && !pcooling->Exact()) {
+    pcooling->Apply(w0, eos_data, bdt, history_bdt, u0);  // exact: after the stages
   }
   if (rel_cooling) RelCooling(w0, eos_data, bdt, u0);
   return;
@@ -203,6 +203,15 @@ void SourceTerms::RelCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 
 bool SourceTerms::CoolingHistoryEnabled() const {
   return (pcooling != nullptr && pcooling->HistoryEnabled());
+}
+
+bool SourceTerms::ExactCooling() const {
+  return (pcooling != nullptr && pcooling->Exact());
+}
+
+void SourceTerms::ApplyExactCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
+                                    const Real dt, DvceArray5D<Real> &u0) {
+  if (pcooling != nullptr) pcooling->ApplyExact(w0, eos, dt, u0);
 }
 
 int SourceTerms::AddCoolingHistoryLabels(std::string *labels, int start,

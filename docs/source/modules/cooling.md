@@ -52,6 +52,7 @@ where `q_cool` and `q_heat` are selected by `cooling_density` and
 | CGS temperature axis or cgs timestep temperature bounds | Add a `<units>` block and provide `temperature_mu` or `mu`. |
 | Passive-scalar/metallicity table axis | Compile/run with enough passive scalars and set `scalar_index=N` on that axis. |
 | Cooling timestep limit | Set `timestep=true`, `timestep_factor`, and explicit bound booleans/units if filtering cells. |
+| Cooling time shorter than `dt` | Set `integrator=exact` (and optionally `exact_dlogT`); no cooling timestep limit is needed for stability. |
 | History rates | Set `history=true`; `cool_gross` and `cool_net` are interval-integrated rates. |
 | Pgen-defined cooling | Set `cooling_model=user` or `heating_model=user`, then register the user cooling hooks from the pgen. |
 
@@ -245,6 +246,45 @@ timestep_density_max = 1.0e2
 
 There are no sentinel values such as `-1` for disabled bounds.
 
+## Time Integration
+
+By default (`integrator = explicit`) cooling and heating are applied in every RK
+stage, like the other source terms. That is accurate while `dt` resolves the
+cooling time and unstable once it does not, which is what `timestep = true` guards
+against. Alternatively,
+
+```text
+integrator = exact
+exact_dlogT = 0.001  # node spacing in log10 T (default)
+```
+
+integrates the energy equation exactly over each step at fixed density, once per
+step after the RK stages (operator splitting); restriction, ghost zones and
+primitives are then refreshed before outputs, AMR and the next step. The net rate is
+taken linear in T between nodes spaced `exact_dlogT` apart in log10 T (T in K with
+a `<units>` block, code units otherwise), where the solution is exact: T relaxes
+onto equilibria without overshooting them at any `dt`/t_cool (Townsend 2009,
+generalized to net heating and cooling as in Tan & Fielding 2023, App. C). The
+temperature edges of the tables in use, and the switch of the `ism` fit at
+10^4.2 K, are moved onto nodes, so rate jumps there are exact; for example, gas
+cooling onto a `bounds = zero` table edge against heating stays on the edge.
+`cool_net` is the exact energy change and `cool_gross` the exact time integral of
+the piecewise-linear cooling rate.
+
+Things to know:
+
+- The splitting is first order in `dt`: in condensing gas, cooling leads the hydro
+  response by about half a step.
+- Rates are interpolated to O(`exact_dlogT`^2), about 1e-4 relative or better at
+  the default spacing even for log-slopes of 10. In an isobaric
+  thermal-instability test with power-law cooling the growth rate is within 0.1%
+  of the analytic value.
+- A cell costs two rate evaluations per node interval its temperature crosses in
+  a step, so gas that cools through decades in one step is the expensive case
+  (`exact_dlogT = 0.01` is ten times cheaper there); every step also does one
+  extra boundary exchange.
+- `cooling_model = user` and `heating_model = user` are not supported.
+
 ## History Output
 
 When `history = true`, the standard Hydro or MHD history output gets interval
@@ -341,6 +381,10 @@ The suite covers:
 - Cooling history disabled mode.
 - Table bounds behavior for `zero` and `clamp`.
 - Cooling timestep control and temperature-bound exclusion.
+- `integrator=exact`: stiff linear cooling and relaxation to a heating equilibrium
+  against analytic solutions (energy and history), gas resting on a `bounds=zero`
+  table edge, the MHD path, and clean failures for unknown integrators and user
+  models.
 - Nontrivial CGS density conversion for total number density and hydrogen
   number density.
 - Runtime scalar-axis selection and clean failure for invalid scalar indices.
