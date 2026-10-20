@@ -242,7 +242,10 @@ void Particles::InitializeStars(ParameterInput *pin) {
   auto &pr = prtcl_rdata;
   Real unit_time = pmy_pack->punit->time_cgs();
 
-  Real sn_delay = pin->GetReal("SN","delay");
+  // <SN> is optional (gotham runs without feedback). Do not GetOrAdd here: particles are
+  // built before the pgen, and creating <SN> would switch supernova feedback on there.
+  Real sn_delay = 0.0;
+  if (pin->DoesParameterExist("SN","delay")) sn_delay = pin->GetReal("SN","delay");
 
   // Initialize particles on device
   par_for("star_par", DevExeSpace(), 0, nprtcl_thispack-1,
