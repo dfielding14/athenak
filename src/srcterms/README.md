@@ -51,7 +51,9 @@ where:
 
 ### Common Parameters
 - `turb_flag`: 1=decaying turbulence, 2=continuously driven
-- `dedt`: Total energy injection rate over the whole domain (energy/time, not per volume) with `constant_edot = true`, the default. With `constant_edot = false` it instead fixes Σ ½|a|²·dt summed over cells without volume weights, so the forcing amplitude then depends on resolution and dt.
+- `constant_edot`: true (default) normalizes the forcing to the injected power `dedt`; false normalizes it to the RMS acceleration `accel_rms`. Each mode rejects the other's parameter.
+- `dedt`: Total energy injection rate over the whole domain (energy/time, not per volume), with `constant_edot = true`
+- `accel_rms`: Required with `constant_edot = false`: the volume-weighted RMS of the applied acceleration over the whole domain, so it does not depend on the AMR layout. The injected power then follows the flow. With a driving window (scale heights below) the average still covers the whole domain, so the RMS inside the window is larger by about sqrt(V/∫w²dV), where w is the window: about 1.1e4 for the GOTHAM window in its 400 kpc box.
 - `tcorr`: Correlation time for amplitude evolution
 - `rseed`: Seed of the forcing's random sequence (the ran2 initialization value). The default -1 is a fixed seed, so runs are reproducible; nothing is time-based.
 - `sol_fraction`: Fraction of solenoidal modes (1.0 = incompressible)

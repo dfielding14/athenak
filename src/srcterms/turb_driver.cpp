@@ -89,12 +89,24 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   expo = pin->GetOrAddReal("turb_driving", "expo", 5.0/3.0);
   exp_prp = pin->GetOrAddReal("turb_driving", "exp_prp", 5.0/3.0);
   exp_prl = pin->GetOrAddReal("turb_driving", "exp_prl", 0.0);
-  // energy injection rate
-  dedt = pin->GetOrAddReal("turb_driving", "dedt", 0.0);
-  if (!std::isfinite(dedt) || dedt < 0.0) {
+  // strength: total injected power dedt (constant_edot = true, the default), or the
+  // volume-weighted RMS acceleration over the whole domain, accel_rms (false)
+  constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
+  const char *unused = constant_edot ? "accel_rms" : "dedt";
+  if (pin->DoesParameterExist("turb_driving", unused)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "<turb_driving>/dedt must be finite and non-negative."
+              << std::endl << "<turb_driving>/" << unused << " is not used with "
+              << "constant_edot = " << (constant_edot ? "true" : "false") << "."
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  dedt = constant_edot ? pin->GetOrAddReal("turb_driving", "dedt", 0.0) : 0.0;
+  accel_rms = constant_edot ? 0.0 : pin->GetReal("turb_driving", "accel_rms");
+  if (!std::isfinite(dedt) || dedt < 0.0 || !std::isfinite(accel_rms) ||
+      accel_rms < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<turb_driving>/dedt and accel_rms must be finite and "
+              << "non-negative." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   // correlation time
@@ -107,9 +119,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   // random seed for turbulence driving: the ran2 initialization value, so -1 (the
   // default) is a fixed seed, not a time-based one
   rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
-
-  // drive with constant edot or constant acceleration
-  constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
 
   // spatially varying driving
   x_turb_scale_height = pin->GetOrAddReal("turb_driving", "x_turb_scale_height", -1.0);
@@ -200,7 +209,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   tdriv_start = pin->GetOrAddReal("turb_driving", "tdriv_start", 0.); // If not specified, start driving at t=0
   if (global_variable::my_rank == 0){
     std::cout << "Initialising turbulence driving module" << std::endl <<
-    " dedt = " << dedt << " tcorr = " << tcorr << " dt_turb_update = " << dt_turb_update << std::endl;
+    (constant_edot ? " dedt = " : " accel_rms = ") << (constant_edot ? dedt : accel_rms)
+    << " tcorr = " << tcorr << " dt_turb_update = " << dt_turb_update << std::endl;
   }
 
   // Initialize n_turb_updates_yet based on current simulation time
@@ -745,7 +755,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 // 1. Copies values from temporary force array to the main force array.
 // 2. Applies Gaussian weighting to the forcing in x, y, and z directions if requested.
 // 3. Computes net momentum and applies corrections to ensure momentum conservation.
-// 4. Scales the forcing to input dedt.
+// 4. Scales the forcing to the input dedt or accel_rms.
 //
 
 TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
@@ -933,8 +943,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         sum_t0 += den*0.5*(a1*a1 + a2*a2 + a3*a3)*dt*vol;
         sum_t1 += (mom1*a1 + mom2*a2 + mom3*a3)*vol;
       } else {
-        sum_t0 += 0.5*(a1*a1 + a2*a2 + a3*a3)*dt;
-        sum_t1 += 0.0;
+        sum_t0 += (a1*a1 + a2*a2 + a3*a3)*vol;
       }
       totvol_ += vol;
     }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(totvol));
@@ -945,13 +954,10 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
     t0 = gm[0]; t1 = gm[1]; totvol = gm[2];
   #endif
 
-    t0 = std::max(t0, 1.0e-20);
-
-    Real m0 = t0;
-    Real m1 = t1;
-
     Real s = 0.0;
     if (constant_edot) {
+      Real m0 = std::max(t0, 1.0e-20);
+      Real m1 = t1;
       // 1/2 rho (s vdot dt)^2 / dt + rho (s vdot dt).v / dt = dedt, i.e.
       // m0*s^2 + m1*s = dedt: take the non-negative root without subtracting nearly
       // equal numbers. Zero dedt disables forcing, including when it opposes the flow.
@@ -959,11 +965,14 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         Real disc = sqrt(m1*m1 + 4.0*m0*dedt);
         s = (m1 >= 0.0) ? 2.0*dedt/(m1 + disc) : (disc - m1)/(2.0*m0);
       }
-    } else {
-      // 1/2 rho (s vdot dt)^2 / dt = dedt
-      // s = sqrt(dedt * dt / (1/2 rho (vdot dt)^2))
-      // s = sqrt(dedt / (1/2 rho vdot^2 dt))
-      s = sqrt(dedt/m0);
+    } else if (t0 > 0.0) {
+      // volume-weighted RMS over the whole domain, so independent of the AMR layout
+      s = accel_rms/sqrt(t0/totvol);
+    } else if (accel_rms > 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Cannot impose accel_rms on a zero forcing field."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
     }
     if (!std::isfinite(s)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
