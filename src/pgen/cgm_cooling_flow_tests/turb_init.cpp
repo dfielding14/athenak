@@ -14,7 +14,7 @@
 #include "eos/eos.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
-#include "pgen.hpp"
+#include "pgen/pgen.hpp"
 #include "utils/random.hpp"
 
 //----------------------------------------------------------------------------------------
@@ -122,6 +122,10 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   Real gm1 = eos.gamma - 1.0;
   Real rho0 = pin->GetOrAddReal("problem", "rho0", 1.0);
   Real p0 = pin->GetOrAddReal("problem", "p0", 1.0);
+  // Passive scalar 0 is the metal mass density, as GOTHAM's u0(IZS) = Z*Zsol*rho
+  Real zmet = 0.02*pin->GetOrAddReal("problem", "metallicity", 1.0/3.0);
+  int nhyd = pmbp->phydro->nhydro;
+  int nscal = pmbp->phydro->nscalars;
 
   int &is = indcs.is, &ie = indcs.ie;
   int &js = indcs.js, &je = indcs.je;
@@ -160,6 +164,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
 
     // Set conserved variables
     u0(m,IDN,k,j,i) = rho0;
+    if (nscal > 0) u0(m,nhyd,k,j,i) = rho0*zmet;
     u0(m,IM1,k,j,i) = rho0 * vx;
     u0(m,IM2,k,j,i) = rho0 * vy;
     u0(m,IM3,k,j,i) = rho0 * vz;
