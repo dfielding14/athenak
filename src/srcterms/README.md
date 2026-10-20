@@ -51,21 +51,26 @@ where:
 
 ### Common Parameters
 - `turb_flag`: 1=decaying turbulence, 2=continuously driven
-- `dedt`: Energy injection rate (energy/time/volume)
+- `dedt`: Total energy injection rate over the whole domain (energy/time, not per volume) with `constant_edot = true`, the default. With `constant_edot = false` it instead fixes Σ ½|a|²·dt summed over cells without volume weights, so the forcing amplitude then depends on resolution and dt.
 - `tcorr`: Correlation time for amplitude evolution
-- `rseed`: Random seed for reproducibility (-1 for time-based)
+- `rseed`: Seed of the forcing's random sequence (the ran2 initialization value). The default -1 is a fixed seed, so runs are reproducible; nothing is time-based.
 - `sol_fraction`: Fraction of solenoidal modes (1.0 = incompressible)
 
 ### Spectral Parameters
-- `nlow`, `nhigh`: Minimum and maximum |k| for mode selection
+- `nlow`, `nhigh`: Minimum and maximum mode number |n| for mode selection, counted in waves per tile (per box without tiling)
 - `spect_form`: 1=parabolic spectrum, 2=power law
-- `kpeak`: Peak wavenumber for parabolic spectrum
+- `kpeak`: Peak wavenumber for parabolic spectrum, in code units (default 4π)
+- `npeak`: Peak of the parabolic spectrum as a mode number, so kpeak = npeak·2π/tile_lx (the box length without tiling); overrides `kpeak`. With `spect_form = 1` the run stops unless `nhigh > nlow` and `nlow ≤ npeak ≤ nhigh`.
 - `expo`: Power law exponent (if spect_form=2)
 
 ### Spatial Windowing (optional)
 - `x_turb_scale_height`: Gaussian scale height in x-direction (-1 = no windowing)
 - `x_turb_center`: Center of Gaussian window in x-direction
 - (Similarly for y and z directions)
+
+### Tiled Driving (optional)
+- `tile_driving`: Repeat one forcing pattern on every tile (default false)
+- `tile_factor`: Tiles per dimension (default 1), the default for `tile_nx`, `tile_ny` and `tile_nz`, which can also be set individually. Each must divide the root-grid `nx1`, `nx2`, `nx3`.
 
 ## Algorithm Flow
 
@@ -80,9 +85,8 @@ where:
    - Remove net momentum to maintain momentum conservation
 
 3. **Force Application** (every timestep):
-   - Compute force field at each cell center
-   - Add to momentum equation source terms
-   - Add corresponding energy source term
+   - Newtonian hydro, MHD and ion-neutral: one kick per step, after the last stage's fluid update and source terms and before restriction and boundary exchange (for ion-neutral, after the implicit update). The forcing is normalized against the state being kicked, then dv = a·dt is added with dE = m·dv + ρ|dv|²/2 from the pre-kick momentum m, so the thermal energy is unchanged.
+   - Special relativity keeps a source term in every stage.
 
 ## AMR Considerations
 
