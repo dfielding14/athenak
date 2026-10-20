@@ -149,7 +149,7 @@ spect_form          = 1 # parabolic
 npeak               = 9
 sol_fraction        = 0.5
 tile_driving        = true
-tile_factor         = 384 # 1.25 kpc tile size
+tile_factor         = 384 # 1.04 kpc tile size (400 kpc / 384)
 
 <units>
 length_cgs  = 3.0856775809623245e+21 # kpc

@@ -67,14 +67,11 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   // range of modes including, corresponding to kmin and kmax
   nlow = pin->GetOrAddInteger("turb_driving", "nlow", 1);
   nhigh = pin->GetOrAddInteger("turb_driving", "nhigh", 3);
-  // Peak of power when spectral form is parabolic, in units of 2*(PI/L)
-  // Support both npeak (wavenumber index) and kpeak (actual k value)
-  if (pin->DoesParameterExist("turb_driving", "npeak")) {
-    Real npeak = pin->GetReal("turb_driving", "npeak");
-    // Convert npeak to kpeak using fundamental wavenumber
-    Real dkfund = 2.0*M_PI; // Assuming box size = 1
-    kpeak = npeak * dkfund;
-  } else {
+  // Peak of power when spectral form is parabolic: kpeak (actual k value), or npeak in
+  // tile-local mode numbers, converted to kpeak below once the tile size is known
+  const bool use_npeak = pin->DoesParameterExist("turb_driving", "npeak");
+  const Real npeak = use_npeak ? pin->GetReal("turb_driving", "npeak") : 0.0;
+  if (!use_npeak) {
     kpeak = pin->GetOrAddReal("turb_driving", "kpeak", 4.0*M_PI);
   }
   // spect form - 1 for parabola, 2 for power-law
@@ -107,7 +104,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   // To store fraction of energy in solenoidal modes
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
 
-  // random seed for turbulence driving (-1 = use time-based seed)
+  // random seed for turbulence driving: the ran2 initialization value, so -1 (the
+  // default) is a fixed seed, not a time-based one
   rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
 
   // drive with constant edot or constant acceleration
@@ -167,6 +165,23 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   tile_lx = lx_global / static_cast<Real>(tile_nx);
   tile_ly = (tile_ny > 0) ? ly_global / static_cast<Real>(tile_ny) : ly_global;
   tile_lz = (tile_nz > 0) ? lz_global / static_cast<Real>(tile_nz) : lz_global;
+  if (use_npeak) {
+    kpeak = npeak*2.0*M_PI/tile_lx;
+  }
+  if (spect_form == 1) {  // the parabola's prefactor is -4/(khigh - klow)^2
+    if (nhigh <= nlow) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<turb_driving>/nhigh must exceed nlow for the "
+                << "parabolic spectrum (spect_form = 1)." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (use_npeak && (npeak < nlow || npeak > nhigh)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<turb_driving>/npeak must lie between nlow and nhigh."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   inv_tile_lx = (tile_lx > 0.0) ? 1.0/tile_lx : 0.0;
   inv_tile_ly = (tile_ly > 0.0) ? 1.0/tile_ly : 0.0;
@@ -551,6 +566,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
       int no_dir=3;
       int nmode = 0;
+      Real norm_max = 0.0;
 
       // Cartesian mode generation
       int nkx, nky, nkz, nsqr;
@@ -590,7 +606,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                   if(spect_form==2) norm = 1.0/pow(kiso,(ex+2.0)/2.0); // power-law driving
                   else if (spect_form==1)
                   {
-                    norm = fabs(parab_prefact*pow(kiso-k_peak,2.0)+1.0);// parabola in k-space
+                    // parabola in k-space, zero beyond its roots (fabs mirrored it)
+                    norm = fmax(parab_prefact*pow(kiso-k_peak,2.0)+1.0, 0.0);
                     norm = pow(norm,0.5) * pow(k_peak/kiso, ((int)no_dir-1)/2.);
                   }
                   else {
@@ -608,13 +625,15 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
                     else if (spect_form==1)
                     {
-                      norm = fabs(parab_prefact*pow(kprp-k_peak,2.0)+1.0);// parabola in kperp-space
+                      // parabola in kperp-space, zero beyond its roots
+                      norm = fmax(parab_prefact*pow(kprp-k_peak,2.0)+1.0, 0.0);
                       norm = pow(norm,0.5) * pow(k_peak/kprp, ((int)no_dir-1)/2.);
                     }
                   } else {
                     norm = 0.0;
                   }
                 }
+                norm_max = fmax(norm_max, norm);
                 // Generate coefficients once (same pattern repeated on all tiles)
                 Real ka = 0.0;
                 Real kb = 0.0;
@@ -647,6 +666,14 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
             }
           }
         }
+
+      // a clamped parabola can zero every mode: stop rather than silently not drive
+      if (!(norm_max > 0.0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<turb_driving> spectrum is zero for every mode in "
+                  << "[nlow, nhigh]; put kpeak (or npeak) inside the band." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
 
       aka_.template modify<HostMemSpace>();
       aka_.template sync<DevExeSpace>();
