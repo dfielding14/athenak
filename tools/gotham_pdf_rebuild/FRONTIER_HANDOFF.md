@@ -377,4 +377,10 @@ above or deliberately refreeze and repeat the release sequence.
   cooling-weighted temperature products use cell-integrated net cooling
   luminosity in `erg s^-1`; the 3D cooling-rate product remains a local
   source-rate density in `erg s^-1 cm^-3`.
+- That `gotham-1.0` rate sets the UV-background (PIE) term to zero above
+  `n_H = 1 cm^-3`, as the archived runs did. AthenaK `9d54412a7` (2026-10-19)
+  changed this for later runs. The reducer is deliberately not updated: it
+  serves only the archived runs, and later runs write correct PDFs in situ.
+  Its cooling products are wrong for snapshots from AthenaK at or after
+  `9d54412a7`.
 - The Kokkos Kepler source patch is Andes-only. Frontier HIP does not need it.

@@ -44,6 +44,19 @@ so it remains comparable across the 4 pc and 8 pc meshes. The
 cooling-weighted temperature products instead use cell-integrated signed net
 cooling luminosity in `erg s^-1`.
 
+The cooling model is frozen to the archived runs on purpose. This tool exists
+only to rebuild the PDF streams that the archived GOTHAM runs wrote while
+AthenaK's N-D PDF output was broken (fixed in `db953863b`); runs made with a
+fixed AthenaK write correct PDFs themselves and do not use this tool.
+`cooling_lambdas_cgs` and `net_cooling_rate_cgs` reproduce the CGM rate those
+runs computed, including a UV-background (PIE) term that is zero above
+`n_H = 1 cm^-3`, the top of the cooling table. AthenaK `9d54412a7`
+(2026-10-19) changed the simulation to use the `n_H = 1` row there instead.
+Do not port that change here: it would make the cooling products disagree
+with the simulations they describe. For the same reason the cooling products
+are wrong for snapshots made by AthenaK at or after `9d54412a7`, which are
+outside this tool's scope.
+
 ## Execution model
 
 - One MPI rank per accelerator.
