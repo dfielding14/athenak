@@ -151,15 +151,20 @@ Real Psi(const Real u) {
   return (fabs(u) < 1.0e-8) ? 1.0 : log1p(u)/u;
 }
 
+// CalculateRates is not linear in T within a table bin: chords between table nodes miss
+// its slope by O(bin width), 1.2% in the isobaric TI growth rate at 3000 K. Sub-nodes
+// cut slope and value errors by kNodesPerBin and its square.
+constexpr int kNodesPerBin = 10;
+
 //! \fn Real IntegrateTemperature()
 //! \brief Returns T [K] after cooling/heating from T0 for dt at fixed rho, Z, position
 //! and dx. The net rate R(T) (CalculateRates at e = c_V*T) is taken linear in T between
-//! nodes T_k = 10^(Tbins(0) + k*dlogT), on which de/dt = -R integrates exactly: the
-//! Townsend (2009) scheme generalized as in Tan & Fielding (2023, App. C), simplified.
-//! CalculateRates jumps at the table edges Tfloor (node 0) and Tceil (node N-1), so these
-//! are segment boundaries with one-sided rates; T rests on an edge if the rate beyond it
-//! pushes back. T stays in [T_lo, T_hi]. Costs about one rate evaluation per node
-//! crossed.
+//! nodes T_k = 10^(Tbins(0) + k*dlogT), kNodesPerBin per table bin, on which de/dt = -R
+//! integrates exactly: the Townsend (2009) scheme generalized as in Tan & Fielding
+//! (2023, App. C), simplified. CalculateRates jumps at the table edges Tfloor and Tceil
+//! (nodes 0 and (N-1)*kNodesPerBin), so these are segment boundaries with one-sided
+//! rates; T rests on an edge if the rate beyond it pushes back. T stays in [T_lo, T_hi].
+//! Costs about one rate evaluation per node crossed.
 template<typename View1D, typename View2D>
 KOKKOS_INLINE_FUNCTION
 Real IntegrateTemperature(const Real T0, const Real dt, const Real rho,
@@ -183,11 +188,12 @@ Real IntegrateTemperature(const Real T0, const Real dt, const Real rho,
                           Metal_Cooling_CIE, H_He_Cooling_CIE).net_cooling_rate;
   };
   const Real logT_0 = Tbins(0);
-  const Real dlogT = (Tbins(Tbins_DIM_0 - 1) - logT_0)/(Tbins_DIM_0 - 1);
+  constexpr int kTop = (Tbins_DIM_0 - 1)*kNodesPerBin;  // node index of Tceil
+  const Real dlogT = (Tbins(Tbins_DIM_0 - 1) - logT_0)/kTop;
   auto node = [&](const int k) { return pow(10.0, logT_0 + k*dlogT); };
-  // segment k lies below the table (k < 0), in it, or above it (k >= N-1); rates are
+  // segment k lies below the table (k < 0), in it, or above it (k >= kTop); rates are
   // taken on the segment's own side of the edges, with a margin against T->e->T round-off
-  auto side = [](const int k) { return (k < 0) ? 0 : ((k < Tbins_DIM_0 - 1) ? 1 : 2); };
+  auto side = [](const int k) { return (k < 0) ? 0 : ((k < kTop) ? 1 : 2); };
   auto side_rate = [&](const Real T, const int k) {
     constexpr Real eps = 1.0e-12;
     if (side(k) == 0) return rate(fmin(T, Tfloor*(1.0 - eps)));
