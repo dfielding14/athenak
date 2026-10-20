@@ -1,3 +1,4 @@
+#include <algorithm>
 #include <iostream>
 #include <cmath>
 #include <string>
@@ -129,7 +130,8 @@ namespace {
   // Refinment condition threshold
   Real ddens_threshold;
 
-  // SN injection persistent buffer: event position and host-particle velocity.
+  // SN injection persistent buffer: event position, host-particle velocity, injection
+  // radius and 1/(volume of the cells injected into).
   DvceArray2D<Real> sn_events_buffer;
   Kokkos::View<int> sn_counter;
 
@@ -221,11 +223,11 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
       std::exit(EXIT_FAILURE);
     }
     r_inj = pin->GetReal("SN", "r_inj");
-    const Real sphere_vol = (4.0/3.0)*M_PI*std::pow(r_inj, 3);
     const Real E_def = 1e51; // Default 10^51 ergs
     const Real M_def = 8.4;  // Default 8.4 solar masses
-    e_sn = pin->GetOrAddReal("SN", "E_sn", E_def)*pmbp->punit->erg()/sphere_vol;
-    m_ej = pin->GetOrAddReal("SN", "M_ej", M_def)*pmbp->punit->msun()/sphere_vol;
+    // Totals per event; SNSource spreads them over the cells it injects into.
+    e_sn = pin->GetOrAddReal("SN", "E_sn", E_def)*pmbp->punit->erg();
+    m_ej = pin->GetOrAddReal("SN", "M_ej", M_def)*pmbp->punit->msun();
     Z_ej = pin->GetOrAddReal("SN", "Z_ej", 0.1);
     sn_delay = pin->GetOrAddReal("SN", "delay", 0.0);
   }
@@ -403,7 +405,7 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   // Allocate event storage only when supernova feedback is active.
   if (sn_feedback_enabled) {
     pmy_mesh_->CountParticles();
-    sn_events_buffer = DvceArray2D<Real>("sn_events_buffer", 6, pmy_mesh_->nprtcl_total);
+    sn_events_buffer = DvceArray2D<Real>("sn_events_buffer", 8, pmy_mesh_->nprtcl_total);
     sn_counter = Kokkos::View<int>("sn_counter");
     last_sn_detect_cycle = -1;
     num_sn_this_cycle = 0;
@@ -1258,6 +1260,14 @@ void GravitySource(Mesh* pm, const Real bdt) {
   return;
 }
 
+// True when the cell center (x1, x2, x3) lies within r of the SN event (sx, sy, sz). The
+// cell count at detection and the injection both use it, so they select the same cells.
+KOKKOS_INLINE_FUNCTION
+bool InSNSphere(const Real x1, const Real x2, const Real x3, const Real sx,
+                const Real sy, const Real sz, const Real r) {
+  return SQR(x1 - sx) + SQR(x2 - sy) + SQR(x3 - sz) <= SQR(r);
+}
+
 void SNSource(Mesh* pm, const Real bdt) {
   if (!sn_feedback_enabled) return;
 
@@ -1320,13 +1330,48 @@ void SNSource(Mesh* pm, const Real bdt) {
         Real x2max = size.d_view(m).x2max;
         Real x3min = size.d_view(m).x3min;
         Real x3max = size.d_view(m).x3max;
+        Real dx1 = size.d_view(m).dx1;
+        Real dx2 = size.d_view(m).dx2;
+        Real dx3 = size.d_view(m).dx3;
 
-        sn_events(0, idx) = fmin(fmax(pr(IPX,p), x1min+dr), x1max-dr);
-        sn_events(1, idx) = fmin(fmax(pr(IPY,p), x2min+dr), x2max-dr);
-        sn_events(2, idx) = fmin(fmax(pr(IPZ,p), x3min+dr), x3max-dr);
+        // Inject into the host MeshBlock's cells whose centers lie within r_evt. r_evt is
+        // at least the cell half-diagonal, so the cell holding the event always counts,
+        // and the clamp keeps the sphere inside the host MeshBlock (on this rank).
+        Real r_evt = fmax(dr, 0.5*sqrt(dx1*dx1 + dx2*dx2 + dx3*dx3)*(1.0 + 1.0e-6));
+        Real sx = fmin(fmax(pr(IPX,p), x1min+r_evt), x1max-r_evt);
+        Real sy = fmin(fmax(pr(IPY,p), x2min+r_evt), x2max-r_evt);
+        Real sz = fmin(fmax(pr(IPZ,p), x3min+r_evt), x3max-r_evt);
+
+        // Count those cells, so each event adds exactly E_sn and M_ej at any resolution
+        int il = is + static_cast<int>(floor((sx - r_evt - x1min)/dx1)) - 1;
+        int iu = is + static_cast<int>(floor((sx + r_evt - x1min)/dx1)) + 1;
+        int jl = js + static_cast<int>(floor((sy - r_evt - x2min)/dx2)) - 1;
+        int ju = js + static_cast<int>(floor((sy + r_evt - x2min)/dx2)) + 1;
+        int kl = ks + static_cast<int>(floor((sz - r_evt - x3min)/dx3)) - 1;
+        int ku = ks + static_cast<int>(floor((sz + r_evt - x3min)/dx3)) + 1;
+        il = Kokkos::max(il, is); iu = Kokkos::min(iu, ie);
+        jl = Kokkos::max(jl, js); ju = Kokkos::min(ju, je);
+        kl = Kokkos::max(kl, ks); ku = Kokkos::min(ku, ke);
+        int ncell = 0;
+        for (int k = kl; k <= ku; ++k) {
+          Real x3v = CellCenterX(k-ks, nx3, x3min, x3max);
+          for (int j = jl; j <= ju; ++j) {
+            Real x2v = CellCenterX(j-js, nx2, x2min, x2max);
+            for (int i = il; i <= iu; ++i) {
+              Real x1v = CellCenterX(i-is, nx1, x1min, x1max);
+              if (InSNSphere(x1v, x2v, x3v, sx, sy, sz, r_evt)) ++ncell;
+            }
+          }
+        }
+
+        sn_events(0, idx) = sx;
+        sn_events(1, idx) = sy;
+        sn_events(2, idx) = sz;
         sn_events(3, idx) = pr(IPVX,p);
         sn_events(4, idx) = pr(IPVY,p);
         sn_events(5, idx) = pr(IPVZ,p);
+        sn_events(6, idx) = r_evt;
+        sn_events(7, idx) = 1.0/(static_cast<Real>(Kokkos::max(ncell, 1))*dx1*dx2*dx3);
       }
     });
 
@@ -1367,25 +1412,22 @@ void SNSource(Mesh* pm, const Real bdt) {
         Real sn_vy = sn_events(4, sn);
         Real sn_vz = sn_events(5, sn);
 
-        // Calculate distance from SN center
-        Real dx = x1v - sn_x;
-        Real dy = x2v - sn_y;
-        Real dz = x3v - sn_z;
-        Real r = sqrt(dx*dx + dy*dy + dz*dz);
-
-        // Inject if within injection radius
-        if (r <= dr) {
+        // Inject into the cells counted at detection, at densities that add up to exactly
+        // this stage's share of E_sn and M_ej
+        if (InSNSphere(x1v, x2v, x3v, sn_x, sn_y, sn_z, sn_events(6, sn))) {
+          const Real m_add = m_ej_*sn_events(7, sn);
+          const Real e_add = e_sn_*sn_events(7, sn);
           const Real rho_old = u0(m,IDN,k,j,i);
           const Real mx_old = u0(m,IM1,k,j,i);
           const Real my_old = u0(m,IM2,k,j,i);
           const Real mz_old = u0(m,IM3,k,j,i);
-          const Real rho_new = rho_old + m_ej_;
-          const Real mx_new = mx_old + m_ej_*sn_vx;
-          const Real my_new = my_old + m_ej_*sn_vy;
-          const Real mz_new = mz_old + m_ej_*sn_vz;
+          const Real rho_new = rho_old + m_add;
+          const Real mx_new = mx_old + m_add*sn_vx;
+          const Real my_new = my_old + m_add*sn_vy;
+          const Real mz_new = mz_old + m_add*sn_vz;
           const Real ekin_old = 0.5*(mx_old*mx_old + my_old*my_old + mz_old*mz_old)/rho_old;
           const Real ekin_new = 0.5*(mx_new*mx_new + my_new*my_new + mz_new*mz_new)/rho_new;
-          const Real ekin_ej = 0.5*m_ej_*(sn_vx*sn_vx + sn_vy*sn_vy + sn_vz*sn_vz);
+          const Real ekin_ej = 0.5*m_add*(sn_vx*sn_vx + sn_vy*sn_vy + sn_vz*sn_vz);
           // Unresolved inelastic mixing converts relative bulk kinetic energy to heat.
           const Real inelastic_heat = ekin_old + ekin_ej - ekin_new;
 
@@ -1393,10 +1435,10 @@ void SNSource(Mesh* pm, const Real bdt) {
           u0(m,IM1,k,j,i) = mx_new;
           u0(m,IM2,k,j,i) = my_new;
           u0(m,IM3,k,j,i) = mz_new;
-          u0(m,IEN,k,j,i) += e_sn_ + (ekin_new - ekin_old) + inelastic_heat;
-          u0(m, IZS, k, j, i) += (1.-dz_sn) * Z_ej_ * m_ej_;
-          u0(m, IDS, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
-          u0(m, IDL, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_ej_;
+          u0(m,IEN,k,j,i) += e_add + (ekin_new - ekin_old) + inelastic_heat;
+          u0(m, IZS, k, j, i) += (1.-dz_sn) * Z_ej_ * m_add;
+          u0(m, IDS, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_add;
+          u0(m, IDL, k, j, i) += 0.5 * dz_sn * Z_ej_ * m_add;
         }
       }
 
