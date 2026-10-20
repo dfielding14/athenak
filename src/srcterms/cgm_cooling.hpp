@@ -192,10 +192,11 @@ Real CoolingTime(const CGMCoolingResult &result, const Real eint) {
   return (result.cap_active > 0.0) ? 0.0 : eint/denom;
 }
 
-// phi(x) = (1 - e^-x)/x and psi(u) = ln(1 + u)/u, both -> 1 as their argument -> 0
+// phi(x) = (1 - e^-x)/x and psi(u) = ln(1 + u)/u, both -> 1 as their argument -> 0.
+// Below |x| = 1e-3, phi uses its series 1 - x/2 + x^2/6 (error < x^3/24 < 5e-11).
 KOKKOS_INLINE_FUNCTION
 Real Phi(const Real x) {
-  return (fabs(x) < 1.0e-8) ? 1.0 : -expm1(-x)/x;
+  return (fabs(x) < 1.0e-3) ? 1.0 - x*(0.5 - x/6.0) : -expm1(-x)/x;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -205,8 +206,9 @@ Real Psi(const Real u) {
 
 // CalculateRates is not linear in T within a table bin: chords between table nodes miss
 // its slope by O(bin width), 1.2% in the isobaric TI growth rate at 3000 K. Sub-nodes
-// cut slope and value errors by kNodesPerBin and its square.
-constexpr int kNodesPerBin = 10;
+// cut slope and value errors by kNodesPerBin and its square; with 5 that growth rate is
+// exact to 0.03%. Each node a cell crosses in a step costs two NetRate evaluations.
+constexpr int kNodesPerBin = 5;
 
 //! Integrator nodes and the temperature terms at both ends of each segment between
 //! them (cgm_cooling::TabulateNodes): segment k = [temp[k - k_lo], temp[k - k_lo + 1]],
@@ -295,7 +297,9 @@ Real IntegrateTemperature(const Real T0, const Real dt, const Real c_V, const Re
     const Real Te = down ? fmax(Ta, T_lo) : fmin(Tb, T_hi);
     // interpolate from the edge's own node, so Re is exact when the edge is a node
     const Real Re = down ? Ra + s*(Te - Ta) : Rb + s*(Te - Tb);
-    if (Re*R0 > 0.0) {  // R keeps its sign up to the edge: T reaches it after te
+    // T can reach the edge within rem only if R keeps its sign up to it and the faster
+    // end rate, max(|R0|, |Re|), covers the distance; only then is the edge time needed
+    if (Re*R0 > 0.0 && c_V*fabs(T - Te) < fmax(fabs(R0), fabs(Re))*rem) {
       const Real te = c_V*(T - Te)/R0*Psi(s*(Te - T)/R0);
       if (te < rem) {
         rem -= te;
