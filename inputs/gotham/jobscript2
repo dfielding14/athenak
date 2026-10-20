@@ -26,6 +26,8 @@ export FI_MR_CACHE_MONITOR=kdreg2
 export FI_CXI_RX_MATCH_MODE=software
 export HSA_XNACK=1
 
+# output36 exists only in decks written after the duplicate-<output35> fix. When restarting
+# from a restart file made with the older deck, delete the output36/dt override below.
 srun -N 512 -n 4096 -c 7 --gpus-per-node=8 --gpu-bind=closest \
 	/ccs/home/zunyibrent/Work/athenak/build/src/athena \
 	-r phase1/rst/node_00000000/gotham.00002.rst \
@@ -65,4 +67,5 @@ srun -N 512 -n 4096 -c 7 --gpus-per-node=8 --gpu-bind=closest \
 	output33/dt=0.006 \
 	output34/dt=0.006 \
 	output35/dt=0.006 \
+	output36/dt=0.006 \
 	-d phase2 -t 6:55:00

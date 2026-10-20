@@ -22,7 +22,7 @@
 //   name1 = value1    # note that same parameter names can appear in different blocks
 //   name2 = value2    # empty lines (like following) are OK
 //
-//   <blockname1>      # same blockname can re-appear, although NOT recommended
+//   <blockname1>      # same blockname can re-appear (prints a warning), NOT recommended
 //   name3 = value3    # this would be the 3rd parameter name in blockname1
 //   name1 = value4    # if parameter name is repeated, previous value is overwritten!
 //
@@ -39,6 +39,7 @@
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <set>
 #include <sstream>
 #include <string>
 
@@ -114,6 +115,8 @@ void ParameterInput::LoadFromStream(std::istream &is) {
   std::size_t first_char, last_char;
   InputBlock *pib{};
   int line_num{-1}, blocks_found{0};
+  // blocks seen in this stream only, so -i overrides of a restart file do not warn
+  std::set<std::string> blocks_in_stream;
 
   while (is.good()) {
     std::getline(is, line);
@@ -146,6 +149,19 @@ void ParameterInput::LoadFromStream(std::istream &is) {
                   << std::endl << "Block name '" << block_name
                   << "' could not be found/added" << std::endl;
         std::exit(EXIT_FAILURE);
+      }
+      // a repeated block is merged into the first one and parameters set again overwrite
+      // the earlier values, which silently loses the earlier block: say so loudly
+      if (!blocks_in_stream.insert(block_name).second && global_variable::my_rank == 0) {
+        std::cout << std::string(80, '#') << std::endl
+                  << "### WARNING in " << __FILE__ << " at line " << __LINE__ << std::endl
+                  << "### Input block <" << block_name << "> appears more than once"
+                  << " (again at input line " << line_num + 1 << ")." << std::endl
+                  << "### Repeated blocks are merged: parameters set again overwrite"
+                  << " earlier values," << std::endl
+                  << "### so the earlier <" << block_name << "> is lost. Rename one"
+                  << " if both were meant to exist." << std::endl
+                  << std::string(80, '#') << std::endl;
       }
       blocks_found++;
       continue;  // skip to next line if block name was found
