@@ -202,7 +202,8 @@ The turbulence regression tests exercise:
 - AMR execution with exclusion localization;
 - exact rendered-force and final-history continuation across fixed-grid and AMR restarts;
 - MPI execution of the AMR/localized case and periodic MHD energy budget;
-- rejection of removed parameter names and singular parabolic spectra.
+- rejection of removed parameter names and singular parabolic spectra;
+- zero forcing beyond the far root of a parabolic spectrum with an off-centre peak.
 
 The driver uses precision-correct MPI reductions. In the tested development
 checkout, a complete single-precision executable did not build with AppleClang:

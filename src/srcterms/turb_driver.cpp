@@ -716,8 +716,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
                   if (spectrum == TurbSpectrum::power_law) {
                     norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);  // power-law driving
                   } else if (spectrum == TurbSpectrum::parabolic) {
-                    norm = fabs(parab_prefact * pow(kiso - k_peak, 2.0) +
-                                1.0);  // parabola in k-space
+                    // parabola in k-space; zero beyond its roots
+                    norm = fmax(parab_prefact * pow(kiso - k_peak, 2.0) + 1.0, 0.0);
                     norm = pow(norm, 0.5) * pow(k_peak / kiso, (no_dir - 1) / 2.0);
                   } else {
                     norm = 0.0;
@@ -734,8 +734,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
                     norm =
                         1.0 / pow(kprp, (ex_prp + 1.0) / 2.0) / pow(kprl, ex_prl / 2.0);
                   } else if (spectrum == TurbSpectrum::parabolic) {
-                    norm = fabs(parab_prefact * pow(kprp - k_peak, 2.0) +
-                                1.0);  // parabola in kperp-space
+                    // parabola in kperp-space; zero beyond its roots
+                    norm = fmax(parab_prefact * pow(kprp - k_peak, 2.0) + 1.0, 0.0);
                     norm = pow(norm, 0.5) * pow(k_peak / kprp, (no_dir - 1) / 2.0);
                   }
                 } else {

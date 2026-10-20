@@ -316,6 +316,25 @@ def test_removed_parameter_and_degenerate_spectrum_are_rejected(tmp_path):
     )
 
 
+@pytest.mark.parametrize("npeak", [8.5, 9.0])
+def test_parabolic_spectrum_vanishes_beyond_its_roots(tmp_path, npeak):
+    """An off-centre peak drives no mode past the parabola root at npeak + 1."""
+    grid = [f"{block}/nx{d}=32" for block in ("mesh", "meshblock") for d in (1, 2, 3)]
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, forcing_input(tmp_path), *grid,
+                               "turb_driving/nlow=8", "turb_driving/nhigh=10",
+                               f"turb_driving/npeak={npeak}"))
+    force = read_force_blocks(latest_force(run_dir))["blocks"][0]["force"]
+    power = np.sum(np.abs(np.fft.fftn(force.astype(float), axes=(1, 2, 3)))**2, axis=0)
+    n = np.fft.fftfreq(32, 1.0 / 32)
+    nz, ny, nx = np.meshgrid(n, n, n, indexing="ij")
+    beyond = np.max(power[np.sqrt(nx**2 + ny**2 + nz**2) > 9.5]) / np.max(power)
+    if npeak == 8.5:
+        assert beyond < 1.0e-12
+    else:  # the centred peak (roots at 8 and 10) shows that modes past 9.5 are resolved
+        assert beyond > 0.1
+
+
 @pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3", "rk4"])
 @pytest.mark.parametrize("fluid", ["hydro", "mhd"])
 def test_once_per_step_power(tmp_path, integrator, fluid):
