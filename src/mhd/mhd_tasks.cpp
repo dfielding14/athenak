@@ -123,6 +123,17 @@ void MHD::AssembleMHDTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) 
     (void) tl["after_parabolic_stagen"]->AddTask(&MHD::ClearRecv, this, pcsend);
   }
 
+  // assemble "after_timeintegrator" task list: <cooling>/integrator = exact cools once
+  // per step after the stages; restriction, ghost zones and primitives are then
+  // refreshed as after a stage (AMR and the next fluxes read them), and dt recomputed
+  if (psrc != nullptr && psrc->ExactCooling()) {
+    tl["after_timeintegrator"]->AddTask([this](Driver *pdrive, int) {
+      psrc->ApplyExactCooling(w0, peos->eos_data, pmy_pack->pmesh->dt, u0);
+      pdrive->InitBoundaryValuesAndPrimitives(pmy_pack->pmesh);
+      return NewTimeStep(pdrive, pdrive->nexp_stages);
+    }, none);
+  }
+
   return;
 }
 

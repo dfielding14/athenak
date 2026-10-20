@@ -334,6 +334,81 @@ def test_cooling_timestep_constraint_and_bounds():
     assert excluded["time"][row] > 1.0e-2
 
 
+GM1 = 2.0/3.0
+DT = 1.0e-3  # the uniform test takes one step to tlim
+
+
+def _step_energies(data):
+    row = _first_evolved_row(data)
+    return data["tot-E"][row - 1], data["tot-E"][row]
+
+
+def test_exact_integrator_solves_stiff_cooling():
+    """Lambda proportional to T: e decays exponentially, exact at any dt/t_cool."""
+    lam0 = 1.0e4  # dt/t_cool ~ 6.7, where explicit RK2 is unstable
+    data = _run_case(
+        "cooling_exact_linear",
+        ["cooling/integrator=exact",
+         "cooling/cooling_slope=1.0",
+         f"cooling/cooling_reference_value={lam0}"],
+    )
+    e0, e1 = _step_energies(data)
+    assert np.isclose(e1, e0*np.exp(-lam0*GM1*DT), rtol=1.0e-12, atol=0.0)
+    _assert_history_rate(data, gross=(e0 - e1)/DT, net=(e0 - e1)/DT, rtol=1.0e-12)
+
+
+def test_exact_integrator_relaxes_to_heating_equilibrium():
+    """Linear cooling against constant heating relaxes to T_eq = heating/Lambda_0."""
+    lam0, heat = 1.0e4, 5.0e3
+    data = _run_case(
+        "cooling_exact_equilibrium",
+        ["cooling/integrator=exact",
+         "cooling/cooling_slope=1.0",
+         f"cooling/cooling_reference_value={lam0}",
+         "cooling/heating_model=constant",
+         f"cooling/heating_rate={heat}"],
+    )
+    e0, e1 = _step_energies(data)
+    t0, t_eq, x = GM1*e0, heat/lam0, lam0*GM1*DT
+    assert np.isclose(e1, (t_eq + (t0 - t_eq)*np.exp(-x))/GM1, rtol=1.0e-12, atol=0.0)
+    gross = lam0*(t_eq + (t0 - t_eq)*(1.0 - np.exp(-x))/x)  # time-averaged cooling
+    _assert_history_rate(data, gross=gross, net=gross - heat, rtol=1.0e-12)
+
+
+def test_exact_integrator_rests_on_table_edge():
+    """Lambda = 1e4*T on 1 <= T <= 2 and zero below (bounds=zero), against heating:
+    gas cooling onto the T = 1 edge stays there, with cooling balancing heating."""
+    heat = 5.0e3
+    data = _run_case(
+        "cooling_exact_table_edge",
+        ["cooling/integrator=exact",
+         "cooling/cooling_model=table",
+         "cooling/cooling_table=inputs/tables/cooling_lambda_1d_edge.tbl",
+         "cooling/cooling_bounds=zero",
+         "cooling/heating_model=constant",
+         f"cooling/heating_rate={heat}",
+         "problem/pressure=1.8"],
+    )
+    e0, e1 = _step_energies(data)
+    assert np.isclose(e1, 1.0/GM1, rtol=1.0e-12, atol=0.0)
+    net = (e0 - e1)/DT
+    _assert_history_rate(data, gross=net + heat, net=net, rtol=1.0e-12)
+
+
+def test_exact_integrator_mhd_path():
+    lam0 = 1.0e4
+    data = _run_case(
+        "cooling_exact_mhd",
+        ["cooling/integrator=exact",
+         "cooling/cooling_slope=1.0",
+         f"cooling/cooling_reference_value={lam0}"],
+        input_file=MHD_INPUT, physics="mhd")
+    e0, e1 = _step_energies(data)
+    emag = 0.5*(0.1**2 + 0.2**2 + 0.3**2)
+    assert np.isclose(e1 - emag, (e0 - emag)*np.exp(-lam0*GM1*DT), rtol=1.0e-11,
+                      atol=0.0)
+
+
 def _run_failure(basename, flags, input_file=HYDRO_INPUT):
     _remove_outputs(basename, "hydro")
     command = ["./athena", "-i", input_file, f"job/basename={basename}"] + flags
@@ -350,6 +425,16 @@ def _run_failure(basename, flags, input_file=HYDRO_INPUT):
             "cooling_legacy_rejected",
             ["hydro/ism_cooling=true"],
             "Use the standalone <cooling> block instead",
+        ),
+        (
+            "cooling_integrator_unknown",
+            ["cooling/integrator=implicit"],
+            "integrator must be 'explicit' or 'exact'",
+        ),
+        (
+            "cooling_exact_rejects_user_model",
+            ["cooling/integrator=exact", "cooling/cooling_model=user"],
+            "integrator=exact requires built-in cooling and heating models",
         ),
         (
             "cooling_table_bounds_fatal",

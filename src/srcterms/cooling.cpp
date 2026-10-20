@@ -944,6 +944,146 @@ EvaluatedCoolingRates EvaluateCoolingRates(const CoolingCellState &state,
   return rates;
 }
 
+// (1 - e^-x)/x, ln(1 + u)/u and 2(x - 1 + e^-x)/x^2, stable near zero
+KOKKOS_INLINE_FUNCTION
+Real ExactPhi(Real x) { return (fabs(x) < 1.0e-8) ? 1.0 - 0.5*x : -expm1(-x)/x; }
+KOKKOS_INLINE_FUNCTION
+Real ExactPsi(Real u) { return (fabs(u) < 1.0e-8) ? 1.0 - 0.5*u : log1p(u)/u; }
+KOKKOS_INLINE_FUNCTION
+Real ExactChi(Real x) {
+  return (fabs(x) < 1.0e-4) ? 1.0 - x/3.0 + x*x/12.0 : 2.0*(x + expm1(-x))/(x*x);
+}
+
+struct ExactCoolingResult {
+  Real temp = 0.0;  // code temperature after dt
+  Real cool = 0.0;  // time integral of edot_cool over dt
+};
+
+constexpr int MAX_EXACT_BREAKS = 16;
+
+//! Temperature nodes of the exact integrator: log10(T_cgs) = n*dlogt, except that each
+//! known jump of the rates (table temperature edges, the ISM fit's switch) replaces the
+//! nearest node, so jumps always fall on node boundaries.
+struct ExactGrid {
+  Real dlogt = 0.001;
+  Real temp_cgs = 1.0;
+  int nbreaks = 0;
+  int break_index[MAX_EXACT_BREAKS] = {};
+  Real break_temp[MAX_EXACT_BREAKS] = {};  // code units
+
+  KOKKOS_INLINE_FUNCTION
+  Real Node(const int n) const {
+    for (int b = 0; b < nbreaks; ++b) {
+      if (break_index[b] == n) return break_temp[b];
+    }
+    return pow(10.0, n*dlogt)/temp_cgs;
+  }
+  void AddBreak(const Real temp_code) {
+    if (!(temp_code > 0.0) || !std::isfinite(temp_code)) return;
+    const int n = static_cast<int>(std::lround(std::log10(temp_code*temp_cgs)/dlogt));
+    for (int b = 0; b < nbreaks; ++b) {
+      if (break_index[b] == n) return;  // keep the first break near a node
+    }
+    if (nbreaks == MAX_EXACT_BREAKS) {
+      FatalCoolingInput("too many cooling/heating table temperature edges for "
+                        "integrator=exact.");
+    }
+    break_index[nbreaks] = n;
+    break_temp[nbreaks++] = temp_code;
+  }
+  void AddTableEdges(const TableData &table) {
+    if (!table.enabled) return;
+    for (int a = 0; a < table.ndim; ++a) {
+      const AxisData &axis = table.axes[a];
+      if (axis.kind != AxisKind::temperature) continue;
+      for (const Real x : {axis.xmin, axis.xmax}) {
+        const Real t = (axis.scale == ValueScale::log10) ? std::pow(10.0, x) : x;
+        AddBreak((axis.units == UnitSystem::cgs) ? t/temp_cgs : t);
+      }
+    }
+  }
+};
+
+//! Integrates c_v dT/dt = -edot_net(T) over dt at fixed density, with the rates taken
+//! linear in T between the nodes of grid, where it is exact (Townsend 2009, generalized
+//! as in Tan & Fielding 2023, App. C). Rates are evaluated just inside each node
+//! interval, so a jump at a node is an interval boundary: T rests on the node if the
+//! rate beyond it pushes back. T stays in [temp_lo, temp_hi]. Costs two rate
+//! evaluations per node interval visited.
+template <typename RateFn>
+KOKKOS_INLINE_FUNCTION
+ExactCoolingResult IntegrateCoolingExact(const Real temp0, const Real dt, const Real c_v,
+    const Real temp_lo, const Real temp_hi, const ExactGrid &grid, const RateFn &rates) {
+  constexpr Real eps = 1.0e-9;
+  ExactCoolingResult res;
+  Real temp = fmin(fmax(temp0, temp_lo), temp_hi);
+  // interval n = [Node(n), Node(n+1)) holding temp; a break moves a node by < dlogt/2
+  int n = static_cast<int>(floor(log10(temp*grid.temp_cgs)/grid.dlogt));
+  if (temp < grid.Node(n)) {
+    --n;
+  } else if (temp >= grid.Node(n + 1)) {
+    ++n;
+  }
+  // each interval's line passes through its two samples just inside the nodes
+  Real ta, tb, xa, xb, ra, rb, ca, cb, s, sc;
+  auto load = [&]() {
+    ta = grid.Node(n);
+    tb = grid.Node(n + 1);
+    xa = ta*(1.0 + eps);
+    xb = tb*(1.0 - eps);
+    const EvaluatedCoolingRates lo = rates(xa), hi = rates(xb);
+    ra = lo.edot_net; rb = hi.edot_net;
+    ca = lo.edot_cool; cb = hi.edot_cool;
+    s = (rb - ra)/(xb - xa);
+    sc = (cb - ca)/(xb - xa);
+  };
+  auto net = [&](const Real t) {
+    return (t - xa < xb - t) ? ra + s*(t - xa) : rb + s*(t - xb);
+  };
+  auto cool = [&](const Real t) {
+    return (t - xa < xb - t) ? ca + sc*(t - xa) : cb + sc*(t - xb);
+  };
+  load();
+  Real r0 = net(temp), c0 = cool(temp);
+  Real rem = dt;
+  while (r0 != 0.0) {
+    const bool down = (r0 > 0.0);  // net cooling lowers T
+    const Real te = down ? fmax(ta, temp_lo) : fmin(tb, temp_hi);
+    const Real re = net(te);
+    Real tau = rem;  // time spent in this interval
+    bool edge = false;
+    if (re*r0 > 0.0) {  // the rate keeps its sign up to the edge
+      const Real t_edge = c_v*(temp - te)/r0*ExactPsi(s*(te - temp)/r0);
+      if (t_edge < rem) {
+        tau = t_edge;
+        edge = true;
+      }
+    }
+    res.cool += c0*tau - sc*r0*tau*tau/(2.0*c_v)*ExactChi(s*tau/c_v);
+    rem -= tau;
+    if (!edge) {
+      temp -= r0*tau/c_v*ExactPhi(s*tau/c_v);
+      break;
+    }
+    temp = te;
+    if (down ? (te <= temp_lo) : (te >= temp_hi)) break;  // at the floor or the cap
+    const Real c_from = cool(te);
+    n += down ? -1 : 1;
+    load();
+    r0 = net(temp);
+    c0 = cool(temp);
+    if (down ? (r0 <= 0.0) : (r0 >= 0.0)) {
+      // pushed back: T rests on the node, splitting the time between the two sides
+      // so that the mean net rate is zero, and cooling accrues accordingly
+      const Real theta = r0/(r0 - re);
+      res.cool += rem*(theta*c_from + (1.0 - theta)*c0);
+      break;
+    }
+  }
+  res.temp = temp;
+  return res;
+}
+
 bool TableHasFatalBounds(const TableData &table) {
   return table.enabled && table.bounds == BoundsBehavior::fatal;
 }
@@ -1094,6 +1234,19 @@ GeneralCooling::GeneralCooling(MeshBlockPack *pp, ParameterInput *pin) :
   history_enabled_ = pin->GetOrAddBoolean("cooling", "history", false);
   history_gross_ = pin->GetOrAddBoolean("cooling", "history_gross", true);
   history_net_ = pin->GetOrAddBoolean("cooling", "history_net", true);
+
+  const std::string integrator = Lower(pin->GetOrAddString("cooling", "integrator",
+                                                           "explicit"));
+  if (integrator == "exact") {
+    exact_ = true;
+    exact_dlogt_ = pin->GetOrAddReal("cooling", "exact_dlogT", 0.001);
+    if (!(exact_dlogt_ > 0.0)) FatalCoolingInput("exact_dlogT must be positive.");
+    if (cooling_model_ == ModelKind::user || heating_model_ == ModelKind::user) {
+      FatalCoolingInput("integrator=exact requires built-in cooling and heating models.");
+    }
+  } else if (integrator != "explicit") {
+    FatalCoolingInput("integrator must be 'explicit' or 'exact'.");
+  }
 
   if (cooling_model_ == ModelKind::table) {
     LoadTable(pin->GetString("cooling", "cooling_table"), cooling_bounds_, "lambda",
@@ -1363,6 +1516,129 @@ void GeneralCooling::Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data
     gross_sum += rates.edot_cool*history_bdt_local*dvol;
     net_sum += rates.edot_net*history_bdt_local*dvol;
     bad_sum += local_bad;
+  }, Kokkos::Sum<Real>(gross_energy), Kokkos::Sum<Real>(net_energy),
+     Kokkos::Sum<Real>(bad_bounds));
+
+  if (bad_bounds > 0.0) {
+    FatalCoolingInput("fatal cooling/heating bounds were exceeded in at least "
+                      "one cell during source update.");
+  }
+  if (history_enabled_) {
+    accumulated_gross_energy_ += gross_energy;
+    accumulated_net_energy_ += net_energy;
+  }
+}
+
+void GeneralCooling::ApplyExact(const DvceArray5D<Real> &w0, const EOS_Data &eos_data,
+                                const Real dt, DvceArray5D<Real> &u0) {
+  if (!Exact()) return;
+  if (!eos_data.is_ideal) {
+    FatalCoolingInput("cooling source terms require an ideal-gas energy equation.");
+  }
+  auto &indcs = pmy_pack_->pmesh->mb_indcs;
+  const int is = indcs.is, nx1 = indcs.nx1;
+  const int js = indcs.js, nx2 = indcs.nx2;
+  const int ks = indcs.ks, nx3 = indcs.nx3;
+  const int nmkji = (pmy_pack_->nmb_thispack)*nx3*nx2*nx1;
+  const int nkji = nx3*nx2*nx1;
+  const int nji  = nx2*nx1;
+  int nfluid = 0, nscalars = 0;
+  if (pmy_pack_->phydro != nullptr) {
+    nfluid = pmy_pack_->phydro->nhydro;
+    nscalars = pmy_pack_->phydro->nscalars;
+  } else if (pmy_pack_->pmhd != nullptr) {
+    nfluid = pmy_pack_->pmhd->nmhd;
+    nscalars = pmy_pack_->pmhd->nscalars;
+  }
+  ValidateBuiltInScalarAxes(cooling_table_, heating_table_, cgm_pie_table_,
+                            cgm_cie_table_, cooling_powerlaw_, heating_powerlaw_,
+                            cooling_modifier_, heating_modifier_, nscalars);
+
+  const Real gm1 = eos_data.gamma - 1.0;
+  const Real use_e = eos_data.use_e;
+  const Real temp_lo = fmax(eos_data.tfloor, FLT_MIN);
+  const Real temp_hi = static_cast<Real>(std::numeric_limits<float>::max());
+  const RuntimeData runtime = runtime_;
+  const ModelKind cooling_model = cooling_model_;
+  const ModelKind heating_model = heating_model_;
+  const TableData cooling_table = cooling_table_;
+  const TableData heating_table = heating_table_;
+  const TableData cgm_pie_table = cgm_pie_table_;
+  const TableData cgm_cie_table = cgm_cie_table_;
+  const PowerLawData cooling_powerlaw = cooling_powerlaw_;
+  const PowerLawData heating_powerlaw = heating_powerlaw_;
+  const ModifierData cooling_modifier = cooling_modifier_;
+  const ModifierData heating_modifier = heating_modifier_;
+  const ShieldingData shielding = shielding_;
+  const Real constant_heating_rate = constant_heating_rate_;
+  auto &size = pmy_pack_->pmb->mb_size;
+  const bool track_bad_bounds = BuiltInModelsHaveFatalBounds(cooling_model, heating_model,
+      cooling_table, heating_table, cgm_pie_table, cgm_cie_table, cooling_powerlaw,
+      heating_powerlaw, cooling_modifier, heating_modifier);
+  ExactGrid grid;
+  grid.dlogt = exact_dlogt_;
+  grid.temp_cgs = runtime.temp_cgs;
+  if (cooling_model == ModelKind::table) grid.AddTableEdges(cooling_table);
+  if (cooling_model == ModelKind::cgm) {
+    grid.AddTableEdges(cgm_pie_table);
+    grid.AddTableEdges(cgm_cie_table);
+  }
+  if (cooling_model == ModelKind::ism) {  // ISMCoolFn switches fits at these log10(T/K)
+    grid.AddBreak(std::pow(10.0, 4.2)/runtime.temp_cgs);
+    grid.AddBreak(std::pow(10.0, 8.15)/runtime.temp_cgs);
+  }
+  if (heating_model == ModelKind::table) grid.AddTableEdges(heating_table);
+  if (cooling_modifier.enabled && cooling_modifier.model == ModelKind::table) {
+    grid.AddTableEdges(cooling_modifier.table);
+  }
+  if (heating_modifier.enabled && heating_modifier.model == ModelKind::table) {
+    grid.AddTableEdges(heating_modifier.table);
+  }
+
+  Real gross_energy = 0.0, net_energy = 0.0, bad_bounds = 0.0;
+  Kokkos::parallel_reduce("general_cooling_exact",
+                          Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+  KOKKOS_LAMBDA(const int &idx, Real &gross_sum, Real &net_sum, Real &bad_sum) {
+    int m = idx/nkji;
+    int k = (idx - m*nkji)/nji;
+    int j = (idx - m*nkji - k*nji)/nx1;
+    int i = (idx - m*nkji - k*nji - j*nx1) + is;
+    k += ks;
+    j += js;
+
+    const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
+        nfluid, nscalars, m, k, j, i);
+    const Real c_v = state.rho_code/gm1;  // de/dT in code units
+    auto rates_at = [&](const Real temp, Real &bad) {
+      CoolingCellState s = state;
+      s.temp_code = temp;
+      s.temp_cgs = temp*runtime.temp_cgs;
+      s.eint_code = c_v*temp;
+      return EvaluateCoolingRates(s, w0, runtime, cooling_model, heating_model,
+          cooling_table, heating_table, cgm_pie_table, cgm_cie_table, cooling_powerlaw,
+          heating_powerlaw, cooling_modifier, heating_modifier, shielding,
+          constant_heating_rate, size.d_view(m).dx1, m, k, j, i, bad);
+    };
+    // node rates may lie outside a table the cell never leaves: bounds are checked at
+    // the cell's own initial and final temperatures only
+    auto rates = [&](const Real temp) {
+      Real ignore = 0.0;
+      return rates_at(temp, ignore);
+    };
+    const Real temp0 = fmax(state.temp_code, temp_lo);
+    const ExactCoolingResult res = IntegrateCoolingExact(temp0, dt, c_v, temp_lo,
+        temp_hi, grid, rates);
+    const Real de = c_v*(res.temp - temp0);
+    u0(m, IEN, k, j, i) += de;
+    if (track_bad_bounds) {
+      Real local_bad = 0.0;
+      rates_at(temp0, local_bad);
+      rates_at(res.temp, local_bad);
+      bad_sum += local_bad;
+    }
+    const Real dvol = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+    gross_sum += res.cool*dvol;
+    net_sum -= de*dvol;
   }, Kokkos::Sum<Real>(gross_energy), Kokkos::Sum<Real>(net_energy),
      Kokkos::Sum<Real>(bad_bounds));
 

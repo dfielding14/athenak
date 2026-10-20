@@ -71,6 +71,9 @@ class SourceTerms {
   void BeamSource(DvceArray5D<Real> &i0, const Real bdt);
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos);
   bool CoolingHistoryEnabled() const;
+  bool ExactCooling() const;  // <cooling>/integrator = exact: applied after the stages
+  void ApplyExactCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos, const Real dt,
+                         DvceArray5D<Real> &u0);
   int AddCoolingHistoryLabels(std::string *labels, int start, int max_labels) const;
   int AddCoolingHistoryData(Real *hdata, int start, int max_data, Real current_time);
 

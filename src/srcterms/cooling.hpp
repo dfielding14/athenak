@@ -150,11 +150,16 @@ class GeneralCooling {
   ~GeneralCooling() = default;
 
   bool Enabled() const { return enabled_; }
+  bool Exact() const { return enabled_ && exact_; }
   bool TimestepEnabled() const { return enabled_ && timestep_enabled_; }
   bool HistoryEnabled() const { return enabled_ && history_enabled_; }
 
   void Apply(const DvceArray5D<Real> &w0, const EOS_Data &eos_data, const Real bdt,
              const Real history_bdt, DvceArray5D<Real> &u0);
+  // integrator = exact: once per step after the stages, at fixed density; the caller
+  // then refreshes coarse data, ghost zones and primitives
+  void ApplyExact(const DvceArray5D<Real> &w0, const EOS_Data &eos_data, const Real dt,
+                  DvceArray5D<Real> &u0);
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos_data, Real &dtnew);
 
   int AddHistoryLabels(std::string *labels, int start, int max_labels) const;
@@ -163,6 +168,8 @@ class GeneralCooling {
  private:
   MeshBlockPack *pmy_pack_;
   bool enabled_ = false;
+  bool exact_ = false;
+  Real exact_dlogt_ = 0.001;
   bool timestep_enabled_ = false;
   bool history_enabled_ = false;
   bool history_gross_ = true;
