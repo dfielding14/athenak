@@ -11,6 +11,7 @@
 #include "mhd/mhd.hpp"
 #include "pgen.hpp"
 #include "units/units.hpp"
+#include "utils/galaxy_potential.hpp"
 #include "utils/profile_reader.hpp"
 #include "utils/sn_scheduler.hpp"
 #include "utils/random.hpp"
@@ -48,12 +49,6 @@ void SetDustScalars(const DvceArray5D<Real> &u0,
                     int m, int k, int j, int i,
                     int IZS, int IDS, int IDL,
                     Real dz, Real Z, Real Zsol);
-
-KOKKOS_INLINE_FUNCTION
-Real GravPot(Real x1, Real x2, Real x3,
-             Real G, Real r_s, Real rho_s,
-             Real M_gal, Real a_gal, Real z_gal,
-             Real c_outer, Real rho_mean);
 
 KOKKOS_INLINE_FUNCTION
 Real LimitDustTransfer(const Real requested,
@@ -1104,19 +1099,19 @@ void SetEquilibriumState(const DvceArray5D<Real> &u0,
     if (R > disk_profile.GetRmax()) return;
 
     // Calculate Gravitational Potentialsi
-    Real c_out = (4.0/3.0) * pow(5 * r_m, 1.5);
+    Real c_out = GalaxyPotOuterCoef(r_m);
 
-    Real phi0    = GravPot(x1v, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi0_1l = GravPot(x1l, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi0_1r = GravPot(x1r, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi0_2l = GravPot(x1v, x2l, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi0_2r = GravPot(x1v, x2r, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi0    = GalaxyPot(x1v, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi0_1l = GalaxyPot(x1l, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi0_1r = GalaxyPot(x1r, x2v, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi0_2l = GalaxyPot(x1v, x2l, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi0_2r = GalaxyPot(x1v, x2r, 0.0, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
 
-    Real phi   = GravPot(x1v, x2v, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi1r = GravPot(x1r, x2v, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi2l = GravPot(x1v, x2l, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi2r = GravPot(x1v, x2r, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
-    Real phi1l = GravPot(x1l, x2v, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi   = GalaxyPot(x1v, x2v, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi1r = GalaxyPot(x1r, x2v, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi2l = GalaxyPot(x1v, x2l, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi2r = GalaxyPot(x1v, x2r, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+    Real phi1l = GalaxyPot(x1l, x2v, x3v, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
 
     Real f_x1_ = -(phi1r - phi1l) / (x1r - x1l);
     Real f_x2_ = -(phi2r - phi2l) / (x2r - x2l);
@@ -1212,7 +1207,7 @@ void GravitySource(Mesh* pm, const Real bdt) {
   Real a_g = a_gal;
   Real z_g = z_gal;
   Real rho_m = rho_mean;
-  Real c_out = (4.0/3.0) * pow(5 * r_200, 1.5);
+  Real c_out = GalaxyPotOuterCoef(r_200);
 
   par_for("gravity_source", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -1232,14 +1227,14 @@ void GravitySource(Mesh* pm, const Real bdt) {
     const Real x3l = LeftEdgeX(k-ks,   nx3, x3min, x3max);
     const Real x3r = LeftEdgeX(k+1-ks, nx3, x3min, x3max);
 
-    Real phi1l = GravPot(x1l,x2v,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
-    Real phi1r = GravPot(x1r,x2v,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
+    Real phi1l = GalaxyPot(x1l,x2v,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
+    Real phi1r = GalaxyPot(x1r,x2v,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
 
-    Real phi2l = GravPot(x1v,x2l,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
-    Real phi2r = GravPot(x1v,x2r,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
+    Real phi2l = GalaxyPot(x1v,x2l,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
+    Real phi2r = GalaxyPot(x1v,x2r,x3v,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
 
-    Real phi3l = GravPot(x1v,x2v,x3l,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
-    Real phi3r = GravPot(x1v,x2v,x3r,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
+    Real phi3l = GalaxyPot(x1v,x2v,x3l,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
+    Real phi3r = GalaxyPot(x1v,x2v,x3r,G,r_s,rho_s,m_g,a_g,z_g,c_out,rho_m);
 
     constexpr Real tiny = 1e-20;
     Real f_x1_ = -(phi1r - phi1l) / fmax(x1r - x1l, tiny);
@@ -1261,30 +1256,6 @@ void GravitySource(Mesh* pm, const Real bdt) {
   });
 
   return;
-}
-
-KOKKOS_INLINE_FUNCTION
-Real GravPot(Real x1, Real x2, Real x3,
-             Real G, Real r_s, Real rho_s,
-             Real M_gal, Real a_gal, Real z_gal,
-             Real c_outer, Real rho_mean) {
-  const Real R2 = fma(x1, x1 , x2*x2);
-  const Real R  = sqrt(R2);
-  const Real r2 = fma(x3 , x3 , R2);
-  const Real r  = sqrt(fmax(r2, 1e-20));
-
-  // NFW component
-  Real x = r / r_s;
-  Real phi_NFW = -4 * M_PI * G * rho_s * SQR(r_s) * log1p(x) / x;
-
-  // Miyamoto-Nagai model
-  Real phi_MN = -G * M_gal / sqrt(R2 + SQR(sqrt(fma(x3 , x3 , z_gal*z_gal)) + a_gal));
-
-  // Outer component
-  Real phi_Outer = 4 * M_PI * G * rho_mean * (c_outer * sqrt(r) + (1.0/6.0) * r2);
-
-  // Total potential
-  return phi_NFW + phi_MN + phi_Outer;
 }
 
 void SNSource(Mesh* pm, const Real bdt) {

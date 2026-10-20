@@ -11,13 +11,9 @@
 #include "driver/driver.hpp"
 #include "particles.hpp"
 #include "units/units.hpp"
+#include "utils/galaxy_potential.hpp"
 
 namespace particles {
-KOKKOS_INLINE_FUNCTION
-Real GravPot(Real x1, Real x2, Real x3,
-             Real G, Real r_s, Real rho_s,
-             Real M_gal, Real a_gal, Real z_gal,
-             Real R200, Real rho_mean);
 
 //----------------------------------------------------------------------------------------
 //! \fn void Particles::ParticlesPush
@@ -62,7 +58,7 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
       Real m_g = m_gal;
       Real a_g = a_gal;
       Real z_g = z_gal;
-      Real r_m = r_200;
+      Real c_out = GalaxyPotOuterCoef(r_200);
       Real rho_m = rho_mean;
       Real h = par_grav_dx;
 
@@ -76,13 +72,16 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
         Real vy = pr(IPVY, p);
         Real vz = pr(IPVZ, p);
 
-	auto compute_acc = [&](Real px, Real py, Real pz, Real& ax, Real& ay, Real& az) {
-          Real phi_xp = GravPot(px+h, py, pz, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
-          Real phi_xm = GravPot(px-h, py, pz, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
-          Real phi_yp = GravPot(px, py+h, pz, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
-          Real phi_ym = GravPot(px, py-h, pz, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
-          Real phi_zp = GravPot(px, py, pz+h, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
-          Real phi_zm = GravPot(px, py, pz-h, G, r_s, rho_s, m_g, a_g, z_g, r_m, rho_m);
+        auto compute_acc = [&](Real px, Real py, Real pz, Real& ax, Real& ay, Real& az) {
+          auto phi = [&](Real qx, Real qy, Real qz) {
+            return GalaxyPot(qx, qy, qz, G, r_s, rho_s, m_g, a_g, z_g, c_out, rho_m);
+          };
+          Real phi_xp = phi(px+h, py, pz);
+          Real phi_xm = phi(px-h, py, pz);
+          Real phi_yp = phi(px, py+h, pz);
+          Real phi_ym = phi(px, py-h, pz);
+          Real phi_zp = phi(px, py, pz+h);
+          Real phi_zm = phi(px, py, pz-h);
 
           ax = -(phi_xp - phi_xm) / (2.0 * h);
           ay = -(phi_yp - phi_ym) / (2.0 * h);
@@ -155,37 +154,6 @@ TaskStatus Particles::Push(Driver *pdriver, int stage) {
   }
 
   return TaskStatus::complete;
-}
-
-KOKKOS_INLINE_FUNCTION
-Real GravPot(Real x1, Real x2, Real x3,
-             Real G, Real r_s, Real rho_s,
-             Real M_gal, Real a_gal, Real z_gal,
-             Real R200, Real rho_mean) {
-  Real R = sqrt(x1*x1 + x2*x2);
-  Real r2 = x1*x1 + x2*x2 + x3*x3;
-  Real r = sqrt(r2);
-
-  // Avoid division by zero
-  constexpr Real tiny = 1.0e-20;
-  r = fmax(r, tiny);
-
-  // NFW component
-  Real x = r / r_s;
-  Real phi_NFW = -4 * M_PI * G * rho_s * SQR(r_s) * log(1 + x) / x;
-
-  // Miyamoto-Nagai model
-  Real phi_MN = -G * M_gal / sqrt(R*R + SQR(sqrt(x3*x3 + z_gal*z_gal) + a_gal));
-
-  // Outer component
-  Real term1 = (4.0 / 3.0) * pow(5 * R200, 1.5) * sqrt(r);
-  Real term2 = (1.0 / 6.0) * r2;
-  Real phi_Outer = 4 * M_PI * G * rho_mean * (term1 + term2);
-
-  // Total potential
-  Real phi = phi_NFW + phi_MN + phi_Outer;
-
-  return phi;
 }
 
 } // namespace particles
