@@ -67,20 +67,11 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   // range of modes including, corresponding to kmin and kmax
   nlow = pin->GetOrAddInteger("turb_driving", "nlow", 1);
   nhigh = pin->GetOrAddInteger("turb_driving", "nhigh", 3);
-  // Peak of power when spectral form is parabolic, in units of 2*(PI/L)
-  // Support both npeak (wavenumber index) and kpeak (actual k value)
-  if (pin->DoesParameterExist("turb_driving", "npeak")) {
-    Real npeak = pin->GetReal("turb_driving", "npeak");
-    // Convert npeak to kpeak using fundamental wavenumber
-    // NOTE: assumes the driving box (or tile) has length 1. For length L the peak lands
-    // at mode index npeak*L, and since the parabolic weight is |1 - 4(n - n_peak)^2/
-    // (nhigh - nlow)^2|, shells meant to get zero power do not. GOTHAM (400/384 kpc
-    // tiles, npeak 9, nlow 8, nhigh 10) peaks at n = 9.375 and drives |n| = 8 hardest.
-    // Kept so running campaigns keep their forcing; development converts with the tile
-    // length (a84c7ffd6). See src/srcterms/README.md.
-    Real dkfund = 2.0*M_PI; // Assuming box size = 1
-    kpeak = npeak * dkfund;
-  } else {
+  // Peak of power when spectral form is parabolic: kpeak (actual k value), or npeak in
+  // tile-local mode numbers, converted to kpeak below once the tile size is known
+  const bool use_npeak = pin->DoesParameterExist("turb_driving", "npeak");
+  const Real npeak = use_npeak ? pin->GetReal("turb_driving", "npeak") : 0.0;
+  if (!use_npeak) {
     kpeak = pin->GetOrAddReal("turb_driving", "kpeak", 4.0*M_PI);
   }
   // spect form - 1 for parabola, 2 for power-law
@@ -98,12 +89,24 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   expo = pin->GetOrAddReal("turb_driving", "expo", 5.0/3.0);
   exp_prp = pin->GetOrAddReal("turb_driving", "exp_prp", 5.0/3.0);
   exp_prl = pin->GetOrAddReal("turb_driving", "exp_prl", 0.0);
-  // energy injection rate
-  dedt = pin->GetOrAddReal("turb_driving", "dedt", 0.0);
-  if (!std::isfinite(dedt) || dedt < 0.0) {
+  // strength: total injected power dedt (constant_edot = true, the default), or the
+  // volume-weighted RMS acceleration over the whole domain, accel_rms (false)
+  constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
+  const char *unused = constant_edot ? "accel_rms" : "dedt";
+  if (pin->DoesParameterExist("turb_driving", unused)) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-              << std::endl << "<turb_driving>/dedt must be finite and non-negative."
+              << std::endl << "<turb_driving>/" << unused << " is not used with "
+              << "constant_edot = " << (constant_edot ? "true" : "false") << "."
               << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  dedt = constant_edot ? pin->GetOrAddReal("turb_driving", "dedt", 0.0) : 0.0;
+  accel_rms = constant_edot ? 0.0 : pin->GetReal("turb_driving", "accel_rms");
+  if (!std::isfinite(dedt) || dedt < 0.0 || !std::isfinite(accel_rms) ||
+      accel_rms < 0.0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl << "<turb_driving>/dedt and accel_rms must be finite and "
+              << "non-negative." << std::endl;
     std::exit(EXIT_FAILURE);
   }
   // correlation time
@@ -113,11 +116,9 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   // To store fraction of energy in solenoidal modes
   sol_fraction=pin->GetOrAddReal("turb_driving","sol_fraction",1.0);
 
-  // random seed for turbulence driving (-1 = use time-based seed)
+  // random seed for turbulence driving: the ran2 initialization value, so -1 (the
+  // default) is a fixed seed, not a time-based one
   rseed = pin->GetOrAddInteger("turb_driving", "rseed", -1);
-
-  // drive with constant edot or constant acceleration
-  constant_edot = pin->GetOrAddBoolean("turb_driving", "constant_edot", true);
 
   // spatially varying driving
   x_turb_scale_height = pin->GetOrAddReal("turb_driving", "x_turb_scale_height", -1.0);
@@ -173,6 +174,23 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   tile_lx = lx_global / static_cast<Real>(tile_nx);
   tile_ly = (tile_ny > 0) ? ly_global / static_cast<Real>(tile_ny) : ly_global;
   tile_lz = (tile_nz > 0) ? lz_global / static_cast<Real>(tile_nz) : lz_global;
+  if (use_npeak) {
+    kpeak = npeak*2.0*M_PI/tile_lx;
+  }
+  if (spect_form == 1) {  // the parabola's prefactor is -4/(khigh - klow)^2
+    if (nhigh <= nlow) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<turb_driving>/nhigh must exceed nlow for the "
+                << "parabolic spectrum (spect_form = 1)." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (use_npeak && (npeak < nlow || npeak > nhigh)) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "<turb_driving>/npeak must lie between nlow and nhigh."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   inv_tile_lx = (tile_lx > 0.0) ? 1.0/tile_lx : 0.0;
   inv_tile_ly = (tile_ly > 0.0) ? 1.0/tile_ly : 0.0;
@@ -191,7 +209,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   tdriv_start = pin->GetOrAddReal("turb_driving", "tdriv_start", 0.); // If not specified, start driving at t=0
   if (global_variable::my_rank == 0){
     std::cout << "Initialising turbulence driving module" << std::endl <<
-    " dedt = " << dedt << " tcorr = " << tcorr << " dt_turb_update = " << dt_turb_update << std::endl;
+    (constant_edot ? " dedt = " : " accel_rms = ") << (constant_edot ? dedt : accel_rms)
+    << " tcorr = " << tcorr << " dt_turb_update = " << dt_turb_update << std::endl;
   }
 
   // Initialize n_turb_updates_yet based on current simulation time
@@ -557,6 +576,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
       int no_dir=3;
       int nmode = 0;
+      Real norm_max = 0.0;
 
       // Cartesian mode generation
       int nkx, nky, nkz, nsqr;
@@ -596,7 +616,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                   if(spect_form==2) norm = 1.0/pow(kiso,(ex+2.0)/2.0); // power-law driving
                   else if (spect_form==1)
                   {
-                    norm = fabs(parab_prefact*pow(kiso-k_peak,2.0)+1.0);// parabola in k-space
+                    // parabola in k-space, zero beyond its roots (fabs mirrored it)
+                    norm = fmax(parab_prefact*pow(kiso-k_peak,2.0)+1.0, 0.0);
                     norm = pow(norm,0.5) * pow(k_peak/kiso, ((int)no_dir-1)/2.);
                   }
                   else {
@@ -614,13 +635,15 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
                     else if (spect_form==1)
                     {
-                      norm = fabs(parab_prefact*pow(kprp-k_peak,2.0)+1.0);// parabola in kperp-space
+                      // parabola in kperp-space, zero beyond its roots
+                      norm = fmax(parab_prefact*pow(kprp-k_peak,2.0)+1.0, 0.0);
                       norm = pow(norm,0.5) * pow(k_peak/kprp, ((int)no_dir-1)/2.);
                     }
                   } else {
                     norm = 0.0;
                   }
                 }
+                norm_max = fmax(norm_max, norm);
                 // Generate coefficients once (same pattern repeated on all tiles)
                 Real ka = 0.0;
                 Real kb = 0.0;
@@ -653,6 +676,14 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
             }
           }
         }
+
+      // a clamped parabola can zero every mode: stop rather than silently not drive
+      if (!(norm_max > 0.0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<turb_driving> spectrum is zero for every mode in "
+                  << "[nlow, nhigh]; put kpeak (or npeak) inside the band." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
 
       aka_.template modify<HostMemSpace>();
       aka_.template sync<DevExeSpace>();
@@ -724,7 +755,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 // 1. Copies values from temporary force array to the main force array.
 // 2. Applies Gaussian weighting to the forcing in x, y, and z directions if requested.
 // 3. Computes net momentum and applies corrections to ensure momentum conservation.
-// 4. Scales the forcing to input dedt.
+// 4. Scales the forcing to the input dedt or accel_rms.
 //
 
 TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
@@ -912,8 +943,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         sum_t0 += den*0.5*(a1*a1 + a2*a2 + a3*a3)*dt*vol;
         sum_t1 += (mom1*a1 + mom2*a2 + mom3*a3)*vol;
       } else {
-        sum_t0 += 0.5*(a1*a1 + a2*a2 + a3*a3)*dt;
-        sum_t1 += 0.0;
+        sum_t0 += (a1*a1 + a2*a2 + a3*a3)*vol;
       }
       totvol_ += vol;
     }, Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(totvol));
@@ -924,13 +954,10 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
     t0 = gm[0]; t1 = gm[1]; totvol = gm[2];
   #endif
 
-    t0 = std::max(t0, 1.0e-20);
-
-    Real m0 = t0;
-    Real m1 = t1;
-
     Real s = 0.0;
     if (constant_edot) {
+      Real m0 = std::max(t0, 1.0e-20);
+      Real m1 = t1;
       // 1/2 rho (s vdot dt)^2 / dt + rho (s vdot dt).v / dt = dedt, i.e.
       // m0*s^2 + m1*s = dedt: take the non-negative root without subtracting nearly
       // equal numbers. Zero dedt disables forcing, including when it opposes the flow.
@@ -938,11 +965,14 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver *pdrive, int stage) {
         Real disc = sqrt(m1*m1 + 4.0*m0*dedt);
         s = (m1 >= 0.0) ? 2.0*dedt/(m1 + disc) : (disc - m1)/(2.0*m0);
       }
-    } else {
-      // 1/2 rho (s vdot dt)^2 / dt = dedt
-      // s = sqrt(dedt * dt / (1/2 rho (vdot dt)^2))
-      // s = sqrt(dedt / (1/2 rho vdot^2 dt))
-      s = sqrt(dedt/m0);
+    } else if (t0 > 0.0) {
+      // volume-weighted RMS over the whole domain, so independent of the AMR layout
+      s = accel_rms/sqrt(t0/totvol);
+    } else if (accel_rms > 0.0) {
+      std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                << std::endl << "Cannot impose accel_rms on a zero forcing field."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
     }
     if (!std::isfinite(s)) {
       std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__

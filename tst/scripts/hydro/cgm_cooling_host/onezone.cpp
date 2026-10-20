@@ -1,9 +1,12 @@
 //! \file onezone.cpp
 //! \brief Host one-zone regression test of cgm_cooling::IntegrateTemperature with the
 //! athinput.gotham units and heating. Reference temperatures come from an RK4
-//! integration of the same rates. Exits nonzero if any case is off by more than 0.5%.
+//! integration of the same rates. Also checks that the tabulated node rates equal
+//! CalculateRates. Exits nonzero if any case is off by more than 0.5%, or if any node
+//! rate differs from CalculateRates beyond round-off.
 
 #include <cstdio>
+#include <vector>
 
 #include "cgm_cooling.hpp"
 
@@ -16,6 +19,11 @@ struct Table2D {
   const Real *a;
   int n1;
   Real operator()(const int i, const int j) const { return a[i*n1 + j]; }
+};
+template<typename T>
+struct HostArray {  // a std::vector indexed like a Kokkos::View
+  const std::vector<T> *v;
+  const T &operator()(const int i) const { return (*v)[i]; }
 };
 }  // namespace
 
@@ -65,19 +73,45 @@ int main() {
     {1.0, metallicity, 3.0, 50.0, 1.0e5, 407.6917},     // heats up across the edge
   };
 
+  const cgm_cooling::CoolingNodes nodes = cgm_cooling::TabulateNodes(
+      T_lo, T_hi, Tfloor, Tceil, Tbins, Metal_CIE, H_He_CIE);
+  const HostArray<Real> node_T{&nodes.temp};
+  const HostArray<cgm_cooling::TempTerms> seg_lo{&nodes.lo}, seg_hi{&nodes.hi};
+
   int nfail = 0;
   for (const Case &c : cases) {
     const Real rho = c.nH/(0.75*nH_unit);  // nH = X*nH_unit*rho, as in CalculateRates
+    const Real c_V = rho/(gm1*temp_unit);
+    const cgm_cooling::CellTerms cell = cgm_cooling::CellPart(
+        rho, c.Z, c.x1, 0.0, 0.0, dx1, nH_unit, length_unit, h_rate, h_norm, h_height,
+        h_radius, nHfloor, nHceil, nHbins);
+
+    // the tabulated rate at every segment end must equal CalculateRates there
+    Real max_rate = 0.0, max_diff = 0.0;
+    for (std::size_t n = 0; n < nodes.lo.size(); ++n) {
+      for (const cgm_cooling::TempTerms &tt : {nodes.lo[n], nodes.hi[n]}) {
+        const Real rate = cgm_cooling::NetRate(cell, tt, cooling_unit, heating_unit,
+                                               Metal, H_He);
+        const Real rate_ref = cgm_cooling::CalculateRates(
+            rho, c_V*tt.temp, c.Z, c.x1, 0.0, 0.0, dx1, gm1, temp_unit, nH_unit,
+            cooling_unit, heating_unit, length_unit, h_rate, h_norm, h_height, h_radius,
+            T_hi, Tfloor, Tceil, nHfloor, nHceil, Tbins, nHbins, Metal, H_He, Metal_CIE,
+            H_He_CIE).net_cooling_rate;
+        max_rate = fmax(max_rate, fabs(rate_ref));
+        max_diff = fmax(max_diff, fabs(rate - rate_ref));
+      }
+    }
+    const Real table_err = max_diff/max_rate;
+
     const Real T1 = cgm_cooling::IntegrateTemperature(
-        c.T0, c.dt_yr*yr_cgs/time_cgs, rho, c.Z, c.x1, 0.0, 0.0, dx1, gm1,
-        temp_unit, nH_unit, cooling_unit, heating_unit, length_unit, h_rate, h_norm,
-        h_height, h_radius, T_lo, T_hi, Tfloor, Tceil, nHfloor, nHceil, Tbins, nHbins,
-        Metal, H_He, Metal_CIE, H_He_CIE);
+        c.T0, c.dt_yr*yr_cgs/time_cgs, c_V, T_lo, T_hi, cell, nodes.k_lo, nodes.logT_0,
+        nodes.dlogT, node_T, seg_lo, seg_hi, cooling_unit, heating_unit, Metal, H_He);
     const Real err = fabs(T1/c.T_ref - 1.0);
-    const bool ok = (err < 5.0e-3);
+    const bool ok = (err < 5.0e-3) && (table_err < 1.0e-12);
     if (!ok) ++nfail;
-    std::printf("%s nH=%-6g x1=%-4g T0=%-6g dt=%-6g yr: T=%.4e K (ref %.4e, err %.1e)\n",
-                ok ? "ok  " : "FAIL", c.nH, c.x1, c.T0, c.dt_yr, T1, c.T_ref, err);
+    std::printf("%s nH=%-6g x1=%-4g T0=%-6g dt=%-6g yr: T=%.4e K (ref %.4e, err %.1e)"
+                "  node rates vs CalculateRates %.1e\n", ok ? "ok  " : "FAIL", c.nH,
+                c.x1, c.T0, c.dt_yr, T1, c.T_ref, err, table_err);
   }
   return nfail;
 }

@@ -6,9 +6,9 @@ This directory contains source term implementations for AthenaK, including CGM c
 
 The CGM cooling source term uses the shared helper in `cgm_cooling.hpp` for the energy update, optional cooling timestep estimate, and `cooling_time` derived output. This keeps the radiative cooling, heating profile, and shielding mix in one place.
 
-Cooling is operator split: `SourceTerms::CGMCoolingSplit` runs once per step in the `after_timeintegrator` task list (not inside the RK stages, where a stiff source loses half its effect to the RK averaging). In active cells, `cgm_cooling::IntegrateTemperature` integrates T exactly over dt with the net rate taken linear in T between table nodes (Townsend 2009, generalized as in Tan & Fielding 2023, App. C), clamped to [`tfloor`, `T_max`]. The task then refreshes restriction, ghost zones and primitives (`Driver::InitBoundaryValuesAndPrimitives`), so AMR and the next step's fluxes see the cooled state, and recomputes dt. The one-zone regression test is `tst/scripts/hydro/cgm_cooling_onezone.py`.
+Cooling is operator split: `SourceTerms::CGMCoolingSplit` runs once per step in the `after_timeintegrator` task list (not inside the RK stages, where a stiff source loses half its effect to the RK averaging). In every active cell `cgm_cooling::IntegrateTemperature` integrates T exactly over dt with the net rate taken linear in T between nodes, five per table bin (Townsend 2009, generalized as in Tan & Fielding 2023, App. C), clamped to [`tfloor`, `T_max`]. The rate jumps at the table edges (100 K and the table top), so each segment takes one-sided rates there and T rests on an edge when the rate beyond it pushes back. Restriction, ghost zones and primitives are then refreshed (`InitBoundaryValuesAndPrimitives`) and the timestep recomputed. The rate is split into a temperature part (`TempPart`), tabulated once at the nodes (`TabulateNodes`), and a cell part (`CellPart`), computed once per cell; `NetRate` combines them, and `CalculateRates` (used by the timestep limiter and outputs) is the same combination at any temperature. The one-zone regression test is `tst/scripts/hydro/cgm_cooling_onezone.py`.
 
-**The cooling rate depends on resolution.** `CalculateRates` blends the UV-background (PIE) and collisional (CIE) rates with the shielding optical depth of one cell, `tau = f_neutral * n_H * 1e-17 cm^2 * dx`, where `dx` is the local cell width. Neutral gas of the same density and temperature therefore cools differently at different resolutions and on either side of an AMR level boundary: one level finer halves `tau` and moves the rate toward the unshielded PIE limit. This is deliberate for now. The `cooling_time` output and the optional dt limiter use the same rate.
+**The cooling rate depends on resolution.** The net rate (`NetRate`, and `CalculateRates`) blends the UV-background (PIE) and collisional (CIE) rates with the shielding optical depth of one cell, `tau = f_neutral * n_H * 1e-17 cm^2 * dx`, where `dx` is the local cell width. Neutral gas of the same density and temperature therefore cools differently at different resolutions and on either side of an AMR level boundary: one level finer halves `tau` and moves the rate toward the unshielded PIE limit. This is deliberate for now. The `cooling_time` output and the optional dt limiter use the same rate.
 
 The explicit cooling timestep limiter is opt-in with `cgm_cooling_limit_dt = true`. When enabled, `cgm_cooling_dt_frac` sets the fraction of the local net-cooling time used for the source-term timestep. Gotham-scale production inputs keep this off by default because a single pathological cell can otherwise force a very small global timestep.
 
@@ -53,22 +53,28 @@ where:
 
 ### Common Parameters
 - `turb_flag`: 1=decaying turbulence, 2=continuously driven
-- `dedt`: Total power injected over the whole domain (energy/time in code units, not per volume). With `constant_edot = true` (default) each step's kick adds exactly `dedt*dt`
+- `constant_edot`: true (default) normalizes the forcing to the injected power `dedt`; false normalizes it to the RMS acceleration `accel_rms`. Each mode rejects the other's parameter.
+- `dedt`: Total energy injection rate over the whole domain (energy/time, not per volume), with `constant_edot = true`
+- `accel_rms`: Required with `constant_edot = false`: the volume-weighted RMS of the applied acceleration over the whole domain, so it does not depend on the AMR layout. The injected power then follows the flow. With a driving window (scale heights below) the average still covers the whole domain, so the RMS inside the window is larger by about sqrt(V/∫w²dV), where w is the window: about 1.1e4 for the GOTHAM window in its 400 kpc box.
 - `tcorr`: Correlation time for amplitude evolution
-- `rseed`: Random seed for reproducibility (-1 for time-based)
+- `rseed`: Seed of the forcing's random sequence (the ran2 initialization value). The default -1 is a fixed seed, so runs are reproducible; nothing is time-based.
 - `sol_fraction`: Fraction of solenoidal modes (1.0 = incompressible)
 
 ### Spectral Parameters
-- `nlow`, `nhigh`: Minimum and maximum |k| for mode selection
+- `nlow`, `nhigh`: Minimum and maximum mode number |n| for mode selection, counted in waves per tile (per box without tiling)
 - `spect_form`: 1=parabolic spectrum, 2=power law
-- `kpeak`: Peak wavenumber for parabolic spectrum
-- `npeak`: Peak as a mode index, converted as `kpeak = npeak*2*pi`, i.e. as if the driving box (or tile) had length 1. For a box or tile of length `L` the peak lands at index `npeak*L`. The parabolic weight per mode is `|1 - 4(n - n_peak)^2/(nhigh - nlow)^2|`, an absolute value, so a misplaced peak also gives power to shells that should get none. GOTHAM's 400/384 kpc tiles put `npeak = 9` at `n = 9.375`; with `nlow = 8`, `nhigh = 10` the per-mode amplitudes of the |n| = 8, 9, 10 shells are 1.11, 0.97, 0.73, where a peak at 9 gives 0, 1, 0. Left as is so running campaigns keep their forcing; `development` converts with the tile length (a84c7ffd6)
+- `kpeak`: Peak wavenumber for parabolic spectrum, in code units (default 4π)
+- `npeak`: Peak of the parabolic spectrum as a mode number, so kpeak = npeak·2π/tile_lx (the box length without tiling); overrides `kpeak`. With `spect_form = 1` the run stops unless `nhigh > nlow` and `nlow ≤ npeak ≤ nhigh`.
 - `expo`: Power law exponent (if spect_form=2)
 
 ### Spatial Windowing (optional)
 - `x_turb_scale_height`: Gaussian scale height in x-direction (-1 = no windowing)
 - `x_turb_center`: Center of Gaussian window in x-direction
 - (Similarly for y and z directions)
+
+### Tiled Driving (optional)
+- `tile_driving`: Repeat one forcing pattern on every tile (default false)
+- `tile_factor`: Tiles per dimension (default 1), the default for `tile_nx`, `tile_ny` and `tile_nz`, which can also be set individually. Each must divide the root-grid `nx1`, `nx2`, `nx3`.
 
 ## Algorithm Flow
 
@@ -83,8 +89,8 @@ where:
    - Remove net momentum to maintain momentum conservation
 
 3. **Force Application** (every timestep):
-   - Newtonian runs: one kick per step after the last RK stage's fluid update and source terms, normalized against the state being kicked; the energy update `dE = m.dv + rho|dv|^2/2` leaves the thermal energy unchanged
-   - Special relativity: a source term in every RK stage
+   - Newtonian hydro, MHD and ion-neutral: one kick per step, after the last stage's fluid update and source terms and before restriction and boundary exchange (for ion-neutral, after the implicit update). The forcing is normalized against the state being kicked, then dv = a·dt is added with dE = m·dv + ρ|dv|²/2 from the pre-kick momentum m, so the thermal energy is unchanged.
+   - Special relativity keeps a source term in every stage.
 
 ## AMR Considerations
 

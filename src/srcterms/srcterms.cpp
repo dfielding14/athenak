@@ -272,7 +272,8 @@ void SourceTerms::ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos_da
 //! \fn void SourceTerms::CGMCoolingSplit()
 //! \brief Operator-split CGM cooling/heating, applied once per step after the RK stages.
 //! Integrates T exactly over dt (cgm_cooling::IntegrateTemperature), clamped to
-//! [tfloor, T_max], and adds the energy change to u0 in active cells. The caller must
+//! [tfloor, T_max], and adds the energy change to u0 in active cells. The temperature
+//! parts of the rates come from a node table built at the first call. The caller must
 //! then refresh coarse_u0, ghost zones and primitives (InitBoundaryValuesAndPrimitives).
 void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
                                   const EOS_Data &eos_data, const Real dt) {
@@ -296,12 +297,10 @@ void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
   Real heating_unit = units->pressure_cgs()/units->time_cgs()/nH_unit;
   Real length_unit = units->length_cgs();
 
-  auto Tbins_ = Tbins.d_view;
+  // the temperature tables enter only through the node table below
   auto nHbins_ = nHbins.d_view;
   auto Metal_Cooling_ = Metal_Cooling.d_view;
   auto H_He_Cooling_ = H_He_Cooling.d_view;
-  auto Metal_Cooling_CIE_ = Metal_Cooling_CIE.d_view;
-  auto H_He_Cooling_CIE_ = H_He_Cooling_CIE.d_view;
 
   auto Tfloor  = std::pow(10, Tbins_ARR[0]);
   auto Tceil   = std::pow(10, Tbins_ARR[Tbins_DIM_0 - 1]);
@@ -316,6 +315,36 @@ void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
   Real T_lo = fmax(eos_data.tfloor, FLT_MIN)*temp_unit;
   Real T_max_ = T_max;
 
+  // the integrator's nodes span [T_lo, T_max]; tabulate them on the first call
+  if (cgm_seg_lo.extent(0) == 0) {
+    const cgm_cooling::CoolingNodes nodes = cgm_cooling::TabulateNodes(
+        T_lo, T_max, Tfloor, Tceil, Tbins.h_view, Metal_Cooling_CIE.h_view,
+        H_He_Cooling_CIE.h_view);
+    const int nseg = nodes.lo.size();
+    cgm_node_lo = nodes.k_lo;
+    cgm_node_logT0 = nodes.logT_0;
+    cgm_node_dlogT = nodes.dlogT;
+    cgm_node_T = DvceArray1D<Real>("cgm_node_T", nseg + 1);
+    cgm_seg_lo = DvceArray1D<cgm_cooling::TempTerms>("cgm_seg_lo", nseg);
+    cgm_seg_hi = DvceArray1D<cgm_cooling::TempTerms>("cgm_seg_hi", nseg);
+    auto node_T_h = Kokkos::create_mirror_view(cgm_node_T);
+    auto seg_lo_h = Kokkos::create_mirror_view(cgm_seg_lo);
+    auto seg_hi_h = Kokkos::create_mirror_view(cgm_seg_hi);
+    for (int n = 0; n <= nseg; ++n) node_T_h(n) = nodes.temp[n];
+    for (int n = 0; n < nseg; ++n) {
+      seg_lo_h(n) = nodes.lo[n];
+      seg_hi_h(n) = nodes.hi[n];
+    }
+    Kokkos::deep_copy(cgm_node_T, node_T_h);
+    Kokkos::deep_copy(cgm_seg_lo, seg_lo_h);
+    Kokkos::deep_copy(cgm_seg_hi, seg_hi_h);
+  }
+  auto node_T = cgm_node_T;
+  auto seg_lo = cgm_seg_lo;
+  auto seg_hi = cgm_seg_hi;
+  const int k_lo = cgm_node_lo;
+  const Real logT_0 = cgm_node_logT0, dlogT = cgm_node_dlogT;
+
   par_for("cgm_cooling_split", DevExeSpace(), 0, nmb1, ks, ke, js, je, is, ie,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
     const Real x1min = size.d_view(m).x1min, x1max = size.d_view(m).x1max;
@@ -329,11 +358,12 @@ void SourceTerms::CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
     const Real rho = w0(m,IDN,k,j,i);
     const Real c_V = rho/(gm1*temp_unit);
     const Real T0 = w0(m,IEN,k,j,i)/c_V;
+    const cgm_cooling::CellTerms cell = cgm_cooling::CellPart(
+        rho, w0(m,nfluid,k,j,i), x1v, x2v, x3v, size.d_view(m).dx1, nH_unit, length_unit,
+        h_rate, h_norm, h_height, h_radius, nHfloor, nHceil, nHbins_);
     const Real T1 = cgm_cooling::IntegrateTemperature(
-        T0, dt, rho, w0(m,nfluid,k,j,i), x1v, x2v, x3v, size.d_view(m).dx1, gm1,
-        temp_unit, nH_unit, cooling_unit, heating_unit, length_unit, h_rate, h_norm,
-        h_height, h_radius, T_lo, T_max_, Tfloor, Tceil, nHfloor, nHceil, Tbins_,
-        nHbins_, Metal_Cooling_, H_He_Cooling_, Metal_Cooling_CIE_, H_He_Cooling_CIE_);
+        T0, dt, c_V, T_lo, T_max_, cell, k_lo, logT_0, dlogT, node_T, seg_lo, seg_hi,
+        cooling_unit, heating_unit, Metal_Cooling_, H_He_Cooling_);
 
     u0(m,IEN,k,j,i) += c_V*(T1 - T0);
   });

@@ -18,6 +18,7 @@
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "parameter_input.hpp"
+#include "srcterms/cgm_cooling_terms.hpp"
 
 // forward declarations
 class TurbulenceDriver;
@@ -62,6 +63,13 @@ class SourceTerms {
   DualArray2D<Real> Metal_Cooling, H_He_Cooling;
   DualArray1D<Real> Metal_Cooling_CIE, H_He_Cooling_CIE;
   Real T_max;
+
+  // nodes of the exact cooling integrator (cgm_cooling::TabulateNodes), filled at the
+  // first CGMCoolingSplit call, once the EOS temperature floor is known
+  int cgm_node_lo = 0;
+  Real cgm_node_logT0 = 0.0, cgm_node_dlogT = 0.0;
+  DvceArray1D<Real> cgm_node_T;
+  DvceArray1D<cgm_cooling::TempTerms> cgm_seg_lo, cgm_seg_hi;
 
   // cooling rate used with relativistic cooling
   Real crate_rel;
