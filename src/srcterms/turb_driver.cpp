@@ -566,6 +566,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
       int no_dir=3;
       int nmode = 0;
+      Real norm_max = 0.0;
 
       // Cartesian mode generation
       int nkx, nky, nkz, nsqr;
@@ -605,7 +606,8 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
                   if(spect_form==2) norm = 1.0/pow(kiso,(ex+2.0)/2.0); // power-law driving
                   else if (spect_form==1)
                   {
-                    norm = fabs(parab_prefact*pow(kiso-k_peak,2.0)+1.0);// parabola in k-space
+                    // parabola in k-space, zero beyond its roots (fabs mirrored it)
+                    norm = fmax(parab_prefact*pow(kiso-k_peak,2.0)+1.0, 0.0);
                     norm = pow(norm,0.5) * pow(k_peak/kiso, ((int)no_dir-1)/2.);
                   }
                   else {
@@ -623,13 +625,15 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
 
                     else if (spect_form==1)
                     {
-                      norm = fabs(parab_prefact*pow(kprp-k_peak,2.0)+1.0);// parabola in kperp-space
+                      // parabola in kperp-space, zero beyond its roots
+                      norm = fmax(parab_prefact*pow(kprp-k_peak,2.0)+1.0, 0.0);
                       norm = pow(norm,0.5) * pow(k_peak/kprp, ((int)no_dir-1)/2.);
                     }
                   } else {
                     norm = 0.0;
                   }
                 }
+                norm_max = fmax(norm_max, norm);
                 // Generate coefficients once (same pattern repeated on all tiles)
                 Real ka = 0.0;
                 Real kb = 0.0;
@@ -662,6 +666,14 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver *pdrive, int stage) {
             }
           }
         }
+
+      // a clamped parabola can zero every mode: stop rather than silently not drive
+      if (!(norm_max > 0.0)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl << "<turb_driving> spectrum is zero for every mode in "
+                  << "[nlow, nhigh]; put kpeak (or npeak) inside the band." << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
 
       aka_.template modify<HostMemSpace>();
       aka_.template sync<DevExeSpace>();
