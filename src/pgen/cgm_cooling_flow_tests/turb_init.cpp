@@ -116,6 +116,62 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
   akb.template modify<HostMemSpace>();
   akb.template sync<DevExeSpace>();
 
+  // Optional seeds of cold gas, both at pressure p0: log-normal density perturbations,
+  // ln(rho/rho0) a random field of rms drho_rms on box modes [drho_nlow, drho_nhigh] with
+  // the velocity field's spectral slope; and a cloud of density cloud_chi*rho0 and radius
+  // cloud_radius at the origin.
+  Real drho_rms = pin->GetOrAddReal("problem", "drho_rms", 0.0);
+  int drho_nlow = pin->GetOrAddInteger("problem", "drho_nlow", 4);
+  int drho_nhigh = pin->GetOrAddInteger("problem", "drho_nhigh", 8);
+  Real cloud_radius = pin->GetOrAddReal("problem", "cloud_radius", 0.0);
+  Real cloud_chi = pin->GetOrAddReal("problem", "cloud_chi", 1.0);
+
+  // Count density modes (none without perturbations)
+  int ndmodes = 0;
+  if (drho_rms > 0.0) {
+    for (int nkx = -drho_nhigh; nkx <= drho_nhigh; nkx++) {
+      for (int nky = -drho_nhigh; nky <= drho_nhigh; nky++) {
+        for (int nkz = -drho_nhigh; nkz <= drho_nhigh; nkz++) {
+          if (nkx == 0 && nky == 0 && nkz == 0) continue;
+          int nsqr = nkx*nkx + nky*nky + nkz*nkz;
+          if (nsqr >= drho_nlow*drho_nlow && nsqr <= drho_nhigh*drho_nhigh) ndmodes++;
+    }}}
+  }
+
+  // Density modes come from their own random sequence, so the velocities don't change
+  DualArray2D<Real> dk_modes, dka;  // dka(0,n), dka(1,n): cos and sin amplitudes
+  Kokkos::realloc(dk_modes, 3, ndmodes);
+  Kokkos::realloc(dka, 2, ndmodes);
+  Real dvar = 0.0;
+  if (drho_rms > 0.0) {
+    RNG_State dstate;
+    dstate.idum = -2;
+    int nd = 0;
+    for (int nkx = -drho_nhigh; nkx <= drho_nhigh; nkx++) {
+      for (int nky = -drho_nhigh; nky <= drho_nhigh; nky++) {
+        for (int nkz = -drho_nhigh; nkz <= drho_nhigh; nkz++) {
+          if (nkx == 0 && nky == 0 && nkz == 0) continue;
+          int nsqr = nkx*nkx + nky*nky + nkz*nkz;
+          if (nsqr >= drho_nlow*drho_nlow && nsqr <= drho_nhigh*drho_nhigh) {
+            Real kx = dkx*nkx, ky = dky*nky, kz = dkz*nkz;
+            Real norm = 1.0/pow(sqrt(kx*kx + ky*ky + kz*kz), (expo+2.0)/2.0);
+            dk_modes.h_view(0,nd) = kx;
+            dk_modes.h_view(1,nd) = ky;
+            dk_modes.h_view(2,nd) = kz;
+            dka.h_view(0,nd) = norm*RanGaussianSt(&dstate);
+            dka.h_view(1,nd) = norm*RanGaussianSt(&dstate);
+            dvar += 0.5*(SQR(dka.h_view(0,nd)) + SQR(dka.h_view(1,nd)));
+            nd++;
+          }
+    }}}
+  }
+  Real d_norm = (ndmodes > 0) ? drho_rms/sqrt(dvar) : 0.0;
+
+  dk_modes.template modify<HostMemSpace>();
+  dk_modes.template sync<DevExeSpace>();
+  dka.template modify<HostMemSpace>();
+  dka.template sync<DevExeSpace>();
+
   // Initialize density, pressure, velocities
   auto &u0 = pmbp->phydro->u0;
   EOS_Data &eos = pmbp->phydro->peos->eos_data;
@@ -162,14 +218,24 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     // Normalize to desired RMS velocity
     vx *= v_norm*att; vy *= v_norm*att; vz *= v_norm*att;
 
-    // Set conserved variables
-    u0(m,IDN,k,j,i) = rho0;
-    if (nscal > 0) u0(m,nhyd,k,j,i) = rho0*zmet;
-    u0(m,IM1,k,j,i) = rho0 * vx;
-    u0(m,IM2,k,j,i) = rho0 * vy;
-    u0(m,IM3,k,j,i) = rho0 * vz;
+    // Density: log-normal perturbations (mean rho0), then the cloud
+    Real lnd = 0.0;
+    for (int n = 0; n < ndmodes; n++) {
+      Real phase = dk_modes.d_view(0,n)*x + dk_modes.d_view(1,n)*y
+                 + dk_modes.d_view(2,n)*z;
+      lnd += dka.d_view(0,n)*cos(phase) - dka.d_view(1,n)*sin(phase);
+    }
+    Real rho = rho0*exp(d_norm*lnd - 0.5*SQR(drho_rms));
+    if (SQR(x) + SQR(y) + SQR(z) < SQR(cloud_radius)) rho = cloud_chi*rho0;
 
-    Real ekin = 0.5*rho0*(vx*vx + vy*vy + vz*vz);
+    // Set conserved variables; the pressure is p0 everywhere
+    u0(m,IDN,k,j,i) = rho;
+    if (nscal > 0) u0(m,nhyd,k,j,i) = rho*zmet;
+    u0(m,IM1,k,j,i) = rho * vx;
+    u0(m,IM2,k,j,i) = rho * vy;
+    u0(m,IM3,k,j,i) = rho * vz;
+
+    Real ekin = 0.5*rho*(vx*vx + vy*vy + vz*vz);
     u0(m,IEN,k,j,i) = p0/gm1 + ekin;
   });
 }
