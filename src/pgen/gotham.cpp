@@ -1444,7 +1444,8 @@ Real LimitDustTransfer(const Real requested,
 }
 
 void DustSource(Mesh* pm, const Real bdt) {
-
+  // By design, all dust processes start together with feedback at <SN>/delay: the
+  // pre-feedback phase evolves dust as passive scalars only. sn_delay is 0 without <SN>.
   if (pm->time < sn_delay) return;
 
   MeshBlockPack *pmbp = pm->pmb_pack;

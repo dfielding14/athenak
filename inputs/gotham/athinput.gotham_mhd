@@ -120,7 +120,7 @@ pusher              = rk4_gravity
 
 <SN>
 r_inj = 0.008 # 8 pc (set injection radius to 2*dx_finest)
-delay = 10.0
+delay = 10.0 # SN clocks and all dust processes start here (dust waits by design)
 
 <dust>
 d_z_init                  = 0.2    # Initial dust-to-metal ratio
