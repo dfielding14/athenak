@@ -1532,6 +1532,11 @@ void DustSource(Mesh* pm, const Real bdt) {
     //      The factor 3/a arises because grain mass ∝ a³ and the
     //      absolute erosion rate da/dt is size-independent, so
     //      d(ln M)/dt = 3 (da/dt)/a = 3 / (a τ_sp).
+    //
+    //      AUDIT (2026-10-19, docs/gotham_dust_rate_audit.md): 1657 Myr per μm
+    //      is the Tsai & Mathews rate at ρ = 1e-27 g cm^-3, i.e. n_H = 4.52e-4
+    //      with this kernel's nH = X ρ / m_u, not 1e-3. Sputtering here is 2.2×
+    //      too slow. Left unchanged.
     // =================================================================
     {
       Real tau_sput_Myr = 1657.0 * (1.0e-3 / nH);
@@ -1633,13 +1638,18 @@ void DustSource(Mesh* pm, const Real bdt) {
 
     // =================================================================
     //  4.  COAGULATION  (small grains → large grains)
-    //      Dubois et al. (2024)
+    //      Dubois et al. (2024), Eq. (20)
     //
+    //      As coded:
     //      τ_coag = 2.7 Myr × (ρ_gr / 3 g cm^-3) × (10^3 / n_H)
     //                        × (0.01 / D_small) × (0.1 km/s / v_coag)
-    //                        × f_coag
+    //                        / f_coag
     //
-    //      Δρ_Ds = -dt × ρ_Ds / (τ_coag × a_small / 0.05)
+    //      Δρ_Ds = -dt × ρ_Ds / (τ_coag × a_small / 0.005 μm)
+    //
+    //      AUDIT (2026-10-19, docs/gotham_dust_rate_audit.md): Eq. (20) has
+    //      0.27 Myr where this has 2.7 Myr; every other factor matches.
+    //      Coagulation here is 10× too slow. Left unchanged.
     // =================================================================
     {
       Real tau_coag_Myr = 2.7;
