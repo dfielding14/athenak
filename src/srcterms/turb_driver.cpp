@@ -72,6 +72,12 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack *pp, ParameterInput *pin) :
   if (pin->DoesParameterExist("turb_driving", "npeak")) {
     Real npeak = pin->GetReal("turb_driving", "npeak");
     // Convert npeak to kpeak using fundamental wavenumber
+    // NOTE: assumes the driving box (or tile) has length 1. For length L the peak lands
+    // at mode index npeak*L, and since the parabolic weight is |1 - 4(n - n_peak)^2/
+    // (nhigh - nlow)^2|, shells meant to get zero power do not. GOTHAM (400/384 kpc
+    // tiles, npeak 9, nlow 8, nhigh 10) peaks at n = 9.375 and drives |n| = 8 hardest.
+    // Kept so running campaigns keep their forcing; development converts with the tile
+    // length (a84c7ffd6). See src/srcterms/README.md.
     Real dkfund = 2.0*M_PI; // Assuming box size = 1
     kpeak = npeak * dkfund;
   } else {

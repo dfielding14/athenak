@@ -130,10 +130,10 @@ z_turb_scale_height = 0.1
 nlow                = 8
 nhigh               = 10
 spect_form          = 1 # parabolic
-npeak               = 9
+npeak               = 9 # turb_driver converts npeak as if the tile were 1 long: peak is at n = 9*1.0417 = 9.375 (see turb_driver.cpp)
 sol_fraction        = 0.5
 tile_driving        = true
-tile_factor         = 384 # 1.25 kpc tile size
+tile_factor         = 384 # 400/384 = 1.04 kpc tile size
 
 <units>
 length_cgs  = 3.0856775809623245e+21 # kpc

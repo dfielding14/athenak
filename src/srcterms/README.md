@@ -6,7 +6,7 @@ This directory contains source term implementations for AthenaK, including CGM c
 
 The CGM cooling source term uses the shared helper in `cgm_cooling.hpp` for the energy update, optional cooling timestep estimate, and `cooling_time` derived output. This keeps the radiative cooling, heating profile, and shielding mix in one place.
 
-Cooling is operator split: `SourceTerms::CGMCoolingSplit` runs once per step in the `after_timeintegrator` task list (not inside the RK stages, where a stiff source loses half its effect to the RK averaging). In every cell, ghosts included, `cgm_cooling::IntegrateTemperature` integrates T exactly over dt with the net rate taken linear in T between table nodes (Townsend 2009, generalized as in Tan & Fielding 2023, App. C), clamped to [`tfloor`, `T_max`]. The one-zone regression test is `tst/scripts/hydro/cgm_cooling_onezone.py`.
+Cooling is operator split: `SourceTerms::CGMCoolingSplit` runs once per step in the `after_timeintegrator` task list (not inside the RK stages, where a stiff source loses half its effect to the RK averaging). In active cells, `cgm_cooling::IntegrateTemperature` integrates T exactly over dt with the net rate taken linear in T between table nodes (Townsend 2009, generalized as in Tan & Fielding 2023, App. C), clamped to [`tfloor`, `T_max`]. The task then refreshes restriction, ghost zones and primitives (`Driver::InitBoundaryValuesAndPrimitives`), so AMR and the next step's fluxes see the cooled state, and recomputes dt. The one-zone regression test is `tst/scripts/hydro/cgm_cooling_onezone.py`.
 
 **The cooling rate depends on resolution.** `CalculateRates` blends the UV-background (PIE) and collisional (CIE) rates with the shielding optical depth of one cell, `tau = f_neutral * n_H * 1e-17 cm^2 * dx`, where `dx` is the local cell width. Neutral gas of the same density and temperature therefore cools differently at different resolutions and on either side of an AMR level boundary: one level finer halves `tau` and moves the rate toward the unshielded PIE limit. This is deliberate for now. The `cooling_time` output and the optional dt limiter use the same rate.
 
@@ -53,7 +53,7 @@ where:
 
 ### Common Parameters
 - `turb_flag`: 1=decaying turbulence, 2=continuously driven
-- `dedt`: Energy injection rate (energy/time/volume)
+- `dedt`: Total power injected over the whole domain (energy/time in code units, not per volume). With `constant_edot = true` (default) each step's kick adds exactly `dedt*dt`
 - `tcorr`: Correlation time for amplitude evolution
 - `rseed`: Random seed for reproducibility (-1 for time-based)
 - `sol_fraction`: Fraction of solenoidal modes (1.0 = incompressible)
@@ -62,6 +62,7 @@ where:
 - `nlow`, `nhigh`: Minimum and maximum |k| for mode selection
 - `spect_form`: 1=parabolic spectrum, 2=power law
 - `kpeak`: Peak wavenumber for parabolic spectrum
+- `npeak`: Peak as a mode index, converted as `kpeak = npeak*2*pi`, i.e. as if the driving box (or tile) had length 1. For a box or tile of length `L` the peak lands at index `npeak*L`. The parabolic weight per mode is `|1 - 4(n - n_peak)^2/(nhigh - nlow)^2|`, an absolute value, so a misplaced peak also gives power to shells that should get none. GOTHAM's 400/384 kpc tiles put `npeak = 9` at `n = 9.375`; with `nlow = 8`, `nhigh = 10` the per-mode amplitudes of the |n| = 8, 9, 10 shells are 1.11, 0.97, 0.73, where a peak at 9 gives 0, 1, 0. Left as is so running campaigns keep their forcing; `development` converts with the tile length (a84c7ffd6)
 - `expo`: Power law exponent (if spect_form=2)
 
 ### Spatial Windowing (optional)
@@ -82,9 +83,8 @@ where:
    - Remove net momentum to maintain momentum conservation
 
 3. **Force Application** (every timestep):
-   - Compute force field at each cell center
-   - Add to momentum equation source terms
-   - Add corresponding energy source term
+   - Newtonian runs: one kick per step after the last RK stage's fluid update and source terms, normalized against the state being kicked; the energy update `dE = m.dv + rho|dv|^2/2` leaves the thermal energy unchanged
+   - Special relativity: a source term in every RK stage
 
 ## AMR Considerations
 
