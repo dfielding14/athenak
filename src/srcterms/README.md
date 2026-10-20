@@ -8,6 +8,8 @@ The CGM cooling source term uses the shared helper in `cgm_cooling.hpp` for the 
 
 Cooling is operator split: `SourceTerms::CGMCoolingSplit` runs once per step in the `after_timeintegrator` task list (not inside the RK stages, where a stiff source loses half its effect to the RK averaging). In every cell, ghosts included, `cgm_cooling::IntegrateTemperature` integrates T exactly over dt with the net rate taken linear in T between table nodes (Townsend 2009, generalized as in Tan & Fielding 2023, App. C), clamped to [`tfloor`, `T_max`]. The one-zone regression test is `tst/scripts/hydro/cgm_cooling_onezone.py`.
 
+**The cooling rate depends on resolution.** `CalculateRates` blends the UV-background (PIE) and collisional (CIE) rates with the shielding optical depth of one cell, `tau = f_neutral * n_H * 1e-17 cm^2 * dx`, where `dx` is the local cell width. Neutral gas of the same density and temperature therefore cools differently at different resolutions and on either side of an AMR level boundary: one level finer halves `tau` and moves the rate toward the unshielded PIE limit. This is deliberate for now. The `cooling_time` output and the optional dt limiter use the same rate.
+
 The explicit cooling timestep limiter is opt-in with `cgm_cooling_limit_dt = true`. When enabled, `cgm_cooling_dt_frac` sets the fraction of the local net-cooling time used for the source-term timestep. Gotham-scale production inputs keep this off by default because a single pathological cell can otherwise force a very small global timestep.
 
 ## Cartesian Fourier Driving

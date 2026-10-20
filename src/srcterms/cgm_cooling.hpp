@@ -118,6 +118,9 @@ CGMCoolingResult CalculateRates(const Real rho, const Real eint, const Real meta
     gamma_heating *= damp_factor;
   }
 
+  // Shielding column through one cell of width dx1: the PIE/CIE blend, and so the cooling
+  // of neutral gas, depends on resolution and changes across AMR levels. Deliberate for
+  // now; see src/srcterms/README.md.
   const Real dx_cgs = dx1*length_unit;
   const Real neutral_frac = 1.0 - 0.5*(1.0 + tanh((temp - 8.0e3)/1.5e3));
   const Real tau = neutral_frac*nH*1.0e-17*dx_cgs;
