@@ -33,7 +33,8 @@ REPO_ROOT = Path(__file__).resolve().parents[3]
         for limiter in ("mirror_limiter", "firehose_limiter")
         for value in ("-1", "nan", "inf")
     ] + [
-        pytest.param(lf, ("passive=true",), "iso_sound_speed",
+        pytest.param(lf, ("passive=true",),
+                     ("Parameter name 'iso_sound_speed' not found", "block 'mhd'"),
                      id=f"passive-lf-{lf}-missing-sound-speed")
         for lf in (False, True)
     ] + [

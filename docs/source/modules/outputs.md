@@ -222,6 +222,14 @@ can also be used as PDF dimensions or weights when they are scalar.
   are only written if `ghost_zones=true` for that output.
 - `mhd_curv`: Magnetic curvature magnitude from cell-centered B and its
   gradients. Cells with `|B| = 0` return `0` (avoids divide-by-zero).
+- `mhd_delta_p`: Signed CGL pressure anisotropy `p_perp - p_parallel` in
+  pressure units. Requires `mhd/eos=cgl` (active or passive).
+- `mhd_beta_delta`: Signed CGL anisotropy `2*(p_perp-p_parallel)/B^2`,
+  using the local cell-centered field. The denominator is floored at
+  `mhd/bfloor^2`; if both field and floor are zero, the output is zero.
+  This is beta times the *fractional* pressure anisotropy, not beta times
+  dimensional `mhd_delta_p`. Both new scalars support binary outputs and
+  either axis of a PDF. Use `logscale=false` for signed PDF axes.
 - `mhd_dynamo_ks`: Eight diagnostic scalars written as
   `mhd_dynamo_B^2`, `mhd_dynamo_B^4`, `mhd_dynamo_dB^2`,
   `mhd_dynamo_BdB^2`, `mhd_dynamo_|BxJ|^2`, `mhd_dynamo_|B.J|^2`,

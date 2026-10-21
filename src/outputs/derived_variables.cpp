@@ -919,6 +919,26 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1; // increment derived variable index
   }
 
+  if (name == "mhd_delta_p" || name == "mhd_beta_delta") {
+    ensure_derived_cell_shape();
+    auto dv = derived_var;
+    auto w = pm->pmb_pack->pmhd->w0;
+    auto bcc = pm->pmb_pack->pmhd->bcc0;
+    const bool normalized = name == "mhd_beta_delta";
+    const Real bfloor = pm->pmb_pack->pmhd->peos->eos_data.bfloor;
+    par_for("cgl_anisotropy", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      const Real delta_p = w(m,IPP,k,j,i) - w(m,IPR,k,j,i);
+      const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
+                        + SQR(bcc(m,IBZ,k,j,i));
+      // Match the EOS weak-field floor; a zero field and zero floor use zero.
+      const Real denominator = fmax(bsqr, SQR(bfloor));
+      dv(m,i_dv,k,j,i) = normalized ?
+          (denominator > 0.0 ? 2.0*delta_p/denominator : 0.0) : delta_p;
+    });
+    i_dv += 1;
+  }
+
   // magnitude of bmag = |bcc|
   // Calculated from cell-centered fields.
   // Not computed in ghost zones since requires derivative
