@@ -50,6 +50,13 @@ directory. Build AthenaK with `-DPROBLEM=gotham`, then run the resulting executa
 from `build/gotham-run` with `-i athinput.gotham`. Table paths are relative to that
 directory. The template's run length and supernova delay are preserved.
 
+The CGM temperature is matched at $R_b=1.5R_{200}$ by default, with
+$c_s^2(R_b)=f_Tv_c^2(R_b)$ and adiabatic sound speed $c_s$. Use `--f-t` (default 1)
+and `--r-boundary` (kpc) to change this condition. The matching radius is
+independent of the mesh; the exported profile must still cover its corner ghost
+cells. See the [1 and 20 kpc sonic-radius comparison](external/CGM_ICs/docs/review/outer_temperature_comparison.md)
+for results at $f_T=0.5,1,2$, including cases that fail that coverage requirement.
+
 See the generator's [physics review and export conventions](external/CGM_ICs/docs/review/gotham_integration.md)
 for the corrections, retained model parameters, and remaining approximations.
 The ICs use a spherical cooling flow plus an isothermal disk; they are not an exact
