@@ -32,6 +32,42 @@ Other pages give instructions for running the code.
 
 Since AthenaK is very similar to Athena++, the [Athena++ documention](https://github.com/PrincetonUniversity/athena/wiki) may also be helpful.
 
+## GOTHAM initial conditions
+
+`gotham_dev` pins the matching generator in `external/CGM_ICs`. From the repository root:
+
+```bash
+git submodule update --init --recursive
+python -m venv .venv-ics
+.venv-ics/bin/python -m pip install -r external/CGM_ICs/requirements.txt
+.venv-ics/bin/python external/CGM_ICs/generate_gotham_ics.py \
+    inputs/gotham/athinput.gotham build/gotham-run --r-sonic 0.7
+```
+
+The generator creates a new run directory containing the profiles, clusters,
+`athinput.gotham`, and `ic_parameters.json`. It refuses to overwrite an existing
+directory. Build AthenaK with `-DPROBLEM=gotham`, then run the resulting executable
+from `build/gotham-run` with `-i athinput.gotham`. Table paths are relative to that
+directory. The template's run length and supernova delay are preserved.
+
+See the generator's [physics review and export conventions](external/CGM_ICs/docs/review/gotham_integration.md)
+for the corrections, retained model parameters, and remaining approximations.
+The ICs use a spherical cooling flow plus an isothermal disk; they are not an exact
+three-dimensional rotating equilibrium.
+
+To check the generator and its agreement with the compiled GOTHAM physics:
+
+```bash
+.venv-ics/bin/python -m pip install -r external/CGM_ICs/requirements-dev.txt
+.venv-ics/bin/python -m pytest -q external/CGM_ICs/tests
+cd tst
+../.venv-ics/bin/python -m scripts.hydro.gotham_ics
+```
+
+The last check needs a C++17 compiler. For reproducible runs, use the pinned
+submodule commit (`git submodule update --init`), without `--remote`. When updating
+the generator, publish its commit before committing the new gitlink in AthenaK.
+
 ## Code papers
 
 For more details on the features and algorithms implemented in AthenaK, see the code papers:

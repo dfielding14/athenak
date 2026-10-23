@@ -4,6 +4,7 @@ build-gotham-pdf-*/
 __pycache__/
 *.pyc
 .pytest_cache/
+.venv-ics/
 docs/explanatory_writeups/**/*.aux
 docs/explanatory_writeups/**/*.log
 docs/explanatory_writeups/**/*.out
