@@ -1,5 +1,5 @@
 {
-  "source_input": "/Users/dbf75/.codex/worktrees/gotham-outer-temperature/athenak-DF/inputs/gotham/athinput.gotham",
+  "source_input": "inputs/gotham/athinput.gotham",
   "sonic_radius_kpc": 144.76736315360156,
   "mass_flow_Msun_per_yr": 4.113684080446519,
   "outer_radius_kpc": 354.52914961347017,

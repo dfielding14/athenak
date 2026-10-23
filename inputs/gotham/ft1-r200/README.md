@@ -46,8 +46,8 @@ The supplied production mesh is intended for a parallel simulation.
   all in code units. GOTHAM supplies the inward sign.
 - `tables/clusters.txt`: positions, velocities, and formation times in code
   units; cluster masses in solar masses.
-- `ic_parameters.json`: generation parameters. Its absolute `source_input`
-  records the original local source; the portable source is `../athinput.gotham`.
+- `ic_parameters.json`: generation parameters; `source_input` is relative to
+  the repository root.
 
 ## Regenerate
 

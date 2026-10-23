@@ -548,4 +548,3 @@ bin3_max = 1
 nbin3 = 128
 logscale3 = true
 weight = mass
-
