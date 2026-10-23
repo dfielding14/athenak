@@ -354,14 +354,16 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
               << profile_file << std::endl;
   }
 
-  // Read in the disk profile file
-  std::string disk_profile_file = pin->GetString("problem", "disk_profile_file");
-  ProfileReaderHost disk_profile_reader_host;
-  disk_profile_reader_host.ReadProfiles(disk_profile_file);
-  disk_profile_reader = disk_profile_reader_host.CreateDeviceReader();
-  if (global_variable::my_rank==0) {
-    std::cout << "Successfully loaded disk profiles from "
-	      << disk_profile_file << std::endl;
+  const bool initialize_disk = pin->GetOrAddBoolean("problem", "initialize_disk", true);
+  if (initialize_disk) {
+    std::string disk_profile_file = pin->GetString("problem", "disk_profile_file");
+    ProfileReaderHost disk_profile_reader_host;
+    disk_profile_reader_host.ReadProfiles(disk_profile_file);
+    disk_profile_reader = disk_profile_reader_host.CreateDeviceReader();
+    if (global_variable::my_rank==0) {
+      std::cout << "Successfully loaded disk profiles from "
+                << disk_profile_file << std::endl;
+    }
   }
 
   std::string bfield_type = pin->GetOrAddString("problem", "bfield_type", "none");
@@ -568,11 +570,13 @@ void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
     SetCoolingFlowState(u0, m, k, j, i, x1v, x2v, x3v, gm1, profile);
     SetRotation(u0, m, k, j, i, x1v, x2v, x3v, r_c, v_c);
     SetDustScalars(u0, m, k, j, i, IZS, IDS, IDL, min_df, Z_, Zsol);
-    SetEquilibriumState(u0, m, k, j, i, x1v, x2v, x3v,
-                        x1l, x1r, x2l, x2r, G, r_s, rho_s,
-                        m_g, a_g, z_g, r_m, rho_m, gm1,
-                        IZS, IDS, IDL, dz_init, Z_, Zsol,
-                        disk_profile);
+    if (initialize_disk) {
+      SetEquilibriumState(u0, m, k, j, i, x1v, x2v, x3v,
+                          x1l, x1r, x2l, x2r, G, r_s, rho_s,
+                          m_g, a_g, z_g, r_m, rho_m, gm1,
+                          IZS, IDS, IDL, dz_init, Z_, Zsol,
+                          disk_profile);
+    }
 
     // Compute turbulent velocities by summing Fourier modes
     Real vx = 0.0, vy = 0.0, vz = 0.0;

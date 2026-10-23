@@ -1,0 +1,21 @@
+{
+  "source_input": "/Users/dbf75/.codex/worktrees/gotham-outer-temperature/athenak-DF/inputs/gotham/athinput.gotham",
+  "sonic_radius_kpc": 144.76736315360156,
+  "mass_flow_Msun_per_yr": 4.113684080446519,
+  "outer_radius_kpc": 354.52914961347017,
+  "gas_metallicity_solar": 0.3333333,
+  "mesh_radius_kpc": 354.52914961347017,
+  "boundary_radius_kpc": 217.15104473040236,
+  "outer_boundary": "temperature",
+  "seed": 42,
+  "cgm_gravity": "angular mean of the GOTHAM potential",
+  "cooling": "optically thin z=0 Wiersma; no local heating or shielding",
+  "disk_mass_Msun": 0,
+  "disk_temperature_K": 10000.0,
+  "disk_vertical_interval_kpc": [
+    -199.99999996570978,
+    199.99999996570978
+  ],
+  "boundary_temperature_K": 147007.74167378957,
+  "f_T": 1.0
+}

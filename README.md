@@ -50,6 +50,12 @@ directory. Build AthenaK with `-DPROBLEM=gotham`, then run the resulting executa
 from `build/gotham-run` with `-i athinput.gotham`. Table paths are relative to that
 directory. The template's run length and supernova delay are preserved.
 
+The ready-to-run [CGM-only $f_T=1$, $R_{\rm sonic}=R_{200}$ bundle](inputs/gotham/ft1-r200/README.md)
+includes its input, CGM profile, and clusters. Use `--no-disk` when generating
+other runs without an initial gas disk. This sets `problem/initialize_disk=false`;
+the stellar-disk gravitational potential is retained. Existing inputs default
+to including a gas disk.
+
 The CGM temperature is matched at $R_b=1.5R_{200}$ by default, with
 $c_s^2(R_b)=f_Tv_c^2(R_b)$ and adiabatic sound speed $c_s$. Use `--f-t` (default 1)
 and `--r-boundary` (kpc) to change this condition. The matching radius is
