@@ -57,6 +57,13 @@ independent of the mesh; the exported profile must still cover its corner ghost
 cells. See the [1 and 20 kpc sonic-radius comparison](external/CGM_ICs/docs/review/outer_temperature_comparison.md)
 for results at $f_T=0.5,1,2$, including cases that fail that coverage requirement.
 
+Alternatively, `--cooling-to-flow` imposes $t_{\rm cool}/t_{\rm flow}=1$ at the
+same radius; supply a value such as `--cooling-to-flow 2` to change the ratio.
+This replaces `--f-t`. Cooling time uses the net cooling rate and
+$t_{\rm flow}=r/|v_r|$. See the [comparison of both boundary conditions](external/CGM_ICs/docs/review/outer_boundary_comparison.md)
+for ratios 0.5, 1, and 2. The ratio need not select a unique flow: the generator
+rejects detected multiple roots instead of choosing a branch automatically.
+
 See the generator's [physics review and export conventions](external/CGM_ICs/docs/review/gotham_integration.md)
 for the corrections, retained model parameters, and remaining approximations.
 The ICs use a spherical cooling flow plus an isothermal disk; they are not an exact
