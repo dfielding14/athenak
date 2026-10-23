@@ -3,4 +3,4 @@
 	url = https://github.com/kokkos/kokkos.git
 [submodule "external/CGM_ICs"]
 	path = external/CGM_ICs
-	url = https://github.com/JonathanSternAstro/CGM_ICs.git
+	url = https://github.com/zunyibrt/CGM_ICs.git
