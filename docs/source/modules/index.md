@@ -146,6 +146,7 @@ eos
 diffusion
 super_time_stepping
 cgl_mhd_method
+cgl_cooling
 cgl_landau_fluid
 cgl_passive
 cgl_amr

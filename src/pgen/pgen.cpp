@@ -1009,6 +1009,8 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
     CGLPassiveValidation(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_lf_paper") == 0) {
     CGLLFPaper(pin, is_restart);
+  } else if (pgen_fun_name.compare("cgl_lf_cooling") == 0) {
+    CGLLFCooling(pin, is_restart);
   } else if (pgen_fun_name.compare("cgl_lf_sbox") == 0) {
     CGLLFSbox(pin, is_restart);
   } else if (pgen_fun_name.compare("divb_amr") == 0) {
