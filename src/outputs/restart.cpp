@@ -329,6 +329,9 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       pturb->mode_amp_imag.template sync<HostMemSpace>();
       resfile.Write_any_type(&metadata, sizeof(TurbulenceRestartMetadata), "byte",
                              single_file_per_rank);
+      resfile.Write_any_type(pturb->mode_indices.data(),
+                             pturb->mode_indices.size() * sizeof(std::array<int, 3>),
+                             "byte", single_file_per_rank);
       resfile.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte",
                              single_file_per_rank);
       resfile.Write_any_type(pturb->mode_amp_real.h_view.data(),
@@ -390,6 +393,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (pz4c != nullptr) step3size += sizeof(Real);
   if (pturb != nullptr) {
     step3size += sizeof(TurbulenceRestartMetadata) + sizeof(RNG_State) +
+                 pturb->mode_indices.size() * sizeof(std::array<int, 3>) +
                  6 * pturb->mode_count * sizeof(Real);
     if (pturb->record_injected_work) step3size += sizeof(Real);
   }

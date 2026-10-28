@@ -42,14 +42,73 @@ weighted by the spectrum and selected projection policy. With negligible
 For three-dimensional `solenoidal_compressive` driving, `sol_fraction=1` gives
 solenoidal forcing and `sol_fraction=0` gives compressive forcing.
 
-`driving_type=0` selects a three-dimensional shell and defaults to the
-`solenoidal_compressive` policy. Type 2 uses the same shell with independent
-unprojected amplitudes in all three components; it defaults to `power_law`
-and requires `projection_policy=mks24_random_unprojected`. Type 1 drives only
-the x/y components. Every planar policy uses
-\(k_\parallel=|k_z|\) and \(k_\perp=\sqrt{k_x^2+k_y^2}\) for its anisotropic
-spectrum. The `mks24_alfvenic_perpendicular` policy projects against
-\((k_x,k_y)\), while the generic policy retains its full-wavevector projection.
+Mode selection, radial spectrum, and force projection are independent.
+All policies select the same spherical shell and evaluate `spectrum` using
+$|\boldsymbol{k}|$. `spectrum=parabolic` is the default; `power_law` uses `expo`.
+The projection policy selects the acceleration components:
+
+- `solenoidal_compressive` blends projections parallel and perpendicular to
+  $\boldsymbol{k}$ using `sol_fraction`.
+- `mks24_random_unprojected` uses independent random amplitudes in all three
+  components and ignores `sol_fraction`.
+- `mks24_alfvenic_perpendicular` projects the acceleration perpendicular to
+  both `mean_field_direction` and $\boldsymbol{k}$. It requires
+  `sol_fraction=1` and retains variation along the reference field. When
+  $\boldsymbol{k}$ is parallel to that direction, both transverse
+  polarizations are allowed. The direction is fixed rather than taken from
+  the instantaneous local magnetic field.
+
+The default mode set is the full signed spherical shell. The driver applies
+the requested exclusions, then stores each real-field conjugate pair only
+once. For example, this excludes all modes with zero parallel wavenumber
+relative to a diagonal reference field, together with two individual mode
+pairs:
+
+```ini
+<turb_driving>
+nlow = 1
+nhigh = 3
+mean_field_direction = 1 1 1
+exclude_k_parallel_zero = true
+exclude_modes = 1 1 0; 1 -1 1
+projection_policy = mks24_alfvenic_perpendicular
+sol_fraction = 1.0
+spectrum = parabolic
+```
+
+`mean_field_direction` is a nonzero physical Cartesian vector, normalized
+internally; its default is `0 0 1`. The zero-parallel filter removes modes
+with $\boldsymbol{k}\cdot\boldsymbol{B}_0=0$, using
+$k_i=2\pi n_i/L_{\mathrm{tile},i}$. Thus a reference field along x removes
+$k_x=0$, while a field along $(1,1,1)$ removes $k_x+k_y+k_z=0$.
+The latter is equivalent to $n_x+n_y+n_z=0$ only for cubic tiles.
+This filter controls spatial variation independently of force polarization.
+
+`exclude_modes` contains semicolon-separated integer triplets in tile-local
+Fourier mode indices. Excluding $(n_x,n_y,n_z)$ also excludes its negative.
+An empty list, written as `none`, excludes no individual modes.
+
+Optional `min_kx/y/z` and `max_kx/y/z` remain signed integer search bounds.
+Defaults cover the full shell: $-n_{\mathrm{high}}$ through
+$n_{\mathrm{high}}$ for index shells, or the required component bounds for
+physical shells and tile lengths. Inactive dimensions use zero. The
+physical mode set includes the conjugate partners of the searched modes;
+overlapping pairs are evaluated only once. The full signed default increases
+angular coverage and changes fixed-seed realizations from the older
+positive-octant default.
+
+The direction configures the forcing; it does not initialize or rotate the
+magnetic field. The current CGL paper problem generator initializes its mean
+field along z, so its input and z-based history checks should retain
+`mean_field_direction = 0 0 1` until that initializer is extended.
+
+`physical_k_shell` changes mode selection only. The retained parabolic
+weighting uses `kpeak = npeak * 2*pi/L_tile,x1` (or explicit `kpeak`), with
+width endpoints `nlow * min(dkx,dky,dkz)` and
+`nhigh * max(dkx,dky,dkz)`, where `dk_i = 2*pi/L_tile,i`. These do not
+automatically become `nlow * k_shell_unit` and `nhigh * k_shell_unit`
+in a physical shell.
+Check the intended peak and weighting separately for an elongated box.
 
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The
 cell-centered `force` field is rendered from those coefficients and the
@@ -181,6 +240,7 @@ operations.
 Restart output records:
 
 - a versioned configuration record and completed OU update count;
+- the exact retained integer mode list;
 - random-number generator state;
 - the real and imaginary coefficient arrays.
 - accumulated injected work when `record_injected_work = true`.
@@ -188,12 +248,14 @@ Restart output records:
 It does not checkpoint the rendered cell-centered force array. On restart,
 the force is regenerated on the restored mesh from the authoritative modal
 state. A checkpoint is rejected if turbulence-driving configuration differs
-from the run reading it. Prototype checkpoint layouts are intentionally not
-supported.
+from the run reading it. The unified driver writes turbulence restart
+version 5; older checkpoint layouts are rejected rather than reinterpreted.
+Validation includes the normalized reference direction, zero-parallel
+filter, and exact retained mode list, so different exclusions with equal
+mode counts cannot silently reuse an incompatible modal state.
 
-The final-stage kick preserves the existing restart layout. Its changed
-operator ordering does not preserve trajectories from the older pre-RK binary;
-record the executable revision with every continuation.
+The final-stage kick does not preserve trajectories from the older pre-RK
+binary; record the executable revision with every continuation.
 
 Real-valued defaults added at runtime are read back from their serialized
 parameter representation on the initial run, so an unchanged restart uses
@@ -220,14 +282,15 @@ The following keys belong in `<turb_driving>`.
 | `accel_rms` | required for `accel_rms` | Target volume-weighted RMS acceleration. |
 | `nlow`, `nhigh` | `1`, `3` | Inclusive driven mode-radius bounds. |
 | `npeak` / `kpeak` | `kpeak=4*pi` | Parabolic spectral peak; `npeak` is tile-local mode number. |
-| `spectrum` | `power_law` for type 2, otherwise `parabolic` | `parabolic` or `power_law`. |
-| `expo`, `exp_prp`, `exp_prl` | `5/3`, `5/3`, `0` | Power-law spectrum exponents. |
-| `min_kx/y/z`, `max_kx/y/z` | `0`, `nhigh` | Optional directional mode bounds. |
-| `driving_type` | `0` | `0` for three-dimensional driving; `1` for planar x/y driving; `2` for isotropic unprojected random driving. |
-| `projection_policy` | `mks24_random_unprojected` for type 2, otherwise `solenoidal_compressive` | `solenoidal_compressive`, `mks24_random_unprojected` (types 0/2), or `mks24_alfvenic_perpendicular` (type 1). Type 2 requires the unprojected policy. |
+| `spectrum` | `parabolic` | Radial `parabolic` or `power_law` spectrum for every projection policy. |
+| `expo` | `5/3` | Radial power-law spectrum exponent. |
+| `min_kx/y/z`, `max_kx/y/z` | Full signed shell | Optional inclusive signed search bounds; inactive dimensions use zero. |
+| `mean_field_direction` | `0 0 1` | Nonzero physical Cartesian reference direction, normalized internally; does not initialize the magnetic field. |
+| `exclude_k_parallel_zero` | `false` | Remove every mode with physical `k` perpendicular to the reference direction. |
+| `exclude_modes` | `none` | Semicolon-separated integer triplets; remove each listed mode and its conjugate partner. |
+| `projection_policy` | `solenoidal_compressive` | `solenoidal_compressive`, `mks24_random_unprojected`, or `mks24_alfvenic_perpendicular`; independent of shell and spectrum. |
 | `physical_k_shell` | `false` | Apply `nlow`/`nhigh` to `abs(k)/k_shell_unit`. |
 | `k_shell_unit` | `0.0` | Positive reference wavenumber required by `physical_k_shell`. |
-| `isotropic_power_spectrum` | `false` | Apply `expo` to total `abs(k)` for planar driving. |
 | `sol_fraction` | `1.0` | Solenoidal/compressive amplitude blend in `[0,1]`; unused by unprojected driving and required to be 1 for the Alfvénic policy. |
 | `rseed` | `-1` | Positive values select reproducible sequences; zero and negative values use seed 1. |
 | `record_injected_work` | `false` | Restart measured forcing work for one nonrelativistic fluid; kinetic work for isothermal/passive CGL. |
@@ -238,7 +301,12 @@ The following keys belong in `<turb_driving>`.
 
 ## Rejected Prototype Names
 
-This interface has no deprecated aliases. In particular, inputs containing
+This interface has no deprecated aliases. The removed `driving_type`,
+`isotropic_power_spectrum`, `exp_prp`, and `exp_prl` keys are rejected. Select
+the desired spectrum and projection explicitly when migrating an input.
+The four legacy planar example decks now use 3D perpendicular solenoidal
+forcing; this deliberately changes their old planar spatial forcing.
+In particular, inputs containing
 `constant_edot`, `tile_factor`, or `x_turb_scale_height` terminate with an
 input error rather than silently selecting a new behavior. The driver also
 rejects the provisional names `dt_turb_update`, `spect_form`,

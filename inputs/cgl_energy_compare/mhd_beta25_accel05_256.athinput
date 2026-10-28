@@ -65,7 +65,6 @@ nlow = 1
 nhigh = 3
 npeak = 2
 spectrum = parabolic
-driving_type = 0
 sol_fraction = 1.0
 rseed = 252525
 record_injected_work = true

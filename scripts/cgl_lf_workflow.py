@@ -267,10 +267,10 @@ def input_block_value(source_text: str, block: str, parameter: str) -> str | Non
     if match is None:
         return None
     value = re.search(
-        rf"(?m)^\s*{re.escape(parameter)}\s*=\s*([^\s#]+)",
+        rf"(?m)^\s*{re.escape(parameter)}\s*=\s*([^#\n]+)",
         match.group(1),
     )
-    return value.group(1) if value is not None else None
+    return value.group(1).strip() if value is not None else None
 
 
 def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
@@ -350,15 +350,27 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
     )
     if strict_admissibility != "true":
         choices["cgl_lf_strict_admissibility"] = strict_admissibility
-    driving_type = input_block_value(source_text, "turb_driving", "driving_type")
-    if driving_type is not None:
-        driving_type = choice("turb_driving", "driving_type", driving_type)
+    if re.search(r"(?m)^<turb_driving>", source_text):
+        projection_policy = choice(
+            "turb_driving", "projection_policy", "solenoidal_compressive"
+        )
         choices.update({
             "forcing_mode": (
-                "alfvenic_z_perpendicular" if driving_type == "1"
-                else "isotropic_random" if driving_type in ("0", "2")
-                else f"unsupported_{driving_type}"
+                "alfvenic_z_perpendicular"
+                if projection_policy == "mks24_alfvenic_perpendicular"
+                else "isotropic_random"
+                if projection_policy == "mks24_random_unprojected"
+                else projection_policy
             ),
+            "forcing_projection_policy": projection_policy,
+            "forcing_mean_field_direction": choice(
+                "turb_driving", "mean_field_direction", "0 0 1"
+            ),
+            "forcing_exclude_k_parallel_zero": choice(
+                "turb_driving", "exclude_k_parallel_zero", "false"
+            ),
+            "forcing_exclude_modes": choice("turb_driving", "exclude_modes", "none"),
+            "forcing_spectrum": choice("turb_driving", "spectrum", "parabolic"),
             "forcing_seed": choice("turb_driving", "rseed", "-1"),
             "forcing_dedt": choice("turb_driving", "dedt", "0.0"),
             "forcing_tcorr": choice("turb_driving", "tcorr", "0.0"),
@@ -371,12 +383,7 @@ def model_choices(source_text: str, overrides: list[str]) -> dict[str, str]:
                 "turb_driving", "physical_k_shell", "false"
             ),
             "forcing_k_shell_unit": choice("turb_driving", "k_shell_unit", "0.0"),
-            "forcing_isotropic_power_spectrum": choice(
-                "turb_driving", "isotropic_power_spectrum", "false"
-            ),
             "forcing_expo": choice("turb_driving", "expo", "5.0/3.0"),
-            "forcing_exp_prp": choice("turb_driving", "exp_prp", "5.0/3.0"),
-            "forcing_exp_prl": choice("turb_driving", "exp_prl", "0.0"),
             "forcing_time_integration": "ou_updates_at_dt_update_full_dt_kick_before_rk",
         })
     return choices
@@ -426,7 +433,6 @@ def workflow_cases(workflow: str) -> list[CaseSpec]:
                 "paper_smoke_active_random",
                 source,
                 (
-                    "turb_driving/driving_type=0",
                     "turb_driving/projection_policy=mks24_random_unprojected",
                     "turb_driving/rseed=314159",
                     "turb_driving/expo=2.0",
@@ -1088,6 +1094,17 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
         mhd = parse_history(mhd_path)
         model = case.get("model_choices", {})
         forcing_mode = model.get("forcing_mode") if isinstance(model, dict) else None
+        if forcing_mode == "alfvenic_z_perpendicular":
+            direction = [float(value) for value in str(
+                model.get("forcing_mean_field_direction", "0 0 1")
+            ).split()]
+            if (len(direction) != 3 or not all(math.isfinite(v) for v in direction)
+                    or direction[0] != 0.0 or direction[1] != 0.0
+                    or direction[2] == 0.0):
+                return {"passed": False, "error": (
+                    "paper-smoke force histories measure components relative to z; "
+                    "they cannot validate an off-axis mean_field_direction"
+                )}
         perpendicular = final_value(user, "force_prp2")
         parallel = final_value(user, "force_prl2")
         volume = final_value(user, "volume")
@@ -1106,7 +1123,8 @@ def evaluate_paper_smoke(case: dict[str, object], root: Path) -> dict[str, objec
         active_delta = model.get("passive_delta", "false").lower() != "true"
         mode_pass = (
             parallel == 0.0 if forcing_mode == "alfvenic_z_perpendicular"
-            else parallel > 0.0 if forcing_mode == "isotropic_random"
+            else parallel > 0.0
+            if forcing_mode in ("isotropic_random", "solenoidal_compressive")
             else False
         )
         return {

@@ -62,13 +62,14 @@ B0 = 1.0
 beta0 = 10.0
 
 <turb_driving>
-driving_type = 1
+# Replace the old planar path with 3D perpendicular solenoidal forcing.
+projection_policy = mks24_alfvenic_perpendicular
+sol_fraction = 1.0
+spectrum = parabolic
 tcorr = 1.0
 dedt = 0.02
 nlow = 1
 nhigh = 2
-exp_prp = 1.666666666666667
-exp_prl = 0.0
 
 <output1>
 file_type = hst

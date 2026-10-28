@@ -81,6 +81,8 @@ field_amp = 0.05
 field_k = 2.0
 
 <turb_driving>
+# Replace the old planar path with 3D perpendicular solenoidal forcing.
+projection_policy = mks24_alfvenic_perpendicular
 turb_flag = 2
 tcorr = 0.25
 dt_update = 0.01
@@ -90,7 +92,6 @@ nlow = 1
 nhigh = 3
 npeak = 2
 spectrum = parabolic
-driving_type = 1
 sol_fraction = 1.0
 rseed = 314159
 

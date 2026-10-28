@@ -445,21 +445,17 @@ Complete list of all input parameters by block, extracted from source code.
 | `nhigh` | int | 3 | turb_driver.cpp:L69 |
 | `npeak` | Real | — (optional) | turb_driver.cpp:L72 |
 | `kpeak` | Real | 4.0*M_PI | turb_driver.cpp:L78 |
-| `spectrum` | string | `power_law` for type 2, otherwise `parabolic` | turb_driver.cpp |
-| `driving_type` | int | 0 (`0` three-dimensional, `1` planar x/y, `2` unprojected isotropic) | turb_driver.cpp |
-| `projection_policy` | string | `mks24_random_unprojected` for type 2, otherwise `solenoidal_compressive` | turb_driver.cpp |
-| `min_kz` | int | 0 | turb_driver.cpp:L85 |
-| `max_kz` | int | nhigh | turb_driver.cpp:L86 |
-| `min_kx` | int | 0 | turb_driver.cpp:L87 |
-| `max_kx` | int | nhigh | turb_driver.cpp:L88 |
-| `min_ky` | int | 0 | turb_driver.cpp:L89 |
-| `max_ky` | int | nhigh | turb_driver.cpp:L90 |
+| `spectrum` | string | `parabolic` (or radial `power_law`) | turb_driver.cpp |
+| `projection_policy` | string | `solenoidal_compressive` (or `mks24_random_unprojected`, `mks24_alfvenic_perpendicular`) | turb_driver.cpp |
+| `min_kz`, `max_kz` | int | Full signed shell; zero in inactive dimensions | turb_driver.cpp |
+| `min_kx`, `max_kx` | int | Full signed shell | turb_driver.cpp |
+| `min_ky`, `max_ky` | int | Full signed shell; zero in inactive dimensions | turb_driver.cpp |
+| `mean_field_direction` | string | `0 0 1` (nonzero Cartesian vector, normalized internally) | turb_driver.cpp |
+| `exclude_k_parallel_zero` | Boolean | false | turb_driver.cpp |
+| `exclude_modes` | string | `none` (semicolon-separated integer triplets; each removes both signs) | turb_driver.cpp |
 | `expo` | Real | 5.0/3.0 | turb_driver.cpp:L92 |
-| `exp_prp` | Real | 5.0/3.0 | turb_driver.cpp:L93 |
-| `exp_prl` | Real | 0.0 | turb_driver.cpp:L94 |
 | `physical_k_shell` | Boolean | false | turb_driver.cpp |
 | `k_shell_unit` | Real | 0.0 (must be positive with `physical_k_shell`) | turb_driver.cpp |
-| `isotropic_power_spectrum` | Boolean | false | turb_driver.cpp |
 | `sol_fraction` | Real | 1.0 | turb_driver.cpp:L102 |
 | `rseed` | int | -1 | turb_driver.cpp:L105 |
 | `record_injected_work` | Boolean | false (single nonrelativistic ideal/CGL fluid only) | turb_driver.cpp |

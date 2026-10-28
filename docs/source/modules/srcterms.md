@@ -107,8 +107,15 @@ or fixed RMS-acceleration normalization, physical-coordinate tiling, and
 Gaussian include/exclude regions.
 
 For MKS24-oriented CGL runs, `physical_k_shell = true` applies the shell
-bounds to `abs(k)/k_shell_unit`, and `isotropic_power_spectrum = true` applies
-`expo` to total `abs(k)` while retaining planar forcing orientation. With
+bounds to `abs(k)/k_shell_unit`. Radial `spectrum = power_law` uses `expo`,
+independently of `projection_policy = mks24_alfvenic_perpendicular`, which
+sets acceleration perpendicular to `mean_field_direction` while retaining
+variation along it. That direction defaults to `0 0 1`; it does not rotate
+the magnetic field initialized by the problem generator. The full signed
+shell is selected by default, with each conjugate pair stored once.
+`exclude_k_parallel_zero = true` removes modes with physical
+$\boldsymbol{k}\cdot\boldsymbol{B}_0=0$, and `exclude_modes` removes named
+integer Fourier triplets together with their negative partners. With
 `record_injected_work = true`, a single nonrelativistic fluid also restarts and
 reports measured forcing work: total-energy change for active ideal/CGL, or
 kinetic-energy change for isothermal/passive CGL. Passive J/A is unchanged by
@@ -133,13 +140,16 @@ combined path. The relevant CGL model assumptions are summarized in
 `SourceTerms::NewTimeStep` scans the mesh pack for ISM and CGM cooling cells and stores the minimum stable timestep in `dtnew`. The driver reduces the global timestep against this value before advancing.
 
 ## Operational Tips
-- Archive `rseed`, `driving_type`, mode bounds, spectral exponents, normalization
+- Archive `rseed`, `projection_policy`, `mean_field_direction`,
+  `exclude_k_parallel_zero`, `exclude_modes`, any signed mode bounds,
+  `spectrum`, `expo`,
+  normalization
   and its `dedt` or `accel_rms` strength,
   `tcorr`, `dt_update`, `record_injected_work`, and any physical-shell
   settings with driven-run results.
 - MKS24-oriented inputs explicitly set `physical_k_shell = true`,
-  `k_shell_unit = 2*pi/L_parallel`, `isotropic_power_spectrum = true`, and
-  `expo = 2` to encode the documented physical shell and `k^-2` forcing.
+  `k_shell_unit = 2*pi/L_parallel`, `spectrum = power_law`, and `expo = 2`
+  to encode the documented physical shell and `k^-2` forcing.
 - Treat quantitative forcing-correlation or energy-injection comparisons as
   paper-qualified only after long-duration statistical calibration at the
   target configuration; the reduced cadence/source contract alone is not

@@ -201,17 +201,26 @@ def test_acceleration_normalization_and_localization(tmp_path):
     assert inner < outer
 
 
-def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path):
+@pytest.mark.parametrize("projection_policy", [
+    "solenoidal_compressive", "mks24_alfvenic_perpendicular",
+])
+def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path, projection_policy):
     """Restarting retains the modal OU trajectory independently of mesh layout."""
     for name, split_cycle, final_cycle in (
         ("turb_driving_edot.athinput", 3, 6),
         ("turb_driving_amr_exclude.athinput", 2, 4),
     ):
         stem = Path(name).stem
+        policy_input = f"projection_policy = {projection_policy}"
+        if projection_policy == "mks24_alfvenic_perpendicular":
+            policy_input += "\nsol_fraction = 1.0"
+        path = staged_turb_input(tmp_path / stem, name, {
+            "turb_driving": policy_input,
+        })
         reference_dir = tmp_path / f"{stem}_reference"
         split_dir = tmp_path / f"{stem}_split"
         resume_dir = tmp_path / f"{stem}_resume"
-        require_success(run_athena(reference_dir, name))
+        require_success(run_athena(reference_dir, path))
         if name == "turb_driving_edot.athinput":
             history = np.loadtxt(reference_dir / "turb_test_edot.hydro.hst")
             slope = np.polyfit(history[2:, 0], history[2:, 6], 1)[0]
@@ -219,7 +228,7 @@ def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path):
         require_success(
             run_athena(
                 split_dir,
-                name,
+                path,
                 f"time/nlim={split_cycle}",
                 "output2/file_type=rst",
                 f"output2/dcycle={split_cycle}",
@@ -232,7 +241,7 @@ def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path):
         require_success(
             run_athena(
                 resume_dir,
-                name,
+                path,
                 f"time/nlim={final_cycle}",
                 "output2/file_type=bin",
                 "output2/variable=turb_force",
@@ -257,6 +266,30 @@ def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path):
             assert "configuration differs for 'npeak'" in (
                 incompatible.stdout + incompatible.stderr
             )
+            other_policy = ("mks24_random_unprojected"
+                            if projection_policy == "solenoidal_compressive"
+                            else "solenoidal_compressive")
+            incompatible = run_athena(
+                tmp_path / "incompatible_projection", name,
+                f"turb_driving/projection_policy={other_policy}", restart=restart,
+            )
+            assert incompatible.returncode != 0
+            assert "configuration differs for 'projection_policy'" in (
+                incompatible.stdout + incompatible.stderr
+            )
+            if projection_policy == "solenoidal_compressive":
+                data = bytearray(restart.read_bytes())
+                # This fixture has 61 independent modes in the full signed shell.
+                marker = struct.pack("=2i", 5, 61)
+                assert data.count(marker) == 1
+                struct.pack_into("=i", data, data.index(marker), 3)
+                old_restart = tmp_path / "old_format.rst"
+                old_restart.write_bytes(data)
+                incompatible = run_athena(
+                    tmp_path / "old_format", name, restart=old_restart,
+                )
+                assert incompatible.returncode != 0
+                assert "version" in incompatible.stdout + incompatible.stderr
 
 
 def test_removed_parameter_and_degenerate_spectrum_are_rejected(tmp_path):
@@ -356,32 +389,29 @@ def staged_turb_input(tmp_path, name, additions):
     return path
 
 
-def test_type_two_has_nonzero_force(tmp_path):
+@pytest.mark.parametrize("key,value", [
+    ("driving_type", "0"), ("isotropic_power_spectrum", "true"),
+    ("exp_prp", "1.666666666666667"), ("exp_prl", "0.0"),
+])
+def test_removed_driving_controls_are_rejected(tmp_path, key, value):
     path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
-        "turb_driving": "driving_type = 2",
-    })
-    result = run_athena(tmp_path / "run", path)
-    require_success(result)
-    assert rms_acceleration(read_force_blocks(latest_force(tmp_path / "run"))) > 0.0
-
-
-def test_type_two_rejects_projected_policy(tmp_path):
-    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
-        "turb_driving": "driving_type = 2\nprojection_policy = solenoidal_compressive",
+        "turb_driving": f"{key} = {value}",
     })
     result = run_athena(tmp_path / "run", path)
     assert result.returncode != 0
-    assert "driving_type = 2 requires mks24_random_unprojected" in (
-        result.stdout + result.stderr
-    )
+    assert f"removed parameter '{key}'" in result.stdout + result.stderr
 
 
 @pytest.mark.parametrize("integrator", ["rk1", "rk2", "rk3"])
-@pytest.mark.parametrize("driving_type", [0, 2])
-def test_once_per_step_power(tmp_path, integrator, driving_type):
+@pytest.mark.parametrize("projection_policy", [
+    "solenoidal_compressive", "mks24_random_unprojected",
+    "mks24_alfvenic_perpendicular",
+])
+def test_once_per_step_power(tmp_path, integrator, projection_policy):
     """Periodic total energy gains dedt*dt on every step, including the first."""
     path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
-        "turb_driving": f"driving_type = {driving_type}\nrecord_injected_work = true",
+        "turb_driving": f"projection_policy = {projection_policy}\n"
+                        "record_injected_work = true",
         "output1": "data_format = %24.16e",
     })
     result = run_athena(tmp_path / "run", path, f"time/integrator={integrator}")
@@ -472,35 +502,66 @@ def test_final_stage_kick_from_uniform_state(tmp_path, model, normalization):
             pytest.approx(0.25, rel=2e-6))
 
 
-@pytest.mark.parametrize("driving_type", [1, 2])
-def test_every_selected_mode_is_nonzero(tmp_path, driving_type):
+@pytest.mark.parametrize("projection_policy", [
+    "solenoidal_compressive", "mks24_random_unprojected",
+    "mks24_alfvenic_perpendicular",
+])
+def test_every_selected_mode_is_nonzero(tmp_path, projection_policy):
     path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {})
     text = path.read_text().replace("pgen_name = turb", "pgen_name = turb_forcing")
     # Power-law modes have no legitimate zero-amplitude shell endpoints.
     text = text[:text.index("<output1>")]
-    text += f"\n<turb_driving>\ndriving_type = {driving_type}\nspectrum = power_law\n"
+    text += (f"\n<turb_driving>\nprojection_policy = {projection_policy}\n"
+             "spectrum = power_law\n")
     path.write_text(text)
     result = run_athena(tmp_path / "run", path, "time/nlim=0")
     require_success(result)
     assert "nonzero modes" in result.stdout
 
 
-def test_type_two_matches_unprojected_type_zero(tmp_path):
-    """Equal fixed-seed isotropic policies render the same OU force trajectory."""
-    outputs = []
-    for driving_type in (0, 2):
-        directory = tmp_path / f"type_{driving_type}"
+@pytest.mark.parametrize("projection_policy", [
+    "solenoidal_compressive", "mks24_alfvenic_perpendicular",
+])
+def test_signed_modes_projection_and_radial_spectrum(tmp_path, projection_policy):
+    """Signed modes, force polarization, and radial weights are independent."""
+    powers = {}
+    modes = np.fft.fftfreq(16) * 16
+    kz, ky, kx = np.meshgrid(modes, modes, modes, indexing="ij")
+    radius = np.sqrt(kx*kx + ky*ky + kz*kz)
+    shell = (radius >= 1) & (radius <= 3) & (kz != 0)
+    interior = shell & (radius > 1) & (radius < 3)
+    assert np.count_nonzero(shell) == 94
+    for spectrum in ("power_law", "parabolic"):
+        directory = tmp_path / spectrum
         path = staged_turb_input(directory, "turb_driving_edot.athinput", {
-            "turb_driving": f"driving_type = {driving_type}\n"
-                            "projection_policy = mks24_random_unprojected\n"
-                            "spectrum = power_law\nrseed = 2718",
+            "meshblock": "nx1 = 16\nnx2 = 16\nnx3 = 16",
+            "turb_driving": f"projection_policy = {projection_policy}\n"
+                            f"spectrum = {spectrum}\nexpo = 2.0\n"
+                            "min_kx = -3\nmax_kx = 3\n"
+                            "min_ky = -3\nmax_ky = 3\n"
+                            "min_kz = 1\nmax_kz = 3",
+            "output2": "dcycle = 1",
         })
-        output_dir = directory / "run"
-        require_success(run_athena(output_dir, path))
-        output = latest_force(output_dir)
-        assert rms_acceleration(read_force_blocks(output)) > 0.0
-        outputs.append(output)
-    assert_equal_force_outputs(*outputs)
+        run_dir = directory / "run"
+        require_success(run_athena(run_dir, path, "time/nlim=1"))
+        force = read_force_blocks(latest_force(run_dir))["blocks"][0]["force"]
+        if projection_policy == "mks24_alfvenic_perpendicular":
+            np.testing.assert_array_equal(force[2], 0.0)
+        else:
+            assert np.max(np.abs(force[2])) > 0.0
+        amplitude = np.fft.fftn(force, axes=(1, 2, 3))
+        power = np.sum(np.abs(amplitude)**2, axis=0)
+        expected = shell if spectrum == "power_law" else interior
+        np.testing.assert_array_equal(power > power.max()*1e-12, expected)
+        divergence = kx*amplitude[0] + ky*amplitude[1] + kz*amplitude[2]
+        assert np.max(np.abs(divergence)) < 2e-6*np.max(np.abs(amplitude))
+        powers[spectrum] = power
+    # Fixed-seed innovations are identical; only the prescribed radial weight changes.
+    # For expo=2 and npeak=2, squared weights give P_par/P_pow proportional to
+    # [1-(|n|-2)^2] |n|^2, independently of the force's overall normalization.
+    ratio = powers["parabolic"][interior] / powers["power_law"][interior]
+    expected = (1.0 - (radius[interior] - 2.0)**2) * radius[interior]**2
+    np.testing.assert_allclose(ratio / ratio[0], expected / expected[0], rtol=2e-5)
 
 
 @pytest.mark.parametrize("integrator", ["imex2", "imex3"])
@@ -513,7 +574,7 @@ def test_two_fluid_once_per_step_power(tmp_path, integrator, ifield):
                "reconstruct = plm\nrsolver = hlle",
         "ion-neutral": "drag_coeff = 0.0",
         "problem": f"d_n = 1.3\nd_i = 0.7\nifield = {ifield}",
-        "turb_driving": "driving_type = 0\nrseed = 2718\ndedt = 0.1\n"
+        "turb_driving": "rseed = 2718\ndedt = 0.1\n"
                         "record_injected_work = false",
         "output1": "data_format = %24.16e",
     })
@@ -552,3 +613,164 @@ def test_zero_power_with_opposing_flow(tmp_path):
     result = run_athena(tmp_path / "run", path, "time/nlim=0", "turb_driving/dedt=0")
     require_success(result)
     assert "zero power with opposing flow passed" in result.stdout
+
+
+@pytest.mark.parametrize("direction", [(0, 0, 1), (1, 0, 0), (1, 1, 1)])
+@pytest.mark.parametrize("exclude_parallel_zero", [False, True])
+def test_arbitrary_field_direction_and_individual_mode_exclusions(
+    tmp_path, direction, exclude_parallel_zero
+):
+    """The physical signed spectrum obeys both filters and both projections."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "meshblock": "nx1 = 16\nnx2 = 16\nnx3 = 16",
+        "turb_driving": "projection_policy = mks24_alfvenic_perpendicular\n"
+                        "spectrum = power_law\n"
+                        f"mean_field_direction = {' '.join(map(str, direction))}\n"
+                        f"exclude_k_parallel_zero = {str(exclude_parallel_zero).lower()}\n"
+                        "exclude_modes = 1 0 1; -1 -1 1",
+        "output2": "dcycle = 1",
+    })
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/nlim=1"))
+    force = read_force_blocks(latest_force(run_dir))["blocks"][0]["force"]
+    amplitude = np.fft.fftn(force, axes=(1, 2, 3))
+    modes = np.fft.fftfreq(16) * 16
+    kz, ky, kx = np.meshgrid(modes, modes, modes, indexing="ij")
+    radius2 = kx*kx + ky*ky + kz*kz
+    expected = (radius2 >= 1) & (radius2 <= 9)
+    if exclude_parallel_zero:
+        expected &= direction[0]*kx + direction[1]*ky + direction[2]*kz != 0
+    for excluded in ((1, 0, 1), (-1, -1, 1)):
+        for sign in (-1, 1):
+            expected &= ~((kx == sign*excluded[0]) & (ky == sign*excluded[1])
+                          & (kz == sign*excluded[2]))
+    power = np.sum(np.abs(amplitude)**2, axis=0)
+    np.testing.assert_array_equal(power > power.max()*1e-12, expected)
+    scale = np.max(np.abs(amplitude))
+    assert np.max(np.abs(kx*amplitude[0] + ky*amplitude[1] + kz*amplitude[2])) < 2e-6*scale
+    assert np.max(np.abs(sum(direction[i]*amplitude[i] for i in range(3)))) < 2e-6*scale
+
+
+@pytest.mark.parametrize("tile_nx", [1, 2])
+def test_field_direction_filter_uses_physical_wavevectors(tmp_path, tile_nx):
+    """Rectangular and tiled boxes use physical k, including the full shell."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "mesh": "x1min = -1.0\nx1max = 1.0",
+        "meshblock": "nx1 = 16\nnx2 = 16\nnx3 = 16",
+        "turb_driving": "projection_policy = mks24_alfvenic_perpendicular\n"
+                        "spectrum = power_law\nmean_field_direction = 1 1 1\n"
+                        "exclude_k_parallel_zero = true\nexclude_modes = 1 -1 0\n"
+                        "physical_k_shell = true\nk_shell_unit = 6.283185307179586\n"
+                        f"tile_nx = {tile_nx}",
+        "output2": "dcycle = 1",
+    })
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/nlim=1"))
+    force = read_force_blocks(latest_force(run_dir))["blocks"][0]["force"]
+    amplitude = np.fft.fftn(force, axes=(1, 2, 3))
+    modes = np.fft.fftfreq(16) * 16
+    nz, ny, nx = np.meshgrid(modes, modes, modes, indexing="ij")
+    kx, ky, kz = nx/2.0, ny, nz
+    radius2 = kx*kx + ky*ky + kz*kz
+    expected = ((radius2 >= 1) & (radius2 <= 9) & (kx+ky+kz != 0)
+                & (nx % tile_nx == 0))
+    for sign in (-1, 1):
+        expected &= ~((nx == sign*tile_nx) & (ny == -sign) & (nz == 0))
+    power = np.sum(np.abs(amplitude)**2, axis=0)
+    np.testing.assert_array_equal(power > power.max()*1e-12, expected)
+    scale = np.max(np.abs(amplitude))
+    assert np.max(np.abs(kx*amplitude[0] + ky*amplitude[1] + kz*amplitude[2])) < 3e-6*scale
+    assert np.max(np.abs(amplitude[0] + amplitude[1] + amplitude[2])) < 2e-6*scale
+
+
+@pytest.mark.parametrize("direction", [(0, 0, 1), (1, 0, 0), (1, 1, 1)])
+def test_wavevector_parallel_to_field_keeps_both_transverse_polarizations(tmp_path, direction):
+    """At k_perp=0 both independent force polarizations are admissible."""
+    bounds = "\n".join(
+        f"min_k{axis} = {value}\nmax_k{axis} = {value}"
+        for axis, value in zip("xyz", direction)
+    )
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "meshblock": "nx1 = 16\nnx2 = 16\nnx3 = 16",
+        "turb_driving": "projection_policy = mks24_alfvenic_perpendicular\n"
+                        "spectrum = power_law\n"
+                        f"mean_field_direction = {' '.join(map(str, direction))}\n{bounds}",
+        "output2": "dcycle = 1",
+    })
+    run_dir = tmp_path / "run"
+    require_success(run_athena(run_dir, path, "time/nlim=1"))
+    force = read_force_blocks(latest_force(run_dir))["blocks"][0]["force"]
+    amplitude = np.fft.fftn(force, axes=(1, 2, 3))
+    value = amplitude[:, direction[2], direction[1], direction[0]]
+    assert np.linalg.norm(value) > 0.0
+    assert abs(np.dot(direction, value)) < 2e-6*np.linalg.norm(value)
+    assert np.linalg.norm(np.cross(value.real, value.imag)) > (
+        1e-6*np.linalg.norm(value.real)*np.linalg.norm(value.imag))
+
+
+@pytest.mark.parametrize("key,value", [
+    ("mean_field_direction", "0 0 0"),
+    ("mean_field_direction", "nan 0 1"),
+    ("mean_field_direction", "inf 0 1"),
+    ("mean_field_direction", "1 2"),
+    ("mean_field_direction", "1 2 3 4"),
+    ("exclude_modes", "1 2"),
+    ("exclude_modes", "1 2 3 4"),
+    ("exclude_modes", "1 0.5 0"),
+    ("exclude_modes", "1 x 0"),
+])
+def test_invalid_direction_and_mode_exclusions_are_rejected(tmp_path, key, value):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": f"{key} = {value}",
+    })
+    result = run_athena(tmp_path / "run", path)
+    assert result.returncode != 0
+    assert key in result.stdout + result.stderr
+
+
+def test_excluding_the_last_conjugate_pair_is_rejected(tmp_path):
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "spectrum = power_law\n"
+                        "min_kx = 1\nmax_kx = 1\nmin_ky = 0\nmax_ky = 0\n"
+                        "min_kz = 0\nmax_kz = 0\nexclude_modes = -1 0 0",
+    })
+    result = run_athena(tmp_path / "run", path)
+    assert result.returncode != 0
+    assert "mode_count" in result.stdout + result.stderr
+
+
+def test_filtered_oblique_forcing_restart_and_configuration_validation(tmp_path):
+    """Restart validates the direction and actual mode identities, not just count."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "projection_policy = mks24_alfvenic_perpendicular\n"
+                        "spectrum = power_law\nmean_field_direction = 1 1 1\n"
+                        "exclude_k_parallel_zero = true\n"
+                        "exclude_modes = 1 0 1; 1 -1 1\nrecord_injected_work = true",
+    })
+    reference, split, resumed = [tmp_path/name for name in ("reference", "split", "resumed")]
+    require_success(run_athena(reference, path))
+    require_success(run_athena(split, path, "time/nlim=3", "output2/file_type=rst",
+                               "output2/dcycle=3", "output2/id=restart"))
+    restart = max((split/"rst").glob("*.rst"), key=lambda file: file.stat().st_mtime)
+    require_success(run_athena(
+        resumed, path, "time/nlim=6", "output2/file_type=bin", "output2/variable=turb_force",
+        "output2/id=resume_force", "output2/dcycle=6", restart=restart,
+    ))
+    assert_equal_force_outputs(latest_force(reference), latest_force(resumed))
+    np.testing.assert_array_equal(np.loadtxt(next(reference.glob("*.hydro.hst")))[-1],
+                                  np.loadtxt(next(resumed.glob("*.hydro.hst")))[-1])
+    for index, override in enumerate((
+        "turb_driving/mean_field_direction=1 0 0",
+        "turb_driving/exclude_k_parallel_zero=false",
+        "turb_driving/exclude_modes=1 1 0; 1 -1 1",
+    )):
+        result = run_athena(tmp_path/f"changed_{index}", path, override, restart=restart)
+        assert result.returncode != 0
+        assert "configuration differs" in result.stdout + result.stderr
+    equivalent = tmp_path/"equivalent"
+    require_success(run_athena(
+        equivalent, path, "time/nlim=6", "output2/file_type=bin", "output2/variable=turb_force",
+        "output2/id=resume_force", "output2/dcycle=6",
+        "turb_driving/exclude_modes=-1 1 -1; -1 0 -1", restart=restart,
+    ))
+    assert_equal_force_outputs(latest_force(reference), latest_force(equivalent))

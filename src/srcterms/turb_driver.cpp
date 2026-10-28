@@ -34,6 +34,15 @@
 
 namespace {
 
+constexpr Real kDirectionTolerance = 32.0 * std::numeric_limits<Real>::epsilon();
+
+std::array<int, 3> CanonicalMode(int nx, int ny, int nz) {
+  if (nz < 0 || (nz == 0 && ny < 0) || (nz == 0 && ny == 0 && nx < 0)) {
+    return {-nx, -ny, -nz};
+  }
+  return {nx, ny, nz};
+}
+
 void FatalTurbulenceError(const std::string& message) {
   std::cout << "### FATAL ERROR in turbulence driver: " << message << std::endl;
   std::exit(EXIT_FAILURE);
@@ -157,7 +166,11 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
       {"tile_factor", "tile_nx, tile_ny, and tile_nz"},
       {"tile_driving", "tile_nx, tile_ny, and tile_nz"},
       {"dt_turb_update", "dt_update"},
-      {"spect_form", "spectrum"}
+      {"spect_form", "spectrum"},
+      {"driving_type", "projection_policy (mode selection and spectrum are independent)"},
+      {"isotropic_power_spectrum", "spectrum (all spectra now use abs(k))"},
+      {"exp_prp", "expo (all power-law spectra now use abs(k))"},
+      {"exp_prl", "expo (all power-law spectra now use abs(k))"}
   };
   for (const auto& parameter : removed_parameters) {
     if (pin->DoesParameterExist(block_name, parameter.first)) {
@@ -182,13 +195,8 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
     npeak = 0.0;
     kpeak = get_serialized_real("kpeak", 4.0 * M_PI);
   }
-  // Type 2 is isotropic random driving without a solenoidal projection.
-  driving_type = pin->GetOrAddInteger(block_name, "driving_type", 0);
-  if (driving_type < 0 || driving_type > 2) {
-    FatalTurbulenceError("driving_type must be 0, 1, or 2");
-  }
   std::string spectrum_name = pin->GetOrAddString(
-      block_name, "spectrum", driving_type == 2 ? "power_law" : "parabolic");
+      block_name, "spectrum", "parabolic");
   if (spectrum_name == "parabolic") {
     spectrum = TurbSpectrum::parabolic;
   } else if (spectrum_name == "power_law") {
@@ -197,9 +205,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
     FatalTurbulenceError("spectrum must be parabolic or power_law");
   }
   std::string projection_policy_name =
-      pin->GetOrAddString(block_name, "projection_policy",
-                          driving_type == 2 ? "mks24_random_unprojected"
-                                            : "solenoidal_compressive");
+      pin->GetOrAddString(block_name, "projection_policy", "solenoidal_compressive");
   if (projection_policy_name == "solenoidal_compressive") {
     projection_policy = TurbProjectionPolicy::solenoidal_compressive;
   } else if (projection_policy_name == "mks24_random_unprojected") {
@@ -211,34 +217,54 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
         "projection_policy must be solenoidal_compressive, "
         "mks24_random_unprojected, or mks24_alfvenic_perpendicular");
   }
-  if (projection_policy == TurbProjectionPolicy::mks24_random_unprojected &&
-      driving_type != 0 && driving_type != 2) {
-    FatalTurbulenceError("mks24_random_unprojected requires driving_type = 0 or 2");
+  std::istringstream direction(pin->GetOrAddString(
+      block_name, "mean_field_direction", "0 0 1"));
+  if (!(direction >> mean_field_direction[0] >> mean_field_direction[1]
+                  >> mean_field_direction[2]) || !(direction >> std::ws).eof()) {
+    FatalTurbulenceError("mean_field_direction requires three finite components");
   }
-  if (driving_type == 2 &&
-      projection_policy != TurbProjectionPolicy::mks24_random_unprojected) {
-    FatalTurbulenceError("driving_type = 2 requires mks24_random_unprojected");
+  Real direction_scale = 0.0;
+  for (Real component : mean_field_direction) {
+    if (!std::isfinite(component)) {
+      FatalTurbulenceError("mean_field_direction requires three finite components");
+    }
+    direction_scale = std::max(direction_scale, std::abs(component));
   }
-  if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular &&
-      driving_type != 1) {
-    FatalTurbulenceError("mks24_alfvenic_perpendicular requires driving_type = 1");
+  if (direction_scale == 0.0) {
+    FatalTurbulenceError("mean_field_direction must be nonzero");
   }
-  // min kz zero should be 0 for including kz modes and 1 for not including
-  min_kz = pin->GetOrAddInteger(block_name, "min_kz", 0);
-  max_kz = pin->GetOrAddInteger(block_name, "max_kz", nhigh);
-  min_kx = pin->GetOrAddInteger(block_name, "min_kx", 0);
-  max_kx = pin->GetOrAddInteger(block_name, "max_kx", nhigh);
-  min_ky = pin->GetOrAddInteger(block_name, "min_ky", 0);
-  max_ky = pin->GetOrAddInteger(block_name, "max_ky", nhigh);
+  for (Real& component : mean_field_direction) component /= direction_scale;
+  const Real direction_norm = std::hypot(mean_field_direction[0],
+                                        mean_field_direction[1], mean_field_direction[2]);
+  for (Real& component : mean_field_direction) component /= direction_norm;
+  exclude_k_parallel_zero =
+      pin->GetOrAddBoolean(block_name, "exclude_k_parallel_zero", false);
+  const std::string exclusions = pin->GetOrAddString(block_name, "exclude_modes", "none");
+  if (exclusions != "none") {
+    std::istringstream entries(exclusions);
+    std::string entry;
+    if (exclusions.empty() || exclusions.back() == ';') {
+      FatalTurbulenceError("exclude_modes requires semicolon-separated integer triplets");
+    }
+    while (std::getline(entries, entry, ';')) {
+      std::istringstream values(entry);
+      int nx, ny, nz;
+      if (!(values >> nx >> ny >> nz) || !(values >> std::ws).eof() ||
+          nx == std::numeric_limits<int>::min() ||
+          ny == std::numeric_limits<int>::min() || nz == std::numeric_limits<int>::min()) {
+        FatalTurbulenceError("exclude_modes requires semicolon-separated integer triplets");
+      }
+      excluded_modes.push_back(CanonicalMode(nx, ny, nz));
+    }
+    std::sort(excluded_modes.begin(), excluded_modes.end());
+    excluded_modes.erase(std::unique(excluded_modes.begin(), excluded_modes.end()),
+                         excluded_modes.end());
+  }
   // power-law exponent for isotropic driving
   expo = get_serialized_real("expo", 5.0 / 3.0);
-  exp_prp = get_serialized_real("exp_prp", 5.0 / 3.0);
-  exp_prl = get_serialized_real("exp_prl", 0.0);
   physical_k_shell = pin->GetOrAddBoolean(block_name, "physical_k_shell", false);
   k_shell_unit = get_serialized_real("k_shell_unit", 0.0);
-  isotropic_power_spectrum =
-      pin->GetOrAddBoolean(block_name, "isotropic_power_spectrum", false);
-  if (physical_k_shell && k_shell_unit <= 0.0) {
+  if (physical_k_shell && (!std::isfinite(k_shell_unit) || k_shell_unit <= 0.0)) {
     FatalTurbulenceError("k_shell_unit must be positive when physical_k_shell = true");
   }
   // correlation time
@@ -366,6 +392,33 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   tile_lx = lx_global / static_cast<Real>(tile_nx);
   tile_ly = (tile_ny > 0) ? ly_global / static_cast<Real>(tile_ny) : ly_global;
   tile_lz = (tile_nz > 0) ? lz_global / static_cast<Real>(tile_nz) : lz_global;
+  // Cover the full physical shell; explicit bounds may restrict the candidate set.
+  const Real tile_lengths[3] = {tile_lx, tile_ly, tile_lz};
+  const int root_cells[3] = {mesh_indcs_root.nx1, mesh_indcs_root.nx2,
+                            mesh_indcs_root.nx3};
+  int* lower[3] = {&min_kx, &min_ky, &min_kz};
+  int* upper[3] = {&max_kx, &max_ky, &max_kz};
+  const char* lower_names[3] = {"min_kx", "min_ky", "min_kz"};
+  const char* upper_names[3] = {"max_kx", "max_ky", "max_kz"};
+  for (int dir = 0; dir < 3; ++dir) {
+    const Real radius = root_cells[dir] <= 1 ? 0.0 :
+        (physical_k_shell ? std::ceil(nhigh * k_shell_unit * tile_lengths[dir] /
+                                      (2.0 * M_PI)) : nhigh);
+    if (!std::isfinite(radius) || radius >= std::numeric_limits<int>::max()) {
+      FatalTurbulenceError("forcing shell exceeds supported integer mode bounds");
+    }
+    *lower[dir] = pin->GetOrAddInteger(block_name, lower_names[dir],
+                                      -static_cast<int>(radius));
+    *upper[dir] = pin->GetOrAddInteger(block_name, upper_names[dir],
+                                      static_cast<int>(radius));
+    if (*lower[dir] > *upper[dir] || *lower[dir] == std::numeric_limits<int>::min() ||
+        *upper[dir] == std::numeric_limits<int>::max()) {
+      FatalTurbulenceError("invalid signed forcing mode bounds");
+    }
+    if (root_cells[dir] <= 1 && (*lower[dir] != 0 || *upper[dir] != 0)) {
+      FatalTurbulenceError("inactive directions require zero forcing mode bounds");
+    }
+  }
   if (use_npeak) {
     kpeak = npeak * 2.0 * M_PI / tile_lx;
   }
@@ -402,8 +455,6 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   }
   n_turb_updates_yet = 0;
 
-  mode_count = 0;
-
   // Count Cartesian modes
   const Real dkx = (tile_lx > 0.0) ? 2.0 * M_PI / tile_lx : 0.0;
   const Real dky = (tile_ly > 0.0) ? 2.0 * M_PI / tile_ly : 0.0;
@@ -414,17 +465,18 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
       for (nkz = min_kz; nkz <= max_kz; nkz++) {
         if (nkx == 0 && nky == 0 && nkz == 0) continue;
         if (IsDrivenMode(nkx, nky, nkz, dkx, dky, dkz)) {
-          mode_count++;
+          mode_indices.push_back({nkx, nky, nkz});
         }
       }
     }
   }
+  mode_count = static_cast<int>(mode_indices.size());
 
   if (mode_count == 0) {
     std::cout << "ERROR: mode_count is 0! Check turbulence driving parameters."
               << std::endl;
     std::cout << "  nlow=" << nlow << ", nhigh=" << nhigh << std::endl;
-    std::cout << "  driving_type=" << driving_type << std::endl;
+    std::cout << "  projection_policy=" << projection_policy_name << std::endl;
     exit(EXIT_FAILURE);
   }
 
@@ -459,22 +511,30 @@ TurbulenceDriver::~TurbulenceDriver() {}
 
 bool TurbulenceDriver::IsDrivenMode(int nkx, int nky, int nkz, Real dkx, Real dky,
                                     Real dkz) const {
-  const Real nlow_sqr = SQR(nlow);
-  const Real nhigh_sqr = SQR(nhigh);
+  const auto canonical = CanonicalMode(nkx, nky, nkz);
+  // Real forcing supplies -k; keep the other representative only if this one is absent.
+  if (canonical != std::array<int, 3>{nkx, nky, nkz} &&
+      -nkx >= min_kx && -nkx <= max_kx && -nky >= min_ky && -nky <= max_ky &&
+      -nkz >= min_kz && -nkz <= max_kz) return false;
+  if (std::binary_search(excluded_modes.begin(), excluded_modes.end(), canonical)) {
+    return false;
+  }
+  const Real kx = dkx * nkx, ky = dky * nky, kz = dkz * nkz;
+  const Real ksqr = SQR(kx) + SQR(ky) + SQR(kz);
+  if (exclude_k_parallel_zero) {
+    const Real kparallel = kx * mean_field_direction[0] + ky * mean_field_direction[1] +
+                           kz * mean_field_direction[2];
+    if (std::abs(kparallel) <= kDirectionTolerance * std::sqrt(ksqr)) return false;
+  }
+  const Real nlow_sqr = SQR(static_cast<Real>(nlow));
+  const Real nhigh_sqr = SQR(static_cast<Real>(nhigh));
   if (physical_k_shell) {
-    const Real normalized_k2 =
-        (SQR(dkx * nkx) + SQR(dky * nky) + SQR(dkz * nkz)) /
-        SQR(k_shell_unit);
+    const Real normalized_k2 = ksqr / SQR(k_shell_unit);
     return normalized_k2 >= nlow_sqr && normalized_k2 <= nhigh_sqr;
   }
-  if (driving_type == 0 || driving_type == 2) {
-    const Real nsqr = SQR(nkx) + SQR(nky) + SQR(nkz);
-    return nsqr >= nlow_sqr && nsqr <= nhigh_sqr;
-  }
-  const Real nperp_sqr = SQR(nkx) + SQR(nky);
-  const Real nparallel_sqr = SQR(nkz);
-  return nperp_sqr >= nlow_sqr && nperp_sqr <= nhigh_sqr &&
-         nparallel_sqr >= nlow_sqr && nparallel_sqr <= nhigh_sqr;
+  const Real nsqr = SQR(static_cast<Real>(nkx)) + SQR(static_cast<Real>(nky)) +
+                    SQR(static_cast<Real>(nkz));
+  return nsqr >= nlow_sqr && nsqr <= nhigh_sqr;
 }
 
 //----------------------------------------------------------------------------------------
@@ -524,7 +584,7 @@ void TurbulenceDriver::Initialize() {
   auto kz_mode_ = kz_mode;
 
   // Cartesian plane-wave precomputations
-  Real dkx, dky, dkz, kx, ky, kz;
+  Real dkx, dky, dkz;
   Real lx = tile_lx;
   Real ly = tile_ly;
   Real lz = tile_lz;
@@ -532,27 +592,10 @@ void TurbulenceDriver::Initialize() {
   dky = (ly > 0.0) ? 2.0 * M_PI / ly : 0.0;
   dkz = (lz > 0.0) ? 2.0 * M_PI / lz : 0.0;
 
-  int nmode = 0;
-  int nkx, nky, nkz;
-  for (nkx = min_kx; nkx <= max_kx; nkx++) {
-    for (nky = min_ky; nky <= max_ky; nky++) {
-      for (nkz = min_kz; nkz <= max_kz; nkz++) {
-        if (nkx == 0 && nky == 0 && nkz == 0) continue;
-        if (IsDrivenMode(nkx, nky, nkz, dkx, dky, dkz)) {
-          kx = dkx * nkx;
-          ky = dky * nky;
-          kz = dkz * nkz;
-          kx_mode_.h_view(nmode) = kx;
-          ky_mode_.h_view(nmode) = ky;
-          kz_mode_.h_view(nmode) = kz;
-          nmode++;
-        }
-      }
-    }
-  }
-
-  if (nmode != mode_count) {
-    FatalTurbulenceError("Initialize mode count does not match allocated mode_count");
+  for (int n = 0; n < mode_count; ++n) {
+    kx_mode_.h_view(n) = dkx * mode_indices[n][0];
+    ky_mode_.h_view(n) = dky * mode_indices[n][1];
+    kz_mode_.h_view(n) = dkz * mode_indices[n][2];
   }
   kx_mode_.template modify<HostMemSpace>();
   kx_mode_.template sync<DevExeSpace>();
@@ -593,10 +636,6 @@ void TurbulenceDriver::BuildBasis() {
   auto size_view = pmy_pack->pmb->mb_size;
   size_view.template modify<HostMemSpace>();
   size_view.template sync<DevExeSpace>();
-  const int drivingtype = driving_type;
-  const bool retain_z_variation =
-      isotropic_power_spectrum ||
-      projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular;
   const bool tile_enabled = (tile_nx > 1 || tile_ny > 1 || tile_nz > 1);
   const int tile_nx_local = tile_nx;
   const int tile_ny_local = tile_ny;
@@ -664,7 +703,7 @@ void TurbulenceDriver::BuildBasis() {
         }
         zsin_(m, n, k) = sin(kz_mode_.d_view(n) * arg);
         zcos_(m, n, k) = cos(kz_mode_.d_view(n) * arg);
-        if (ncells3 == 1 || (drivingtype == 1 && !retain_z_variation)) {
+        if (ncells3 == 1) {
           zsin_(m, n, k) = 0.0;
           zcos_(m, n, k) = 1.0;
         }
@@ -747,7 +786,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
   auto mode_noise_real_ = mode_noise_real;
   auto mode_noise_imag_ = mode_noise_imag;
 
-  Real dkx, dky, dkz, kx, ky, kz;
+  Real dkx, dky, dkz;
   Real lx = tile_lx;
   Real ly = tile_ly;
   Real lz = tile_lz;
@@ -755,149 +794,78 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
   dky = (ly > 0.0) ? 2.0 * M_PI / ly : 0.0;
   dkz = (lz > 0.0) ? 2.0 * M_PI / lz : 0.0;
 
-  Real& ex = expo;
-  Real& ex_prp = exp_prp;
-  Real& ex_prl = exp_prl;
-  const TurbProjectionPolicy projection_policy_ = projection_policy;
-  Real norm, kprl, kprp, kiso;
   Real khigh = nhigh * fmax(fmax(dkx, dky), dkz);
   Real klow = nlow * fmin(fmin(dkx, dky), dkz);
   Real parab_prefact = 0.0;
   if (spectrum == TurbSpectrum::parabolic) {
     parab_prefact = -4.0 / pow(khigh - klow, 2.0);
   }
-  Real& k_peak = kpeak;
 
-  // Now compute new force using new random amplitudes and phases
-  // Advance modal state only when another configured OU update boundary is reached.
-
-  if ((t_since_start < tdriv_duration) ||
-      turb_flag != 1) {  // Update forcing if continuous or t<tdriv_duration
+  if ((t_since_start < tdriv_duration) || turb_flag != 1) {
     for (int i_turb_update = n_turb_updates_yet; i_turb_update < n_turb_updates_reqd;
          i_turb_update++) {
-      int no_dir = 3;
-      int nmode = 0;
-
-      // Cartesian mode generation
-      int nkx, nky, nkz;
-
-      for (nkx = min_kx; nkx <= max_kx; nkx++) {
-        for (nky = min_ky; nky <= max_ky; nky++) {
-          for (nkz = min_kz; nkz <= max_kz; nkz++) {
-            if (nkx == 0 && nky == 0 && nkz == 0) continue;
-            norm = 0.0;
-            if (IsDrivenMode(nkx, nky, nkz, dkx, dky, dkz)) {
-              kx = dkx * nkx;
-              ky = dky * nky;
-              kz = dkz * nkz;
-
-              Real k[3] = {kx, ky, kz};
-              // Always define kiso; used below for the solenoidal/compressive split
-              kiso = sqrt(SQR(kx) + SQR(ky) + SQR(kz));
-
-              // Generate Fourier amplitudes
-
-              if (driving_type == 0 || driving_type == 2) {
-                if (kiso > 1e-16) {
-                  if (spectrum == TurbSpectrum::power_law) {
-                    norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);  // power-law driving
-                  } else if (spectrum == TurbSpectrum::parabolic) {
-                    norm = fabs(parab_prefact * pow(kiso - k_peak, 2.0) +
-                                1.0);  // parabola in k-space
-                    norm = pow(norm, 0.5) * pow(k_peak / kiso, (no_dir - 1) / 2.0);
-                  } else {
-                    norm = 0.0;
-                  }
-                } else {
-                  norm = 0.0;
-                }
-              } else if (driving_type == 1) {
-                no_dir = 2;
-                // The planar force is perpendicular to z for every policy.
-                kprl = fabs(kz);
-                kprp = sqrt(SQR(kx) + SQR(ky));
-                if (isotropic_power_spectrum && kiso > 1e-16) {
-                  norm = 1.0 / pow(kiso, (ex + 2.0) / 2.0);
-                } else if (kprl > 1e-16 && kprp > 1e-16) {
-                  if (spectrum == TurbSpectrum::power_law) {
-                    norm =
-                        1.0 / pow(kprp, (ex_prp + 1.0) / 2.0) / pow(kprl, ex_prl / 2.0);
-                  } else if (spectrum == TurbSpectrum::parabolic) {
-                    norm = fabs(parab_prefact * pow(kprp - k_peak, 2.0) +
-                                1.0);  // parabola in kperp-space
-                    norm = pow(norm, 0.5) * pow(k_peak / kprp, (no_dir - 1) / 2.0);
-                  }
-                } else {
-                  norm = 0.0;
-                }
-              }
-              // Generate complex Fourier amplitudes for this mode:
-              //   amp_real_dir (real part) and amp_imag_dir (imaginary part),
-              // scaled by norm. Also accumulate k·Re(A) and k·Im(A) to construct
-              // solenoidal/compressive projections below.
-              Real k_dot_amp_imag = 0.0;
-              Real k_dot_amp_real = 0.0;
-
-              for (int dir = 0; dir < 3; dir++) {
-                mode_noise_real_.h_view(dir, nmode) = 0.0;
-                mode_noise_imag_.h_view(dir, nmode) = 0.0;
-              }
-              for (int dir = 0; dir < no_dir; dir++) {
-                Real amp_real_dir = norm * RanGaussianSt(&(rstate));
-                Real amp_imag_dir = norm * RanGaussianSt(&(rstate));
-                mode_noise_real_.h_view(dir, nmode) = amp_real_dir;
-                mode_noise_imag_.h_view(dir, nmode) = amp_imag_dir;
-
-                k_dot_amp_imag += k[dir] * amp_imag_dir;  // k·Im(A)
-                k_dot_amp_real += k[dir] * amp_real_dir;  // k·Re(A)
-              }
-
-              // The generic policy preserves the historical full-k
-              // solenoidal/compressive blend. MKS24 random forcing retains
-              // all three independent amplitudes without projection. MKS24
-              // Alfvenic forcing projects only its x/y amplitudes against
-              // k_perp = (kx, ky), while retaining kz phase variation.
-              if (norm > 0. &&
-                  projection_policy_ !=
-                      TurbProjectionPolicy::mks24_random_unprojected) {
-                Real projection_norm_sqr = SQR(kiso);
-                if (projection_policy_ ==
-                    TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
-                  projection_norm_sqr = SQR(kx) + SQR(ky);
-                }
-                for (int dir = 0; dir < no_dir; dir++) {
-                  // Compressible (longitudinal) projections:
-                  //   A_div = k (k·Re(A)) / |k|^2,  B_div = k (k·Im(A)) / |k|^2
-                  Real A_div = 0.0;
-                  Real B_div = 0.0;
-                  if (projection_norm_sqr > 1.0e-32) {
-                    A_div = k[dir] * k_dot_amp_real / projection_norm_sqr;
-                    B_div = k[dir] * k_dot_amp_imag / projection_norm_sqr;
-                  }
-
-                  // Solenoidal parts (divergence-free):
-                  //   A_sol = A - A_div,  B_sol = B - B_div
-                  Real A_sol = mode_noise_real_.h_view(dir, nmode) - A_div;
-                  Real B_sol = mode_noise_imag_.h_view(dir, nmode) - B_div;
-
-                  // Blend in amplitude-space:
-                  //   sol_fraction = 1.0 -> purely solenoidal,
-                  //   sol_fraction = 0.0 -> purely compressive.
-                  mode_noise_real_.h_view(dir, nmode) =
-                      sol_fraction * A_sol + (1.0 - sol_fraction) * A_div;
-                  mode_noise_imag_.h_view(dir, nmode) =
-                      sol_fraction * B_sol + (1.0 - sol_fraction) * B_div;
-                }
-              }
-
-              nmode++;
-            }
+      for (int n = 0; n < mode_count; ++n) {
+        const Real k[3] = {dkx * mode_indices[n][0], dky * mode_indices[n][1],
+                           dkz * mode_indices[n][2]};
+        const Real kiso = std::hypot(k[0], k[1], k[2]);
+        Real norm = 0.0;
+        // Radial shell weighting is independent of force polarization.
+        if (kiso > 1e-16) {
+          if (spectrum == TurbSpectrum::power_law) {
+            norm = 1.0 / pow(kiso, (expo + 2.0) / 2.0);
+          } else {
+            norm = fabs(parab_prefact * pow(kiso - kpeak, 2.0) + 1.0);
+            norm = pow(norm, 0.5) * (kpeak / kiso);
           }
         }
-      }
+        Real amp_real[3], amp_imag[3];
+        for (int dir = 0; dir < 3; ++dir) {
+          amp_real[dir] = norm * RanGaussianSt(&rstate);
+          amp_imag[dir] = norm * RanGaussianSt(&rstate);
+        }
 
-      if (nmode != mode_count) {
-        FatalTurbulenceError("InitializeModes mode count does not match mode_count");
+        if (projection_policy == TurbProjectionPolicy::mks24_alfvenic_perpendicular) {
+          const auto& b = mean_field_direction;
+          Real transverse[3] = {b[1]*k[2] - b[2]*k[1], b[2]*k[0] - b[0]*k[2],
+                                 b[0]*k[1] - b[1]*k[0]};
+          const Real transverse_norm = std::hypot(transverse[0], transverse[1],
+                                                  transverse[2]);
+          const bool parallel_mode = transverse_norm <= kDirectionTolerance * kiso;
+          // k parallel to B permits both transverse polarizations; otherwise use B x k.
+          for (int dir = 0; dir < 3; ++dir) {
+            transverse[dir] = parallel_mode ? b[dir] : transverse[dir]/transverse_norm;
+          }
+          Real real_projection = 0.0, imag_projection = 0.0;
+          for (int dir = 0; dir < 3; ++dir) {
+            real_projection += transverse[dir] * amp_real[dir];
+            imag_projection += transverse[dir] * amp_imag[dir];
+          }
+          for (int dir = 0; dir < 3; ++dir) {
+            amp_real[dir] = parallel_mode ? amp_real[dir] - b[dir]*real_projection :
+                                           transverse[dir]*real_projection;
+            amp_imag[dir] = parallel_mode ? amp_imag[dir] - b[dir]*imag_projection :
+                                           transverse[dir]*imag_projection;
+          }
+        } else if (projection_policy == TurbProjectionPolicy::solenoidal_compressive &&
+                   kiso > 1e-16) {
+          Real k_dot_real = 0.0, k_dot_imag = 0.0;
+          for (int dir = 0; dir < 3; ++dir) {
+            k_dot_real += k[dir] * amp_real[dir];
+            k_dot_imag += k[dir] * amp_imag[dir];
+          }
+          for (int dir = 0; dir < 3; ++dir) {
+            const Real real_compressive = k[dir] * k_dot_real / SQR(kiso);
+            const Real imag_compressive = k[dir] * k_dot_imag / SQR(kiso);
+            amp_real[dir] = sol_fraction * (amp_real[dir] - real_compressive) +
+                            (1.0 - sol_fraction) * real_compressive;
+            amp_imag[dir] = sol_fraction * (amp_imag[dir] - imag_compressive) +
+                            (1.0 - sol_fraction) * imag_compressive;
+          }
+        }
+        for (int dir = 0; dir < 3; ++dir) {
+          mode_noise_real_.h_view(dir, n) = amp_real[dir];
+          mode_noise_imag_.h_view(dir, n) = amp_imag[dir];
+        }
       }
       mode_noise_real_.template modify<HostMemSpace>();
       mode_noise_imag_.template modify<HostMemSpace>();
@@ -1884,12 +1852,11 @@ void TurbulenceDriver::RefreshForceAfterMeshChange(Driver* pdrive) {
 
 TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   TurbulenceRestartMetadata metadata{};
-  metadata.version = 3;
+  metadata.version = 5;
   metadata.mode_count = mode_count;
   metadata.n_updates = n_turb_updates_yet;
   metadata.nlow = nlow;
   metadata.nhigh = nhigh;
-  metadata.driving_type = driving_type;
   metadata.min_kx = min_kx;
   metadata.max_kx = max_kx;
   metadata.min_ky = min_ky;
@@ -1906,8 +1873,11 @@ TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   metadata.spectrum = static_cast<int>(spectrum);
   metadata.projection_policy = static_cast<int>(projection_policy);
   metadata.physical_k_shell = static_cast<int>(physical_k_shell);
-  metadata.isotropic_power_spectrum = static_cast<int>(isotropic_power_spectrum);
   metadata.record_injected_work = static_cast<int>(record_injected_work);
+  metadata.exclude_k_parallel_zero = static_cast<int>(exclude_k_parallel_zero);
+  for (int dir = 0; dir < 3; ++dir) {
+    metadata.mean_field_direction[dir] = mean_field_direction[dir];
+  }
   metadata.tcorr = tcorr;
   metadata.dt_update = dt_update;
   metadata.dedt = dedt;
@@ -1916,8 +1886,6 @@ TurbulenceRestartMetadata TurbulenceDriver::RestartMetadata() const {
   metadata.kpeak = kpeak;
   metadata.npeak = npeak;
   metadata.expo = expo;
-  metadata.exp_prp = exp_prp;
-  metadata.exp_prl = exp_prl;
   metadata.tdriv_duration = tdriv_duration;
   metadata.tdriv_start = tdriv_start;
   metadata.sigma_x1 = sigma_x1;
@@ -1939,11 +1907,19 @@ void TurbulenceDriver::ValidateRestartMetadata(
                            std::string(key) + "'");
     }
   };
-  check(metadata.version != expected.version, "version");
+  if (metadata.version != expected.version) {
+    FatalTurbulenceError("unsupported turbulence restart version; unified forcing "
+                         "requires version 5 (use the original executable for older files)");
+  }
+  check(metadata.exclude_k_parallel_zero != expected.exclude_k_parallel_zero,
+        "exclude_k_parallel_zero");
+  for (int dir = 0; dir < 3; ++dir) {
+    check(metadata.mean_field_direction[dir] != expected.mean_field_direction[dir],
+          "mean_field_direction");
+  }
   check(metadata.mode_count != expected.mode_count, "mode_count");
   check(metadata.nlow != expected.nlow, "nlow");
   check(metadata.nhigh != expected.nhigh, "nhigh");
-  check(metadata.driving_type != expected.driving_type, "driving_type");
   check(metadata.min_kx != expected.min_kx, "min_kx");
   check(metadata.max_kx != expected.max_kx, "max_kx");
   check(metadata.min_ky != expected.min_ky, "min_ky");
@@ -1960,8 +1936,6 @@ void TurbulenceDriver::ValidateRestartMetadata(
   check(metadata.spectrum != expected.spectrum, "spectrum");
   check(metadata.projection_policy != expected.projection_policy, "projection_policy");
   check(metadata.physical_k_shell != expected.physical_k_shell, "physical_k_shell");
-  check(metadata.isotropic_power_spectrum != expected.isotropic_power_spectrum,
-        "isotropic_power_spectrum");
   check(metadata.record_injected_work != expected.record_injected_work,
         "record_injected_work");
   check(metadata.tcorr != expected.tcorr, "tcorr");
@@ -1972,8 +1946,6 @@ void TurbulenceDriver::ValidateRestartMetadata(
   check(metadata.npeak != expected.npeak, "npeak");
   check(metadata.kpeak != expected.kpeak, "kpeak");
   check(metadata.expo != expected.expo, "expo");
-  check(metadata.exp_prp != expected.exp_prp, "exp_prp");
-  check(metadata.exp_prl != expected.exp_prl, "exp_prl");
   check(metadata.tdriv_duration != expected.tdriv_duration, "tdriv_duration");
   check(metadata.tdriv_start != expected.tdriv_start, "tdriv_start");
   check(metadata.sigma_x1 != expected.sigma_x1, "sigma_x1");

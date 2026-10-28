@@ -41,8 +41,9 @@ def input_text(*,passive=True,nx=128,mode=0,tlim=.05,nlim=-1,lf=None,forcing=Fal
     if acceleration:
         d['mhd_srcterms']={'const_accel':'true','const_accel_dir':2,'const_accel_val':.5}
     if forcing:
-        d['turb_driving']={'driving_type':1,'tcorr':1,'dedt':.02,'nlow':1,'nhigh':2,
-                           'exp_prp':5/3,'exp_prl':0,'rseed':519,'record_injected_work':'true'}
+        d['turb_driving']={'tcorr':1,'dedt':.02,'nlow':1,'nhigh':2,
+                           'projection_policy':'mks24_alfvenic_perpendicular',
+                           'sol_fraction':1,'rseed':519,'record_injected_work':'true'}
         if forcing_policy:d['turb_driving']['projection_policy']=forcing_policy
     return ''.join('\n<'+block+'>\n'+''.join(f'{k} = {v}\n' for k,v in values.items())
                    for block,values in d.items())
@@ -159,7 +160,8 @@ def main(argv=None):
         cases = [('plm',{}),('dc',{'recon':'dc'}),('ppm4',{'recon':'ppm4'}),('ppmx',{'recon':'ppmx'}),('wenoz',{'recon':'wenoz'}),
                          ('density-floor',{'amp':.95,'dfloor':.2}),
                          ('thermal-floor',{'pfloor':3.0,'strict':False}),('weak-field',{'weak_field':True}),
-                         ('accelerated',{'acceleration':True}),('forced',{'forcing':True,'nlim':12,'tlim':1}),
+                         ('accelerated',{'acceleration':True}),('forced',{'forcing':True,'nlim':12,'tlim':1,
+                                       'forcing_policy':'solenoidal_compressive'}),
                          ('forced-3d',{'forcing':True,'nlim':12,'tlim':1,
                                        'forcing_policy':'mks24_alfvenic_perpendicular'})]
         if args.suite == 'forced':

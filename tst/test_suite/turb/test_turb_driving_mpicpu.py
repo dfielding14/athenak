@@ -6,7 +6,9 @@ from pathlib import Path
 import numpy as np
 import pytest
 
-from test_suite.turb.test_turb_driving_cpu import latest_force, read_force_blocks
+from test_suite.turb.test_turb_driving_cpu import (
+    assert_equal_force_outputs, latest_force, read_force_blocks,
+)
 from test_suite.turb.test_turb_driving_cpu import rms_acceleration, staged_turb_input
 
 
@@ -65,3 +67,42 @@ def test_full_step_power_agrees_across_mpi_decomposition(tmp_path):
                                    rtol=2e-7, atol=2e-8)
         histories.append((times, energy))
     np.testing.assert_allclose(histories[0], histories[1], rtol=1e-12, atol=1e-12)
+
+
+@pytest.mark.parametrize("single_file_per_rank", [False, True])
+def test_perpendicular_forcing_restart_under_mpi(tmp_path, single_file_per_rank):
+    """Shared and rank-local checkpoints retain the exact two-rank OU trajectory."""
+    input_file = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "turb_driving": "projection_policy = mks24_alfvenic_perpendicular\n"
+                        "spectrum = power_law\nrecord_injected_work = true\n"
+                        "min_kx = -3\nmax_kx = 3\nmin_ky = -3\nmax_ky = 3\n"
+                        "min_kz = 1\nmax_kz = 3",
+        "output1": "data_format = %24.16e",
+        "output2": "single_file_per_rank = false",
+    })
+
+    def run(directory, *arguments):
+        directory.mkdir()
+        result = subprocess.run(
+            ["mpirun", "-np", "2", str(ATHENA), "-d", str(directory), *arguments],
+            capture_output=True, text=True, check=False,
+        )
+        assert result.returncode == 0, result.stdout + result.stderr
+
+    reference, split, resumed = [tmp_path / name for name in ("reference", "split", "resumed")]
+    run(reference, "-i", str(input_file))
+    run(split, "-i", str(input_file), "time/nlim=3", "output2/file_type=rst",
+        "output2/dcycle=3", "output2/id=restart",
+        f"output2/single_file_per_rank={str(single_file_per_rank).lower()}")
+    restart_dir = split / "rst"
+    if single_file_per_rank:
+        restart_dir /= "rank_00000000"
+        assert list((split / "rst" / "rank_00000001").glob("*.rst"))
+    restart = max(restart_dir.glob("*.rst"), key=lambda path: path.stat().st_mtime)
+    run(resumed, "-r", str(restart), "time/nlim=6", "output2/file_type=bin",
+        "output2/variable=turb_force", "output2/id=resume_force", "output2/dcycle=6",
+        "output2/single_file_per_rank=false")
+    assert_equal_force_outputs(latest_force(reference), latest_force(resumed))
+    reference_history = np.loadtxt(next(reference.glob("*.hydro.hst")))[-1]
+    resumed_history = np.loadtxt(next(resumed.glob("*.hydro.hst")))[-1]
+    np.testing.assert_array_equal(reference_history, resumed_history)

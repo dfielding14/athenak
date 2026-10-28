@@ -180,9 +180,7 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     std::vector<Real> amp_imag(3 * pturb->mode_count);
     if (global_variable::my_rank == 0 || single_file_per_rank) {
       if (resfile.Read_bytes(&metadata, 1, sizeof(TurbulenceRestartMetadata),
-                             single_file_per_rank) != sizeof(TurbulenceRestartMetadata) ||
-          resfile.Read_bytes(&rng_state, 1, sizeof(RNG_State), single_file_per_rank)
-          != sizeof(RNG_State)) {
+                             single_file_per_rank) != sizeof(TurbulenceRestartMetadata)) {
         std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
                   << std::endl
                   << "Turbulence state data read from restart file is incorrect, "
@@ -190,6 +188,29 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
         exit(EXIT_FAILURE);
       }
       pturb->ValidateRestartMetadata(metadata);
+      std::vector<std::array<int, 3>> mode_indices(pturb->mode_count);
+      const auto mode_bytes = mode_indices.size() * sizeof(std::array<int, 3>);
+      if (resfile.Read_bytes(mode_indices.data(), 1, mode_bytes, single_file_per_rank)
+          != mode_bytes) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Turbulence mode indices read from restart file are truncated."
+                  << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      if (mode_indices != pturb->mode_indices) {
+        std::cout << "### FATAL ERROR in turbulence driver: restart turbulence "
+                  << "configuration differs for 'mode selection'" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      if (resfile.Read_bytes(&rng_state, 1, sizeof(RNG_State), single_file_per_rank)
+          != sizeof(RNG_State)) {
+        std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+                  << std::endl
+                  << "Turbulence RNG state data read from restart file is incorrect, "
+                  << "restart file is broken." << std::endl;
+        exit(EXIT_FAILURE);
+      }
       if (resfile.Read_bytes(amp_real.data(), 1, amp_real.size() * sizeof(Real),
                              single_file_per_rank) != amp_real.size() * sizeof(Real) ||
           resfile.Read_bytes(amp_imag.data(), 1, amp_imag.size() * sizeof(Real),

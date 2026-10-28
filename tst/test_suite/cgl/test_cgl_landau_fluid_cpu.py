@@ -1756,7 +1756,6 @@ def test_cgl_lf_paper_random_forcing_leaves_cartesian_amplitudes_unprojected():
         _run_paper(
             "cgl_ci_paper_random",
             "time/nlim=1",
-            "turb_driving/driving_type=0",
             "turb_driving/projection_policy=mks24_random_unprojected",
             "turb_driving/rseed=314159",
         )
@@ -1943,16 +1942,15 @@ def test_cgl_lf_paper_passive_delta_must_match_eos_mode():
     assert "passive_delta must match" in result.stdout
 
 
-def test_cgl_lf_paper_type_two_rejects_alfvenic_policy():
-    command = [
-        "./athena",
-        "-i",
-        PAPER_INPUT,
-        "turb_driving/driving_type=2",
-    ]
+def test_cgl_lf_paper_rejects_removed_driving_type(tmp_path):
+    input_path = tmp_path / "removed_driving_type.athinput"
+    input_path.write_text(
+        Path(PAPER_INPUT).read_text() + "\n<turb_driving>\ndriving_type = 2\n"
+    )
+    command = ["./athena", "-i", str(input_path)]
     result = subprocess.run(command, capture_output=True, text=True, check=False)
     assert result.returncode != 0
-    assert "driving_type = 2 requires mks24_random_unprojected" in result.stdout
+    assert "removed parameter 'driving_type'" in result.stdout
 
 
 def test_cgl_lf_paper_alfvenic_policy_rejects_compressive_blend():
@@ -2024,11 +2022,12 @@ def test_cgl_lf_paper_production_inputs_explicitly_use_rank_local_io():
         assert "k_shell_unit = 3.141592653589793" in turbulence
         assert "nlow = 1" in turbulence
         assert "nhigh = 3" in turbulence
-        assert "isotropic_power_spectrum = true" in turbulence
+        for removed in ("driving_type", "isotropic_power_spectrum", "exp_prp", "exp_prl"):
+            assert removed not in turbulence
         assert "expo = 2.0" in turbulence
         expected_policy = (
             "mks24_random_unprojected"
-            if "driving_type = 0" in turbulence
+            if "_random_" in input_path.name
             else "mks24_alfvenic_perpendicular"
         )
         assert f"projection_policy = {expected_policy}" in turbulence
@@ -5738,3 +5737,52 @@ def test_cgl_lf_amr_primitive_prolongation_rejects_pressure_work_recording():
         result.stdout
     )
     assert "<mhd>/cgl_lf_record_pressure_work = false" in result.stdout
+
+
+@pytest.mark.parametrize("projection_policy,parallel,direction,expected", [
+    ("solenoidal_compressive", 1.0, "0 0 1", True),
+    ("mks24_random_unprojected", 1.0, "0 0 1", True),
+    ("mks24_alfvenic_perpendicular", 0.0, "0 0 1", True),
+    ("mks24_alfvenic_perpendicular", 1.0, "0 0 1", False),
+    ("mks24_alfvenic_perpendicular", 0.0, "0 0 -2", True),
+    ("mks24_alfvenic_perpendicular", 0.0, "1 0 0", False),
+    ("mks24_alfvenic_perpendicular", 0.0, "1 1 1", False),
+])
+def test_cgl_lf_paper_smoke_uses_projection_policy(
+    tmp_path, projection_policy, parallel, direction, expected
+):
+    spec = importlib.util.spec_from_file_location(
+        "cgl_lf_workflow_projection_test",
+        Path(__file__).resolve().parents[3] / "scripts/cgl_lf_workflow.py",
+    )
+    workflow = importlib.util.module_from_spec(spec)
+    sys.modules[spec.name] = workflow
+    spec.loader.exec_module(workflow)
+    user = tmp_path / "user.hst"
+    user.write_text(
+        "#  [1]=force_prp2 [2]=force_prl2 [3]=volume [4]=b2 [5]=b4 "
+        "[6]=beta [7]=mirror_vol [8]=fire_vol [9]=hard_vol [10]=force_work\n"
+        f"1 {parallel} 1 1 1 10 0 0 0 0\n"
+        f"1 {parallel} 1 1 1 10 0 0 0 1\n"
+    )
+    mhd = tmp_path / "mhd.hst"
+    mhd.write_text("#  [1]=tot-E\n1\n2\n")
+    exclude_modes = "1 0 0; 0 1 -1; -2 1 0"
+    choices = workflow.model_choices(
+        f"<turb_driving>\nprojection_policy = {projection_policy}\n"
+        f"mean_field_direction = {direction} # reference direction\n"
+        "exclude_k_parallel_zero = true\n"
+        f"exclude_modes = {exclude_modes} # selected modes and their conjugates\n", []
+    )
+    assert choices["forcing_mean_field_direction"] == direction
+    assert choices["forcing_exclude_k_parallel_zero"] == "true"
+    assert choices["forcing_exclude_modes"] == exclude_modes
+    case = {
+        "model_choices": choices,
+        "outputs": {"user_history": user.name, "mhd_history": mhd.name},
+    }
+    result = workflow.evaluate_paper_smoke(case, tmp_path)
+    assert result["passed"] is expected
+    if direction in ("1 0 0", "1 1 1"):
+        assert "histories measure components relative to z" in result["error"]
+        assert "off-axis mean_field_direction" in result["error"]

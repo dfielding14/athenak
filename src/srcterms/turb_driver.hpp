@@ -8,7 +8,9 @@
 //! \file turb_driver.hpp
 //  \brief defines the stochastic turbulence forcing driver
 
+#include <array>
 #include <memory>
+#include <vector>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
@@ -32,7 +34,6 @@ struct TurbulenceRestartMetadata {
   int n_updates;
   int nlow;
   int nhigh;
-  int driving_type;
   int min_kx;
   int max_kx;
   int min_ky;
@@ -49,8 +50,8 @@ struct TurbulenceRestartMetadata {
   int spectrum;
   int projection_policy;
   int physical_k_shell;
-  int isotropic_power_spectrum;
   int record_injected_work;
+  int exclude_k_parallel_zero;
   Real tcorr;
   Real dt_update;
   Real dedt;
@@ -59,8 +60,6 @@ struct TurbulenceRestartMetadata {
   Real kpeak;
   Real npeak;
   Real expo;
-  Real exp_prp;
-  Real exp_prl;
   Real tdriv_duration;
   Real tdriv_start;
   Real sigma_x1;
@@ -70,6 +69,7 @@ struct TurbulenceRestartMetadata {
   Real center_x2;
   Real center_x3;
   Real k_shell_unit;
+  Real mean_field_direction[3];
 };
 
 //----------------------------------------------------------------------------------------
@@ -90,6 +90,7 @@ class TurbulenceDriver {
   DvceArray3D<Real> xcos, xsin, ycos, ysin, zcos, zsin;
 
   int mode_count;
+  std::vector<std::array<int, 3>> mode_indices;
   int n_turb_updates_yet;
   Real injected_work;
   bool record_injected_work;
@@ -120,9 +121,12 @@ class TurbulenceDriver {
   Real kpeak, npeak;
   bool use_npeak;
   Real tcorr, dedt, tdriv_duration, tdriv_start, k_shell_unit;
-  Real expo, exp_prl, exp_prp;
-  int driving_type, turb_flag;
-  bool physical_k_shell, isotropic_power_spectrum;
+  Real expo;
+  int turb_flag;
+  bool physical_k_shell;
+  bool exclude_k_parallel_zero;
+  Real mean_field_direction[3];
+  std::vector<std::array<int, 3>> excluded_modes;
   int min_kz, max_kz, min_kx, max_kx, min_ky, max_ky;
   Real sol_fraction;
   Real dt_update;
