@@ -47,9 +47,17 @@ Each full step removes the same pressure decrement from both components:
 $$
 \delta p=\min\left[
  p_{\rm iso}(1-e^{-\alpha\Delta t}),
- \max(\min(p_\perp,p_\parallel)-p_{\rm floor},0)
+ \max(\min(p_\perp,p_\parallel)-p_{\rm stop},0)
 \right],\qquad p_{\rm iso}=\frac{2p_\perp+p_\parallel}{3}.
 $$
+
+Here $p_{\rm stop}=\max(p_{\rm floor},|\Delta p|/9)$ stops cooling before the
+larger pressure exceeds ten times the smaller one. This fixed numerical guard
+preserves $\Delta p$ and leaves the mirror/firehose limiters unchanged. Cells
+already beyond 10:1 receive no cooling; the guard neither repairs them nor
+prevents transport or fluid evolution from creating them. Restart before the
+extreme ratios develop to test this prevention. The cutoff can reduce the
+cooling power and should be revisited if many cells reach it.
 
 Total energy decreases by $3\delta p/2$, and the stored CGL anisotropy is updated
 consistently. Density, momentum, and magnetic field are unchanged by cooling.
@@ -61,7 +69,8 @@ apply when thermal energy is tiny compared with kinetic or magnetic energy.
 
 The source runs once before the existing collision task, after the hyperbolic
 update. For split LF, the post-LF collision update remains in its existing place.
-This is exact for isolated cooling with a held coefficient and first-order split
+The exponential is exact for isolated, uncapped cooling with a held coefficient;
+the source has first-order split
 coupling to the fluid evolution. A finite exponential update at every RK source
 stage would instead corrupt the RK combination of the conserved anisotropy.
 Uniform periodic ghost cells receive the same source as owned cells, avoiding

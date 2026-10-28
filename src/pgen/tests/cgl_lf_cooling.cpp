@@ -69,15 +69,17 @@ struct Cooling {
       Real pperp = w(m,IPP,k,j,i);
       const Real delta = pperp - ppar;
       const Real piso = TWO_3RDS*pperp + ONE_3RD*ppar;
-      const Real available = fmax(fmin(ppar, pperp) - eos.pfloor, 0.0);
+      // shortcut: cap cooling at a 10:1 pressure ratio; revisit if many cells hit it.
+      const Real cooling_floor = fmax(eos.pfloor, fabs(delta)/(10.0 - 1.0));
+      const Real available = fmax(fmin(ppar, pperp) - cooling_floor, 0.0);
       const Real decrement = fmin(fraction*piso, available);
       if (decrement == 0.0) return;
       // Limit the common decrement, never floor the two pressures independently.
       if (delta >= 0.0) {
-        ppar = fmax(ppar - decrement, eos.pfloor);
+        ppar = fmax(ppar - decrement, cooling_floor);
         pperp = ppar + delta;
       } else {
-        pperp = fmax(pperp - decrement, eos.pfloor);
+        pperp = fmax(pperp - decrement, cooling_floor);
         ppar = pperp - delta;
       }
       const Real bx = bcc(m,IBX,k,j,i);

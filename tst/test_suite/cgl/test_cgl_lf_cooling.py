@@ -202,6 +202,43 @@ def test_cooling_floor_preserves_anisotropy(tmp_path, ppar, pperp):
         assert_background_unchanged(states[0], state)
 
 
+@pytest.mark.parametrize("landau_fluid", [False, True])
+@pytest.mark.parametrize("ppar,pperp", [(0.8, 1.0), (1.0, 0.8)])
+def test_cooling_stops_at_pressure_ratio_cap(tmp_path, ppar, pperp, landau_fluid):
+    source = input_text(ppar=ppar, pperp=pperp, target=0.05, tau=1e-5,
+                        floor=1e-6, nlim=3)
+    if landau_fluid:
+        source += ("\n<mhd>\ncgl_heat_flux = landau_fluid\n"
+                   "cgl_heat_flux_integrator = sts\n<time>\nsts_integrator = rkl2\n")
+    states = run(tmp_path / "guarded", source)
+    for cycle, state in states.items():
+        if cycle == 0:
+            continue
+        parallel, perpendicular = pressures(state)
+        smaller = np.minimum(parallel, perpendicular)
+        larger = np.maximum(parallel, perpendicular)
+        np.testing.assert_allclose(larger/smaller, 10, rtol=3e-12, atol=0)
+        np.testing.assert_allclose(perpendicular - parallel, pperp - ppar,
+                                   rtol=0, atol=3e-13)
+        removed = states[0]["active"][:, 4] - state["active"][:, 4]
+        np.testing.assert_allclose(removed, 1.5*(min(ppar, pperp) - smaller),
+                                   rtol=0, atol=3e-13)
+        assert_background_unchanged(states[0], state)
+    resumed = run(tmp_path / "resumed", restart=states[1]["path"],
+                  flags=("time/nlim=3",))
+    np.testing.assert_array_equal(resumed[3]["payload"], states[3]["payload"])
+
+
+@pytest.mark.parametrize("ppar,pperp", [(1e-6, 0.392), (0.392, 1e-6)])
+def test_cooling_skips_existing_extreme_ratio(tmp_path, ppar, pperp):
+    states = run(tmp_path / "extreme", input_text(ppar=ppar, pperp=pperp,
+                 target=0.05, tau=1e-5, floor=1e-8, nlim=3))
+    for state in states.values():
+        assert state["cooling_alpha"] > 0
+        np.testing.assert_allclose(state["payload"], states[0]["payload"],
+                                   rtol=0, atol=3e-13)
+
+
 def test_cooling_cold_floor_retains_representable_pressure(tmp_path):
     floor = 1e-20
     states = run(tmp_path / "cold", input_text(ppar=2, pperp=2, target=1e-25,
