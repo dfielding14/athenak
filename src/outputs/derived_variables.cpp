@@ -114,9 +114,11 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     }
     auto &w0_ = (pm->pmb_pack->phydro != nullptr) ?
       pm->pmb_pack->phydro->w0 : pm->pmb_pack->pmhd->w0;
+    const int energy_index = pm->pmb_pack->phydro == nullptr &&
+        pm->pmb_pack->pmhd->peos->eos_data.passive_adiabatic ? IEG : IEN;
     par_for("temperature", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      dv(m,i_dv,k,j,i) = w0_(m,IEN,k,j,i) / w0_(m,IDN,k,j,i);
+      dv(m,i_dv,k,j,i) = w0_(m,energy_index,k,j,i) / w0_(m,IDN,k,j,i);
     });
     i_dv += 1; // increment derived variable index
   }

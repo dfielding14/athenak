@@ -547,11 +547,11 @@ TaskStatus MHD::Fluxes(Driver *pdrive, int stage) {
     CalculateFluxes<MHD_RSolver::hlle>(pdrive, stage);
   } else if (rsolver_method == MHD_RSolver::hlle_cgl) {
     if (peos->eos_data.passive) {
-      // Reuse the compiled isothermal flow kernel; fusion changes HIP rounding.
+      // Reuse the native flow kernel; passive pressures never enter its fluxes.
       const auto cgl_eos = peos->eos_data;
-      peos->eos_data.is_ideal = false;
+      peos->eos_data.is_ideal = cgl_eos.passive_adiabatic;
       peos->eos_data.is_cgl = false;
-      peos->eos_data.gamma = 0.0;
+      if (!cgl_eos.passive_adiabatic) peos->eos_data.gamma = 0.0;
       CalculateFluxes<MHD_RSolver::hlle>(pdrive, stage);
       peos->eos_data = cgl_eos;
     }

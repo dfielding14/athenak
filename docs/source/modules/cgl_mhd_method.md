@@ -236,8 +236,10 @@ firehose, ion-Larmor-radius, or kinetic phase-space physics.
 ## Active And Passive Runs
 
 In active CGL runs, the anisotropic pressure tensor participates in the MHD
-momentum and energy fluxes. With `mhd/passive = true`, native isothermal MHD
-evolves the flow while two material invariants carry the thermal pressures.
+momentum and energy fluxes. With `mhd/passive = true`, native MHD evolves the
+flow while two material invariants carry the CGL pressures. The background is
+isothermal by default; `mhd/passive_eos = adiabatic` adds an independent
+ideal-gas MHD energy equation.
 See [passive thermodynamics](cgl_passive.md) for the J/A storage contract,
 pressure-work interpretation, restart encoding and uniform-periodic scope.
 

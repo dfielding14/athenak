@@ -65,6 +65,25 @@ struct Cooling {
     par_for("cgl_cooling", DevExeSpace(), 0, mesh->pmb_pack->nmb_thispack - 1,
             0, nk - 1, 0, nj - 1, 0, ni - 1,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      if (eos.passive_adiabatic) {
+        const Real rho = u(m,IDN,k,j,i);
+        const Real ek = (0.5/rho)*(SQR(u(m,IM1,k,j,i)) + SQR(u(m,IM2,k,j,i)) +
+                                  SQR(u(m,IM3,k,j,i)));
+        const Real em = 0.5*(SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i)) +
+                             SQR(bcc(m,IBZ,k,j,i)));
+        const Real floor = fmax(eos.pfloor, fmax(rho*eos.tfloor,
+            eos.sfloor*pow(rho, eos.gamma)))/(eos.gamma - 1.0);
+        const Real old_energy = u(m,IEG,k,j,i);
+        Real energy = fmax(old_energy - fraction*w(m,IEG,k,j,i), (floor + ek) + em);
+        // Retain a representable thermal floor without adding energy.
+        while (energy < old_energy && energy - ek - em < floor) {
+          energy = Kokkos::nextafter(energy, std::numeric_limits<Real>::infinity());
+        }
+        if (energy < old_energy) {
+          u(m,IEG,k,j,i) = energy;
+          w(m,IEG,k,j,i) = energy - ek - em;
+        }
+      }
       Real ppar = w(m,IPR,k,j,i);
       Real pperp = w(m,IPP,k,j,i);
       const Real delta = pperp - ppar;
@@ -86,6 +105,17 @@ struct Cooling {
       const Real by = bcc(m,IBY,k,j,i);
       const Real bz = bcc(m,IBZ,k,j,i);
       const Real bmag = fmax(sqrt(SQR(bx) + SQR(by) + SQR(bz)), eos.bfloor);
+      if (eos.passive_adiabatic) {
+        // Passive cooling cannot alter the independent MHD energy or its controller.
+        const auto q = cgl::PassiveEncodeFloored(u(m,IDN,k,j,i), ppar, pperp,
+                                                 bmag, eos.pfloor);
+        u(m,IEN,k,j,i) = q.j;
+        u(m,IAN,k,j,i) = q.a;
+        cgl::PassiveDecode(u(m,IDN,k,j,i), q, bmag, ppar, pperp);
+        w(m,IPR,k,j,i) = ppar;
+        w(m,IPP,k,j,i) = pperp;
+        return;
+      }
       const Real old_energy = u(m,IEN,k,j,i);
       Real energy = old_energy - 1.5*decrement;
       if (energy == old_energy) return;
@@ -138,9 +168,12 @@ void CoolingHistory(HistoryData *pdata, Mesh *pm) {
        static_cast<float>(cooling.last_time + cooling.history_dt));
   // Finalize also calls history off cadence and can repeat the last sample.
   if (due && pm->ncycle != cooling.last_cycle) {
+    const auto eos = pm->pmb_pack->pmhd->peos->eos_data;
+    const std::string thermal = eos.passive_adiabatic ? "therm_mhd" : "therm_cgl";
+    const Real heat_capacity = eos.passive_adiabatic ? 1.0/(eos.gamma - 1.0) : 1.5;
     Real sums[2] = {};
     for (int n = 0; n < pdata->nhist; ++n) {
-      if (pdata->label[n] == "therm_cgl") sums[0] = pdata->hdata[n];
+      if (pdata->label[n] == thermal) sums[0] = pdata->hdata[n];
       if (pdata->label[n] == "volume") sums[1] = pdata->hdata[n];
     }
 #if MPI_PARALLEL_ENABLED
@@ -151,7 +184,8 @@ void CoolingHistory(HistoryData *pdata, Mesh *pm) {
         !std::isfinite(sums[1]) || sums[1] <= 0.0) {
       Fail("history requires positive finite thermal energy and volume");
     }
-    cooling.alpha = fmax(1.0 - 1.5*cooling.target*sums[1]/sums[0], 0.0)/cooling.tau;
+    cooling.alpha = fmax(1.0 - heat_capacity*cooling.target*sums[1]/sums[0],
+                         0.0)/cooling.tau;
     cooling.last_time = cooling.last_cycle < 0 ? pm->time :
         cooling.last_time + cooling.history_dt;
     cooling.last_cycle = pm->ncycle;
@@ -173,8 +207,9 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
   auto *pmbp = pm->pmb_pack;
   auto *pmhd = pmbp->pmhd;
   if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl ||
-      pmhd->peos->eos_data.passive || pmbp->frozen_mhd || pm->multilevel) {
-    Fail("requires active CGL on a uniform, evolving mesh");
+      (pmhd->peos->eos_data.passive && !pmhd->peos->eos_data.passive_adiabatic) ||
+      pmbp->frozen_mhd || pm->multilevel) {
+    Fail("requires active CGL or adiabatic passive CGL on a uniform, evolving mesh");
   }
   for (int face = 0; face < 6; ++face) {
     if (pm->mesh_bcs[face] != BoundaryFlag::periodic) {

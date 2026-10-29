@@ -66,7 +66,7 @@ dcycle = 1
 """
 
 
-def run(directory, source=None, *, restart=None, flags=(), ranks=1):
+def run(directory, source=None, *, restart=None, flags=(), ranks=1, adiabatic=False):
     directory.mkdir()
     executable = Path(os.environ.get("ATHENAK_TEST_EXE", "athena")).resolve()
     command = [str(executable), "-d", str(directory)]
@@ -86,7 +86,9 @@ def run(directory, source=None, *, restart=None, flags=(), ranks=1):
     # Final output can repeat the last cycle; retain the final version of each state.
     states = {}
     for path in sorted((directory / "rst").glob("*.rst")):
-        state = passive_acceptance.decode_restart(path, False, active_cgl=True)
+        state = passive_acceptance.decode_restart(path, adiabatic,
+                                                  active_cgl=not adiabatic,
+                                                  adiabatic=adiabatic)
         header = path.read_bytes().split(b"<par_end>\n", 1)[0].decode()
         for name in ("cooling_alpha", "cooling_history_last_time",
                      "cooling_history_last_cycle"):
@@ -100,6 +102,8 @@ def run(directory, source=None, *, restart=None, flags=(), ranks=1):
 
 
 def pressures(state):
+    if "pp" in state:
+        return state["pp"], state["pt"]
     u, b = state["active"], state["bcc"]
     rho = u[:, 0]
     bsqr = np.sum(b*b, axis=1)
@@ -114,6 +118,77 @@ def assert_background_unchanged(initial, final):
                                rtol=0, atol=3e-13)
     for before, after in zip(initial["faces"], final["faces"]):
         np.testing.assert_allclose(after, before, rtol=0, atol=3e-13)
+
+
+def adiabatic_settings(*, pgas=2.3, gamma=5/3):
+    return f"""
+<mhd>
+passive = true
+passive_eos = adiabatic
+gamma = {gamma:.17g}
+<problem>
+passive_delta = true
+p_gas0 = {pgas}
+"""
+
+
+def gas_pressure(state, gamma=5/3):
+    u, b = state["active"], state["bcc"]
+    thermal = u[:, 6] - 0.5*np.sum(u[:, 1:4]**2, axis=1)/u[:, 0] - 0.5*np.sum(b*b, axis=1)
+    return (gamma - 1)*thermal
+
+
+@pytest.mark.parametrize("gamma", [5/3, 1.4])
+@pytest.mark.parametrize("integrator", ["rk2", "rk4"])
+def test_adiabatic_cooling_uses_gas_controller(tmp_path, gamma, integrator):
+    source = input_text(integrator=integrator) + adiabatic_settings(gamma=gamma)
+    states = run(tmp_path / "gas", source, adiabatic=True)
+    alpha = (1 - 0.5/2.3)/0.1
+    piso0 = (2.0 + 2*2.2)/3
+    for state in states.values():
+        factor = np.exp(-alpha*state["time"])
+        pp, pt = pressures(state)
+        np.testing.assert_allclose(gas_pressure(state, gamma), 2.3*factor,
+                                   rtol=3e-12, atol=3e-13)
+        np.testing.assert_allclose((pp + 2*pt)/3, piso0*factor, rtol=3e-12, atol=3e-13)
+        np.testing.assert_allclose(pt - pp, 0.2, rtol=0, atol=3e-12)
+        assert state["cooling_alpha"] == pytest.approx(alpha, rel=3e-12)
+        assert_background_unchanged(states[0], state)
+
+
+@pytest.mark.parametrize("floor_kind", ["pfloor", "tfloor", "sfloor", "roundoff"])
+def test_adiabatic_cooling_gas_floors(tmp_path, floor_kind):
+    gamma, rho = 5/3, 2.0
+    floor = 1e-20 if floor_kind == "roundoff" else 0.5
+    source = (input_text(target=1e-25, tau=1e-5, floor=1e-20, nlim=3)
+              + adiabatic_settings() + f"\n<problem>\nrho0 = {rho}\n")
+    key = "pfloor" if floor_kind == "roundoff" else floor_kind
+    source += f"\n<mhd>\n{key} = {floor}\n"
+    states = run(tmp_path / floor_kind, source, adiabatic=True)
+    expected = floor * {"pfloor": 1, "tfloor": rho, "sfloor": rho**gamma,
+                        "roundoff": 1}[floor_kind]
+    for cycle, state in states.items():
+        if cycle == 0:
+            continue
+        pgas = gas_pressure(state)
+        assert np.min(pgas) >= expected*(1 - 1e-14)
+        np.testing.assert_allclose(pgas, expected, rtol=3e-12, atol=3e-15)
+        assert np.all(state["active"][:, 6] <= states[0]["active"][:, 6])
+        assert_background_unchanged(states[0], state)
+
+
+def test_passive_cooling_cap_does_not_limit_gas_cooling(tmp_path):
+    source = (input_text(ppar=0.8, pperp=1.0, target=0.05, tau=1e-5,
+                         floor=1e-6, nlim=3) + adiabatic_settings())
+    states = run(tmp_path / "cap", source, adiabatic=True)
+    for cycle, state in states.items():
+        if cycle == 0:
+            continue
+        pp, pt = pressures(state)
+        np.testing.assert_allclose(pt/pp, 10, rtol=3e-12, atol=0)
+        np.testing.assert_allclose(pt - pp, 0.2, rtol=0, atol=3e-13)
+        np.testing.assert_allclose(gas_pressure(state), 1e-6, rtol=1e-9, atol=0)
+        assert_background_unchanged(states[0], state)
 
 
 @pytest.mark.parametrize("integrator", ["rk2", "rk4"])
@@ -255,17 +330,21 @@ def test_cooling_cold_floor_retains_representable_pressure(tmp_path):
 
 
 @pytest.mark.parametrize("checkpoint_kind", ["interior", "off_cadence_final"])
-def test_cooling_restart_preserves_history_schedule(tmp_path, checkpoint_kind):
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_cooling_restart_preserves_history_schedule(tmp_path, checkpoint_kind, adiabatic):
     source = input_text(history="dt = 0.04", nlim=12)
-    direct = run(tmp_path / "direct", source)
+    if adiabatic:
+        source += adiabatic_settings()
+    direct = run(tmp_path / "direct", source, adiabatic=adiabatic)
     # Cycle 1 is before the first scheduled update, with a different current pressure.
     assert direct[1]["time"] < 0.04 and direct[1]["cooling_history_last_cycle"] == 0
     if checkpoint_kind == "interior":
         checkpoint = direct[1]
     else:
-        checkpoint = run(tmp_path / "partial", source, flags=("time/nlim=1",))[1]
+        checkpoint = run(tmp_path / "partial", source, flags=("time/nlim=1",),
+                         adiabatic=adiabatic)[1]
     resumed = run(tmp_path / "resumed", restart=checkpoint["path"],
-                  flags=("time/nlim=12",))
+                  flags=("time/nlim=12",), adiabatic=adiabatic)
     assert direct[12]["cooling_history_last_cycle"] > 1
     for cycle, state in resumed.items():
         reference = direct[cycle]
@@ -276,26 +355,35 @@ def test_cooling_restart_preserves_history_schedule(tmp_path, checkpoint_kind):
             assert state[name] == reference[name], (cycle, name)
 
 
-def test_cooling_global_coefficient_matches_mpi(tmp_path):
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_cooling_global_coefficient_matches_mpi(tmp_path, adiabatic):
     executable = Path(os.environ.get("ATHENAK_TEST_EXE", "athena")).resolve()
     config = subprocess.run([str(executable), "-c"], capture_output=True,
                             text=True, check=True).stdout
     if not re.search(r"MPI parallelism:\s+ON", config) or not shutil.which("mpirun"):
         pytest.skip("requires an MPI executable and mpirun")
     source = input_text(history="dcycle = 2", nlim=0)
-    seed = run(tmp_path / "seed", source)[0]
+    if adiabatic:
+        source += adiabatic_settings()
+    seed = run(tmp_path / "seed", source, adiabatic=adiabatic)[0]
     # Give the two blocks different thermal states without adding a production IC knob.
     raw = bytearray(seed["path"].read_bytes())
     offset = len(raw) - seed["payload"].nbytes
     payload = np.frombuffer(raw, dtype="=f8", offset=offset).reshape(seed["payload"].shape)
     u = payload[:, :seed["u"][0].size].reshape(seed["u"].shape)
     for block, (ppar, pperp) in enumerate(((2.0, 2.2), (3.0, 3.2))):
-        u[block, 4] = 0.5*ppar + pperp + 0.5
+        if adiabatic:
+            u[block, 6] = 0.5*ppar + pperp + 0.5
+            u[block, 4] = np.log(ppar)
+        else:
+            u[block, 4] = 0.5*ppar + pperp + 0.5
         u[block, 5] = np.log(pperp/ppar)  # rho = |B| = 1.
     checkpoint = tmp_path / "nonuniform.rst"
     checkpoint.write_bytes(raw)
-    one = run(tmp_path / "one", restart=checkpoint, flags=("time/nlim=4",))
-    two = run(tmp_path / "two", restart=checkpoint, flags=("time/nlim=4",), ranks=2)
+    one = run(tmp_path / "one", restart=checkpoint, flags=("time/nlim=4",),
+              adiabatic=adiabatic)
+    two = run(tmp_path / "two", restart=checkpoint, flags=("time/nlim=4",), ranks=2,
+              adiabatic=adiabatic)
     for cycle, state in two.items():
         np.testing.assert_allclose(state["payload"], one[cycle]["payload"],
                                    rtol=2e-12, atol=2e-13)
@@ -303,5 +391,34 @@ def test_cooling_global_coefficient_matches_mpi(tmp_path):
                                                        rel=2e-12)
     for directory in ("one", "two"):
         history = passive_acceptance.history(tmp_path / directory / "cooling.user.hst")
-        expected = np.maximum(1 - 1.5*0.5*history["volume"]/history["therm_cgl"], 0)/0.1
+        thermal = "therm_mhd" if adiabatic else "therm_cgl"
+        expected = np.maximum(1 - 1.5*0.5*history["volume"]/history[thermal], 0)/0.1
         np.testing.assert_allclose(history["cool_alpha"], expected, rtol=2e-12, atol=2e-13)
+
+
+def test_forced_cooled_gas_is_independent_of_passive_physics(tmp_path):
+    source = input_text(history="dcycle = 2", nlim=8) + adiabatic_settings()
+    source += "\n<turb_driving>\ndedt = 0.2\n"
+    reference = run(tmp_path / "reference", source, adiabatic=True)
+    modified = source + """
+<problem>
+p_parallel0 = 0.0001
+p_perp0 = 1.0
+<mhd>
+cgl_heat_flux = landau_fluid
+cgl_heat_flux_integrator = sts
+nu_coll = 0.7
+<time>
+sts_integrator = rkl2
+"""
+    passive = run(tmp_path / "passive", modified, adiabatic=True)
+    for cycle, state in passive.items():
+        expected = reference[cycle]
+        assert state["time"] == expected["time"]
+        assert state["dt"] == expected["dt"]
+        np.testing.assert_array_equal(state["active"][:, [0, 1, 2, 3, 6]],
+                                      expected["active"][:, [0, 1, 2, 3, 6]])
+        for first, second in zip(state["faces"], expected["faces"]):
+            np.testing.assert_array_equal(first, second)
+        assert state["cooling_alpha"] == expected["cooling_alpha"]
+    assert np.ptp(gas_pressure(passive[8])) > 0

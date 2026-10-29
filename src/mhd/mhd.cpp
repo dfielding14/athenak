@@ -137,7 +137,7 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       std::exit(EXIT_FAILURE);
     } else {
       peos = new CGLMHD(ppack, pin);
-      nmhd = 6;
+      nmhd = peos->eos_data.passive_adiabatic ? 7 : 6;
     }
 
   // EOS string not recognized

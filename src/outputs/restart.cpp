@@ -138,7 +138,8 @@ void RestartOutput::LoadOutputData(Mesh *pm) {
 void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (pm->pmb_pack->pmhd != nullptr &&
       pm->pmb_pack->pmhd->peos->eos_data.passive) {
-    pin->SetInteger("mhd", "passive_restart_encoding", 1);
+    pin->SetInteger("mhd", "passive_restart_encoding",
+                   pm->pmb_pack->pmhd->peos->eos_data.passive_adiabatic ? 2 : 1);
   }
   // get spatial dimensions of arrays, including ghost zones
   auto &indcs = pm->pmb_pack->pmesh->mb_indcs;

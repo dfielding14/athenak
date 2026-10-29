@@ -4,7 +4,7 @@
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
 //! \file cgl_passive_validation.cpp
-//! \brief Independent passive/isothermal validation initial data.
+//! \brief Independent passive/MHD validation initial data.
 
 #include <cmath>
 #include <cstdlib>
@@ -26,10 +26,6 @@ void ProblemGenerator::CGLPassiveValidation(ParameterInput *pin, const bool rest
     std::exit(EXIT_FAILURE);
   }
   const auto eos = pack->pmhd->peos->eos_data;
-  if (eos.is_ideal && !eos.is_cgl) {
-    std::cout << "passive_validation requires isothermal or CGL EOS" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
   const auto indcs = pmy_mesh_->mb_indcs;
   const int is=indcs.is, ie=indcs.ie, js=indcs.js, je=indcs.je, ks=indcs.ks, ke=indcs.ke;
   const int nmb = pack->nmb_thispack;
@@ -48,6 +44,7 @@ void ProblemGenerator::CGLPassiveValidation(ParameterInput *pin, const bool rest
   const Real amplitude = pin->GetOrAddReal("problem", "amplitude", 0.1);
   const Real thermal_amplitude = pin->GetOrAddReal("problem", "thermal_amplitude", 0.2);
   const Real p0 = pin->GetOrAddReal("problem", "p0", 2.0);
+  const Real pgas = pin->GetOrAddReal("problem", "p_gas0", p0);
   const Real advect = pin->GetOrAddReal("problem", "advect_velocity", 0.4);
   const Real bx = pin->GetOrAddReal("problem", "bx", 1.0);
   const Real by = pin->GetOrAddReal("problem", "by", mode == 2 ? 0.0 : 1.0);
@@ -90,6 +87,8 @@ void ProblemGenerator::CGLPassiveValidation(ParameterInput *pin, const bool rest
     w(m,IDN,k,j,i)=rho; w(m,IVX,k,j,i)=vx;
     w(m,IVY,k,j,i)=vy; w(m,IVZ,k,j,i)=vz;
     if (eos.is_cgl) { w(m,IPR,k,j,i)=pp; w(m,IPP,k,j,i)=pt; }
+    if (eos.passive_adiabatic) w(m,IEG,k,j,i)=pgas/(eos.gamma-1.0);
+    if (eos.is_ideal && !eos.is_cgl) w(m,IEN,k,j,i)=pgas/(eos.gamma-1.0);
     bcc(m,IBX,k,j,i)=bx; bcc(m,IBY,k,j,i)=by; bcc(m,IBZ,k,j,i)=bz;
   });
   par_for("passive_validation_bx", DevExeSpace(), 0,nmb-1, ks,ke, js,je, is,ie+1,

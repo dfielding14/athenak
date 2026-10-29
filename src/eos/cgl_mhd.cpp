@@ -102,8 +102,24 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
   RequirePositiveCGLParameter("sigma_max", eos_data.sigma_max);
 
   eos_data.passive = pin->GetOrAddBoolean("mhd", "passive", false);
-  eos_data.iso_cs = eos_data.passive ? pin->GetReal("mhd", "iso_sound_speed") : 0.0;
-  if (eos_data.passive) {
+  const std::string passive_eos =
+      pin->GetOrAddString("mhd", "passive_eos", "isothermal");
+  if ((passive_eos != "isothermal" && passive_eos != "adiabatic") ||
+      (passive_eos == "adiabatic" && !eos_data.passive)) {
+    std::cout << "### FATAL ERROR: <mhd>/passive_eos must be isothermal or "
+              << "adiabatic; adiabatic requires passive=true" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  eos_data.passive_adiabatic = eos_data.passive && passive_eos == "adiabatic";
+  if (eos_data.passive_adiabatic &&
+      (!std::isfinite(eos_data.gamma) || eos_data.gamma <= 1.0)) {
+    std::cout << "### FATAL ERROR: adiabatic passive CGL requires finite gamma > 1"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  eos_data.iso_cs = eos_data.passive && !eos_data.passive_adiabatic ?
+      pin->GetReal("mhd", "iso_sound_speed") : 0.0;
+  if (eos_data.passive && !eos_data.passive_adiabatic) {
     RequirePositiveCGLParameter("iso_sound_speed", eos_data.iso_cs);
   }
 
@@ -178,7 +194,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
 
     // load cell-centered fields into conserved state
     // use input CC fields if only testing floors with FOFC
-    if (only_testfloors && !eos.passive) {
+    if (only_testfloors && (!eos.passive || eos.passive_adiabatic)) {
       u.bx = bcc(m,IBX,k,j,i);
       u.by = bcc(m,IBY,k,j,i);
       u.bz = bcc(m,IBZ,k,j,i);
@@ -201,14 +217,19 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
       return;
     }
 
-    // Passive thermal repairs must not change native isothermal flow/FOFC decisions.
+    // Passive thermal repairs must not change native flow/FOFC decisions.
     if (only_testfloors && eos.passive) {
-      const Real b2 = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
       HydPrim1D w;
-      bool dfloor_used = false;
-      SingleC2P_IsothermalMHD(u, fmax(eos.dfloor, b2/eos.sigma_max), w, dfloor_used);
-      if (dfloor_used) {
-        cons(m,IDN,k,j,i) = u.d;
+      bool dfloor_used = false, efloor_used = false, tfloor_used = false;
+      if (eos.passive_adiabatic) {
+        u.e = cons(m,IEG,k,j,i);
+        SingleC2P_IdealMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used);
+      } else {
+        const Real b2 = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+        SingleC2P_IsothermalMHD(u, fmax(eos.dfloor, b2/eos.sigma_max), w, dfloor_used);
+        if (dfloor_used) cons(m,IDN,k,j,i) = u.d;
+      }
+      if (dfloor_used || efloor_used || tfloor_used) {
         fofc_(m,k,j,i) = true;
         sumd++;
       }
@@ -232,6 +253,17 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
         sumd++;  // use dfloor as counter for when either is true
       }
     } else {
+      if (eos.passive_adiabatic) {
+        MHDCons1D gas = u;
+        gas.e = cons(m,IEG,k,j,i);
+        HydPrim1D gas_prim;
+        bool gas_dfloor = false, gas_efloor = false, gas_tfloor = false;
+        SingleC2P_IdealMHD(gas, eos, gas_prim, gas_dfloor, gas_efloor, gas_tfloor);
+        cons(m,IEG,k,j,i) = gas.e;
+        prim(m,IEG,k,j,i) = gas_prim.e;
+        if (gas_efloor) sume++;
+        if (gas_tfloor) sumt++;
+      }
       // update counter, reset conserved if floor was hit
       if (dfloor_used) {
         cons(m,IDN,k,j,i) = u.d;
@@ -348,6 +380,7 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
                                        tfloor_used, bfloor_used, strict_lf);
 
+    // Independent gas energy and its primitive cache stay frozen through LF.
     if (dfloor_used) {
       cons(m,IDN,k,j,i) = u.d;
       for (int n=nmhd; n<(nmhd+nscal); ++n) {
@@ -396,6 +429,7 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
   const int nmb = pmy_pack->nmb_thispack;
   const Real bfloor = eos_data.bfloor;
   const bool passive = eos_data.passive;
+  const bool passive_adiabatic = eos_data.passive_adiabatic;
   const bool magnetic_moment = pmy_pack->pmhd->cgl_slot_representation ==
       mhd::CGLSlotRepresentation::magnetic_moment;
 
@@ -435,6 +469,13 @@ void CGLMHD::PrimToCons(const DvceArray5D<Real> &prim, const DvceArray5D<Real> &
     cons(m,IM3,k,j,i) = u.mz;
     cons(m,IEN,k,j,i) = u.e;
     cons(m,IAN,k,j,i) = u.mu;
+    if (passive_adiabatic) {
+      MHDPrim1D gas = w;
+      gas.e = prim(m,IEG,k,j,i);
+      HydCons1D gas_cons;
+      SingleP2C_IdealMHD(gas, gas_cons);
+      cons(m,IEG,k,j,i) = gas_cons.e;
+    }
 
     // convert scalars (if any), always stored at end of cons and prim arrays.
     for (int n=nmhd; n<(nmhd+nscal); ++n) {

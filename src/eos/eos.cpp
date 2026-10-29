@@ -26,6 +26,7 @@ EquationOfState::EquationOfState(std::string bk, MeshBlockPack* pp, ParameterInp
   eos_data.bfloor = pin->GetOrAddReal(bk,"bfloor",sqrt(1024.0*FLT_MIN));
   eos_data.is_cgl = false;
   eos_data.passive = false;
+  eos_data.passive_adiabatic = false;
   eos_data.mlim = false;
   eos_data.flim = false;
   eos_data.backup_lim = false;

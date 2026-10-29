@@ -117,7 +117,8 @@ sweep-end checks do not add LF RHS counts. Backup scattering requires explicit
 | Parameter | Default | Meaning |
 | --- | --- | --- |
 | `eos` | required | Set to `cgl` for this feature. |
-| `passive` | `false` | Use `true` for [passive J/A thermodynamics](cgl_passive.md) on native isothermal flow; requires positive `iso_sound_speed` and uniform periodic Newtonian MHD. |
+| `passive` | `false` | Use `true` for [passive J/A thermodynamics](cgl_passive.md) on uniform periodic Newtonian MHD. |
+| `passive_eos` | `isothermal` | Background flow EOS: `isothermal` requires positive `iso_sound_speed`; `adiabatic` carries separate MHD energy and requires finite `gamma > 1`. |
 | `cgl_heat_flux` | absent | Set to `landau_fluid` to enable LF transport. |
 | `cgl_heat_flux_integrator` | `sts` | `sts` for production runs or `explicit` for reference verification. |
 | `lf_k_parallel` | required | Finite positive closure wavenumber magnitude. |

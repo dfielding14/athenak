@@ -158,6 +158,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       if (eos.is_cgl) {
         wim1.e  = w0_(m,IPR,k,j,i-1);
         wim1.pp = w0_(m,IPP,k,j,i-1);
+        if (eos.passive_adiabatic) wim1.eg = w0_(m,IEG,k,j,i-1);
       } else if (eos.is_ideal) {
         wim1.e  = w0_(m,IEN,k,j,i-1);
       }
@@ -173,6 +174,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       if (eos.is_cgl) {
         wi.e  = w0_(m,IPR,k,j,i);
         wi.pp = w0_(m,IPP,k,j,i);
+        if (eos.passive_adiabatic) wi.eg = w0_(m,IEG,k,j,i);
       } else if (eos.is_ideal) {
         wi.e = w0_(m,IEN,k,j,i);
       }
@@ -213,6 +215,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM3,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i) = flux.e;}
         if (eos.is_cgl) {flx1(m,IAN,k,j,i) = flux.mu;}
+        if (eos.passive_adiabatic) {flx1(m,IEG,k,j,i) = flux.eg;}
         if (eos.is_cgl && record_pwork_) {
           MHDCons1D pressure, anisotropic;
           SingleStateLLF_CGLPressureTraction(wim1, wi, bxi, eos, pressure, anisotropic);
@@ -237,6 +240,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wjm1.e  = w0_(m,IPR,k,j-1,i);
           wjm1.pp = w0_(m,IPP,k,j-1,i);
+          if (eos.passive_adiabatic) wjm1.eg = w0_(m,IEG,k,j-1,i);
         } else if (eos.is_ideal) {
           wjm1.e = w0_(m,IEN,k,j-1,i);
         }
@@ -252,6 +256,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wj.e  = w0_(m,IPR,k,j,i);
           wj.pp = w0_(m,IPP,k,j,i);
+          if (eos.passive_adiabatic) wj.eg = w0_(m,IEG,k,j,i);
         } else if (eos.is_ideal) {
           wj.e = w0_(m,IEN,k,j,i);
         }
@@ -291,6 +296,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM1,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j,i) = flux.e;}
         if (eos.is_cgl) {flx2(m,IAN,k,j,i) = flux.mu;}
+        if (eos.passive_adiabatic) {flx2(m,IEG,k,j,i) = flux.eg;}
         if (eos.is_cgl && record_pwork_) {
           MHDCons1D pressure, anisotropic;
           SingleStateLLF_CGLPressureTraction(wjm1, wj, bxi, eos, pressure, anisotropic);
@@ -315,6 +321,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wkm1.e  = w0_(m,IPR,k-1,j,i);
           wkm1.pp = w0_(m,IPP,k-1,j,i);
+          if (eos.passive_adiabatic) wkm1.eg = w0_(m,IEG,k-1,j,i);
         } else if (eos.is_ideal) {
           wkm1.e = w0_(m,IEN,k-1,j,i);
         }
@@ -330,6 +337,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wk.e  = w0_(m,IPR,k,j,i);
           wk.pp = w0_(m,IPP,k,j,i);
+          if (eos.passive_adiabatic) wk.eg = w0_(m,IEG,k,j,i);
         } else if (eos.is_ideal) {
           wk.e = w0_(m,IEN,k,j,i);
         }
@@ -369,6 +377,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM2,k,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k,j,i) = flux.e;}
         if (eos.is_cgl) {flx3(m,IAN,k,j,i) = flux.mu;}
+        if (eos.passive_adiabatic) {flx3(m,IEG,k,j,i) = flux.eg;}
         if (eos.is_cgl && record_pwork_) {
           MHDCons1D pressure, anisotropic;
           SingleStateLLF_CGLPressureTraction(wkm1, wk, bxi, eos, pressure, anisotropic);
@@ -410,6 +419,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       if (eos.is_cgl) {
         wi.e  = w0_(m,IPR,k,j,i);
         wi.pp = w0_(m,IPP,k,j,i);
+        if (eos.passive_adiabatic) wi.eg = w0_(m,IEG,k,j,i);
       } else if (eos.is_ideal) {
         wi.e = w0_(m,IEN,k,j,i);
       }
@@ -425,6 +435,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
       if (eos.is_cgl) {
         wip1.e  = w0_(m,IPR,k,j,i+1);
         wip1.pp = w0_(m,IPP,k,j,i+1);
+        if (eos.passive_adiabatic) wip1.eg = w0_(m,IEG,k,j,i+1);
       } else if (eos.is_ideal) {
         wip1.e = w0_(m,IEN,k,j,i+1);
       }
@@ -465,6 +476,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx1(m,IM3,k,j,i+1) = flux.mz;
         if (eos.is_ideal) {flx1(m,IEN,k,j,i+1) = flux.e;}
         if (eos.is_cgl) {flx1(m,IAN,k,j,i+1) = flux.mu;}
+        if (eos.passive_adiabatic) {flx1(m,IEG,k,j,i+1) = flux.eg;}
         if (eos.is_cgl && record_pwork_) {
           MHDCons1D pressure, anisotropic;
           SingleStateLLF_CGLPressureTraction(wi, wip1, bxi, eos, pressure, anisotropic);
@@ -489,6 +501,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wj.e  = w0_(m,IPR,k,j,i);
           wj.pp = w0_(m,IPP,k,j,i);
+          if (eos.passive_adiabatic) wj.eg = w0_(m,IEG,k,j,i);
         } else if (eos.is_ideal) {
           wj.e = w0_(m,IEN,k,j,i);
         }
@@ -504,6 +517,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wjp1.e  = w0_(m,IPR,k,j+1,i);
           wjp1.pp = w0_(m,IPP,k,j+1,i);
+          if (eos.passive_adiabatic) wjp1.eg = w0_(m,IEG,k,j+1,i);
         } else if (eos.is_ideal) {
           wjp1.e = w0_(m,IEN,k,j+1,i);
         }
@@ -543,6 +557,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx2(m,IM1,k,j+1,i) = flux.mz;
         if (eos.is_ideal) {flx2(m,IEN,k,j+1,i) = flux.e;}
         if (eos.is_cgl) {flx2(m,IAN,k,j+1,i) = flux.mu;}
+        if (eos.passive_adiabatic) {flx2(m,IEG,k,j+1,i) = flux.eg;}
         if (eos.is_cgl && record_pwork_) {
           MHDCons1D pressure, anisotropic;
           SingleStateLLF_CGLPressureTraction(wj, wjp1, bxi, eos, pressure, anisotropic);
@@ -567,6 +582,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wk.e  = w0_(m,IPR,k,j,i);
           wk.pp = w0_(m,IPP,k,j,i);
+          if (eos.passive_adiabatic) wk.eg = w0_(m,IEG,k,j,i);
         } else if (eos.is_ideal) {
           wk.e = w0_(m,IEN,k,j,i);
         }
@@ -582,6 +598,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         if (eos.is_cgl) {
           wkp1.e  = w0_(m,IPR,k+1,j,i);
           wkp1.pp = w0_(m,IPP,k+1,j,i);
+          if (eos.passive_adiabatic) wkp1.eg = w0_(m,IEG,k+1,j,i);
         } else if (eos.is_ideal) {
           wkp1.e = w0_(m,IEN,k+1,j,i);
         }
@@ -621,6 +638,7 @@ void MHD::FOFC(Driver *pdriver, int stage) {
         flx3(m,IM2,k+1,j,i) = flux.mz;
         if (eos.is_ideal) {flx3(m,IEN,k+1,j,i) = flux.e;}
         if (eos.is_cgl) {flx3(m,IAN,k+1,j,i) = flux.mu;}
+        if (eos.passive_adiabatic) {flx3(m,IEG,k+1,j,i) = flux.eg;}
         if (eos.is_cgl && record_pwork_) {
           MHDCons1D pressure, anisotropic;
           SingleStateLLF_CGLPressureTraction(wk, wkp1, bxi, eos, pressure, anisotropic);

@@ -152,11 +152,19 @@ KOKKOS_INLINE_FUNCTION
 void SingleStateLLF_CGL(const MHDPrim1D &wl, const MHDPrim1D &wr, const Real &bxi,
                         const EOS_Data &eos, MHDCons1D &flux) {
   if (eos.passive) {
-    EOS_Data iso = eos;
-    iso.is_ideal = false;
-    iso.is_cgl = false;
-    iso.gamma = 0.0;
-    SingleStateLLF_MHD(wl, wr, bxi, iso, flux);
+    EOS_Data flow_eos = eos;
+    flow_eos.is_ideal = eos.passive_adiabatic;
+    flow_eos.is_cgl = false;
+    if (eos.passive_adiabatic) {
+      MHDPrim1D left = wl, right = wr;
+      left.e = wl.eg;
+      right.e = wr.eg;
+      SingleStateLLF_MHD(left, right, bxi, flow_eos, flux);
+      flux.eg = flux.e;
+    } else {
+      flow_eos.gamma = 0.0;
+      SingleStateLLF_MHD(wl, wr, bxi, flow_eos, flux);
+    }
     const MHDPrim1D &w = (flux.d >= 0.0) ? wl : wr;
     const Real bmag = sqrt(SQR(bxi) + SQR(w.by) + SQR(w.bz));
     Real pp = fmax(w.e, eos.pfloor), pt = fmax(w.pp, eos.pfloor);

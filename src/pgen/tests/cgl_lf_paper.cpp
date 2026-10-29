@@ -59,6 +59,11 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
   auto w0 = pmbp->pmhd->w0;
   auto bcc0 = pmbp->pmhd->bcc0;
   const auto eos = pmbp->pmhd->peos->eos_data;
+  if (eos.passive_adiabatic) {
+    pdata->nhist = 24;
+    pdata->label[22] = "therm_mhd";
+    pdata->label[23] = "p_gas";
+  }
   const bool backup = (pmbp->pmhd->pcgl_lf != nullptr)
                           ? pmbp->pmhd->pcgl_lf->effective_backup_limiter
                           : eos.backup_lim;
@@ -126,6 +131,10 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
     for (int n = 21; n < NREDUCTION_VARIABLES; ++n) {
       cell.the_array[n] = 0.0;
     }
+    if (eos.passive_adiabatic) {
+      cell.the_array[22] = vol*w0(m,IEG,k,j,i);
+      cell.the_array[23] = (eos.gamma - 1.0)*cell.the_array[22];
+    }
     result += cell;
   }, Kokkos::Sum<array_sum::GlobalSum>(sum));
   Kokkos::fence();
@@ -177,6 +186,12 @@ void ProblemGenerator::CGLLFPaper(ParameterInput *pin, const bool restart) {
   if (ppar0 <= 0.0 || pperp0 <= 0.0) {
     Fail("cgl_lf_paper requires positive initial parallel and perpendicular pressures");
   }
+  const auto eos = pmhd->peos->eos_data;
+  const Real pgas0 = eos.passive_adiabatic ? pin->GetOrAddReal(
+      "problem", "p_gas0", ONE_3RD*ppar0 + TWO_3RDS*pperp0) : 0.0;
+  if (eos.passive_adiabatic && (!std::isfinite(pgas0) || pgas0 <= 0.0)) {
+    Fail("cgl_lf_paper requires finite positive p_gas0");
+  }
 
   auto &indcs = pmy_mesh_->mb_indcs;
   const int is = indcs.is, ie = indcs.ie;
@@ -195,6 +210,7 @@ void ProblemGenerator::CGLLFPaper(ParameterInput *pin, const bool restart) {
     w0(m,IVZ,k,j,i) = 0.0;
     w0(m,IPR,k,j,i) = ppar0;
     w0(m,IPP,k,j,i) = pperp0;
+    if (eos.passive_adiabatic) w0(m,IEG,k,j,i) = pgas0/(eos.gamma - 1.0);
     bcc0(m,IBX,k,j,i) = 0.0;
     bcc0(m,IBY,k,j,i) = 0.0;
     bcc0(m,IBZ,k,j,i) = b0z;

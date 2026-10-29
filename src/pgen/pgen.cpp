@@ -1008,9 +1008,17 @@ void ProblemGenerator::CallProblemGenerator(ParameterInput *pin, bool is_restart
   auto *pmhd = pmy_mesh_->pmb_pack->pmhd;
   if (pmhd != nullptr && pmhd->peos->eos_data.passive &&
       pgen_fun_name != "turb" && pgen_fun_name != "cgl_lf_paper" &&
-      pgen_fun_name != "cgl_passive_validation") {
+      pgen_fun_name != "cgl_passive_validation" && pgen_fun_name != "cgl_lf_cooling") {
     std::cout << "### FATAL ERROR: this problem generator does not initialize "
               << "passive CGL invariants." << std::endl;
+    exit(EXIT_FAILURE);
+  }
+
+  if (pmhd != nullptr && pmhd->peos->eos_data.passive_adiabatic &&
+      pgen_fun_name != "cgl_lf_paper" && pgen_fun_name != "cgl_lf_cooling" &&
+      pgen_fun_name != "cgl_passive_validation") {
+    std::cout << "### FATAL ERROR: this problem generator does not initialize "
+              << "the adiabatic passive MHD energy." << std::endl;
     exit(EXIT_FAILURE);
   }
 

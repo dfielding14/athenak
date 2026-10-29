@@ -277,18 +277,8 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   int &nmhd_ = pmhd->nmhd;
   int &nscalars_ = pmhd->nscalars;
 
-  // set number of and names of history variables for mhd
-  if (eos_data.is_cgl) {
-    pdata->nhist = 12;
-    //std::cout << "writing out history data for cgl" << std::endl;
-  } else if (eos_data.is_ideal && !(eos_data.is_cgl)) {
-    pdata->nhist = 11;
-  } else {
-    pdata->nhist = 10;
-  }
-  if (nscalars_>0) {
-    pdata->nhist += nscalars_;
-  }
+  // Conserved variables, kinetic/magnetic energies, and scalar masses.
+  pdata->nhist = nmhd_ + 6 + nscalars_;
   pdata->label[IDN] = "mass";
   pdata->label[IM1] = "1-mom";
   pdata->label[IM2] = "2-mom";
@@ -299,6 +289,7 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   if (eos_data.is_cgl) {
     pdata->label[IAN] = eos_data.passive ? "cgl-A" : "aam-D";
   }
+  if (eos_data.passive_adiabatic) pdata->label[IEG] = "tot-E";
   pdata->label[nmhd_  ] = "1-KE";
   pdata->label[nmhd_+1] = "2-KE";
   pdata->label[nmhd_+2] = "3-KE";
@@ -383,6 +374,10 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
     }
     if (eos_data.is_cgl) {
       hvars.the_array[IAN] = vol*u0_(m,IAN,k,j,i);
+    }
+
+    if (eos_data.passive_adiabatic) {
+      hvars.the_array[IEG] = vol*u0_(m,IEG,k,j,i);
     }
 
     // MHD KE

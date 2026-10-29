@@ -177,7 +177,7 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
           max_dv2 = fabs(w0_(m,IVY,k,j,i)) + cf;
           cf = eos.IdealMHDFastSpeed(w_d, w_e, w_p, w_bz, w_bx, w_by, eos.bfloor);
           max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
-        } else if (eos.is_cgl) {
+        } else if (eos.is_cgl && !eos.passive_adiabatic) {
           cf = eos.IdealMHDFastSpeed(w_d, w_bx, w_by, w_bz);
           max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
           cf = eos.IdealMHDFastSpeed(w_d, w_by, w_bz, w_bx);
@@ -185,7 +185,8 @@ void MHD::RecomputeTimeStepFromCurrentState(Driver *pdriver) {
           cf = eos.IdealMHDFastSpeed(w_d, w_bz, w_bx, w_by);
           max_dv3 = fabs(w0_(m,IVZ,k,j,i)) + cf;
         } else if (eos.is_ideal) {
-          Real p = eos.IdealGasPressure(w0_(m,IEN,k,j,i));
+          const int energy_index = eos.passive_adiabatic ? IEG : IEN;
+          Real p = eos.IdealGasPressure(w0_(m,energy_index,k,j,i));
           cf = eos.IdealMHDFastSpeed(w_d, p, w_bx, w_by, w_bz);
           max_dv1 = fabs(w0_(m,IVX,k,j,i)) + cf;
           cf = eos.IdealMHDFastSpeed(w_d, p, w_by, w_bz, w_bx);

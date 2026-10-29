@@ -11,14 +11,14 @@ HERE=Path(__file__).resolve().parent
 def input_text(*,passive=True,nx=128,mode=0,tlim=.05,nlim=-1,lf=None,forcing=False,
                recon='plm',amp=.1,thermal=.2,cfl=.3,nu=0.0,dfloor=1e-12,
                pfloor=1e-12,weak_field=False,acceleration=False,forcing_policy=None,
-               strict=True,axis=1,active_cgl=False):
+               strict=True,axis=1,active_cgl=False,adiabatic=False,ideal_mhd=False):
     dims=(16,16,16) if forcing else [(nx,1,1),(4,nx,1),(4,4,nx)][axis-1]
     block=min(nx//4,64)
     blocks=(8,8,8) if forcing else [(block,1,1),(4,block,1),(4,4,block)][axis-1]
     d={'job':{'basename':'passive_validation'},'mesh':{'nghost':4},'meshblock':{},
        'time':{'evolution':'dynamic','integrator':'rk2','sts_integrator':'rkl2' if passive and lf=='sts' else 'none',
                'sts_max_dt_ratio':-1,'cfl_number':cfl,'nlim':nlim,'tlim':tlim,'ndiag':1},
-       'mhd':{'eos':'cgl' if passive or active_cgl else 'isothermal','passive':str(passive).lower(),
+       'mhd':{'eos':'cgl' if passive or active_cgl else ('ideal' if ideal_mhd else 'isothermal'),'passive':str(passive).lower(),
               'iso_sound_speed':1.0,'reconstruct':recon,'rsolver':'hlle','fofc':'true',
               'dfloor':dfloor,'pfloor':pfloor,'bfloor':1e-10,'nu_coll':nu,
               'mirror_limiter':'false','firehose_limiter':'false','backup_limiters':'false'},
@@ -26,6 +26,10 @@ def input_text(*,passive=True,nx=128,mode=0,tlim=.05,nlim=-1,lf=None,forcing=Fal
                   'amplitude':amp,'thermal_amplitude':thermal,'p0':2.0},
        'output1':{'file_type':'hst','data_format':'%25.17e','dcycle':1},
        'output2':{'file_type':'rst','dcycle':100000}}
+    if adiabatic or ideal_mhd:
+        d['mhd'].update(gamma=5/3,tfloor=0,sfloor=0)
+    if adiabatic:
+        d['mhd']['passive_eos']='adiabatic'
     for n,(total,block) in enumerate(zip(dims,blocks),1):
         d['mesh'].update({f'nx{n}':total,f'x{n}min':0,f'x{n}max':1,
                           f'ix{n}_bc':'periodic',f'ox{n}_bc':'periodic'})
@@ -48,13 +52,13 @@ def input_text(*,passive=True,nx=128,mode=0,tlim=.05,nlim=-1,lf=None,forcing=Fal
     return ''.join('\n<'+block+'>\n'+''.join(f'{k} = {v}\n' for k,v in values.items())
                    for block,values in d.items())
 
-def decode_restart(path,passive,active_cgl=False):
+def decode_restart(path,passive,active_cgl=False,adiabatic=False,ideal_mhd=False):
     raw=Path(path).read_bytes();marker=b'<par_end>\n';h=raw.index(marker)+len(marker)
     nmb,root=struct.unpack_from('=ii',raw,h)
     ng,n1,n2,n3=struct.unpack_from('=4i',raw,h+8+72+76)
     assert nmb>0 and root>=0 and ng==4 and min(n1,n2,n3)>0,'unexpected restart ABI'
     nx,ny,nz=n1+2*ng,n2+2*ng if n2>1 else 1,n3+2*ng if n3>1 else 1
-    nv=6 if passive or active_cgl else 4;cc=nx*ny*nz
+    nv=7 if adiabatic else (6 if passive or active_cgl else (5 if ideal_mhd else 4));cc=nx*ny*nz
     sizes=[nv*cc,(nx+1)*ny*nz,nx*(ny+1)*nz,nx*ny*(nz+1)]
     count=sum(sizes);off=len(raw)-nmb*count*8
     assert off>h+252 and struct.unpack_from('=Q',raw,off-8)[0]==count*8

@@ -109,9 +109,12 @@ void WENOZX1(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
           ql(IDN,i+1) = fmax(ql(IDN,i+1), dfloor_);
           qr(IDN,i  ) = fmax(qr(IDN,i  ), dfloor_);
         }
-        if (n==IEN || (eos.is_cgl && n==IPP)) {
-          ql(n,i+1) = fmax(ql(n,i+1), efloor_);
-          qr(n,i  ) = fmax(qr(n,i  ), efloor_);
+        if (n==IEN || (eos.is_cgl && n==IPP) ||
+            (eos.passive_adiabatic && n==IEG)) {
+          const Real floor = eos.passive_adiabatic && n==IEG ?
+              eos.pfloor/(eos.gamma - 1.0) : efloor_;
+          ql(n,i+1) = fmax(ql(n,i+1), floor);
+          qr(n,i  ) = fmax(qr(n,i  ), floor);
         }
       }
     });
@@ -145,9 +148,12 @@ void WENOZX2(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
           ql_jp1(IDN,i) = fmax(ql_jp1(IDN,i), dfloor_);
           qr_j  (IDN,i) = fmax(qr_j  (IDN,i), dfloor_);
         }
-        if (n==IEN || (eos.is_cgl && n==IPP)) {
-          ql_jp1(n,i) = fmax(ql_jp1(n,i), efloor_);
-          qr_j  (n,i) = fmax(qr_j  (n,i), efloor_);
+        if (n==IEN || (eos.is_cgl && n==IPP) ||
+            (eos.passive_adiabatic && n==IEG)) {
+          const Real floor = eos.passive_adiabatic && n==IEG ?
+              eos.pfloor/(eos.gamma - 1.0) : efloor_;
+          ql_jp1(n,i) = fmax(ql_jp1(n,i), floor);
+          qr_j  (n,i) = fmax(qr_j  (n,i), floor);
         }
       }
     });
@@ -181,9 +187,12 @@ void WENOZX3(TeamMember_t const &member, const EOS_Data &eos, const bool apply_f
           ql_kp1(IDN,i) = fmax(ql_kp1(IDN,i), dfloor_);
           qr_k  (IDN,i) = fmax(qr_k  (IDN,i), dfloor_);
         }
-        if (n==IEN || (eos.is_cgl && n==IPP)) {
-          ql_kp1(n,i) = fmax(ql_kp1(n,i), efloor_);
-          qr_k  (n,i) = fmax(qr_k  (n,i), efloor_);
+        if (n==IEN || (eos.is_cgl && n==IPP) ||
+            (eos.passive_adiabatic && n==IEG)) {
+          const Real floor = eos.passive_adiabatic && n==IEG ?
+              eos.pfloor/(eos.gamma - 1.0) : efloor_;
+          ql_kp1(n,i) = fmax(ql_kp1(n,i), floor);
+          qr_k  (n,i) = fmax(qr_k  (n,i), floor);
         }
       }
     });

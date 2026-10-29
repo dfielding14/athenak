@@ -1402,8 +1402,9 @@ void TurbulenceDriver::ApplyForcingWithStep(Real bdt) {
             work = den * (a1 * ux + a2 * uy + a3 * uz) * bdt / ut;
           }
           const Real kick2 = (a1 * a1 + a2 * a2 + a3 * a3) * bdt * bdt;
-          if (eos.is_ideal && !eos.passive) {
-            u0(m, IEN, k, j, i) += work + 0.5 * den * kick2;
+          if (eos.is_ideal && (!eos.passive || eos.passive_adiabatic)) {
+            const int energy_index = eos.passive_adiabatic ? IEG : IEN;
+            u0(m, energy_index, k, j, i) += work + 0.5 * den * kick2;
           }
           u0(m, IM1, k, j, i) += den * a1 * bdt;
           u0(m, IM2, k, j, i) += den * a2 * bdt;
@@ -1705,7 +1706,8 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
     if (pmy_pack->pmhd != nullptr) u0 = pmy_pack->pmhd->u0;
     const auto &eos = pmy_pack->pmhd != nullptr ?
         pmy_pack->pmhd->peos->eos_data : pmy_pack->phydro->peos->eos_data;
-    const bool kinetic_only = !eos.is_ideal || eos.passive;
+    const bool kinetic_only = !eos.is_ideal || (eos.passive && !eos.passive_adiabatic);
+    const int energy_index = eos.passive_adiabatic ? IEG : IEN;
     auto& indcs = pm->mb_indcs;
     const int is = indcs.is, js = indcs.js, ks = indcs.ks;
     const int nx1 = indcs.nx1, nx2 = indcs.nx2, nx3 = indcs.nx3;
@@ -1729,7 +1731,7 @@ TaskStatus TurbulenceDriver::AddForcing(Driver* pdrive, int stage) {
           energy += vol * (kinetic_only ?
               0.5 * (SQR(u0(m, IM1, k, j, i)) + SQR(u0(m, IM2, k, j, i)) +
                      SQR(u0(m, IM3, k, j, i))) / u0(m, IDN, k, j, i) :
-              u0(m, IEN, k, j, i));
+              u0(m, energy_index, k, j, i));
         },
         Kokkos::Sum<Real>(total));
     return total;

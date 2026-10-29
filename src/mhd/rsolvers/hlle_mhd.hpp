@@ -36,6 +36,7 @@ void HLLE(TeamMember_t const &member, const EOS_Data &eos,
   Real gm1 = eos.gamma - 1.0;
   Real igm1 = 1.0/gm1;
   Real iso_cs = eos.iso_cs;
+  const int energy_index = eos.passive_adiabatic ? IEG : IEN;
 
   par_for_inner(member, il, iu, [&](const int i) {
     //--- Step 1.  Create local references for L/R states (helps compiler vectorize)
@@ -56,8 +57,8 @@ void HLLE(TeamMember_t const &member, const EOS_Data &eos,
 
     Real wl_ipr, wr_ipr;
     if (eos.is_ideal) {
-      wl_ipr = eos.IdealGasPressure(wl(IEN,i));
-      wr_ipr = eos.IdealGasPressure(wr(IEN,i));
+      wl_ipr = eos.IdealGasPressure(wl(energy_index,i));
+      wr_ipr = eos.IdealGasPressure(wr(energy_index,i));
     }
 
     Real bxi = bx(m,k,j,i);
@@ -172,7 +173,7 @@ void HLLE(TeamMember_t const &member, const EOS_Data &eos,
     flx(m,ivx,k,j,i) = 0.5*(fl.mx + fr.mx) + (fl.mx - fr.mx)*tmp;
     flx(m,ivy,k,j,i) = 0.5*(fl.my + fr.my) + (fl.my - fr.my)*tmp;
     flx(m,ivz,k,j,i) = 0.5*(fl.mz + fr.mz) + (fl.mz - fr.mz)*tmp;
-    if (eos.is_ideal) flx(m,IEN,k,j,i) = 0.5*(fl.e + fr.e ) + (fl.e - fr.e)*tmp;
+    if (eos.is_ideal) flx(m,energy_index,k,j,i) = 0.5*(fl.e + fr.e ) + (fl.e - fr.e)*tmp;
     ey(m,k,j,i) = -0.5*(fl.by + fr.by) - (fl.by - fr.by)*tmp;
     ez(m,k,j,i) =  0.5*(fl.bz + fr.bz) + (fl.bz - fr.bz)*tmp;
   });

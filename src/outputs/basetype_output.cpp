@@ -397,6 +397,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
                              IEN, &(pmhd->u0));
         if (pmhd->peos->eos_data.passive) {
           outvars.emplace_back("cgl_A", IAN, &(pmhd->u0));
+          if (pmhd->peos->eos_data.passive_adiabatic) {
+            outvars.emplace_back("ener", IEG, &(pmhd->u0));
+          }
         }
       }
     }
@@ -416,6 +419,9 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
           if (pm->pmb_pack->pmhd->peos->eos_data.is_cgl) {
             // Preserve legacy eint=p_parallel and expose the second CGL pressure.
             outvars.emplace_back("p_perp",IPP,&(pm->pmb_pack->pmhd->w0));
+            if (pm->pmb_pack->pmhd->peos->eos_data.passive_adiabatic) {
+              outvars.emplace_back("gas_eint",IEG,&(pm->pmb_pack->pmhd->w0));
+            }
           }
         }
       }

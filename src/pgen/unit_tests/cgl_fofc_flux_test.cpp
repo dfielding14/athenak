@@ -54,7 +54,7 @@ void CheckClose(const std::string &label, Real got, Real expected) {
 }
 
 EOS_Data MakeCglEOS(bool passive=false) {
-  EOS_Data eos;
+  EOS_Data eos{};
   eos.gamma = 5.0/3.0;
   eos.iso_cs = 0.7;
   eos.nu_coll = 0.0;

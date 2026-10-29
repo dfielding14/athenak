@@ -287,10 +287,16 @@ int main(int argc, char *argv[]) {
                          pinput->GetBoolean("mhd", "passive");
     const int encoding = pinput->DoesParameterExist("mhd", "passive_restart_encoding") ?
         pinput->GetInteger("mhd", "passive_restart_encoding") : -1;
+    const bool adiabatic_passive = passive &&
+        pinput->DoesParameterExist("mhd", "passive_eos") &&
+        pinput->GetString("mhd", "passive_eos") == "adiabatic";
+    const int expected_encoding = adiabatic_passive ? 2 : 1;
     if (passive != restart_passive || encoding != restart_passive_encoding ||
-        (passive && (encoding != 1 || pinput->GetString("mhd", "eos") != "cgl")) ||
+        (passive && (encoding != expected_encoding ||
+                     pinput->GetString("mhd", "eos") != "cgl")) ||
         (!passive && encoding != -1)) {
-      std::cout << "### FATAL ERROR: passive restarts require J/A encoding version 1; "
+      std::cout << "### FATAL ERROR: passive restarts require J/A encoding version 1 "
+                << "for isothermal flow or version 2 for adiabatic flow; "
                 << "active and passive checkpoints cannot be interchanged." << std::endl;
       std::exit(EXIT_FAILURE);
     }

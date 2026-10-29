@@ -242,11 +242,12 @@ both strict and relaxed modes.
 
 Active CGL runs apply the anisotropic pressure tensor in the dynamic MHD fluxes.
 Passive-Delta runs evolve CGL/LF pressures diagnostically while the flow uses
-the isothermal-MHD passive path. The passive branch affects Riemann fluxes and
+the native MHD passive path (`passive_eos=isothermal` or `adiabatic`). The passive branch affects Riemann fluxes and
 timestep estimates, so active/passive comparisons should be documented as a
 model-path comparison rather than a single-line source-term toggle. The
 [passive model contract](cgl_passive.md) specifies J/A outside LF, U/moment
-inside LF, restart encoding and the absence of irreversible shock heating.
+inside LF, restart encoding and the absence of irreversible shock heating in
+the passive CGL pair. Adiabatic passive flow carries its own MHD energy.
 
 ## Restrictions
 
