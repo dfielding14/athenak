@@ -244,24 +244,28 @@ int main(int argc, char *argv[]) {
     if (single_file_per_rank) {
         // Reject before looking for old files at the new allocation's rank numbers.
         ParameterInput options;
-        options.SetBoolean("mesh", "refine_on_restart", false);
+        for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
+          options.SetBoolean("mesh", key, false);
+        }
         if (iarg_flag) {
           IOWrapper overlay;
           overlay.Open(input_file.c_str(), IOWrapper::FileMode::read);
           options.LoadFromFile(overlay);
           overlay.Close();
         }
-        const std::string option = "mesh/refine_on_restart=";
-        for (int i = 1; i < argc; ++i) {
-          const std::string arg = argv[i];
-          if (arg.compare(0, option.size(), option) == 0) {
-            options.SetString("mesh", "refine_on_restart", arg.substr(option.size()));
+        for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
+          const std::string option = std::string("mesh/") + key + "=";
+          for (int i = 1; i < argc; ++i) {
+            const std::string arg = argv[i];
+            if (arg.compare(0, option.size(), option) == 0) {
+              options.SetString("mesh", key, arg.substr(option.size()));
+            }
           }
-        }
-        if (options.GetBoolean("mesh", "refine_on_restart")) {
-          std::cout << "### FATAL ERROR: refine_on_restart requires a shared checkpoint"
-                    << std::endl;
-          std::exit(EXIT_FAILURE);
+          if (options.GetBoolean("mesh", key)) {
+            std::cout << "### FATAL ERROR: " << key << " requires a shared checkpoint"
+                      << std::endl;
+            std::exit(EXIT_FAILURE);
+          }
         }
         // Extract the base directory and file name
         size_t last_slash = restart_file.rfind('/');
@@ -301,13 +305,16 @@ int main(int argc, char *argv[]) {
     infile.Close();
     pinput->CheckBlockNames();
   }
-  pinput->GetOrAddBoolean("mesh", "refine_on_restart", false);
+  for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
+    pinput->GetOrAddBoolean("mesh", key, false);
+  }
   pinput->ModifyFromCmdline(argc, argv);
-  if (pinput->GetBoolean("mesh", "refine_on_restart") &&
-      (!res_flag || single_file_per_rank)) {
-    std::cout << "### FATAL ERROR: refine_on_restart requires a shared checkpoint "
-              << "specified with -r" << std::endl;
-    std::exit(EXIT_FAILURE);
+  for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
+    if (pinput->GetBoolean("mesh", key) && (!res_flag || single_file_per_rank)) {
+      std::cout << "### FATAL ERROR: " << key << " requires a shared checkpoint "
+                << "specified with -r" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   if (res_flag) {

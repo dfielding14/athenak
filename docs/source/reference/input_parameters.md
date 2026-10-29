@@ -91,6 +91,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `ox2_bc` | string | required | mesh.cpp:L120 |
 | `ox3_bc` | string | required | mesh.cpp:L147 |
 | `refine_on_restart` | bool | false | build_tree.cpp; [uniform restart refinement](../modules/cgl_amr.md#uniform-refinement-during-restart) |
+| `reblock_on_restart` | bool | false | build_tree.cpp; [restart block sizes](../modules/cgl_amr.md#changing-meshblock-sizes-during-restart) |
 | `x1max` | Real | required | mesh.cpp:L57 |
 | `x1min` | Real | required | mesh.cpp:L56 |
 | `x2max` | Real | required | mesh.cpp:L59 |

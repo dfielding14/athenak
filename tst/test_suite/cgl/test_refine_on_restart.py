@@ -17,7 +17,9 @@ from test_suite.cgl import test_cgl_lf_cooling
 MODES = ("ideal", "isothermal", "cgl", "passive", "adiabatic")
 
 
-def input_text(mode, *, blocks=1, nlim=0, nghost=4):
+def input_text(mode, *, blocks=1, nlim=0, nghost=4, shape=None,
+               block_shape=(8, 8, 8)):
+    shape = shape or (8*blocks, 8, 8)
     source = passive_acceptance.input_text(
         passive=mode in ("passive", "adiabatic"),
         adiabatic=mode == "adiabatic", ideal_mhd=mode == "ideal",
@@ -27,14 +29,16 @@ def input_text(mode, *, blocks=1, nlim=0, nghost=4):
     return source + f"""
 <mesh>
 nghost = {nghost}
-nx1 = {8*blocks}
-nx2 = 8
-nx3 = 8
-x1max = {blocks}
+nx1 = {shape[0]}
+nx2 = {shape[1]}
+nx3 = {shape[2]}
+x1max = {shape[0]/8}
+x2max = {shape[1]/8}
+x3max = {shape[2]/8}
 <meshblock>
-nx1 = 8
-nx2 = 8
-nx3 = 8
+nx1 = {block_shape[0]}
+nx2 = {block_shape[1]}
+nx3 = {block_shape[2]}
 <mhd>
 gamma = 1.6666666666666667
 tfloor = 0
@@ -54,7 +58,7 @@ def mpi_available():
     return re.search(r"MPI parallelism:\s+ON", config) and shutil.which("mpirun")
 
 
-def run(directory, mode, *, source=None, restart=None, refine=False,
+def run(directory, mode, *, source=None, restart=None, refine=False, reblock=False,
         flags=(), ranks=1, error=False):
     directory.mkdir()
     executable = Path(os.environ.get("ATHENAK_TEST_EXE", "athena")).resolve()
@@ -67,6 +71,8 @@ def run(directory, mode, *, source=None, restart=None, refine=False,
         command += ["-r", str(restart)]
     if refine:
         command += ["mesh/refine_on_restart=true"]
+    if reblock:
+        command += ["mesh/reblock_on_restart=true"]
     if ranks > 1:
         if not mpi_available():
             pytest.skip("requires an MPI executable and mpirun")
@@ -89,6 +95,7 @@ def run(directory, mode, *, source=None, restart=None, refine=False,
     nmb = len(state["u"])
     box = np.frombuffer(raw, dtype="=f8", count=9, offset=header + 8)
     state.update(path=checkpoint, text=raw[:header].decode(),
+                 block_shape=tuple(reversed(state["active"].shape[-3:])),
                  shape=struct.unpack_from("=3i", raw, header + 8 + 72 + 4),
                  lengths=tuple(box[3:6] - box[:3]),
                  locations=np.frombuffer(raw, dtype="=i4", count=4*nmb,
@@ -102,15 +109,16 @@ def run(directory, mode, *, source=None, restart=None, refine=False,
 def global_fields(state):
     ng = state["ng"]
     n1, n2, n3 = state["shape"]
+    bx, by, bz = state["block_shape"]
     u = np.empty((state["u"].shape[1], n3, n2, n1))
     faces = [np.full((n3, n2, n1+1), np.nan),
              np.full((n3, n2+1, n1), np.nan),
              np.full((n3+1, n2, n1), np.nan)]
     for m, (x, y, z, _) in enumerate(state["locations"]):
-        i, j, k = 8*x, 8*y, 8*z
-        u[:, k:k+8, j:j+8, i:i+8] = state["active"][m]
+        i, j, k = bx*x, by*y, bz*z
+        u[:, k:k+bz, j:j+by, i:i+bx] = state["active"][m]
         for axis, field in enumerate(state["faces"]):
-            sizes = [8, 8, 8]
+            sizes = [bz, by, bx]
             sizes[2-axis] += 1
             nk, nj, ni = sizes
             target = faces[axis][k:k+nk, j:j+nj, i:i+ni]
@@ -139,7 +147,8 @@ def curl_field(state):
 
 def patch_checkpoint(state, mode, path, *, nonuniform=False, poison_ghosts=False):
     ng = state["ng"]
-    active_cells = (slice(ng, ng+8),)*3
+    nx, ny, nz = state["block_shape"]
+    active_cells = (slice(ng, ng+nz), slice(ng, ng+ny), slice(ng, ng+nx))
     raw = bytearray(state["path"].read_bytes())
     payload = np.frombuffer(raw, dtype="=f8", offset=state["offset"])
     payload = payload.reshape(state["payload"].shape)
@@ -152,22 +161,22 @@ def patch_checkpoint(state, mode, path, *, nonuniform=False, poison_ghosts=False
         magnetic = curl_field(state)
     for m, (lx, ly, lz, _) in enumerate(state["locations"]):
         if nonuniform:
-            x = (8*lx + np.arange(8) + 0.5)/state["shape"][0]
-            y = (8*ly + np.arange(8) + 0.5)/state["shape"][1]
-            z = (8*lz + np.arange(8) + 0.5)/state["shape"][2]
+            x = (nx*lx + np.arange(nx) + 0.5)/state["shape"][0]
+            y = (ny*ly + np.arange(ny) + 0.5)/state["shape"][1]
+            z = (nz*lz + np.arange(nz) + 0.5)/state["shape"][2]
             zz, yy, xx = np.meshgrid(z, y, x, indexing="ij")
             for axis in range(3):
-                sizes = [8, 8, 8]
+                sizes = [nz, ny, nx]
                 sizes[2-axis] += 1
                 nk, nj, ni = sizes
                 faces[axis][m, ng:ng+nk, ng:ng+nj, ng:ng+ni] = magnetic[axis][
-                    8*lz:8*lz+nk, 8*ly:8*ly+nj, 8*lx:8*lx+ni]
+                    nz*lz:nz*lz+nk, ny*ly:ny*ly+nj, nx*lx:nx*lx+ni]
             bx = 0.5*(faces[0][(m, *active_cells)] +
-                      faces[0][m, ng:ng+8, ng:ng+8, ng+1:ng+9])
+                      faces[0][m, ng:ng+nz, ng:ng+ny, ng+1:ng+nx+1])
             by = 0.5*(faces[1][(m, *active_cells)] +
-                      faces[1][m, ng:ng+8, ng+1:ng+9, ng:ng+8])
+                      faces[1][m, ng:ng+nz, ng+1:ng+ny+1, ng:ng+nx])
             bz = 0.5*(faces[2][(m, *active_cells)] +
-                      faces[2][m, ng+1:ng+9, ng:ng+8, ng:ng+8])
+                      faces[2][m, ng+1:ng+nz+1, ng:ng+ny, ng:ng+nx])
             rho = 1 + 0.1*np.cos(2*np.pi*xx)
             velocity = np.array([0.1*np.sin(2*np.pi*yy),
                                  0.1*np.cos(2*np.pi*zz),
@@ -191,7 +200,7 @@ def patch_checkpoint(state, mode, path, *, nonuniform=False, poison_ghosts=False
             u[m, :, ~active] = np.nan
             for axis, field in enumerate(faces):
                 active = np.zeros(field[m].shape, dtype=bool)
-                sizes = [8, 8, 8]
+                sizes = [nz, ny, nx]
                 sizes[2-axis] += 1
                 nk, nj, ni = sizes
                 active[ng:ng+nk, ng:ng+nj, ng:ng+ni] = True
@@ -376,7 +385,9 @@ def test_refine_restart_rejects_rectangular_cells(tmp_path):
 
 
 @pytest.mark.parametrize("mode", ["cgl", "adiabatic"])
-def test_refine_restart_preserves_forcing_lf_and_cooling_clocks(tmp_path, mode):
+@pytest.mark.parametrize("operation", ["refine", "reblock", "both"])
+def test_refine_restart_preserves_forcing_lf_and_cooling_clocks(
+        tmp_path, mode, operation):
     source = test_cgl_lf_cooling.input_text(nlim=3, history="dcycle = 100")
     source += """
 <mesh>
@@ -399,8 +410,11 @@ dedt = 0.2
         source += test_cgl_lf_cooling.adiabatic_settings()
     initial = run(tmp_path / "initial", mode, source=source)
     assert initial["time"] > 0 and initial["cycle"] == 3
-    refined = run(tmp_path / "fine", mode, restart=initial["path"], refine=True,
-                  ranks=2)
+    reblock = operation in ("reblock", "both")
+    flags = tuple(f"meshblock/nx{i}=4" for i in (1, 2, 3)) if reblock else ()
+    refined = run(tmp_path / "fine", mode, restart=initial["path"],
+                  refine=operation in ("refine", "both"), reblock=reblock,
+                  flags=flags, ranks=2)
     assert refined["time"] == initial["time"] and refined["cycle"] == initial["cycle"]
     assert refined["metadata"] == initial["metadata"]
     for key in ("cooling_alpha", "cooling_history_last_time",

@@ -32,7 +32,7 @@
 #include "radiation/radiation.hpp"
 #include "srcterms/turb_driver.hpp"
 #include "pgen.hpp"
-#include "pgen/restart_refinement.hpp"
+#include "pgen/restart_transfer.hpp"
 
 
 //----------------------------------------------------------------------------------------
@@ -108,8 +108,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
   user_srcs = pin->GetOrAddBoolean("problem","user_srcs",false);
   user_hist = pin->GetOrAddBoolean("problem","user_hist",false);
 
-  // get spatial dimensions of arrays, including ghost zones
-  auto &indcs = pm->pmb_pack->pmesh->mb_indcs;
+  // Use the source layout to validate records before transferring to the live mesh.
+  const auto &indcs = pm->restart_transfer != nullptr ?
+      pm->restart_transfer->source_mb_indcs : pm->mb_indcs;
   int nout1 = indcs.nx1 + 2*(indcs.ng);
   int nout2 = (indcs.nx2 > 1)? (indcs.nx2 + 2*(indcs.ng)) : 1;
   int nout3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
@@ -405,9 +406,9 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     exit(EXIT_FAILURE);
   }
 
-  if (pm->restart_refinement != nullptr) {
-    ReadRefinedRestartMHD(pm, pin, resfile, headeroffset, data_size);
-    pm->restart_refinement.reset();
+  if (pm->restart_transfer != nullptr) {
+    ReadRestartMHD(pm, pin, resfile, headeroffset, data_size);
+    pm->restart_transfer.reset();
   } else {
     // read CC data into host array
     int mygids = pm->gids_eachrank[global_variable::my_rank];

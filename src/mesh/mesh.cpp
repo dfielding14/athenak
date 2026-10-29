@@ -261,20 +261,22 @@ Mesh::Mesh(ParameterInput *pin) :
     mb_indcs.nx3 = mesh_indcs.nx3;
   }
 
-  // error check consistency of the block and mesh
-  if (mesh_indcs.nx1 % mb_indcs.nx1 != 0 ||
-      mesh_indcs.nx2 % mb_indcs.nx2 != 0 ||
-      mesh_indcs.nx3 % mb_indcs.nx3 != 0) {
-    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
-              << "Mesh must be evenly divisible by MeshBlocks" << std::endl
-              << "Check Mesh and MeshBlock dimensions in input file" << std::endl;
-    std::exit(EXIT_FAILURE);
-  }
   if ((mb_indcs.nx1 < 4) ||
       (mb_indcs.nx2 < 4 && multi_d) ||
       (mb_indcs.nx3 < 4 && three_d) ) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
               << "MeshBlock must be >= 4 cells in each active dimension" << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  // A combined restart transfer tiles the refined grid, not the saved grid.
+  const int factor = pin->GetOrAddBoolean("mesh", "refine_on_restart", false) &&
+                     pin->GetOrAddBoolean("mesh", "reblock_on_restart", false) ? 2 : 1;
+  if (static_cast<std::int64_t>(mesh_indcs.nx1)*factor % mb_indcs.nx1 != 0 ||
+      static_cast<std::int64_t>(mesh_indcs.nx2)*factor % mb_indcs.nx2 != 0 ||
+      static_cast<std::int64_t>(mesh_indcs.nx3)*factor % mb_indcs.nx3 != 0) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__ << std::endl
+              << "Mesh must be evenly divisible by MeshBlocks" << std::endl
+              << "Check Mesh and MeshBlock dimensions in input file" << std::endl;
     std::exit(EXIT_FAILURE);
   }
   if ( (multilevel) &&

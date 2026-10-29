@@ -3,8 +3,8 @@
 // Copyright(C) 2020 James M. Stone <jmstone@ias.edu> and the Athena code team
 // Licensed under the 3-clause BSD License (the "LICENSE")
 //========================================================================================
-//! \file restart_refinement.cpp
-//! \brief Stage coarse restart patches on the final uniform mesh before prolongation.
+//! \file restart_transfer.cpp
+//! \brief Transfer source restart patches to a reblocked or refined uniform mesh.
 
 #include <algorithm>
 #include <array>
@@ -18,7 +18,7 @@
 #include "mesh/mesh.hpp"
 #include "mesh/restart_prolongation.hpp"
 #include "mhd/mhd.hpp"
-#include "pgen/restart_refinement.hpp"
+#include "pgen/restart_transfer.hpp"
 
 namespace {
 
@@ -32,7 +32,7 @@ struct Patch {
 };
 
 [[noreturn]] void Fail(const char *message) {
-  std::cerr << "### FATAL ERROR: restart refinement: " << message << std::endl;
+  std::cerr << "### FATAL ERROR: restart transfer: " << message << std::endl;
 #if MPI_PARALLEL_ENABLED
   MPI_Abort(MPI_COMM_WORLD, EXIT_FAILURE);
 #endif
@@ -54,14 +54,15 @@ std::vector<int> Offsets(const std::vector<int> &counts) {
   return offsets;
 }
 
-std::vector<Segment> SplitAxis(int start, int length, int cells, int blocks, int ng) {
+std::vector<Segment> SplitAxis(int start, int length, int cells, int blocks,
+                               int source_ng, int destination_start) {
   std::vector<Segment> segments;
   const int total = cells*blocks;
   for (int n = 0; n < length;) {
     const int position = ((start + n)%total + total)%total;
     const int local = position%cells;
     const int count = std::min(length - n, cells - local);
-    segments.push_back({position/cells, local + ng, n + ng - 1, count});
+    segments.push_back({position/cells, local + source_ng, n + destination_start, count});
     n += count;
   }
   return segments;
@@ -75,8 +76,8 @@ int Values(const Patch &patch, int nvar) {
 
 }  // namespace
 
-void ReadRefinedRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
-                          IOWrapperSizeT offset, IOWrapperSizeT block_bytes) {
+void ReadRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
+                    IOWrapperSizeT offset, IOWrapperSizeT block_bytes) {
   const auto *pack = pm->pmb_pack;
   if (pack->pmhd == nullptr || pack->phydro != nullptr || pack->prad != nullptr ||
       pack->pz4c != nullptr || pack->padm != nullptr || pack->pdyngr != nullptr ||
@@ -85,17 +86,21 @@ void ReadRefinedRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
       pack->pcoord->is_dynamical_relativistic) {
     Fail("requires standalone Newtonian MHD without particles or coupled physics");
   }
-  const auto &source = *pm->restart_refinement;
+  const auto &source = *pm->restart_transfer;
   const auto &indcs = pm->mb_indcs;
   const int ng = indcs.ng;
-  const int nx = indcs.nx1, ny = indcs.nx2, nz = indcs.nx3;
-  const int cx = nx/2, cy = ny/2, cz = nz/2;
+  const auto &source_indcs = source.source_mb_indcs;
+  const int source_ng = source_indcs.ng;
+  const int nx = source_indcs.nx1, ny = source_indcs.nx2, nz = source_indcs.nx3;
+  const int factor = source.refine ? 2 : 1;
+  const int halo = source.refine ? 1 : 0;
+  const int cx = indcs.nx1/factor, cy = indcs.nx2/factor, cz = indcs.nx3/factor;
   const int nvar = pm->pmb_pack->pmhd->nmhd + pm->pmb_pack->pmhd->nscalars;
   const int nlocal = pm->pmb_pack->nmb_thispack;
   const int nsource = static_cast<int>(source.source_gid_by_location.size());
   const int rank = global_variable::my_rank, nranks = global_variable::nranks;
   const int cells[3] = {nx, ny, nz};
-  const int coarse[3] = {cx, cy, cz};
+  const int patch_cells[3] = {cx, cy, cz};
   const int roots[3] = {source.nmb_rootx1, source.nmb_rootx2, source.nmb_rootx3};
 
   // A shared face belongs to the block on its positive side, including periodic faces.
@@ -106,8 +111,9 @@ void ReadRefinedRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
     for (int field = 0; field < 4; ++field) {
       std::array<std::vector<Segment>, 3> segments;
       for (int axis = 0; axis < 3; ++axis) {
-        segments[axis] = SplitAxis(position[axis]*coarse[axis] - 1,
-            coarse[axis] + 2 + (field == axis + 1), cells[axis], roots[axis], ng);
+        segments[axis] = SplitAxis(position[axis]*patch_cells[axis] - halo,
+            patch_cells[axis] + 2*halo + (field == axis + 1), cells[axis],
+            roots[axis], source_ng, ng - halo);
       }
       for (const auto &z : segments[2]) {
         for (const auto &y : segments[1]) {
@@ -175,7 +181,7 @@ void ReadRefinedRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
   }
   std::vector<Real> send_values(value_send_offset.back());
   std::vector<Real> recv_values(value_recv_offset.back());
-  const int sx = nx + 2*ng, sy = ny + 2*ng, sz = nz + 2*ng;
+  const int sx = nx + 2*source_ng, sy = ny + 2*source_ng, sz = nz + 2*source_ng;
   const std::size_t field_offset[4] = {0, static_cast<std::size_t>(nvar)*sz*sy*sx,
       static_cast<std::size_t>(nvar)*sz*sy*sx + static_cast<std::size_t>(sz)*sy*(sx+1),
       static_cast<std::size_t>(nvar)*sz*sy*sx + static_cast<std::size_t>(sz)*sy*(sx+1) +
@@ -223,8 +229,8 @@ void ReadRefinedRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
   send_values.shrink_to_fit();
 
   const int hx = cx + 2*ng, hy = cy + 2*ng, hz = cz + 2*ng;
-  HostArray5D<Real> coarse_cons("restart-coarse-cons", nlocal, nvar, hz, hy, hx);
-  HostFaceFld4D<Real> coarse_b("restart-coarse-b", nlocal, hz, hy, hx);
+  HostArray5D<Real> staged_cons("restart-transfer-cons", nlocal, nvar, hz, hy, hx);
+  HostFaceFld4D<Real> staged_b("restart-transfer-b", nlocal, hz, hy, hx);
   for (int n = 0; n < nranks; ++n) {
     int position = value_recv_offset[n];
     for (int q = send_offset[n]; q < send_offset[n+1]; ++q) {
@@ -236,21 +242,28 @@ void ReadRefinedRestartMHD(Mesh *pm, ParameterInput *pin, IOWrapper &file,
               const int di = patch.destination[0] + i, dj = patch.destination[1] + j;
               const int dk = patch.destination[2] + k;
               const Real value = recv_values[position++];
-              if (patch.field == 0) coarse_cons(patch.block,v,dk,dj,di) = value;
-              if (patch.field == 1) coarse_b.x1f(patch.block,dk,dj,di) = value;
-              if (patch.field == 2) coarse_b.x2f(patch.block,dk,dj,di) = value;
-              if (patch.field == 3) coarse_b.x3f(patch.block,dk,dj,di) = value;
+              if (patch.field == 0) staged_cons(patch.block,v,dk,dj,di) = value;
+              if (patch.field == 1) staged_b.x1f(patch.block,dk,dj,di) = value;
+              if (patch.field == 2) staged_b.x2f(patch.block,dk,dj,di) = value;
+              if (patch.field == 3) staged_b.x3f(patch.block,dk,dj,di) = value;
             }
           }
         }
       }
     }
   }
-  DvceArray5D<Real> device_cons("restart-coarse-cons", nlocal, nvar, hz, hy, hx);
-  DvceFaceFld4D<Real> device_b("restart-coarse-b", nlocal, hz, hy, hx);
-  Kokkos::deep_copy(device_cons, coarse_cons);
-  Kokkos::deep_copy(device_b.x1f, coarse_b.x1f);
-  Kokkos::deep_copy(device_b.x2f, coarse_b.x2f);
-  Kokkos::deep_copy(device_b.x3f, coarse_b.x3f);
-  ProlongRestartMHD(pm, pin, device_cons, device_b);
+  if (source.refine) {
+    DvceArray5D<Real> device_cons("restart-transfer-cons", nlocal, nvar, hz, hy, hx);
+    DvceFaceFld4D<Real> device_b("restart-transfer-b", nlocal, hz, hy, hx);
+    Kokkos::deep_copy(device_cons, staged_cons);
+    Kokkos::deep_copy(device_b.x1f, staged_b.x1f);
+    Kokkos::deep_copy(device_b.x2f, staged_b.x2f);
+    Kokkos::deep_copy(device_b.x3f, staged_b.x3f);
+    ProlongRestartMHD(pm, pin, device_cons, device_b);
+  } else {
+    Kokkos::deep_copy(pack->pmhd->u0, staged_cons);
+    Kokkos::deep_copy(pack->pmhd->b0.x1f, staged_b.x1f);
+    Kokkos::deep_copy(pack->pmhd->b0.x2f, staged_b.x2f);
+    Kokkos::deep_copy(pack->pmhd->b0.x3f, staged_b.x3f);
+  }
 }

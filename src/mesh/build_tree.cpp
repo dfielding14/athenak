@@ -365,6 +365,7 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
 void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                                                      bool single_file_per_rank) {
   const bool refine = pin->GetOrAddBoolean("mesh", "refine_on_restart", false);
+  const bool reblock = pin->GetOrAddBoolean("mesh", "reblock_on_restart", false);
   const RegionIndcs requested_mb = mb_indcs;
   const RegionIndcs requested_mesh = mesh_indcs;
   const RegionSize requested_size = mesh_size;
@@ -485,9 +486,11 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   delete [] idlist;
   if (!adaptive) max_level = current_level;
 
-  if (refine) {
-    const auto fail = [](const char *message) {
-      std::cout << "### FATAL ERROR: refine_on_restart " << message << std::endl;
+  if (refine || reblock) {
+    const auto fail = [refine](const char *message) {
+      std::cout << "### FATAL ERROR: "
+                << (refine ? "refine_on_restart " : "reblock_on_restart ")
+                << message << std::endl;
       std::exit(EXIT_FAILURE);
     };
     if (single_file_per_rank || multilevel || !strictly_periodic || !three_d ||
@@ -495,9 +498,12 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
             "mesh_refinement", "cgl_amr_repair_restart_version")) {
       fail("requires a shared, uniform 3D periodic checkpoint without SMR/AMR");
     }
-    if (requested_mb.nx1 != mb_indcs.nx1 || requested_mb.nx2 != mb_indcs.nx2 ||
-        requested_mb.nx3 != mb_indcs.nx3 || requested_mb.ng != mb_indcs.ng) {
+    if (!reblock && (requested_mb.nx1 != mb_indcs.nx1 ||
+        requested_mb.nx2 != mb_indcs.nx2 || requested_mb.nx3 != mb_indcs.nx3)) {
       fail("requires unchanged MeshBlock dimensions and ghost-zone count");
+    }
+    if (requested_mb.ng != mb_indcs.ng) {
+      fail("requires an unchanged ghost-zone count");
     }
     if (requested_mesh.nx1 != mesh_indcs.nx1 ||
         requested_mesh.nx2 != mesh_indcs.nx2 || requested_mesh.nx3 != mesh_indcs.nx3) {
@@ -512,29 +518,33 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
         requested_size.x3max != mesh_size.x3max) {
       fail("requires an unchanged physical domain");
     }
-    const Real cell_scale = fmax(mesh_size.dx1, fmax(mesh_size.dx2, mesh_size.dx3));
-    const Real cell_tolerance = 32.0*std::numeric_limits<Real>::epsilon()*cell_scale;
-    if (!(mesh_size.dx1 > 0.0 && mesh_size.dx2 > 0.0 && mesh_size.dx3 > 0.0) ||
-        !std::isfinite(cell_scale) ||
-        fabs(mesh_size.dx1 - mesh_size.dx2) > cell_tolerance ||
-        fabs(mesh_size.dx1 - mesh_size.dx3) > cell_tolerance) {
-      fail("requires cubic cells for native magnetic prolongation");
-    }
-    if (mb_indcs.nx1 % 2 || mb_indcs.nx2 % 2 || mb_indcs.nx3 % 2) {
-      fail("requires even MeshBlock dimensions");
+    if (refine) {
+      const Real cell_scale = fmax(mesh_size.dx1, fmax(mesh_size.dx2, mesh_size.dx3));
+      const Real cell_tolerance = 32.0*std::numeric_limits<Real>::epsilon()*cell_scale;
+      if (!(mesh_size.dx1 > 0.0 && mesh_size.dx2 > 0.0 && mesh_size.dx3 > 0.0) ||
+          !std::isfinite(cell_scale) ||
+          fabs(mesh_size.dx1 - mesh_size.dx2) > cell_tolerance ||
+          fabs(mesh_size.dx1 - mesh_size.dx3) > cell_tolerance) {
+        fail("requires cubic cells for native magnetic prolongation");
+      }
+      if (requested_mb.nx1 % 2 || requested_mb.nx2 % 2 || requested_mb.nx3 % 2) {
+        fail("requires even MeshBlock dimensions");
+      }
     }
     if (nmb_total != static_cast<std::int64_t>(nmb_rootx1)*nmb_rootx2*nmb_rootx3 ||
         current_level != root_level) {
       fail("requires an unrefined uniform root grid");
     }
-    if (nmb_total > std::numeric_limits<int>::max()/8 ||
-        mesh_indcs.nx1 > std::numeric_limits<int>::max()/2 ||
-        mesh_indcs.nx2 > std::numeric_limits<int>::max()/2 ||
-        mesh_indcs.nx3 > std::numeric_limits<int>::max()/2 || root_level >= 30) {
+    const int factor = refine ? 2 : 1;
+    if (mesh_indcs.nx1 > std::numeric_limits<int>::max()/factor ||
+        mesh_indcs.nx2 > std::numeric_limits<int>::max()/factor ||
+        mesh_indcs.nx3 > std::numeric_limits<int>::max()/factor) {
       fail("target mesh exceeds integer or logical-level limits");
     }
-    restart_refinement = std::make_unique<RestartRefinement>();
-    auto &source = *restart_refinement;
+    restart_transfer = std::make_unique<RestartTransfer>();
+    auto &source = *restart_transfer;
+    source.source_mb_indcs = mb_indcs;
+    source.refine = refine;
     source.nmb_rootx1 = nmb_rootx1;
     source.nmb_rootx2 = nmb_rootx2;
     source.nmb_rootx3 = nmb_rootx3;
@@ -552,21 +562,34 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
       source.source_gid_by_location[index] = gid;
     }
 
-    nmb_total *= 8;
-    nmb_rootx1 *= 2;
-    nmb_rootx2 *= 2;
-    nmb_rootx3 *= 2;
-    ++root_level;
+    mb_indcs = requested_mb;
+    mesh_indcs.nx1 *= factor;
+    mesh_indcs.nx2 *= factor;
+    mesh_indcs.nx3 *= factor;
+    if (mesh_indcs.nx1 % mb_indcs.nx1 || mesh_indcs.nx2 % mb_indcs.nx2 ||
+        mesh_indcs.nx3 % mb_indcs.nx3) {
+      fail("requires final mesh dimensions divisible by the requested MeshBlock sizes");
+    }
+    nmb_rootx1 = mesh_indcs.nx1/mb_indcs.nx1;
+    nmb_rootx2 = mesh_indcs.nx2/mb_indcs.nx2;
+    nmb_rootx3 = mesh_indcs.nx3/mb_indcs.nx3;
+    nmb_total = 1;
+    for (const int count : {nmb_rootx1, nmb_rootx2, nmb_rootx3}) {
+      if (nmb_total > std::numeric_limits<int>::max()/count) {
+        fail("target mesh exceeds integer or logical-level limits");
+      }
+      nmb_total *= count;
+    }
+    int nmbmax = (nmb_rootx1 > nmb_rootx2) ? nmb_rootx1 : nmb_rootx2;
+    nmbmax = (nmbmax > nmb_rootx3) ? nmbmax : nmb_rootx3;
+    for (root_level=0; ((1<<root_level) < nmbmax); root_level++) {}
     max_level = root_level;
-    mesh_indcs.nx1 *= 2;
-    mesh_indcs.nx2 *= 2;
-    mesh_indcs.nx3 *= 2;
     mesh_indcs.ie = mesh_indcs.is + mesh_indcs.nx1 - 1;
     mesh_indcs.je = mesh_indcs.js + mesh_indcs.nx2 - 1;
     mesh_indcs.ke = mesh_indcs.ks + mesh_indcs.nx3 - 1;
-    mesh_size.dx1 *= 0.5;
-    mesh_size.dx2 *= 0.5;
-    mesh_size.dx3 *= 0.5;
+    mesh_size.dx1 /= factor;
+    mesh_size.dx2 /= factor;
+    mesh_size.dx3 /= factor;
     delete [] cost_eachmb;
     delete [] rank_eachmb;
     delete [] lloc_eachmb;
@@ -577,13 +600,17 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     pin->SetInteger("mesh", "nx1", mesh_indcs.nx1);
     pin->SetInteger("mesh", "nx2", mesh_indcs.nx2);
     pin->SetInteger("mesh", "nx3", mesh_indcs.nx3);
+    pin->SetInteger("meshblock", "nx1", mb_indcs.nx1);
+    pin->SetInteger("meshblock", "nx2", mb_indcs.nx2);
+    pin->SetInteger("meshblock", "nx3", mb_indcs.nx3);
     pin->SetBoolean("mesh", "refine_on_restart", false);
+    pin->SetBoolean("mesh", "reblock_on_restart", false);
   }
 
   // rebuild the MeshBlockTree
   ptree = std::make_unique<MeshBlockTree>(this);
   ptree->CreateRootGrid();
-  if (!refine) {
+  if (!refine && !reblock) {
     for (int i=0; i<nmb_total; i++) {ptree->AddNodeWithoutRefinement(lloc_eachmb[i]);}
   }
 

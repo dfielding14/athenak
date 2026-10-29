@@ -19,7 +19,7 @@ MHD using PLM reconstruction, the HLLE solver, primitive AMR prolongation, and
 LF+RKL2 STS. Other combinations may share the same implementation but should
 be qualified separately.
 
-Passive CGL rejects runtime AMR/SMR; the uniform restart transfer below also
+Passive CGL rejects runtime AMR/SMR; the uniform restart transfers below also
 supports passive CGL. LF chunking must remain off
 (`time/cgl_lf_max_chunk_ratio = 0`) on runtime AMR/SMR meshes. Historical rehearsals
 below predate the restored finite two-tier limiter; current qualification and
@@ -128,7 +128,7 @@ refinement, derefinement, and load balancing.
 | CGL-aware boundary behavior | `src/bvals/physics/bfield_bcs.cpp` |
 | AMR-derived fields and output resizing | `src/mesh/refinement_criteria.cpp`, `src/outputs/derived_variables.cpp` |
 | Focused AMR problem generator and repair histories | `src/pgen/tests/divb_amr.cpp` |
-| Uniform restart refinement: mesh construction, source patches, native transfer | `src/mesh/build_tree.cpp`, `src/pgen/restart_refinement.cpp`, `src/mesh/restart_prolongation.cpp` |
+| Uniform restart transfer: mesh construction, source patches, native prolongation | `src/mesh/build_tree.cpp`, `src/pgen/restart_transfer.cpp`, `src/mesh/restart_prolongation.cpp` |
 
 ## Configuration
 
@@ -151,8 +151,9 @@ checkpoint containing only 64 blocks. The target remains a uniform root grid;
 this does not enable runtime AMR or add work to subsequent timesteps.
 
 Omit mesh and block dimensions from restart overlays so the checkpoint supplies
-them. If supplied, they must match the **source checkpoint**; do not double
-`mesh/nx1`, `nx2`, or `nx3` yourself. AthenaK derives the doubled dimensions and
+them, except when explicitly reblocking as described below. Otherwise they must
+match the **source checkpoint**; do not double `mesh/nx1`, `nx2`, or `nx3`
+yourself. AthenaK derives the doubled dimensions and
 records them in subsequent outputs. For later restarts, avoid passing the
 original coarse input deck with `-i`, since it can overwrite those saved fine
 dimensions. Use the fine checkpoint's parameters and override only the settings
@@ -166,9 +167,10 @@ This path requires a shared checkpoint from an unrefined, uniform, 3D periodic
 Newtonian MHD run with cubic cells. It supports ideal/isothermal MHD, active CGL,
 and passive CGL with either isothermal or adiabatic gas, including CGL LF and
 pgen cooling.
-Block dimensions must be even; block sizes, ghost count, and physical domain
-must remain unchanged. Rank-local files, SMR/AMR checkpoints (including AMR
-repair metadata), particles, and coupled or relativistic physics are rejected.
+Target block dimensions must be even; block sizes remain unchanged unless
+reblocking is enabled. Ghost count and physical domain must remain unchanged.
+Rank-local files, SMR/AMR checkpoints (including AMR repair metadata), particles,
+and coupled or relativistic physics are rejected.
 The number of ranks must not exceed the final block count.
 The cubic-cell restriction follows the existing magnetic prolongation operator;
 stretched grids require a separate qualification and correction of that operator.
@@ -192,16 +194,68 @@ MPI-enabled `built_in_pgens` executable and `mpirun` available:
 
 ```sh
 ATHENAK_TEST_EXE=/absolute/path/to/athena PYTHONPATH=tst \
-  python3 -m pytest -q tst/test_suite/cgl/test_refine_on_restart.py
+  python3 -m pytest -q tst/test_suite/cgl/test_refine_on_restart.py \
+    tst/test_suite/cgl/test_reblock_on_restart.py
 ```
 
 These CPU/MPI tests cover transfer onto more ranks than source blocks, native
 AMR equivalence, conservation and divergence with two and four ghost zones,
 stale ghosts, pressure floors, repeated and ordinary restarts, passive gas
-independence, and LF/forcing/cooling state. The non-MPI cases also pass a CPU
-Debug build with Kokkos bounds checking.
+independence, exact split/merge transfers, combined refinement/reblocking, and
+LF/forcing/cooling state. The non-MPI cases also pass a CPU Debug build with
+Kokkos bounds checking.
 Large GPU allocation and parallel-filesystem performance require separate
 production qualification.
+
+### Changing MeshBlock sizes during restart
+
+To change the block layout without changing physical resolution, explicitly
+enable `mesh/reblock_on_restart` and give the target block dimensions:
+
+```sh
+srun -n 512 ./athena -r snapshot.rst mesh/reblock_on_restart=true \
+  meshblock/nx1=64 meshblock/nx2=64 meshblock/nx3=64
+```
+
+A $512^3$ mesh originally divided into 64 blocks of $128^3$ cells becomes
+512 blocks of $64^3$ cells. The physical cells, cell widths, and box dimensions
+are unchanged. Increasing block sizes merges blocks; decreasing them splits
+blocks. Target sizes need not be powers of two or divide the old block sizes,
+but must tile the global grid and satisfy the normal minimum block size of four
+cells per direction. The final block count must be at least the rank count.
+
+Exact reblocking copies conserved cell variables and canonical shared magnetic
+faces without interpolation or CGL thermodynamic projection. It rebuilds ghosts
+from owned data, ignoring saved ghosts. This preserves the global owned fields
+exactly for valid states with consistent shared faces; the normal restart
+primitive recovery and pressure floors still apply. Changing block/rank layout
+can change floating-point reduction order during subsequent evolution, so later
+trajectories need not be bitwise identical.
+
+The shared-file, uniform-root, 3D periodic, standalone Newtonian MHD/CGL scope
+above still applies. Pure reblocking supports noncubic cells and odd block
+dimensions; it does not use magnetic prolongation. Keep the ghost count,
+physical domain, and `mesh/nx1`, `nx2`, `nx3` unchanged.
+
+Both operations can be requested together:
+
+```sh
+srun -n 64 ./athena -r snapshot.rst \
+  mesh/refine_on_restart=true mesh/reblock_on_restart=true \
+  meshblock/nx1=256 meshblock/nx2=256 meshblock/nx3=256
+```
+
+For the same $512^3$ source, this creates a $1024^3$ mesh with 64 blocks of
+$256^3$ cells. Target blocks must tile the final doubled mesh and have even
+dimensions; the cubic-cell requirement for refinement also applies. The reader
+assembles each block's coarse stencil directly from the source checkpoint and
+uses the same prolongation as fixed-block refinement.
+
+Both flags reset to `false` after transfer, and the final mesh and block sizes
+are saved in the next checkpoint. Restart that checkpoint without the old input
+deck to retain its geometry, or use an overlay containing only intended changes.
+Time, cycle, forcing state, cooling state, and LF diagnostics retain normal
+restart semantics, and no physical timestep occurs during either transfer.
 
 ### Common CGL and LF settings
 
