@@ -56,7 +56,7 @@ def decode_restart(path,passive,active_cgl=False,adiabatic=False,ideal_mhd=False
     raw=Path(path).read_bytes();marker=b'<par_end>\n';h=raw.index(marker)+len(marker)
     nmb,root=struct.unpack_from('=ii',raw,h)
     ng,n1,n2,n3=struct.unpack_from('=4i',raw,h+8+72+76)
-    assert nmb>0 and root>=0 and ng==4 and min(n1,n2,n3)>0,'unexpected restart ABI'
+    assert nmb>0 and root>=0 and ng>=2 and min(n1,n2,n3)>0,'unexpected restart ABI'
     nx,ny,nz=n1+2*ng,n2+2*ng if n2>1 else 1,n3+2*ng if n3>1 else 1
     nv=7 if adiabatic else (6 if passive or active_cgl else (5 if ideal_mhd else 4));cc=nx*ny*nz
     sizes=[nv*cc,(nx+1)*ny*nz,nx*(ny+1)*nz,nx*ny*(nz+1)]
@@ -75,7 +75,7 @@ def decode_restart(path,passive,active_cgl=False,adiabatic=False,ideal_mhd=False
                   .5*(f[2][:,:-1,:,:]+f[2][:,1:,:,:])],axis=1)
     bactive=bcc[(slice(None),slice(None),*slices[1:])]
     t,dt,cycle=struct.unpack_from('=ddi',raw,h+8+72+2*76)
-    ret={'u':u,'active':uactive,'faces':f,'bcc':bactive,'time':t,'dt':dt,'cycle':cycle,
+    ret={'ng':ng,'u':u,'active':uactive,'faces':f,'bcc':bactive,'time':t,'dt':dt,'cycle':cycle,
          'sha256':hashlib.sha256(raw).hexdigest(),'payload':data}
     if passive:
         rho=uactive[:,0];bm=np.maximum(np.sqrt(np.sum(bactive*bactive,axis=1)),1e-10)

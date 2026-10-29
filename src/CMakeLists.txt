@@ -84,6 +84,7 @@ add_executable(
         mesh/meshblock_tree.cpp
         mesh/mesh_refinement.cpp
         mesh/refinement_criteria.cpp
+        mesh/restart_prolongation.cpp
 
         mhd/mhd.cpp
         mhd/mhd_corner_e.cpp
@@ -119,6 +120,7 @@ add_executable(
         outputs/pdf.cpp
 
         pgen/pgen.cpp
+        pgen/restart_refinement.cpp
         pgen/tests/advection.cpp
         pgen/tests/collapse.cpp
         pgen/tests/cpaw.cpp

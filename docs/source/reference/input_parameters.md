@@ -76,7 +76,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `basename` | string | required | outputs.cpp:L93 |
 
 ## Input Block: `<mesh>`
-**Used by**: mesh.cpp
+**Used by**: mesh.cpp, build_tree.cpp, main.cpp
 
 | Parameter | Type | Default | Source |
 |-----------|------|---------|--------|
@@ -90,6 +90,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `ox1_bc` | string | required | mesh.cpp:L81 |
 | `ox2_bc` | string | required | mesh.cpp:L120 |
 | `ox3_bc` | string | required | mesh.cpp:L147 |
+| `refine_on_restart` | bool | false | build_tree.cpp; [uniform restart refinement](../modules/cgl_amr.md#uniform-refinement-during-restart) |
 | `x1max` | Real | required | mesh.cpp:L57 |
 | `x1min` | Real | required | mesh.cpp:L56 |
 | `x2max` | Real | required | mesh.cpp:L59 |

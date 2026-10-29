@@ -19,8 +19,9 @@ MHD using PLM reconstruction, the HLLE solver, primitive AMR prolongation, and
 LF+RKL2 STS. Other combinations may share the same implementation but should
 be qualified separately.
 
-Passive CGL rejects AMR/SMR. LF chunking must remain off
-(`time/cgl_lf_max_chunk_ratio = 0`) on refined meshes. Historical rehearsals
+Passive CGL rejects runtime AMR/SMR; the uniform restart transfer below also
+supports passive CGL. LF chunking must remain off
+(`time/cgl_lf_max_chunk_ratio = 0`) on runtime AMR/SMR meshes. Historical rehearsals
 below predate the restored finite two-tier limiter; current qualification and
 the 384³-to-768³ continuations are recorded in the
 [rebuild work order](https://github.com/dfielding14/athenak/blob/CGL-STS-LF/docs/cgl_lf_surgical_rebuild_work_order.md).
@@ -127,8 +128,80 @@ refinement, derefinement, and load balancing.
 | CGL-aware boundary behavior | `src/bvals/physics/bfield_bcs.cpp` |
 | AMR-derived fields and output resizing | `src/mesh/refinement_criteria.cpp`, `src/outputs/derived_variables.cpp` |
 | Focused AMR problem generator and repair histories | `src/pgen/tests/divb_amr.cpp` |
+| Uniform restart refinement: mesh construction, source patches, native transfer | `src/mesh/build_tree.cpp`, `src/pgen/restart_refinement.cpp`, `src/mesh/restart_prolongation.cpp` |
 
 ## Configuration
+
+### Uniform refinement during restart
+
+To double the resolution everywhere while restarting on a larger allocation:
+
+```sh
+srun -n 512 ./athena -r coarse.rst mesh/refine_on_restart=true
+```
+
+The source restart output must use `single_file_per_rank = false` to produce
+one shared file. Keep this setting for any fine checkpoint you intend to refine
+again.
+
+For a $512^3$ source with $128^3$ MeshBlocks, this creates a $1024^3$ uniform
+mesh with 512 blocks, still $128^3$ each. The physical box is unchanged.
+Rank assignment uses the **final** block count, so 512 ranks can read a
+checkpoint containing only 64 blocks. The target remains a uniform root grid;
+this does not enable runtime AMR or add work to subsequent timesteps.
+
+Omit mesh and block dimensions from restart overlays so the checkpoint supplies
+them. If supplied, they must match the **source checkpoint**; do not double
+`mesh/nx1`, `nx2`, or `nx3` yourself. AthenaK derives the doubled dimensions and
+records them in subsequent outputs. For later restarts, avoid passing the
+original coarse input deck with `-i`, since it can overwrite those saved fine
+dimensions. Use the fine checkpoint's parameters and override only the settings
+you need to change.
+
+`mesh/refine_on_restart` is reset to `false` after use: an ordinary restart
+continues at the new resolution. Explicitly setting it again performs another
+factor-of-two refinement from that checkpoint.
+
+This path requires a shared checkpoint from an unrefined, uniform, 3D periodic
+Newtonian MHD run with cubic cells. It supports ideal/isothermal MHD, active CGL,
+and passive CGL with either isothermal or adiabatic gas, including CGL LF and
+pgen cooling.
+Block dimensions must be even; block sizes, ghost count, and physical domain
+must remain unchanged. Rank-local files, SMR/AMR checkpoints (including AMR
+repair metadata), particles, and coupled or relativistic physics are rejected.
+The number of ranks must not exceed the final block count.
+The cubic-cell restriction follows the existing magnetic prolongation operator;
+stretched grids require a separate qualification and correction of that operator.
+
+The transfer reuses native conservative cell prolongation and constrained-
+transport face prolongation. Interpolation halos come from source owned cells
+and faces, not potentially stale checkpoint ghosts. Active CGL uses the native
+CGL pressure projection and reports any repair counts on startup. Passive CGL
+transfers its conserved $J/A$ variables and, when present, the independent gas
+energy. Because passive pressures are nonlinear functions of $J/A$, density,
+and magnetic field, their volume averages need not be preserved exactly.
+
+No physical timestep or forcing update occurs during transfer. Time, cycle,
+forcing state, and cooling controller state retain normal restart semantics;
+the timestep and LF/STS limits are recalculated on the fine mesh. A transfer-only
+run can use `time/nlim` equal to the saved cycle, producing a fine checkpoint
+through normal final output.
+
+Run the focused tests from the repository root with a double-precision,
+MPI-enabled `built_in_pgens` executable and `mpirun` available:
+
+```sh
+ATHENAK_TEST_EXE=/absolute/path/to/athena PYTHONPATH=tst \
+  python3 -m pytest -q tst/test_suite/cgl/test_refine_on_restart.py
+```
+
+These CPU/MPI tests cover transfer onto more ranks than source blocks, native
+AMR equivalence, conservation and divergence with two and four ghost zones,
+stale ghosts, pressure floors, repeated and ordinary restarts, passive gas
+independence, and LF/forcing/cooling state. The non-MPI cases also pass a CPU
+Debug build with Kokkos bounds checking.
+Large GPU allocation and parallel-filesystem performance require separate
+production qualification.
 
 ### Common CGL and LF settings
 

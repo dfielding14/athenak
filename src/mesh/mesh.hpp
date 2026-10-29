@@ -15,6 +15,7 @@
 #include <cstdint>  // int32_t
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "athena.hpp"
 #include "diffusion/sts_types.hpp"
@@ -73,6 +74,11 @@ struct NeighborBlock {
 
 struct LogicalLocation {
   std::int32_t lx1, lx2, lx3, level;
+};
+
+struct RestartRefinement {
+  std::vector<int> source_gid_by_location;
+  int nmb_rootx1, nmb_rootx2, nmb_rootx3;
 };
 
 //----------------------------------------------------------------------------------------
@@ -160,6 +166,7 @@ class Mesh {
   MeshBlockPack* pmb_pack;                 // container for MeshBlocks on this rank
   std::unique_ptr<ProblemGenerator> pgen;  // class containing functions to set ICs
   MeshRefinement *pmr=nullptr;             // mesh refinement data/functions (if needed)
+  std::unique_ptr<RestartRefinement> restart_refinement;
 
   // functions
   void BuildTreeFromScratch(ParameterInput *pin);

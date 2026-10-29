@@ -364,6 +364,10 @@ void Mesh::BuildTreeFromScratch(ParameterInput *pin) {
 
 void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
                                                      bool single_file_per_rank) {
+  const bool refine = pin->GetOrAddBoolean("mesh", "refine_on_restart", false);
+  const RegionIndcs requested_mb = mb_indcs;
+  const RegionIndcs requested_mesh = mesh_indcs;
+  const RegionSize requested_size = mesh_size;
   // At this point, the restartfile is already open and the ParameterInput (input file)
   // data has already been read in main(). Thus the file pointer is set to after <par_end>
   IOWrapperSizeT headeroffset = resfile.GetPosition(single_file_per_rank);
@@ -481,10 +485,107 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   delete [] idlist;
   if (!adaptive) max_level = current_level;
 
+  if (refine) {
+    const auto fail = [](const char *message) {
+      std::cout << "### FATAL ERROR: refine_on_restart " << message << std::endl;
+      std::exit(EXIT_FAILURE);
+    };
+    if (single_file_per_rank || multilevel || !strictly_periodic || !three_d ||
+        mb_indcs.nx2 <= 1 || mb_indcs.nx3 <= 1 || pin->DoesParameterExist(
+            "mesh_refinement", "cgl_amr_repair_restart_version")) {
+      fail("requires a shared, uniform 3D periodic checkpoint without SMR/AMR");
+    }
+    if (requested_mb.nx1 != mb_indcs.nx1 || requested_mb.nx2 != mb_indcs.nx2 ||
+        requested_mb.nx3 != mb_indcs.nx3 || requested_mb.ng != mb_indcs.ng) {
+      fail("requires unchanged MeshBlock dimensions and ghost-zone count");
+    }
+    if (requested_mesh.nx1 != mesh_indcs.nx1 ||
+        requested_mesh.nx2 != mesh_indcs.nx2 || requested_mesh.nx3 != mesh_indcs.nx3) {
+      fail("sets the target resolution from the checkpoint; "
+           "leave mesh dimensions unchanged");
+    }
+    if (requested_size.x1min != mesh_size.x1min ||
+        requested_size.x1max != mesh_size.x1max ||
+        requested_size.x2min != mesh_size.x2min ||
+        requested_size.x2max != mesh_size.x2max ||
+        requested_size.x3min != mesh_size.x3min ||
+        requested_size.x3max != mesh_size.x3max) {
+      fail("requires an unchanged physical domain");
+    }
+    const Real cell_scale = fmax(mesh_size.dx1, fmax(mesh_size.dx2, mesh_size.dx3));
+    const Real cell_tolerance = 32.0*std::numeric_limits<Real>::epsilon()*cell_scale;
+    if (!(mesh_size.dx1 > 0.0 && mesh_size.dx2 > 0.0 && mesh_size.dx3 > 0.0) ||
+        !std::isfinite(cell_scale) ||
+        fabs(mesh_size.dx1 - mesh_size.dx2) > cell_tolerance ||
+        fabs(mesh_size.dx1 - mesh_size.dx3) > cell_tolerance) {
+      fail("requires cubic cells for native magnetic prolongation");
+    }
+    if (mb_indcs.nx1 % 2 || mb_indcs.nx2 % 2 || mb_indcs.nx3 % 2) {
+      fail("requires even MeshBlock dimensions");
+    }
+    if (nmb_total != static_cast<std::int64_t>(nmb_rootx1)*nmb_rootx2*nmb_rootx3 ||
+        current_level != root_level) {
+      fail("requires an unrefined uniform root grid");
+    }
+    if (nmb_total > std::numeric_limits<int>::max()/8 ||
+        mesh_indcs.nx1 > std::numeric_limits<int>::max()/2 ||
+        mesh_indcs.nx2 > std::numeric_limits<int>::max()/2 ||
+        mesh_indcs.nx3 > std::numeric_limits<int>::max()/2 || root_level >= 30) {
+      fail("target mesh exceeds integer or logical-level limits");
+    }
+    restart_refinement = std::make_unique<RestartRefinement>();
+    auto &source = *restart_refinement;
+    source.nmb_rootx1 = nmb_rootx1;
+    source.nmb_rootx2 = nmb_rootx2;
+    source.nmb_rootx3 = nmb_rootx3;
+    source.source_gid_by_location.assign(nmb_total, -1);
+    for (int gid = 0; gid < nmb_total; ++gid) {
+      const auto &loc = lloc_eachmb[gid];
+      if (loc.level != root_level || loc.lx1 < 0 || loc.lx1 >= nmb_rootx1 ||
+          loc.lx2 < 0 || loc.lx2 >= nmb_rootx2 || loc.lx3 < 0 || loc.lx3 >= nmb_rootx3) {
+        fail("source block locations do not form a uniform root grid");
+      }
+      const int index = (loc.lx3*nmb_rootx2 + loc.lx2)*nmb_rootx1 + loc.lx1;
+      if (source.source_gid_by_location[index] != -1) {
+        fail("source contains duplicate block locations");
+      }
+      source.source_gid_by_location[index] = gid;
+    }
+
+    nmb_total *= 8;
+    nmb_rootx1 *= 2;
+    nmb_rootx2 *= 2;
+    nmb_rootx3 *= 2;
+    ++root_level;
+    max_level = root_level;
+    mesh_indcs.nx1 *= 2;
+    mesh_indcs.nx2 *= 2;
+    mesh_indcs.nx3 *= 2;
+    mesh_indcs.ie = mesh_indcs.is + mesh_indcs.nx1 - 1;
+    mesh_indcs.je = mesh_indcs.js + mesh_indcs.nx2 - 1;
+    mesh_indcs.ke = mesh_indcs.ks + mesh_indcs.nx3 - 1;
+    mesh_size.dx1 *= 0.5;
+    mesh_size.dx2 *= 0.5;
+    mesh_size.dx3 *= 0.5;
+    delete [] cost_eachmb;
+    delete [] rank_eachmb;
+    delete [] lloc_eachmb;
+    cost_eachmb = new float[nmb_total];
+    rank_eachmb = new int[nmb_total];
+    lloc_eachmb = new LogicalLocation[nmb_total];
+    for (int gid = 0; gid < nmb_total; ++gid) cost_eachmb[gid] = 1.0;
+    pin->SetInteger("mesh", "nx1", mesh_indcs.nx1);
+    pin->SetInteger("mesh", "nx2", mesh_indcs.nx2);
+    pin->SetInteger("mesh", "nx3", mesh_indcs.nx3);
+    pin->SetBoolean("mesh", "refine_on_restart", false);
+  }
+
   // rebuild the MeshBlockTree
   ptree = std::make_unique<MeshBlockTree>(this);
   ptree->CreateRootGrid();
-  for (int i=0; i<nmb_total; i++) {ptree->AddNodeWithoutRefinement(lloc_eachmb[i]);}
+  if (!refine) {
+    for (int i=0; i<nmb_total; i++) {ptree->AddNodeWithoutRefinement(lloc_eachmb[i]);}
+  }
 
   // check the tree structure by making sure total # of MBs counted in tree same as the
   // number read from the restart file.
