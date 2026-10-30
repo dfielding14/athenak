@@ -1,7 +1,7 @@
 #!/bin/bash
 set -euo pipefail
 
-# Produce an immutable HIP/MPI executable for CGL-LF work on Frontier.
+# Produce an immutable HIP/MPI executable for CGL-LF cooling runs on Frontier.
 # Run this from a clean committed checkout; artifacts are retained beneath CGL_ROOT.
 
 CGL_ROOT="${CGL_ROOT:-/lustre/orion/ast207/proj-shared/dfielding/CGL}"
@@ -62,7 +62,7 @@ fi
 
 cmake -S "${SRC_DIR}" -B "${BUILD_DIR}" \
   -DCMAKE_BUILD_TYPE=Release \
-  -DPROBLEM=built_in_pgens \
+  -DPROBLEM=cgl_lf_cooling \
   -DAthena_ENABLE_MPI=ON \
   -DKokkos_ENABLE_HIP=ON \
   -DKokkos_ARCH_ZEN3=ON \

@@ -12,7 +12,7 @@ workflows, use [CGL Landau-Fluid Validation](cgl_landau_fluid_validation.md).
 | CGL EOS and primitive recovery | `src/eos/cgl_mhd.cpp`, `src/eos/ideal_c2p_mhd.hpp`, `src/eos/cgl_physics.hpp` | CGL pressure recovery, conserved anisotropy, finite backup relaxation, limiter predicates, heat-flux ratio helpers. |
 | LF parabolic operator | `src/diffusion/cgl_landau_fluid.hpp`, `src/diffusion/cgl_landau_fluid.cpp`, `src/diffusion/cgl_landau_fluid_arithmetic.hpp` | Runtime parsing, face-state construction, LF heat-flux kernels, diagnostics, profiling, safe arithmetic. |
 | MHD integration | `src/mhd/mhd.cpp`, `src/mhd/mhd_tasks.cpp`, `src/mhd/mhd_sts.cpp`, `src/mhd/rsolvers/hlle_cgl.hpp` | Construction, task graph, STS sweep lifecycle, passive/active CGL fluxes, LF-only fast paths. |
-| Diagnostics and tests | `src/outputs/history.cpp`, `src/pgen/tests/cgl_landau_fluid.cpp`, `src/pgen/tests/cgl_lf_paper.cpp`, `tst/scripts/cgl/`, `tst/test_suite/cgl/` | History columns, quantitative LF pgen, reduced paper pgen, regression workflows. |
+| Diagnostics and tests | `src/outputs/history.cpp`, `src/pgen/tests/cgl_landau_fluid.cpp`, `src/pgen/cgl_lf_paper.cpp`, `tst/scripts/cgl/`, `tst/test_suite/cgl/` | History columns, quantitative LF pgen, reduced paper pgen, regression workflows. |
 
 The LF closure is registered as the MHD parabolic process
 `mhd/cgl_heat_flux`. It is not ordinary isotropic conduction, and ordinary

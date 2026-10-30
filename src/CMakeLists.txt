@@ -121,14 +121,14 @@ add_executable(
 
         pgen/pgen.cpp
         pgen/restart_transfer.cpp
+        pgen/cgl_lf_paper.cpp
+        pgen/cgl_lf_cooling.cpp
         pgen/tests/advection.cpp
         pgen/tests/collapse.cpp
         pgen/tests/cpaw.cpp
         pgen/tests/cshock.cpp
         pgen/tests/cgl_fofc.cpp
         pgen/tests/cgl_landau_fluid.cpp
-        pgen/tests/cgl_lf_paper.cpp
-        pgen/tests/cgl_lf_cooling.cpp
         pgen/tests/cgl_lf_sbox.cpp
         pgen/tests/cgl_passive_validation.cpp
         pgen/tests/divb_amr.cpp
@@ -207,6 +207,9 @@ add_executable(
 
 if (${PROBLEM} STREQUAL "turb")
   set_source_files_properties(pgen/turb.cpp PROPERTIES COMPILE_DEFINITIONS TURB_USER_PROBLEM)
+elseif (${PROBLEM} STREQUAL "cgl_lf_cooling")
+  set_source_files_properties(pgen/cgl_lf_cooling.cpp
+      PROPERTIES COMPILE_DEFINITIONS CGL_COOLING_USER_PROBLEM)
 elseif (NOT ${PROBLEM} STREQUAL "built_in_pgens")
   target_sources(athena
       PRIVATE

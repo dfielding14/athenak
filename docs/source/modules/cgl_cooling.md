@@ -6,6 +6,17 @@ $\Delta p=p_\perp-p_\parallel$. It supports active CGL and passive CGL on an
 adiabatic MHD background, on a uniform periodic mesh with or without
 Landau-fluid conduction and collisions.
 
+Build the production cooling executable with:
+
+```sh
+cmake -S . -B build-cgl-cooling -DPROBLEM=cgl_lf_cooling
+cmake --build build-cgl-cooling --parallel
+```
+
+CMake resolves this name to `src/pgen/cgl_lf_cooling.cpp`. This custom build
+always selects cooling, independent of `problem/pgen_name`. Keep the following
+name in input files so they also work with a `built_in_pgens` executable.
+
 In an existing `cgl_lf_paper` input, change/add:
 
 ```ini
@@ -135,7 +146,7 @@ New adiabatic passive checkpoints contain the extra gas energy and use their
 own passive encoding. Start this comparison from initial conditions; changing
 `passive_eos` on an isothermal passive checkpoint is rejected.
 
-The cooling implementation stays in `src/pgen/tests/cgl_lf_cooling.cpp`. A
+The cooling implementation stays in `src/pgen/cgl_lf_cooling.cpp`. A
 callback after the generic history reduction would avoid the small extra
 collective but require changing the output framework;
 reading the `.hst` file would add I/O and restart dependencies. Neither is needed.

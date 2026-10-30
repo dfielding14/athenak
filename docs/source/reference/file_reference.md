@@ -154,6 +154,8 @@ Complete reference of all source files in AthenaK organized by directory.
 ### Astrophysical Problems
 - **`blast.cpp`** - Blast waves
 - **`turb.cpp`** - Driven turbulence
+- **`cgl_lf_paper.cpp`** - CGL forced turbulence and diagnostics
+- **`cgl_lf_cooling.cpp`** - CGL forced turbulence with adaptive cooling
 - **`gr_torus.cpp`** - Relativistic torus
 - **`mri3d.cpp`** - 3D MRI
 - **`dyngr_tov.cpp`** - TOV neutron star

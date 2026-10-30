@@ -276,3 +276,9 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
       &Cooling::Source, &cooling, none, pmhd->id.cglcoll);
   if (task == none) Fail("requires the standalone MHD collision task");
 }
+
+#ifdef CGL_COOLING_USER_PROBLEM
+void ProblemGenerator::UserProblem(ParameterInput *pin, const bool restart) {
+  CGLLFCooling(pin, restart);
+}
+#endif

@@ -738,11 +738,23 @@ python3 scripts/frontier/cgl_lf_frontier.py self-test
 ```
 
 For an actual Frontier debug-only qualification campaign, first build an
-immutable HIP/MPI executable from a clean committed checkout using:
+immutable HIP/MPI executable from a clean committed checkout. Use the
+module/path setup in `scripts/frontier/build_cgl_lf_frontier.sh`, but configure
+a separate qualification build with `built_in_pgens` so the input can select
+the validation or paper generator:
 
 ```bash
-scripts/frontier/build_cgl_lf_frontier.sh
+cmake -S "$SRC_DIR" -B "$BUILD_DIR" \
+  -DCMAKE_BUILD_TYPE=Release -DPROBLEM=built_in_pgens \
+  -DAthena_ENABLE_MPI=ON -DKokkos_ENABLE_HIP=ON \
+  -DKokkos_ARCH_ZEN3=ON -DKokkos_ARCH_VEGA90A=ON \
+  -DCMAKE_CXX_COMPILER=CC
+cmake --build "$BUILD_DIR" --parallel 16
 ```
+
+The production build script selects `cgl_lf_cooling` unconditionally and is
+not suitable for these multi-pgen qualification runs. Retain the executable,
+source revision, configuration, and build logs with the campaign evidence.
 
 Retain a Git bundle beneath the prescribed project root containing that source
 revision. Then initialize the project area and prepare a reduced validation
