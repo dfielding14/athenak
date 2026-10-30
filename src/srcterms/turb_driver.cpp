@@ -924,13 +924,9 @@ void TurbulenceDriver::RenderForce() {
   mode_amp_real_.template sync<DevExeSpace>();
   mode_amp_imag_.template sync<DevExeSpace>();
   par_for(
-      "turb_force_zero", DevExeSpace(), 0, nmb - 1, 0, 2, ks, ke, js, je, is, ie,
-      KOKKOS_LAMBDA(int m, int dir, int k, int j, int i) {
-        force_(m, dir, k, j, i) = 0.0;
-      });
-  par_for(
       "turb_force_render", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
       KOKKOS_LAMBDA(int m, int k, int j, int i) {
+        Real sum[3] = {};
         for (int n = 0; n < mode_count_; ++n) {
           Real forc_real =
               (xcos_(m, n, i) * ycos_(m, n, j) - xsin_(m, n, i) * ysin_(m, n, j)) *
@@ -943,10 +939,11 @@ void TurbulenceDriver::RenderForce() {
               (ycos_(m, n, j) * zcos_(m, n, k) - ysin_(m, n, j) * zsin_(m, n, k)) *
                   xsin_(m, n, i);
           for (int dir = 0; dir < 3; ++dir) {
-            force_(m, dir, k, j, i) += mode_amp_real_.d_view(dir, n) * forc_real -
-                                        mode_amp_imag_.d_view(dir, n) * forc_imag;
+            sum[dir] += mode_amp_real_.d_view(dir, n) * forc_real -
+                        mode_amp_imag_.d_view(dir, n) * forc_imag;
           }
         }
+        for (int dir = 0; dir < 3; ++dir) force_(m, dir, k, j, i) = sum[dir];
       });
 }
 

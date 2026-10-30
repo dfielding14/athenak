@@ -5774,6 +5774,12 @@ def test_cgl_lf_paper_smoke_uses_projection_policy(
         "exclude_k_parallel_zero = true\n"
         f"exclude_modes = {exclude_modes} # selected modes and their conjugates\n", []
     )
+    assert choices["forcing_nhigh"] == "3"
+    if projection_policy == "mks24_alfvenic_perpendicular":
+        assert choices["forcing_mode"] == (
+            "alfvenic_perpendicular" if direction in ("1 0 0", "1 1 1")
+            else "alfvenic_z_perpendicular"
+        )
     assert choices["forcing_mean_field_direction"] == direction
     assert choices["forcing_exclude_k_parallel_zero"] == "true"
     assert choices["forcing_exclude_modes"] == exclude_modes
