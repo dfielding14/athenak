@@ -470,6 +470,12 @@ void Driver::RunSTSSweep(Mesh *pm) {
     }
     sts.first_chunk = (chunks == 0);
     sts.last_chunk = (sts.dt_sweep == remaining);
+    auto *mhd = pm->pmb_pack->pmhd;
+    if (sts.first_chunk && mhd != nullptr && mhd->has_sts_cgl_lf &&
+        mhd->pcgl_lf->stiffness_cycle == pm->ncycle) {
+      mhd->pcgl_lf->WriteStiffnessMap(sts.sweep == STSSweep::pre ? "pre" : "post",
+                                      sts.dt_sweep, sts.dt_parabolic_min, sts.nstages);
+    }
     for (int stage = 1; stage <= sts.nstages; ++stage) {
       SetSTSStage(stage);
       ExecuteTaskList(pm, "before_parabolic_stagen", stage);

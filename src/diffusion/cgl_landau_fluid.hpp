@@ -96,6 +96,8 @@ class CGLLandauFluid {
   CGLLFSTSFluxMode sts_flux_mode;
   parabolic::ParabolicIntegratorMode mode;
   CGLLFDiagnostics diagnostics;
+  int stiffness_cycle = -1;
+  void WriteStiffnessMap(const char *phase, Real dt_sweep, Real dt_sts, int nstages);
 
   void AddHeatFluxes(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
                      const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
@@ -122,6 +124,17 @@ class CGLLandauFluid {
   }
 
  private:
+  enum class TimestepSample { minimum, cells, faces };
+  enum FaceColumn {
+    status_col, density_col, ppar_col, pperp_col, bbar_col, bn_col, grad_b_col, nu_col,
+    qpar_col, qperp_col, t_par_col, b_par_col, t_perp_col, b_perp_col,
+    row_par_col, row_perp_col, face_columns
+  };
+  template<TimestepSample sample>
+  Real CalculateTimeStep(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
+                         const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
+                         const DvceArray1D<Real> &cell_dt_map,
+                         const DvceArray1D<int> &worst, const DvceArray3D<Real> &face_info);
   template<int DIR, bool CollectQ>
   void AddHeatFluxesDirection(const DvceArray5D<Real> &w, const DvceArray5D<Real> &bcc,
                               const DvceFaceFld4D<Real> &b, const EOS_Data &eos,
