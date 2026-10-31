@@ -10,16 +10,23 @@ import pytest
 ROOT = Path(__file__).resolve().parents[3]
 
 
-@pytest.mark.xfail(
-    strict=True,
-    reason="Accepted T-B4 sharp-contact limitation of A transport; see "
-           "docs/cgl_lf_surgical_rebuild_work_order.md",
-)
+@pytest.mark.parametrize("scattering", [
+    pytest.param(False, marks=pytest.mark.xfail(
+        strict=True, reason="Accepted T-B4 sharp-contact limitation of A transport")),
+    True,
+])
 @pytest.mark.parametrize("velocity", [10.0, -10.0])
-def test_weak_field_contact_remains_bounded(tmp_path, velocity):
+def test_weak_field_contact_remains_bounded(tmp_path, velocity, scattering):
+    deck = ROOT / "inputs/unit_tests/cgl_weak_field_transport.athinput"
+    if scattering:
+        source = deck.read_text() + (
+            "\n<mhd>\nmirror_limiter = true\nfirehose_limiter = true\n"
+            "limiter_nu_coll = 64\nbackup_limiters = true\nlimiter_backup_nu = 1e10\n"
+        )
+        deck = tmp_path / "limited.athinput"
+        deck.write_text(source)
     result = subprocess.run(
-        [str(Path("athena").resolve()), "-i",
-         str(ROOT / "inputs/unit_tests/cgl_weak_field_transport.athinput"),
+        [str(Path("athena").resolve()), "-i", str(deck),
          f"problem/weak_field_velocity={velocity}"],
         cwd=tmp_path, capture_output=True, text=True, check=False,
     )
