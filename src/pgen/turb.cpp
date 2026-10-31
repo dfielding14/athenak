@@ -28,6 +28,7 @@ void TurbulentHistory(HistoryData *pdata, Mesh *pm);
 //  \brief Problem Generator for turbulence
 
 void ProblemGenerator::Turb(ParameterInput *pin, const bool restart) {
+  user_hist_func = TurbulentHistory;
   if (restart) return;
   MeshBlockPack *pmbp = pmy_mesh_->pmb_pack;
   auto &indcs = pmy_mesh_->mb_indcs;
@@ -38,9 +39,6 @@ void ProblemGenerator::Turb(ParameterInput *pin, const bool restart) {
        << "<hydro> or <mhd> block in input file" << std::endl;
     exit(EXIT_FAILURE);
   }
-
-  // enroll user history function
-  user_hist_func = TurbulentHistory;
 
   // capture variables for kernel
   int &is = indcs.is; int &ie = indcs.ie;

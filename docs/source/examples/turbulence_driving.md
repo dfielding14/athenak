@@ -24,6 +24,10 @@ build-turb/src/athena -d run/turb_amr_exclude \
 The `-d` option keeps each case's `bin/` and history files in its run
 directory.
 
+The built-in `turb` generator restores its user-history callback on restart.
+Use the same forcing settings and checkpoint to continue its modal forcing
+state and diagnostic history.
+
 ## Cases
 
 ### Constant Energy Injection
