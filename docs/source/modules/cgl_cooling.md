@@ -67,6 +67,9 @@ The isolated, unclipped box follows $G(a)$ for any timestep or history interval.
 Thus cooling cannot drive that reference box below its target. Fluid pressure
 work and other changes between samples can still move the actual thermal energy
 below target. Cooling is off when the last sample has $E_s\leq E_*$.
+For a large decrement the source computes the retained pressure and thermal
+energy directly, avoiding cancellation when the target is tiny compared with
+the initial pressure. The ordinary small-step decrement retains its accuracy.
 The user history retains `cool_alpha`, the initial fractional cooling rate
 $\max(1-E_*/E_s,0)/\tau$ at the last scheduled sample. The effective cooling rate
 decreases between samples. The response time should be short compared with the

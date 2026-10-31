@@ -454,6 +454,25 @@ def test_cooling_long_interval_relaxes_to_target(tmp_path, history, adiabatic):
         assert_background_unchanged(states[0], final)
 
 
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_cooling_large_contrast_retains_target(tmp_path, adiabatic):
+    target = 1e-16
+    source = input_text(ppar=2, pperp=2, target=target, tau=1e-5,
+                        floor=1e-27, nlim=1)
+    source += "\n<problem>\nb0 = 1e-4\n"
+    if adiabatic:
+        source += adiabatic_settings(pgas=2)
+    states = run(tmp_path / "contrast", source, flags=("time/tlim=0.001",),
+                 adiabatic=adiabatic)
+    pp, pt = pressures(states[1])
+    # The magnetic energy sets an absolute storage error of about one ULP.
+    np.testing.assert_allclose(pp, target, rtol=0, atol=2e-24)
+    np.testing.assert_allclose(pt, target, rtol=0, atol=2e-24)
+    if adiabatic:
+        np.testing.assert_allclose(gas_pressure(states[1]), target, rtol=0, atol=2e-24)
+    assert_background_unchanged(states[0], states[1])
+
+
 def test_legacy_cooling_restart_waits_for_thermal_sample(tmp_path):
     source = input_text(history="dcycle = 3", nlim=1)
     seed = run(tmp_path / "seed", source)[1]

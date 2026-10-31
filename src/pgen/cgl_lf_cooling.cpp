@@ -67,6 +67,9 @@ struct Cooling {
     const Real excess_fraction = target_fraction == 0.0 ? 1.0 :
         remaining/(target_fraction + remaining);
     const Real fraction = excess_fraction*(-std::expm1(-mesh->dt/tau));
+    const Real retained = target_fraction == 0.0 ? std::exp(-mesh->dt/tau) :
+        (target_fraction + remaining*std::exp(-mesh->dt/tau))/
+        (target_fraction + remaining);
     if (fraction == 0.0) return TaskStatus::complete;
     const auto &indcs = mesh->mb_indcs;
     const int ni = indcs.nx1 + 2*indcs.ng;
@@ -90,9 +93,12 @@ struct Cooling {
         const Real floor = fmax(eos.pfloor, fmax(rho*eos.tfloor,
             eos.sfloor*pow(rho, eos.gamma)))/(eos.gamma - 1.0);
         const Real old_energy = u(m,IEG,k,j,i);
-        Real energy = fmax(old_energy - fraction*w(m,IEG,k,j,i), (floor + ek) + em);
+        const Real thermal_minimum = fraction > 0.5 ?
+            fmax(retained*w(m,IEG,k,j,i), floor) : floor;
+        Real energy = fraction > 0.5 ? (thermal_minimum + ek) + em :
+            fmax(old_energy - fraction*w(m,IEG,k,j,i), (floor + ek) + em);
         // Retain a representable thermal floor without adding energy.
-        while (energy < old_energy && energy - ek - em < floor) {
+        while (energy < old_energy && energy - ek - em < thermal_minimum) {
           energy = Kokkos::nextafter(energy, std::numeric_limits<Real>::infinity());
         }
         if (energy < old_energy) {
@@ -117,10 +123,12 @@ struct Cooling {
       if (decrement == 0.0) return;
       // Limit the common decrement, never floor the two pressures independently.
       if (delta >= 0.0) {
-        ppar = fmax(ppar - decrement, cooling_floor);
+        ppar = fmax(fraction > 0.5 ? retained*piso - TWO_3RDS*delta :
+                    ppar - decrement, cooling_floor);
         pperp = ppar + delta;
       } else {
-        pperp = fmax(pperp - decrement, cooling_floor);
+        pperp = fmax(fraction > 0.5 ? retained*piso + ONE_3RD*delta :
+                     pperp - decrement, cooling_floor);
         ppar = pperp - delta;
       }
       const Real bx = bcc(m,IBX,k,j,i);
@@ -140,7 +148,18 @@ struct Cooling {
       }
       const Real old_energy = u(m,IEN,k,j,i);
       Real energy = old_energy - 1.5*decrement;
-      if (energy == old_energy) return;
+      if (fraction > 0.5) {
+        const Real ek = (0.5/u(m,IDN,k,j,i))*(SQR(u(m,IM1,k,j,i)) +
+            SQR(u(m,IM2,k,j,i)) + SQR(u(m,IM3,k,j,i)));
+        const Real em = 0.5*(SQR(bx) + SQR(by) + SQR(bz));
+        const Real thermal = 0.5*ppar + pperp;
+        energy = (thermal + ek) + em;
+        // Near-complete cooling retains the small thermal remainder directly.
+        while (energy < old_energy && energy - ek - em < thermal) {
+          energy = Kokkos::nextafter(energy, std::numeric_limits<Real>::infinity());
+        }
+      }
+      if (energy >= old_energy) return;
       Real anisotropy = CGLConservedAnisotropy(u(m,IDN,k,j,i), ppar, pperp, bmag);
       // Keep the pressure cache consistent with the stored energy and anisotropy.
       CGLRecoverPressuresFromTotalEnergyAndAnisotropy(
