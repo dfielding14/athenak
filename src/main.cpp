@@ -308,6 +308,11 @@ int main(int argc, char *argv[]) {
   for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
     pinput->GetOrAddBoolean("mesh", key, false);
   }
+  // Permit a command-line cap on inputs and passive checkpoints predating the option.
+  if (pinput->DoesParameterExist("mhd", "eos") &&
+      pinput->GetString("mhd", "eos") == "cgl") {
+    pinput->GetOrAddString("mhd", "passive_max_pressure_ratio", "0");
+  }
   pinput->ModifyFromCmdline(argc, argv);
   for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
     if (pinput->GetBoolean("mesh", key) && (!res_flag || single_file_per_rank)) {

@@ -234,11 +234,13 @@ void SingleC2P_CGLMHDFromMagneticMoment(MHDCons1D &u, const EOS_Data &eos,
                                         HydPrim1D &w, bool &dfloor_used,
                                         bool &efloor_used, bool &tfloor_used,
                                         bool &bfloor_used,
-                                        const bool reject_nonfinite = false) {
+                                        const bool reject_nonfinite = false,
+                                        bool *ratio_repaired = nullptr,
+                                        Real *pre_ratio = nullptr) {
   if (eos.passive) {
     const Real bmag = sqrt(SQR(u.bx) + SQR(u.by) + SQR(u.bz));
     cgl::PassiveMomentC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used, bmag,
-                          reject_nonfinite);
+                          reject_nonfinite, ratio_repaired, pre_ratio);
     return;
   }
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
@@ -342,9 +344,11 @@ KOKKOS_INLINE_FUNCTION
 void SingleC2P_CGLMHD(MHDCons1D &u, const EOS_Data &eos,
                         HydPrim1D &w,
                         bool &dfloor_used, bool &efloor_used, bool &tfloor_used,
-                        bool &bfloor_used) {
+                        bool &bfloor_used, bool *ratio_repaired = nullptr,
+                        Real *pre_ratio = nullptr) {
   if (eos.passive) {
-    cgl::PassiveC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used);
+    cgl::PassiveC2P(u, eos, w, dfloor_used, efloor_used, bfloor_used,
+                      ratio_repaired, pre_ratio);
     return;
   }
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);

@@ -138,6 +138,7 @@ Complete list of all input parameters by block, extracted from source code.
 | `eos` | string | required | mhd.cpp:L60 |
 | `passive` | bool | false; true enables [passive thermodynamics](../modules/cgl_passive.md) on uniform periodic meshes | cgl_mhd.cpp |
 | `passive_eos` | string | isothermal; adiabatic adds independent MHD energy with finite `gamma > 1`; isothermal requires positive `iso_sound_speed` | cgl_mhd.cpp |
+| `passive_max_pressure_ratio` | Real | 0 disables; otherwise finite and at least 1; caps either passive EOS pressure ratio at fixed passive thermal energy | cgl_mhd.cpp |
 | `cgl_heat_flux` | string | absent | cgl_landau_fluid.cpp |
 | `cgl_heat_flux_integrator` | string | sts | cgl_landau_fluid.cpp |
 | `lf_k_parallel` | Real | required when CGL LF is active | cgl_landau_fluid.cpp |

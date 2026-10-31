@@ -6,9 +6,12 @@
 //! \file cgl_mhd.cpp
 //! \brief derived class that implements ideal gas EOS in nonrelativistic mhd
 
+#include <cctype>
+#include <cerrno>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
+#include <limits>
 #include <string>
 
 #include "athena.hpp"
@@ -19,6 +22,30 @@
 #include "diffusion/cgl_landau_fluid.hpp"
 
 namespace {
+
+template <typename Recovery>
+void RecoverWithRatioDiagnostics(const char *name, const int ncells, const bool enabled,
+                                 const Recovery &recover, int &nd, int &ne, int &nt,
+                                 EventCounters &events) {
+  if (enabled) {
+    int count = 0;
+    Real maximum = 0.0;
+    Kokkos::parallel_reduce(name, Kokkos::RangePolicy<>(DevExeSpace(), 0, ncells),
+        recover,
+        Kokkos::Sum<int>(nd), Kokkos::Sum<int>(ne), Kokkos::Sum<int>(nt),
+        Kokkos::Sum<int>(count), Kokkos::Max<Real>(maximum));
+    events.passive_ratio_clamps += count;
+    events.passive_ratio_max = fmax(events.passive_ratio_max, maximum);
+  } else {
+    // Keep the original three floor reductions when the cap is disabled or testing FOFC.
+    Kokkos::parallel_reduce(name, Kokkos::RangePolicy<>(DevExeSpace(), 0, ncells),
+    KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
+      int unused_count = 0;
+      Real unused_maximum = 0.0;
+      recover(idx, sumd, sume, sumt, unused_count, unused_maximum);
+    }, Kokkos::Sum<int>(nd), Kokkos::Sum<int>(ne), Kokkos::Sum<int>(nt));
+  }
+}
 
 void RequireNonnegativeCGLParameter(const char *name, const Real value) {
   if (!std::isfinite(value) || value < 0.0) {
@@ -76,6 +103,21 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
     EquationOfState("mhd", pp, pin) {
   eos_data.is_ideal = true;
   eos_data.is_cgl = true;
+  const std::string ratio_text =
+      pin->GetOrAddString("mhd", "passive_max_pressure_ratio", "0");
+  char *ratio_end = nullptr;
+  errno = 0;
+  const double ratio = std::strtod(ratio_text.c_str(), &ratio_end);
+  const bool ratio_parsed = ratio_end != ratio_text.c_str();
+  while (std::isspace(static_cast<unsigned char>(*ratio_end))) ++ratio_end;
+  if (!ratio_parsed || *ratio_end != '\0' || errno == ERANGE || !std::isfinite(ratio) ||
+      (ratio != 0.0 && ratio < 1.0) || ratio > std::numeric_limits<Real>::max()) {
+    std::cout << "### FATAL ERROR: <mhd>/passive_max_pressure_ratio must be zero or "
+              << "finite and >= 1"
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+  eos_data.passive_max_pressure_ratio = static_cast<Real>(ratio);
   RequirePositiveCGLParameter("dfloor", eos_data.dfloor);
   RequirePositiveCGLParameter("pfloor", eos_data.pfloor);
   RequirePositiveCGLParameter("bfloor", eos_data.bfloor);
@@ -173,9 +215,12 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
   const int nkji = (ku - kl + 1)*nji;
   const int nmkji = nmb*nkji;
 
+  const auto owned = pmy_pack->pmesh->mb_indcs;
   int nfloord_=0, nfloore_=0, nfloort_=0;
-  Kokkos::parallel_reduce("mhd_c2p",Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
+  RecoverWithRatioDiagnostics("mhd_c2p", nmkji,
+      eos.passive && eos.passive_max_pressure_ratio > 0.0 && !only_testfloors,
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt,
+                int &sumratio, Real &maxratio_) {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/ni;
@@ -240,7 +285,10 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
     // (inline function in ideal_c2p_mhd.hpp file)
     HydPrim1D w;
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
-    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used);
+    bool ratio_repaired = false;
+    Real pre_ratio = 0.0;
+    SingleC2P_CGLMHD(u, eos, w, dfloor_used, efloor_used, tfloor_used, bfloor_used,
+                     &ratio_repaired, &pre_ratio);
 
     // set FOFC flag and quit loop if this function called only to check floors
     if (only_testfloors) {
@@ -271,10 +319,15 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
         cons(m,IAN,k,j,i) = u.mu;
         sumd++;
       }
-      if (efloor_used) {
+      if (efloor_used || ratio_repaired) {
         cons(m,IEN,k,j,i) = u.e;
         cons(m,IAN,k,j,i) = u.mu;
-        sume++;
+        if (efloor_used) sume++;
+      }
+      if (ratio_repaired && i >= owned.is && i <= owned.ie && j >= owned.js &&
+          j <= owned.je && k >= owned.ks && k <= owned.ke) {
+        ++sumratio;
+        maxratio_ = fmax(maxratio_, pre_ratio);
       }
       if (bfloor_used) {
         if (eos.passive) cons(m,IEN,k,j,i) = u.e;
@@ -306,7 +359,7 @@ void CGLMHD::ConsToPrim(DvceArray5D<Real> &cons, const DvceFaceFld4D<Real> &b,
         prim(m,n,k,j,i) = cons(m,n,k,j,i)/u.d;
       }
     }
-  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
+  }, nfloord_, nfloore_, nfloort_, pmy_pack->pmesh->ecounter);
 
   // store appropriate counters
   if (only_testfloors) {
@@ -347,10 +400,12 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
   const int nkji = (ku - kl + 1)*nji;
   const int nmkji = nmb*nkji;
 
+  const auto owned = pmy_pack->pmesh->mb_indcs;
   int nfloord_=0, nfloore_=0, nfloort_=0;
-  Kokkos::parallel_reduce("mhd_cgl_lf_refresh_prim",
-  Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt) {
+  RecoverWithRatioDiagnostics("mhd_cgl_lf_refresh_prim", nmkji,
+      eos.passive && eos.passive_max_pressure_ratio > 0.0,
+  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt,
+                int &sumratio, Real &maxratio_) {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/ni;
@@ -377,8 +432,17 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     }
     HydPrim1D w;
     bool dfloor_used=false, efloor_used=false, tfloor_used=false, bfloor_used=false;
+    bool ratio_repaired = false;
+    Real pre_ratio = 0.0;
     SingleC2P_CGLMHDFromMagneticMoment(u, eos, w, dfloor_used, efloor_used,
-                                       tfloor_used, bfloor_used, strict_lf);
+                                       tfloor_used, bfloor_used, strict_lf,
+                                       &ratio_repaired, &pre_ratio);
+
+    if (ratio_repaired && i >= owned.is && i <= owned.ie && j >= owned.js &&
+        j <= owned.je && k >= owned.ks && k <= owned.ke) {
+      ++sumratio;
+      maxratio_ = fmax(maxratio_, pre_ratio);
+    }
 
     // Independent gas energy and its primitive cache stay frozen through LF.
     if (dfloor_used) {
@@ -393,10 +457,9 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     }
     if (efloor_used) {
       cons(m,IEN,k,j,i) = u.e;
-      cons(m,IAN,k,j,i) = u.mu;
       sume++;
     }
-    if (bfloor_used) {
+    if (efloor_used || bfloor_used || ratio_repaired) {
       cons(m,IAN,k,j,i) = u.mu;
     }
     prim(m,IDN,k,j,i) = w.d;
@@ -407,7 +470,7 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     prim(m,IPP,k,j,i) = w.pp;
 
     (void) sumt;
-  }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_), Kokkos::Sum<int>(nfloort_));
+  }, nfloord_, nfloore_, nfloort_, pmy_pack->pmesh->ecounter);
 
   pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
   pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;
@@ -543,6 +606,7 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
   const Real pfloor = eos_data.pfloor;
   const Real bfloor = eos_data.bfloor;
   const bool passive = eos_data.passive;
+  const Real max_ratio = eos_data.passive_max_pressure_ratio;
 
   par_for("mhd_cgl_mub_to_anis", DevExeSpace(), 0, (nmb-1), kl, ku, jl, ju, il, iu,
   KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
@@ -555,7 +619,7 @@ void CGLMHD::CGLMagneticMomentToAnisotropy(DvceArray5D<Real> &cons,
       if (bmag <= bfloor) { pp = TWO_3RDS*cons(m,IEN,k,j,i); pt = pp; }
       const auto q = cgl::PassiveEncodeFloored(cons(m,IDN,k,j,i),
                                               fmax(pp, pfloor), fmax(pt, pfloor),
-                                              beff, pfloor);
+                                              beff, pfloor, max_ratio);
       cons(m,IEN,k,j,i) = q.j;
       cons(m,IAN,k,j,i) = q.a;
       cgl::PassiveDecode(cons(m,IDN,k,j,i), q, beff,

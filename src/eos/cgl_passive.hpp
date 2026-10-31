@@ -49,13 +49,21 @@ void PassiveDecode(const Real rho, const PassivePair q, const Real bmag,
 // is used only after an actual repair, never on an unchanged admissible state.
 KOKKOS_INLINE_FUNCTION
 PassivePair PassiveEncodeFloored(const Real rho, const Real ppar, const Real pperp,
-                                 const Real bmag, const Real pfloor) {
+                                 const Real bmag, const Real pfloor,
+                                 const Real max_ratio = 0.0) {
   PassivePair q = PassiveEncode(rho, ppar, pperp, bmag);
   if (!Kokkos::isfinite(q.j) || !Kokkos::isfinite(q.a)) {
     Kokkos::abort("Passive CGL invariant encoding is not representable in Real");
   }
   Real pp, pt;
   PassiveDecode(rho, q, bmag, pp, pt);
+  // A marginal pair can round outside the cap when converted back from LF.
+  if (max_ratio > 0.0 && (max_ratio == 1.0 ||
+      fmax(pp, pt)/max_ratio > fmin(pp, pt))) {
+    const Real boundary = pt > pp ? max_ratio : 1.0/max_ratio;
+    q.a = rho*(log(boundary) + 2.0*log(rho) - 3.0*log(bmag));
+    PassiveDecode(rho, q, bmag, pp, pt);
+  }
   if (pp < pfloor || pt < pfloor) {
     const Real shift = rho*fmax(log(pfloor/pp), log(pfloor/pt));
     q.j = Kokkos::nextafter(q.j + shift, std::numeric_limits<Real>::infinity());
@@ -78,8 +86,34 @@ PassivePair PassiveEncodeFloored(const Real rho, const Real ppar, const Real ppe
 }
 
 KOKKOS_INLINE_FUNCTION
+bool PassiveLimitPressureRatio(const EOS_Data &eos, Real &ppar, Real &pperp,
+                               Real *pre_ratio = nullptr, const Real roundoff =
+                                   64.0*std::numeric_limits<Real>::epsilon()) {
+  const Real cap = eos.passive_max_pressure_ratio;
+  if (cap == 0.0) return false;
+  const Real high = fmax(ppar, pperp), low = fmin(ppar, pperp);
+  if (high/cap <= low*(1.0 + roundoff)) return false;
+  if (pre_ratio != nullptr) *pre_ratio = high/low;
+  // Redistribute at fixed pperp + ppar/2 without overflowing the intermediate sum.
+  if (cap == 1.0) {
+    ppar = TWO_3RDS*pperp + ONE_3RD*ppar;
+    pperp = ppar;
+  } else if (pperp > ppar) {
+    const Real denominator = 1.0 + 0.5/cap;
+    pperp = pperp/denominator + 0.5*(ppar/denominator);
+    ppar = pperp/cap;
+  } else {
+    const Real denominator = 1.0 + 2.0/cap;
+    ppar = ppar/denominator + 2.0*(pperp/denominator);
+    pperp = ppar/cap;
+  }
+  return true;
+}
+
+KOKKOS_INLINE_FUNCTION
 void PassiveC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
-                 bool &dfloor_used, bool &efloor_used, bool &bfloor_used) {
+                 bool &dfloor_used, bool &efloor_used, bool &bfloor_used,
+                 bool *ratio_repaired = nullptr, Real *pre_ratio = nullptr) {
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   const Real bmag = sqrt(bsqr), beff = fmax(bmag, eos.bfloor);
   const Real original_rho = u.d;
@@ -98,12 +132,26 @@ void PassiveC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
     w.pp = w.e;
     bfloor_used = true;
   }
-  if (dfloor_used || efloor_used || bfloor_used) {
-    const PassivePair q = PassiveEncodeFloored(w.d, w.e, w.pp, beff, eos.pfloor);
+  bool ratio_used = false;
+  const Real cap = eos.passive_max_pressure_ratio;
+  if (cap != 0.0 && fmax(w.e, w.pp)/cap > fmin(w.e, w.pp)) {
+    const Real boundary = w.pp > w.e ? cap : 1.0/cap;
+    const Real canonical_a = original_rho*(log(boundary) +
+        2.0*log(original_rho) - 3.0*log(beff));
+    // A canonical boundary can decode a few ulps outside after log cancellation.
+    if (dfloor_used || efloor_used || bfloor_used || u.mu != canonical_a) {
+      ratio_used = PassiveLimitPressureRatio(eos, w.e, w.pp, pre_ratio, 0.0);
+    }
+  }
+  if (dfloor_used || efloor_used || bfloor_used || ratio_used) {
+    const PassivePair q = PassiveEncodeFloored(w.d, w.e, w.pp, beff, eos.pfloor,
+                                              ratio_used ? cap : 0.0);
+    if (q.j == u.e && q.a == u.mu) ratio_used = false;
     u.e = q.j;
     u.mu = q.a;
     PassiveDecode(w.d, q, beff, w.e, w.pp);
   }
+  if (ratio_repaired != nullptr) *ratio_repaired = ratio_used;
 }
 
 KOKKOS_INLINE_FUNCTION
@@ -131,7 +179,8 @@ void PassiveP2C(const MHDPrim1D &w, const Real bfloor, HydCons1D &u) {
 KOKKOS_INLINE_FUNCTION
 void PassiveMomentC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
                        bool &dfloor_used, bool &efloor_used, bool &bfloor_used,
-                       const Real bmag, const bool reject_nonfinite = false) {
+                       const Real bmag, const bool reject_nonfinite = false,
+                       bool *ratio_repaired = nullptr, Real *pre_ratio = nullptr) {
   const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
   SingleC2P_IsothermalMHD(u, fmax(eos.dfloor, bsqr/eos.sigma_max), w, dfloor_used);
   const Real beff = fmax(bmag, eos.bfloor);
@@ -158,6 +207,24 @@ void PassiveMomentC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
   if (efloor_used) {
     u.e = 0.5*w.e + w.pp;
     u.mu = w.pp/beff;
+  }
+  const bool ratio_used = PassiveLimitPressureRatio(eos, w.e, w.pp, pre_ratio);
+  if (ratio_repaired != nullptr) *ratio_repaired = ratio_used;
+  if (ratio_used) {
+    u.mu = w.pp/beff;
+    w.pp = u.mu*beff;
+    w.e = 2.0*(u.e - w.pp);
+    // At large R, U-mu*B cancellation needs an inward representable moment.
+    int tries = 0;
+    while (w.e < eos.pfloor || w.pp < eos.pfloor ||
+           fmax(w.e, w.pp)/eos.passive_max_pressure_ratio >
+           fmin(w.e, w.pp)*(1.0 + 64.0*std::numeric_limits<Real>::epsilon())) {
+      if (++tries > 32) Kokkos::abort("Passive CGL ratio cannot be encoded in Real");
+      u.mu = Kokkos::nextafter(u.mu, w.e < eos.pfloor || w.pp > w.e ? Real(0) :
+          std::numeric_limits<Real>::infinity());
+      w.pp = u.mu*beff;
+      w.e = 2.0*(u.e - w.pp);
+    }
   }
 }
 

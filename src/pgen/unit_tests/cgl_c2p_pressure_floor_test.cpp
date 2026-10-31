@@ -978,6 +978,64 @@ void CheckProductionTinyCollisionRates(MeshBlockPack *pack) {
             << std::endl;
 }
 
+void CheckPassiveRatioRecovery() {
+  EOS_Data eos{};
+  eos.dfloor = 1.0e-12;
+  eos.pfloor = 1.0e-12;
+  eos.bfloor = 1.0e-10;
+  eos.sigma_max = 1.0e30;
+  const Real large_cap = kSinglePrecision ? Real(1.0e3) : Real(1.0e10);
+  for (const Real cap : {Real(1.0), Real(100.0), large_cap}) {
+    eos.passive_max_pressure_ratio = cap;
+    for (const bool perpendicular_hot : {false, true}) {
+      const Real pp = perpendicular_hot ? Real(1.0e-6) : Real(1.0e5);
+      const Real pt = perpendicular_hot ? Real(1.0e5) : Real(1.0e-6);
+      const Real energy = pt + 0.5*pp;
+      MHDCons1D u{};
+      u.d = 1.7;
+      u.bx = 0.3;
+      const auto q = cgl::PassiveEncode(u.d, pp, pt, u.bx);
+      u.e = q.j;
+      u.mu = q.a;
+      HydPrim1D w{};
+      for (int cycle = 0; cycle < 4; ++cycle) {
+        bool d = false, f = false, b = false, ratio = false;
+        cgl::PassiveC2P(u, eos, w, d, f, b, &ratio);
+        Require("ratio recovery respects floors",
+                w.e >= eos.pfloor && w.pp >= eos.pfloor);
+        RequireClose("ratio recovery thermal energy", w.pp + 0.5*w.e, energy);
+        Require("ordinary ratio event only on first recovery", ratio == (cycle == 0));
+        const Real pressure_ratio = perpendicular_hot ? w.pp/w.e : w.e/w.pp;
+        if (cap <= 100.0) {
+          RequireClose("ratio recovery reaches requested boundary", pressure_ratio, cap);
+        }
+        const auto unchanged_e = u.e, unchanged_mu = u.mu;
+        ratio = false;
+        cgl::PassiveC2P(u, eos, w, d, f, b, &ratio);
+        Require("ordinary ratio recovery is idempotent R=" + std::to_string(cap) +
+                " perpendicular_hot=" + std::to_string(perpendicular_hot),
+                !ratio && u.e == unchanged_e && u.mu == unchanged_mu);
+        // Start both representations outside the cap, then cycle the repaired state.
+        u.e = cycle == 0 ? energy : w.pp + 0.5*w.e;
+        u.mu = (cycle == 0 ? pt : w.pp)/u.bx;
+        const Real moment_energy = u.e;
+        cgl::PassiveMomentC2P(u, eos, w, d, f, b, u.bx, false, &ratio);
+        if (cycle == 0) Require("unbounded LF moment is repaired", ratio);
+        Require("moment ratio repair retains U", u.e == moment_energy);
+        Require("moment ratio recovery respects floors",
+                w.e >= eos.pfloor && w.pp >= eos.pfloor);
+        d = f = b = ratio = false;
+        cgl::PassiveMomentC2P(u, eos, w, d, f, b, u.bx, false, &ratio);
+        Require("moment ratio recovery is idempotent", !ratio && !f);
+        const auto encoded = cgl::PassiveEncodeFloored(
+            u.d, w.e, w.pp, u.bx, eos.pfloor, cap);
+        u.e = encoded.j;
+        u.mu = encoded.a;
+      }
+    }
+  }
+}
+
 } // namespace
 
 void RunCglC2PPressureFloorChecks() {
@@ -1010,6 +1068,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckMagnetizationDensityFloor();
   CheckCollisionMap();
   CheckStephenLimiterMap();
+  CheckPassiveRatioRecovery();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
 }

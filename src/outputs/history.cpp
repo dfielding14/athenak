@@ -414,6 +414,22 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
   }
+  if (eos_data.passive && eos_data.passive_max_pressure_ratio > 0.0) {
+    if (pdata->nhist + 2 > NHISTORY_VARIABLES) {
+      std::cout << "### FATAL ERROR: passive ratio history exceeds NHISTORY_VARIABLES"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    Real max_ratio = pm->ecounter.passive_ratio_max;
+#if MPI_PARALLEL_ENABLED
+    MPI_Allreduce(MPI_IN_PLACE, &max_ratio, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);
+#endif
+    pdata->label[pdata->nhist] = "ratio_hits";
+    pdata->hdata[pdata->nhist++] = static_cast<Real>(pm->ecounter.passive_ratio_clamps);
+    pdata->label[pdata->nhist] = "ratio_max";
+    // The generic history reduction sums ranks.
+    pdata->hdata[pdata->nhist++] = global_variable::my_rank == 0 ? max_ratio : 0.0;
+  }
   if (pmhd->pcgl_lf != nullptr) {
     const auto &diag = pmhd->pcgl_lf->diagnostics;
     pdata->hdata[lf_begin] = static_cast<Real>(diag.nstage);

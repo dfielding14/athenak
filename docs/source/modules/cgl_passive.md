@@ -40,6 +40,34 @@ change momentum or trigger a flow flux correction. Density floors and FOFC
 flow decisions use the background EOS; the adiabatic branch also tests its own
 gas pressure floors. LF and collisions leave the independent MHD energy unchanged.
 
+Set the pressure-ratio cap in the `<mhd>` block for either passive flow EOS.
+
+```ini
+<mhd>
+passive_max_pressure_ratio = 100
+```
+
+The default `0` disables the cap. An enabled value must be finite and at least
+one. After pressure-floor handling, recovery limits
+$1/R \leq p_\perp/p_\parallel \leq R$ at fixed passive thermal energy
+$U=p_\perp+p_\parallel/2$. For a limited ratio $r_*$, the corrected pressures are
+$p_\parallel'=U/(r_*+1/2)$ and $p_\perp'=r_*p_\parallel'$.
+Thus `R=1` isotropizes the passive pair. This redistribution changes its
+anisotropic stress while conserving $U$ to roundoff and preserving its floors.
+The background flow and independent adiabatic gas energy `IEG` are unaffected.
+
+Recovery writes the corrected pressures back into persistent J/A during
+ordinary evolution and updates the temporary magnetic moment at fixed $U$
+during LF, including each RKL2 stage. The LF timestep uses the corrected
+pressures. When enabled, MHD history adds `ratio_hits`, the cumulative number
+of owned-cell clamp events since the current process started, and `ratio_max`,
+the largest pre-clamp $\max(p_\perp/p_\parallel,p_\parallel/p_\perp)$ among those
+events. These diagnostics exclude ghost cells. Repeated events can occur in
+the same cell, and restarting resets these diagnostic accumulators.
+To enable the cap on an existing passive checkpoint, pass
+`-r snapshot.rst mhd/passive_max_pressure_ratio=100`. Use a fresh output
+directory when enabling it so the new history columns have their own file.
+
 Identical flow evolution requires identical initial flow, reconstruction,
 forcing realization, boundaries, and **outer timestep sequence**. LF explicit
 stability limits or `sts_max_dt_ratio` can shorten that sequence. For a pure

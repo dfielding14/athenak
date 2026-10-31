@@ -47,7 +47,7 @@ struct Cooling {
   Real history_dt = 0.0, last_time = -1.0;
   int history_dcycle = 0, last_cycle = -1;
 
-  TaskStatus Source(Driver *, int) {
+  TaskStatus Source(Driver *pdrive, int stage) {
     if (alpha == 0.0) return TaskStatus::complete;
     auto *pmhd = mesh->pmb_pack->pmhd;
     pmhd->RequireCGLAnisotropyRepresentation("CGL cooling source");
@@ -55,6 +55,7 @@ struct Cooling {
     auto w = pmhd->w0;
     auto bcc = pmhd->bcc0;
     const auto eos = pmhd->peos->eos_data;
+    constexpr Real cooling_max_ratio = 10.0;
     const Real fraction = -std::expm1(-alpha*mesh->dt);
     const auto &indcs = mesh->mb_indcs;
     const int ni = indcs.nx1 + 2*indcs.ng;
@@ -89,7 +90,7 @@ struct Cooling {
       const Real delta = pperp - ppar;
       const Real piso = TWO_3RDS*pperp + ONE_3RD*ppar;
       // shortcut: cap cooling at a 10:1 pressure ratio; revisit if many cells hit it.
-      const Real cooling_floor = fmax(eos.pfloor, fabs(delta)/(10.0 - 1.0));
+      const Real cooling_floor = fmax(eos.pfloor, fabs(delta)/(cooling_max_ratio - 1.0));
       const Real available = fmax(fmin(ppar, pperp) - cooling_floor, 0.0);
       const Real decrement = fmin(fraction*piso, available);
       if (decrement == 0.0) return;
@@ -153,6 +154,11 @@ struct Cooling {
       w(m,IPR,k,j,i) = ppar;
       w(m,IPP,k,j,i) = pperp;
     });
+    // Guard the post-RK LF timestep when the passive cap is tighter than cooling's.
+    if (eos.passive && eos.passive_max_pressure_ratio != 0.0 &&
+        eos.passive_max_pressure_ratio < cooling_max_ratio && pmhd->has_cgl_lf_split) {
+      pmhd->ConToPrim(pdrive, stage);
+    }
     return TaskStatus::complete;
   }
 };

@@ -422,3 +422,29 @@ sts_integrator = rkl2
             np.testing.assert_array_equal(first, second)
         assert state["cooling_alpha"] == expected["cooling_alpha"]
     assert np.ptp(gas_pressure(passive[8])) > 0
+
+
+@pytest.mark.parametrize("landau_fluid", [False, True])
+def test_passive_ratio_cap_after_cooling(tmp_path, landau_fluid):
+    source = input_text(ppar=1.0, pperp=2.0, target=0.05, tau=1e-5,
+                        nlim=3) + adiabatic_settings()
+    if landau_fluid:
+        source += ("\n<mhd>\ncgl_heat_flux = landau_fluid\n"
+                   "cgl_heat_flux_integrator = sts\n<time>\nsts_integrator = rkl2\n")
+    control = run(tmp_path / "control", source, adiabatic=True)
+    capped = run(tmp_path / "capped", source, adiabatic=True,
+                 flags=("mhd/passive_max_pressure_ratio=3",))
+    for cycle, state in capped.items():
+        pp, pt = pressures(state)
+        assert np.max(np.maximum(pp/pt, pt/pp)) <= 3*(1 + 2e-12)
+        if cycle <= 1:
+            pp0, pt0 = pressures(control[cycle])
+            np.testing.assert_allclose(pt + 0.5*pp, pt0 + 0.5*pp0,
+                                       rtol=3e-12, atol=3e-13)
+        for index in (0, 1, 2, 3, 6):
+            np.testing.assert_allclose(state["active"][:, index],
+                                       control[cycle]["active"][:, index],
+                                       rtol=0, atol=3e-13)
+    resumed = run(tmp_path / "resumed", restart=capped[1]["path"],
+                  flags=("time/nlim=3",), adiabatic=True)
+    np.testing.assert_array_equal(resumed[3]["payload"], capped[3]["payload"])

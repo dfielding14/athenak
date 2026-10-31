@@ -33,6 +33,7 @@ struct EOS_Data {
   bool passive_adiabatic;  // separate ideal-MHD gas energy in IEG
   bool mlim, flim;   // mirror and firehose limiter flags
   bool backup_lim;   // enable backup CGL instability limiters
+  Real passive_max_pressure_ratio = 0.0;  // symmetric passive pressure cap; zero disables
   Real nu_coll, lim_coll;  // physical and limiter collision frequencies
   // Soft Delta p thresholds are -firehose_threshold*B^2/2 and +mirror_threshold*B^2/2.
   Real firehose_threshold, mirror_threshold;

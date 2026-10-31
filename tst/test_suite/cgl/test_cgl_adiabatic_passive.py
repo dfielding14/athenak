@@ -12,16 +12,17 @@ import pytest
 from test_suite.cgl import passive_acceptance
 
 
-def run(directory, *, passive=True, restart=None, flags=(), ranks=1,
+def run(directory, *, passive=True, adiabatic=True, restart=None, flags=(), ranks=1,
         error=None, **kwargs):
     directory.mkdir()
     executable = Path(os.environ.get("ATHENAK_TEST_EXE", "athena")).resolve()
     command = [str(executable), "-d", str(directory)]
     if restart is None:
         source = passive_acceptance.input_text(
-            passive=passive, adiabatic=passive, ideal_mhd=not passive,
+            passive=passive, adiabatic=passive and adiabatic, ideal_mhd=not passive,
             nx=32, nlim=6, tlim=1, **kwargs)
-        source += ("\n<problem>\np_gas0 = 2\n<output2>\nsingle_file_per_rank = false\n"
+        source += ("\n<problem>\np_gas0 = 2\nadvect_velocity = 0.4\n"
+                   "<output2>\nsingle_file_per_rank = false\n"
                    "<output3>\nfile_type = log\ndcycle = 1\n")
         deck = directory / "input.athinput"
         deck.write_text(source)
@@ -40,7 +41,7 @@ def run(directory, *, passive=True, restart=None, flags=(), ranks=1,
     assert result.returncode == 0, log
     checkpoint = sorted((directory / "rst").glob("*.rst"))[-1]
     state = passive_acceptance.decode_restart(
-        checkpoint, passive, adiabatic=passive, ideal_mhd=not passive)
+        checkpoint, passive, adiabatic=passive and adiabatic, ideal_mhd=not passive)
     state["path"] = checkpoint
     state["history"] = passive_acceptance.history(directory / "passive_validation.mhd.hst")
     event_rows = (directory / "passive_validation.log").read_text().splitlines()
@@ -117,12 +118,15 @@ def test_passive_pressure_repairs_leave_native_gas_unchanged(tmp_path):
     assert np.min(passive["pt"]) >= 1e-12*(1 - 1e-14)
 
 
-def test_adiabatic_passive_fofc_matches_native_mhd_in_3d(tmp_path):
+@pytest.mark.parametrize("max_ratio", [0, 1])
+def test_adiabatic_passive_fofc_matches_native_mhd_in_3d(tmp_path, max_ratio):
     # Cold, compressive flow activates fallback on faces in all three directions.
     options = dict(forcing=True, amp=0.95, dfloor=0.2, recon="ppmx",
                    flags=("problem/p_gas0=1e-6", "time/nlim=12"))
     reference = run(tmp_path / "ideal", passive=False, **options)
-    passive = run(tmp_path / "passive", **options)
+    passive_options = dict(options)
+    passive_options["flags"] += (f"mhd/passive_max_pressure_ratio={max_ratio}",)
+    passive = run(tmp_path / "passive", **passive_options)
     assert reference["fofc"] > 0
     assert passive["fofc"] == reference["fofc"]
     assert_flow_equal(passive, reference)
@@ -163,3 +167,131 @@ def test_adiabatic_passive_restart_preserves_all_seven_slots(tmp_path, ranks):
     assert resumed["time"] == reference["time"]
     assert resumed["dt"] == reference["dt"]
     np.testing.assert_array_equal(resumed["payload"], reference["payload"])
+
+
+@pytest.mark.parametrize("adiabatic", [False, True])
+@pytest.mark.parametrize("ratio", [1, 2, 100])
+def test_passive_ratio_cap_conserves_thermal_energy(tmp_path, adiabatic, ratio):
+    options = dict(adiabatic=adiabatic, mode=1, amp=0, thermal=2.5)
+    initial = run(tmp_path / "initial", **options, flags=("time/nlim=0",))
+    capped = run(tmp_path / "capped", **options, flags=(
+        "time/nlim=0", f"mhd/passive_max_pressure_ratio={ratio}"))
+    observed = initial["pt"] / initial["pp"]
+    assert observed.min() < 0.5 and observed.max() > 2
+    result = capped["pt"] / capped["pp"]
+    np.testing.assert_allclose(result, np.clip(observed, 1 / ratio, ratio),
+                               rtol=2e-13, atol=0)
+    np.testing.assert_allclose(capped["U"], initial["U"], rtol=3e-14, atol=3e-14)
+    np.testing.assert_array_equal(capped["active"][:, :4], initial["active"][:, :4])
+    if adiabatic:
+        np.testing.assert_array_equal(capped["active"][:, 6], initial["active"][:, 6])
+    for first, second in zip(capped["faces"], initial["faces"]):
+        np.testing.assert_array_equal(first, second)
+    assert capped["fofc"] == initial["fofc"]
+    if ratio == 100:
+        np.testing.assert_array_equal(capped["payload"], initial["payload"])
+    expected = np.count_nonzero((observed < 1 / ratio) | (observed > ratio))
+    assert capped["history"]["ratio_hits"][-1] == expected
+    maximum = np.maximum(observed, 1 / observed).max() if expected else 0
+    assert capped["history"]["ratio_max"][-1] == pytest.approx(maximum, rel=3e-13)
+
+
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_passive_ratio_cap_survives_lf_and_restart(tmp_path, adiabatic):
+    options = dict(adiabatic=adiabatic, mode=1, amp=0, thermal=2.5, lf="sts")
+    flag = "mhd/passive_max_pressure_ratio=2"
+    initial = run(tmp_path / "initial", **options, flags=(flag, "time/nlim=0"))
+    reference = run(tmp_path / "reference", **options, flags=(flag,))
+    partial = run(tmp_path / "partial", **options, flags=(flag, "time/nlim=2"))
+    resumed = run(tmp_path / "resumed", adiabatic=adiabatic,
+                  restart=partial["path"], flags=("time/nlim=6",))
+    np.testing.assert_array_equal(resumed["payload"], reference["payload"])
+    result = reference["pt"] / reference["pp"]
+    assert result.min() >= 0.5*(1 - 2e-13)
+    assert result.max() <= 2*(1 + 2e-13)
+    np.testing.assert_allclose(np.mean(reference["U"]), np.mean(initial["U"]),
+                               rtol=2e-13, atol=2e-13)
+    assert reference["history"]["lf_nstage"][-1] > 0
+    np.testing.assert_array_equal(reference["active"][:, :4], initial["active"][:, :4])
+    if adiabatic:
+        np.testing.assert_array_equal(reference["active"][:, 6], initial["active"][:, 6])
+
+
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_passive_ratio_cap_disabled_is_unchanged(tmp_path, adiabatic):
+    options = dict(adiabatic=adiabatic, mode=1, amp=0, thermal=2.5, lf="sts")
+    reference = run(tmp_path / "default", **options)
+    disabled = run(tmp_path / "disabled", **options,
+                   flags=("mhd/passive_max_pressure_ratio=0",))
+    np.testing.assert_array_equal(disabled["payload"], reference["payload"])
+
+
+def test_enable_ratio_cap_on_older_passive_checkpoint(tmp_path):
+    original = run(tmp_path / "original", mode=1, amp=0, thermal=2.5,
+                   flags=("time/nlim=0",))
+    header, end, payload = original["path"].read_bytes().partition(b"<par_end>\n")
+    header, removed = re.subn(rb"^passive_max_pressure_ratio\s*=.*\n", b"", header,
+                              flags=re.MULTILINE)
+    assert end and removed == 1
+    legacy = tmp_path / "uncapped.rst"
+    legacy.write_bytes(header + end + payload)
+    resumed = run(tmp_path / "resumed", restart=legacy,
+                  flags=("mhd/passive_max_pressure_ratio=2", "time/nlim=0"))
+    ratio = original["pt"] / original["pp"]
+    np.testing.assert_allclose(resumed["pt"] / resumed["pp"], np.clip(ratio, 0.5, 2),
+                               rtol=2e-13)
+    np.testing.assert_allclose(resumed["U"], original["U"], rtol=3e-14)
+
+
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_passive_ratio_cap_respects_pressure_floors(tmp_path, adiabatic):
+    options = dict(adiabatic=adiabatic, mode=1, amp=0, thermal=2.5, pfloor=1.5)
+    floored = run(tmp_path / "floored", **options, flags=("time/nlim=0",))
+    capped = run(tmp_path / "capped", **options,
+                 flags=("mhd/passive_max_pressure_ratio=1", "time/nlim=0"))
+    assert floored["pp"].min() == pytest.approx(1.5)
+    assert capped["history"]["ratio_hits"][-1] > 0
+    assert np.minimum(capped["pp"], capped["pt"]).min() >= 1.5*(1 - 2e-13)
+    np.testing.assert_allclose(capped["U"], floored["U"], rtol=3e-14)
+    np.testing.assert_allclose(capped["pp"], capped["pt"], rtol=2e-13, atol=0)
+
+
+@pytest.mark.parametrize("adiabatic", [False, True])
+@pytest.mark.parametrize("ranks", [1, 2])
+def test_passive_ratio_cap_counts_owned_cells_once(tmp_path, adiabatic, ranks):
+    if ranks > 1 and not mpi_available():
+        pytest.skip("requires an MPI executable and mpirun")
+    initial = run(tmp_path / "initial", adiabatic=adiabatic, mode=1, amp=0,
+                  thermal=2.5, flags=("mhd/passive_max_pressure_ratio=2", "time/nlim=0"))
+    evolved = run(tmp_path / "evolved", adiabatic=adiabatic, mode=1, amp=0,
+                  thermal=2.5, ranks=ranks, flags=("mhd/passive_max_pressure_ratio=2",))
+    # There is no flow or LF here. Re-encoding must not repeatedly count boundary states.
+    np.testing.assert_array_equal(evolved["history"]["ratio_hits"],
+                                  initial["history"]["ratio_hits"][-1])
+    np.testing.assert_array_equal(evolved["history"]["ratio_max"],
+                                  initial["history"]["ratio_max"][-1])
+    np.testing.assert_array_equal(evolved["payload"], initial["payload"])
+
+
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_passive_ratio_cap_repairs_new_lf_stage_anisotropy(tmp_path, adiabatic):
+    options = dict(adiabatic=adiabatic, mode=3, amp=0, thermal=0.2)
+    flags = ("mhd/passive_max_pressure_ratio=1", "problem/advect_velocity=0")
+    initial = run(tmp_path / "initial", **options, flags=(*flags, "time/nlim=0"))
+    control = run(tmp_path / "control", **options, flags=flags)
+    conducted = run(tmp_path / "conducted", **options, lf="sts", flags=flags)
+    assert control["history"]["ratio_hits"][-1] == initial["history"]["ratio_hits"][-1]
+    assert conducted["history"]["lf_nstage"][-1] > 0
+    # Each owned cell develops fresh anisotropy at every LF stage in this fixture.
+    np.testing.assert_array_equal(
+        conducted["history"]["ratio_hits"] - initial["history"]["ratio_hits"][-1],
+        conducted["history"]["lf_nstage"])
+    np.testing.assert_allclose(conducted["pt"], conducted["pp"], rtol=2e-13, atol=0)
+    np.testing.assert_allclose(np.mean(conducted["U"]), np.mean(initial["U"]),
+                               rtol=3e-13, atol=3e-13)
+
+
+@pytest.mark.parametrize("value", ["-1", "0.5", "nan", "inf", "10oops", "1e-999"])
+def test_passive_ratio_cap_rejects_invalid_values(tmp_path, value):
+    run(tmp_path / "invalid", flags=(f"mhd/passive_max_pressure_ratio={value}",),
+        error="passive_max_pressure_ratio")
