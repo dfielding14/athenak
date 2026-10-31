@@ -247,6 +247,11 @@ CGL restarts require the saved MHD EOS, passive encoding, and scalar count.
 Changing these through an input overlay or command-line override is rejected
 before the fluid payload is read, including during refinement or reblocking.
 
+Active CGL full conserved outputs (`mhd_u` and `mhd_u_bcc`) append `cgl_A`,
+the evolved anisotropy, after the existing fields. The magnetic field and this
+variable complete the state needed to recover both pressures from total energy.
+The energy-only `mhd_u_e` selector outputs `ener`.
+
 When `cgl_lf_diagnostics = none`, LF stage-admissibility counters remain active,
 but heat-flux face, cap, and q-work reductions are not
 collected. In that mode the corresponding heat-flux diagnostic columns should

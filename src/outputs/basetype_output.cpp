@@ -497,6 +497,14 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       outvars.emplace_back("bcc3",2,&(pm->pmb_pack->pmhd->bcc0));
     }
 
+    if (variable.compare("mhd_u") == 0 || variable.compare("mhd_u_bcc") == 0 ||
+        variable.compare("rad_mhd_u") == 0 || variable.compare("rad_mhd_u_bcc") == 0) {
+      auto *pmhd = pm->pmb_pack->pmhd;
+      if (pmhd->peos->eos_data.is_cgl && !pmhd->peos->eos_data.passive) {
+        outvars.emplace_back("cgl_A", IAN, &(pmhd->u0));
+      }
+    }
+
     // MHD temperature
     if (variable.compare("mhd_t") == 0 ||
         ((variable.compare("mhd_w") == 0 ||
