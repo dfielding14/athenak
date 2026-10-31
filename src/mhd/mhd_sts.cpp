@@ -292,10 +292,10 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
                     const int i) {
         const int n = (q == 0) ? IEN : IAN;
         if (stage == 1) {
-          u_sts0_(m,n,k,j,i) = u0_(m,n,k,j,i);
+          u_sts0_(m,q,k,j,i) = u0_(m,n,k,j,i);
         }
-        u_sts2_(m,n,k,j,i) = u_sts1_(m,n,k,j,i);
-        u_sts1_(m,n,k,j,i) = u0_(m,n,k,j,i);
+        u_sts2_(m,q,k,j,i) = u_sts1_(m,q,k,j,i);
+        u_sts1_(m,q,k,j,i) = u0_(m,n,k,j,i);
       });
     } else {
       if (stage == 1) {
@@ -374,22 +374,22 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
           const Real first_rhs_coeff =
               coeffs.gammaj_tilde/cgl_first_rkl_weight;
           u0_(m,n,k,j,i) = cgl_lf::WeightedRKL2Update(
-              coeffs.muj, u_sts1_(m,n,k,j,i),
-              coeffs.nuj, u_sts2_(m,n,k,j,i),
-              1.0 - coeffs.muj - coeffs.nuj, u_sts0_(m,n,k,j,i),
-              first_rhs_coeff, u_sts_rhs_(m,n,k,j,i), weighted_rhs);
+              coeffs.muj, u_sts1_(m,q,k,j,i),
+              coeffs.nuj, u_sts2_(m,q,k,j,i),
+              1.0 - coeffs.muj - coeffs.nuj, u_sts0_(m,q,k,j,i),
+              first_rhs_coeff, u_sts_rhs_(m,q,k,j,i), weighted_rhs);
           if (stage == 1) {
-            u_sts_rhs_(m,n,k,j,i) = weighted_rhs;
+            u_sts_rhs_(m,q,k,j,i) = weighted_rhs;
           }
         } else {
           const Real delta_u = -dt_sweep*divf;
-          u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,n,k,j,i)
-                         + coeffs.nuj*u_sts2_(m,n,k,j,i)
-                         + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,n,k,j,i)
-                         + coeffs.gammaj_tilde*u_sts_rhs_(m,n,k,j,i)
+          u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,q,k,j,i)
+                         + coeffs.nuj*u_sts2_(m,q,k,j,i)
+                         + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,q,k,j,i)
+                         + coeffs.gammaj_tilde*u_sts_rhs_(m,q,k,j,i)
                          + coeffs.muj_tilde*delta_u;
           if (stage == 1) {
-            u_sts_rhs_(m,n,k,j,i) = delta_u;
+            u_sts_rhs_(m,q,k,j,i) = delta_u;
           }
         }
       });

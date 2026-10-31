@@ -93,7 +93,8 @@ or scalar diffusion unless resistivity is also assigned to STS.
 For CGL Landau-fluid transport, MHD stores conserved anisotropy during normal
 evolution and converts that slot to magnetic moment only for the STS sweep.
 The LF process advances energy and magnetic moment, refreshes CGL primitives
-between stages, and restores anisotropy at the end of each sweep. CGL LF STS
+between stages, and restores anisotropy at the end of each sweep. Its four
+RKL2 scratch arrays store only those two evolving components. CGL LF STS
 rejects simultaneous MHD STS viscosity, hyperviscosity, resistivity, ordinary
 conduction, or scalar diffusion. The explicit LF reference mode uses the same
 protected split lifecycle with one Euler stage. See

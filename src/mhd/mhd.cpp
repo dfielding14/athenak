@@ -627,10 +627,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
       int ncells3 = (indcs.nx3 > 1)? (indcs.nx3 + 2*(indcs.ng)) : 1;
       Kokkos::realloc(u1,     nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
       if (has_any_parabolic_cell_update) {
-        Kokkos::realloc(u_sts0,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-        Kokkos::realloc(u_sts1,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-        Kokkos::realloc(u_sts2,    nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
-        Kokkos::realloc(u_sts_rhs, nmb, (nmhd+nscalars), ncells3, ncells2, ncells1);
+        const int nsts = has_sts_cgl_lf ? 2 : nmhd+nscalars;
+        Kokkos::realloc(u_sts0,    nmb, nsts, ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts1,    nmb, nsts, ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts2,    nmb, nsts, ncells3, ncells2, ncells1);
+        Kokkos::realloc(u_sts_rhs, nmb, nsts, ncells3, ncells2, ncells1);
       }
       Kokkos::realloc(b1.x1f, nmb, ncells3, ncells2, ncells1+1);
       Kokkos::realloc(b1.x2f, nmb, ncells3, ncells2+1, ncells1);

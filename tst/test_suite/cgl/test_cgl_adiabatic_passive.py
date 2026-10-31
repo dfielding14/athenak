@@ -86,11 +86,18 @@ def test_passive_collisions_and_lf_leave_adiabatic_flow_unchanged(tmp_path):
     assert history["lf_qface"][-1] > 0
 
 
-def test_nonuniform_passive_lf_diffuses_without_heating_gas(tmp_path):
+@pytest.mark.parametrize("arithmetic,flux", [
+    ("safe", "weighted"), ("fast", "weighted"), ("fast", "physical"),
+])
+def test_nonuniform_passive_lf_diffuses_without_heating_gas(tmp_path, arithmetic, flux):
     # Case 1 with zero shear has uniform rho, gas pressure, B, and passive p_iso.
-    initial = run(tmp_path / "initial", mode=1, amp=0,
+    initial = run(tmp_path / "initial", mode=1, amp=0, lf="sts",
                   flags=("time/nlim=0",))
-    passive = run(tmp_path / "lf", mode=1, amp=0, lf="sts")
+    passive = run(tmp_path / "lf", restart=initial["path"],
+                  flags=("time/nlim=6", f"mhd/cgl_lf_arithmetic={arithmetic}",
+                         f"mhd/cgl_lf_sts_flux={flux}", "mhd/cgl_lf_diagnostics=none"))
+    assert passive["history"]["lf_nstage"][-1] > 0
+    assert passive["history"]["lf_qface"][-1] == 0
     np.testing.assert_allclose(passive["active"][:, :4], initial["active"][:, :4],
                                rtol=0, atol=3e-15)
     np.testing.assert_array_equal(passive["active"][:, 6], initial["active"][:, 6])
