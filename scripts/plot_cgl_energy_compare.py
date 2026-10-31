@@ -37,26 +37,61 @@ def read_history(path: Path) -> dict[str, np.ndarray]:
     with path.open("r", encoding="utf-8") as handle:
         for line in handle:
             if line.startswith("#") and "[1]=" in line:
+                if header and HEADER_RE.findall(header) != HEADER_RE.findall(line):
+                    raise ValueError(f"History columns change within {path}")
                 header = line
-                break
     if not header:
         raise ValueError(f"Missing Athena history column header in {path}")
     indices = {name: int(index) - 1 for index, name in HEADER_RE.findall(header)}
-    required = {"time", "mass", "tot-E", "1-KE", "2-KE", "3-KE", "1-ME", "2-ME", "3-ME"}
-    missing = sorted(required - indices.keys())
-    if missing:
-        raise ValueError(f"{path} is missing required columns: {', '.join(missing)}")
     values = np.loadtxt(path, comments="#", ndmin=2)
     if values.size == 0:
         raise ValueError(f"No history records in {path}")
+    if values.shape[1] != len(indices) or "time" not in indices:
+        raise ValueError(f"History columns do not match header in {path}")
+    times = values[:, indices["time"]]
+    if not np.all(np.isfinite(times)):
+        raise ValueError(f"Nonfinite history times in {path}")
+    # A resumed branch replaces the abandoned rows at and after its first time.
+    retained = []
+    for row, time in enumerate(times):
+        while retained and times[retained[-1]] >= time:
+            retained.pop()
+        retained.append(row)
+    values = values[retained]
     return {name: values[:, index] for name, index in indices.items()}
 
 
-def diagnostics(history: dict[str, np.ndarray]) -> dict[str, np.ndarray]:
+def diagnostics(
+    history: dict[str, np.ndarray], user_history: dict[str, np.ndarray] | None = None,
+) -> dict[str, np.ndarray]:
+    required = {"time", "mass", "tot-E", "1-KE", "2-KE", "3-KE"}
+    missing = sorted(required - history.keys())
+    if missing:
+        raise ValueError(
+            f"Energy history is missing required columns: {', '.join(missing)}")
+    physical = history
+    if user_history is not None:
+        indices = np.searchsorted(user_history["time"], history["time"])
+        if (np.any(indices >= len(user_history["time"])) or
+                not np.array_equal(user_history["time"][indices], history["time"])):
+            raise ValueError("MHD and user histories must contain matching sample times")
+        physical = {key: values[indices] for key, values in user_history.items()}
     mass = history["mass"]
     kinetic = history["1-KE"] + history["2-KE"] + history["3-KE"]
-    magnetic = history["1-ME"] + history["2-ME"] + history["3-ME"]
-    thermal = history["tot-E"] - kinetic - magnetic
+    # Passive J/A heat is separate from the MHD total energy in the gas reservoir.
+    thermal_key = "therm_mhd" if "cgl-J" in history else "therm_cgl"
+    if "B^2" in physical:
+        magnetic = 0.5*physical["B^2"]
+    elif "magnetic" in physical:
+        magnetic = physical["magnetic"]
+    elif thermal_key in physical:
+        magnetic = history["tot-E"] - kinetic - physical[thermal_key]
+    else:
+        raise ValueError("Exact thermal energy requires a companion .user.hst with "
+                         "therm_cgl, therm_mhd, B^2, or magnetic; recover missing "
+                         "thermal energy from snapshots")
+    thermal = (physical[thermal_key] if thermal_key in physical else
+               history["tot-E"] - kinetic - magnetic)
     return {
         "time": history["time"],
         "total_energy": history["tot-E"],
@@ -179,11 +214,12 @@ def main() -> None:
     parser.add_argument("--output-dir", type=Path, required=True)
     args = parser.parse_args()
 
+    runs = []
+    for label, path in (("MHD", args.mhd_history), ("Pure CGL", args.cgl_history)):
+        user_path = path.with_name(path.name.removesuffix(".mhd.hst") + ".user.hst")
+        user = read_history(user_path) if user_path.is_file() else None
+        runs.append((label, diagnostics(read_history(path), user)))
     args.output_dir.mkdir(parents=True, exist_ok=True)
-    runs = [
-        ("MHD", diagnostics(read_history(args.mhd_history))),
-        ("Pure CGL", diagnostics(read_history(args.cgl_history))),
-    ]
 
     save_energy_plot(runs, args.output_dir / "total_energy_over_time.png")
     save_energy_change_plot(runs, args.output_dir / "energy_change_over_time.png")
