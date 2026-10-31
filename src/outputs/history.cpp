@@ -277,6 +277,17 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   int &nmhd_ = pmhd->nmhd;
   int &nscalars_ = pmhd->nscalars;
 
+  const bool ratio_history = eos_data.passive && eos_data.passive_max_pressure_ratio > 0.0;
+  const int required = nmhd_ + 6 + nscalars_ + (eos_data.passive ? 1 : 0) +
+      (pmhd->pcgl_lf != nullptr ? 16 + (pmhd->record_cgl_pressure_work ? 2 : 0) : 0) +
+      (ratio_history ? 2 : 0);
+  if (required > NHISTORY_VARIABLES) {
+    std::cout << "### FATAL ERROR: MHD history requires " << required
+              << " columns, exceeding NHISTORY_VARIABLES=" << NHISTORY_VARIABLES
+              << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
+
   // Conserved variables, kinetic/magnetic energies, and scalar masses.
   pdata->nhist = nmhd_ + 6 + nscalars_;
   pdata->label[IDN] = "mass";
@@ -414,12 +425,7 @@ void HistoryOutput::LoadMHDHistoryData(HistoryData *pdata, Mesh *pm) {
   for (int n=0; n<pdata->nhist; ++n) {
     pdata->hdata[n] = sum_this_mb.the_array[n];
   }
-  if (eos_data.passive && eos_data.passive_max_pressure_ratio > 0.0) {
-    if (pdata->nhist + 2 > NHISTORY_VARIABLES) {
-      std::cout << "### FATAL ERROR: passive ratio history exceeds NHISTORY_VARIABLES"
-                << std::endl;
-      std::exit(EXIT_FAILURE);
-    }
+  if (ratio_history) {
     Real max_ratio = pm->ecounter.passive_ratio_max;
 #if MPI_PARALLEL_ENABLED
     MPI_Allreduce(MPI_IN_PLACE, &max_ratio, 1, MPI_ATHENA_REAL, MPI_MAX, MPI_COMM_WORLD);

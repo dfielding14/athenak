@@ -238,6 +238,11 @@ equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
 compatibility.
 
+The complete MHD history, including scalar masses and optional LF, pressure-work,
+and passive-ratio diagnostics, must fit within `NHISTORY_VARIABLES` (64 by default).
+The `time` and `dt` columns are additional. A configuration exceeding the limit
+is rejected before history labels or reduction data are written.
+
 CGL restarts require the saved MHD EOS, passive encoding, and scalar count.
 Changing these through an input overlay or command-line override is rejected
 before the fluid payload is read, including during refinement or reblocking.
