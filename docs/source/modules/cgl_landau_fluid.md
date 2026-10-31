@@ -471,6 +471,13 @@ It compares serial and two-rank remote shearing partners and checks capped STS
 against the one-stage explicit LF split. It also requires both LF heat-flux
 channels to be active, verifies admissibility, checks magnetic fluxes and
 `div B`, and exercises an MPI restart.
+The homogeneous regression `test_cgl_shear_work.py` checks double-adiabatic
+pressure work in three dimensions and in the two-dimensional radial-vertical
+orientation. The shear-energy source includes the active CGL pressure stress
+$q\Omega(p_\parallel-p_\perp)b_xb_y$, or its $xz$ counterpart in the latter
+orientation. As in the pressure flux, this anisotropic contribution vanishes
+below the magnetic floor. The collisionless shear fixture can cross the
+firehose threshold, which is counted separately from pressure-floor repairs.
 The routine CPU interaction regression uses
 `inputs/tests/cgl_lf_turb_driving_amr.athinput` to check strict LF
 admissibility, refinement, rendered forcing, and deterministic modal restart

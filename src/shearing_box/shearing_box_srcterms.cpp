@@ -124,6 +124,14 @@ void ShearingBoxCC::SourceTermsCC(
       if (eos_data.is_ideal) {
         // For more accuracy, better to use flux values
         u0(m,IEN,k,j,i) += bdt*(mom1*mom2/den-bcc0(m,IBX,k,j,i)*bcc0(m,IBY,k,j,i))*qo;
+        if (eos_data.is_cgl && !eos_data.passive) {
+          const Real bsq = SQR(bcc0(m,IBX,k,j,i)) + SQR(bcc0(m,IBY,k,j,i)) +
+                           SQR(bcc0(m,IBZ,k,j,i));
+          if (sqrt(bsq) > eos_data.bfloor) {
+            u0(m,IEN,k,j,i) += bdt*qo*(w0(m,IPR,k,j,i)-w0(m,IPP,k,j,i))*
+                bcc0(m,IBX,k,j,i)*bcc0(m,IBY,k,j,i)/bsq;
+          }
+        }
       }
     });
 
@@ -142,6 +150,14 @@ void ShearingBoxCC::SourceTermsCC(
       if (eos_data.is_ideal) {
         // For more accuracy, better to use flux values
         u0(m,IEN,k,j,i) += bdt*(mom1*mom3/den-bcc0(m,IBX,k,j,i)*bcc0(m,IBZ,k,j,i))*qo;
+        if (eos_data.is_cgl && !eos_data.passive) {
+          const Real bsq = SQR(bcc0(m,IBX,k,j,i)) + SQR(bcc0(m,IBY,k,j,i)) +
+                           SQR(bcc0(m,IBZ,k,j,i));
+          if (sqrt(bsq) > eos_data.bfloor) {
+            u0(m,IEN,k,j,i) += bdt*qo*(w0(m,IPR,k,j,i)-w0(m,IPP,k,j,i))*
+                bcc0(m,IBX,k,j,i)*bcc0(m,IBZ,k,j,i)/bsq;
+          }
+        }
       }
     });
   }

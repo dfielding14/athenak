@@ -29,10 +29,10 @@ void ProblemGenerator::CGLLFSbox(ParameterInput *pin, const bool restart) {
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
-  if (!pmy_mesh_->three_d || pmhd->psbox_u == nullptr) {
+  if (!pmy_mesh_->multi_d || pmhd->psbox_u == nullptr) {
     std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
               << std::endl
-              << "cgl_lf_sbox requires a three-dimensional shearing box."
+              << "cgl_lf_sbox requires a two- or three-dimensional shearing box."
               << std::endl;
     std::exit(EXIT_FAILURE);
   }
