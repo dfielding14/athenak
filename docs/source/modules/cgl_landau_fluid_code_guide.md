@@ -209,6 +209,55 @@ run, `cool_hits` counts updates clipped by the cooling guard, while passive
 `ratio_hits` counts pressure redistributions at recovery. Compare at the same
 times with the original executable and forcing realization.
 
+### Map the LF timestep on a replay
+
+Set `mhd/cgl_lf_stiffness_cycle=N` to sample one absolute outer cycle in active
+CGL with RKL2. The default is `-1` (off). Choose a healthy developed restart and
+one immediately before the slowdown. Use a fresh directory for each replay and
+keep the original rank layout, forcing, cooling history and solver settings.
+With `C` set to the desired cycle, use these arguments after the executable
+in the usual launch command.
+
+```sh
+-r "$CHECKPOINT" mhd/cgl_lf_stiffness_cycle="$C" time/nlim="$((C+1))"
+```
+
+At each enabled LF sweep in that cycle, the solver re-evaluates the production
+timestep stencil before the first stage. `pre` is the state entering the first
+LF half-step. `post` is the state entering the second, after RK and cooling
+and before the final collisions. In both files `time` is the outer-cycle start.
+With chunking, `dt_sweep` and `nstages` describe the first chunk.
+
+```sh
+for phase in pre post; do
+  python3 "$REPO/scripts/summarize_cgl_lf_stiffness.py" \
+    lf-stiffness."$C"."$phase".rank*.bin > "stiffness-$phase.json"
+done
+```
+
+Each binary holds one native-precision **raw LF timestep** per owned cell
+in block, $k,j,i$ order, plus rank, block locations, mesh geometry and timestep
+metadata. An inactive cell has $+\infty$. The two double-precision maps together
+use 16 bytes per owned cell (6.75 GiB at $768^3$). The summary reports the
+distribution of $r=\Delta t_{\rm sweep}/(\mathrm{sts\_safety}\,\Delta t_{\rm raw})$,
+counts cells and blocks within a factor of ten of the maximum, and compares the
+predicted stage count with the selected one and with the worst block omitted.
+The omission is an offline diagnostic.
+
+The matching TSV lists each block's worst owned cell and its incident faces.
+`dir` is zero-based, `side` is $\pm1$, and `valid` is 1 for direct row arithmetic,
+2 for logarithmic arithmetic, 0 for a face with no normal timestep contribution,
+and $-1$ for a rejected nonfinite or nonpositive closure speed. Temperature and
+magnetic-gradient columns split the two local row bounds. The scattering rate
+and $|q_{\rm raw}|/q_{\max}$ columns describe the physical face closure.
+
+For throughput, repeat from the same checkpoint with `cgl_lf_stiffness_cycle=-1`
+and `cgl_lf_profile=false`. Keep cooling's history sampling active. Report the
+elapsed wall time per unit simulated time, zone-cycles/s/node, and total LF
+stages per outer cycle over the same interval. Read the last quantity from
+$\Delta\mathtt{lf\_nstage}/(N_{\rm owned}\,\Delta n_{\rm cycle})$ on a fixed
+mesh. Collect any fenced profile in a separate run.
+
 ## STS Fast Paths
 
 The MHD STS update has a CGL-LF-only path when no other MHD STS process is
