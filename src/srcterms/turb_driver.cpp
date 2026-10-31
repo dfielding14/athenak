@@ -814,7 +814,7 @@ TaskStatus TurbulenceDriver::InitializeModes(Driver* pdrive, int stage) {
           if (spectrum == TurbSpectrum::power_law) {
             norm = 1.0 / pow(kiso, (expo + 2.0) / 2.0);
           } else {
-            norm = fabs(parab_prefact * pow(kiso - kpeak, 2.0) + 1.0);
+            norm = fmax(parab_prefact * pow(kiso - kpeak, 2.0) + 1.0, 0.0);
             norm = pow(norm, 0.5) * (kpeak / kiso);
           }
         }

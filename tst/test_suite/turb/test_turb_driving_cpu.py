@@ -305,6 +305,67 @@ def test_removed_parameter_and_degenerate_spectrum_are_rejected(tmp_path):
     )
 
 
+@pytest.mark.parametrize("npeak", [1.5, 2.0])
+def test_parabolic_spectrum_vanishes_beyond_its_roots(tmp_path, npeak):
+    """The off-centre peak has no reflected power past its upper root at 2.5."""
+    path = staged_turb_input(tmp_path, "turb_driving_edot.athinput", {
+        "meshblock": "nx1 = 16\nnx2 = 16\nnx3 = 16",
+        "turb_driving": f"npeak = {npeak}",
+        "output2": "dcycle = 1",
+    })
+    directory = tmp_path / "run"
+    require_success(run_athena(directory, path, "time/nlim=1"))
+    force = read_force_blocks(latest_force(directory))["blocks"][0]["force"]
+    power = np.sum(np.abs(np.fft.fftn(force.astype(float), axes=(1, 2, 3)))**2, axis=0)
+    n = np.fft.fftfreq(16) * 16
+    nz, ny, nx = np.meshgrid(n, n, n, indexing="ij")
+    beyond = power[np.sqrt(nx*nx + ny*ny + nz*nz) > 2.5].max() / power.max()
+    if npeak == 1.5:
+        assert beyond < 1.0e-12
+    else:
+        assert beyond > 0.01
+
+
+def test_elongated_cgl_parabolic_spectrum_and_restart(tmp_path):
+    """The shipped elongated box suppresses its negative-power axial mode."""
+    source = (REPO_ROOT / "inputs/cgl_lf_paper/"
+              "cgl_lf_paper_amr_192x192x256_base.athinput").read_text()
+    path = tmp_path / "elongated.athinput"
+    path.write_text(source + """
+<mesh>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+<meshblock>
+nx1 = 16
+nx2 = 16
+nx3 = 16
+<time>
+nlim = 6
+<output1>
+dcycle = 1
+<output3>
+variable = turb_force
+dcycle = 1
+single_file_per_rank = false
+""")
+    reference = tmp_path / "reference"
+    split = tmp_path / "split"
+    resume = tmp_path / "resume"
+    require_success(run_athena(reference, path))
+    force = read_force_blocks(latest_force(reference))["blocks"][0]["force"]
+    power = np.sum(np.abs(np.fft.fftn(force.astype(float), axes=(1, 2, 3)))**2, axis=0)
+    assert power[1, 0, 0] < power.max()*1.0e-12
+    assert power[2, 0, 0] > power.max()*1.0e-4
+    require_success(run_athena(split, path, "time/nlim=3"))
+    restart = max((split / "rst").glob("*.rst"), key=lambda file: file.stat().st_mtime)
+    require_success(run_athena(resume, path, "time/nlim=6", restart=restart))
+    assert_equal_force_outputs(latest_force(reference), latest_force(resume))
+    reference_history = np.loadtxt(next(reference.glob("*.mhd.hst")))[-1]
+    resumed_history = np.loadtxt(next(resume.glob("*.mhd.hst")))[-1]
+    np.testing.assert_array_equal(reference_history, resumed_history)
+
+
 def test_zero_force_normalization_reports_replay_context(tmp_path):
     """A finite zero force fails with enough state to diagnose an exact replay."""
     result = run_athena(
