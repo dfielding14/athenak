@@ -13,6 +13,7 @@
 #include "mesh/mesh.hpp"
 #include "driver/driver.hpp"
 #include "eos/eos.hpp"
+#include "eos/cgl_physics.hpp"
 #include "diffusion/conduction.hpp"
 #include "diffusion/cgl_landau_fluid.hpp"
 #include "diffusion/cgl_landau_fluid_arithmetic.hpp"
@@ -616,6 +617,10 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
       ((indcs.nx3 > 1 && indcs.ks > 0) ? indcs.ks - 1 : 0);
   const int ku = final_stage ? n3m1 :
       ((indcs.nx3 > 1 && indcs.ke < n3m1) ? indcs.ke + 1 : n3m1);
+  // Charge the combined kernel to primitive_refresh; split checkpoints retain their scans.
+  cgl::LFAdmissibilityCounts counts{};
+  const bool fuse = stage > 0 && has_sts_cgl_lf && !peos->eos_data.passive &&
+                    !pmy_pack->pmesh->multilevel;
   const int dfloor_before = pmy_pack->pmesh->ecounter.neos_dfloor;
   const int pfloor_before = pmy_pack->pmesh->ecounter.neos_efloor;
   {
@@ -625,14 +630,14 @@ TaskStatus MHD::CGLLandauFluidPrimitiveRefresh(Driver *pdrive, int stage) {
                                    kl, ku);
     }
     peos->CGLRefreshPrimFromMagneticMoment(u0, bcc0, w0, il, iu, jl, ju,
-                                           kl, ku);
+                                           kl, ku, fuse ? &counts : nullptr);
   }
   pcgl_lf->RecordAdmissibility(
       u0, w0, bcc0, peos->eos_data,
       pmy_pack->pmesh->ecounter.neos_dfloor - dfloor_before,
       pmy_pack->pmesh->ecounter.neos_efloor - pfloor_before,
       pdrive->sts.sweep == Driver::STSSweep::pre ? "pre" : "post",
-      stage, pdrive->sts.nstages);
+      stage, pdrive->sts.nstages, false, fuse ? &counts : nullptr);
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "primitive-refresh", "post",
                               STSSweepName(pdrive), "magnetic-moment", u0);

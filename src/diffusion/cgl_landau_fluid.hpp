@@ -15,6 +15,7 @@
 #include "diffusion/sts_types.hpp"
 
 class ParameterInput;
+namespace cgl { struct LFAdmissibilityCounts; }
 
 struct CGLLFDiagnostics {
   std::uint64_t nstage = 0;
@@ -115,7 +116,8 @@ class CGLLandauFluid {
                            const DvceArray5D<Real> &bcc, const EOS_Data &eos,
                            int dfloor_delta, int pfloor_delta,
                            const char *sweep_name, int stage, int nstages,
-                           bool split_checkpoint = false);
+                           bool split_checkpoint = false,
+                           const cgl::LFAdmissibilityCounts *precomputed = nullptr);
   bool ProfileEnabled() const {return profile_enabled_;}
   void AddProfileTime(CGLLFProfileBucket bucket, Real seconds);
   void ReportProfile(const char *context) const;

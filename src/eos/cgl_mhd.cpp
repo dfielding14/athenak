@@ -390,7 +390,8 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                               DvceArray5D<Real> &prim,
                                               const int il, const int iu,
                                               const int jl, const int ju,
-                                              const int kl, const int ku) {
+                                              const int kl, const int ku,
+                                              cgl::LFAdmissibilityCounts *admissibility) {
   const int nmhd = pmy_pack->pmhd->nmhd;
   const int nscal = pmy_pack->pmhd->nscalars;
   const int nmb = pmy_pack->nmb_thispack;
@@ -405,10 +406,10 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
 
   const auto owned = pmy_pack->pmesh->mb_indcs;
   int nfloord_=0, nfloore_=0, nfloort_=0;
-  RecoverWithRatioDiagnostics("mhd_cgl_lf_refresh_prim", nmkji,
-      eos.passive && eos.passive_max_pressure_ratio > 0.0,
-  KOKKOS_LAMBDA(const int &idx, int &sumd, int &sume, int &sumt,
-                int &sumratio, Real &maxratio_) {
+  const bool backup = pcgl_lf != nullptr && pcgl_lf->effective_backup_limiter;
+  const auto recover = KOKKOS_LAMBDA(const int idx, int &sumd, int &sume,
+                                     int &sumratio, Real &maxratio_, bool check)
+      -> cgl::LFAdmissibilityCounts {
     int m = (idx)/nkji;
     int k = (idx - m*nkji)/nji;
     int j = (idx - m*nkji - k*nji)/ni;
@@ -472,8 +473,39 @@ void CGLMHD::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
     prim(m,IEN,k,j,i) = w.e;
     prim(m,IPP,k,j,i) = w.pp;
 
-    (void) sumt;
-  }, nfloord_, nfloore_, nfloort_, pmy_pack->pmesh->ecounter);
+    if (check && i >= owned.is && i <= owned.ie && j >= owned.js && j <= owned.je &&
+        k >= owned.ks && k <= owned.ke) {
+      const Real bsqr = SQR(u.bx) + SQR(u.by) + SQR(u.bz);
+      return cgl::CheckLFCell(w.d, w.e, w.pp, u.e, u.mu, bsqr, eos, backup);
+    }
+    return {};
+  };
+  if (admissibility != nullptr) {
+    if (eos.passive || pcgl_lf == nullptr || il > owned.is || iu < owned.ie ||
+        jl > owned.js || ju < owned.je || kl > owned.ks || ku < owned.ke) {
+      Kokkos::abort("Fused LF admissibility requires active CGL and full owned-cell coverage");
+    }
+    Kokkos::parallel_reduce("mhd_cgl_lf_refresh_and_check",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int idx, int &sumd, int &sume, int &bad, int &nonpos,
+                  int &mir, int &fh, int &hard) {
+      int unused_count = 0;
+      Real unused_max = 0.0;
+      recover(idx, sumd, sume, unused_count, unused_max, true)
+          .AddTo(bad, nonpos, mir, fh, hard);
+    }, Kokkos::Sum<int>(nfloord_), Kokkos::Sum<int>(nfloore_),
+       Kokkos::Sum<int>(admissibility->nonfinite), Kokkos::Sum<int>(admissibility->nonpositive),
+       Kokkos::Sum<int>(admissibility->mirror), Kokkos::Sum<int>(admissibility->firehose),
+       Kokkos::Sum<int>(admissibility->hard_bound));
+  } else {
+    RecoverWithRatioDiagnostics("mhd_cgl_lf_refresh_prim", nmkji,
+        eos.passive && eos.passive_max_pressure_ratio > 0.0,
+    KOKKOS_LAMBDA(const int idx, int &sumd, int &sume, int &sumt,
+                  int &sumratio, Real &maxratio_) {
+      recover(idx, sumd, sume, sumratio, maxratio_, false);
+      (void) sumt;
+    }, nfloord_, nfloore_, nfloort_, pmy_pack->pmesh->ecounter);
+  }
 
   pmy_pack->pmesh->ecounter.neos_dfloor += nfloord_;
   pmy_pack->pmesh->ecounter.neos_efloor += nfloore_;

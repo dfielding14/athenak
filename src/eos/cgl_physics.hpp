@@ -90,6 +90,31 @@ bool HardBoundViolated(const Real paniso, const Real bsqr, const EOS_Data &eos,
 }
 
 // Backup scattering replaces the soft rate; callers add background collisions.
+struct LFAdmissibilityCounts {
+  int nonfinite, nonpositive, mirror, firehose, hard_bound;
+
+  KOKKOS_INLINE_FUNCTION
+  void AddTo(int &bad, int &nonpos, int &mir, int &fh, int &hard) const {
+    bad += nonfinite;
+    nonpos += nonpositive;
+    mir += mirror;
+    fh += firehose;
+    hard += hard_bound;
+  }
+};
+
+KOKKOS_INLINE_FUNCTION
+LFAdmissibilityCounts CheckLFCell(Real rho, Real ppar, Real pperp, Real energy,
+                                  Real moment, Real bsqr, const EOS_Data &eos, bool backup) {
+  const Real paniso = pperp - ppar;
+  return {!Kokkos::isfinite(rho) || !Kokkos::isfinite(ppar) || !Kokkos::isfinite(pperp) ||
+          !Kokkos::isfinite(energy) || !Kokkos::isfinite(moment),
+          rho <= 0.0 || ppar <= 0.0 || pperp <= 0.0,
+          eos.mlim && MirrorLimiterActive(paniso, bsqr, eos),
+          eos.flim && FirehoseLimiterActive(paniso, bsqr, eos),
+          HardBoundViolated(paniso, bsqr, eos, backup)};
+}
+
 KOKKOS_INLINE_FUNCTION
 Real LimiterCollisionRate(const Real ppar, const Real pperp, const Real bsqr,
                           const EOS_Data &eos, const bool backup) {

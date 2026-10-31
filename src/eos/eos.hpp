@@ -18,6 +18,8 @@
 #include "mesh/meshblock.hpp"
 #include "parameter_input.hpp"
 
+namespace cgl { struct LFAdmissibilityCounts; }
+
 //----------------------------------------------------------------------------------------
 //! \struct EOSData
 //! \brief container for EOS variables and functions needed inside kernels. Storing
@@ -331,7 +333,8 @@ class EquationOfState {
                                                 DvceArray5D<Real> &prim,
                                                 const int il, const int iu,
                                                 const int jl, const int ju,
-                                                const int kl, const int ku);
+                                                const int kl, const int ku,
+                                                cgl::LFAdmissibilityCounts *admissibility = nullptr);
 };
 
 //----------------------------------------------------------------------------------------
@@ -494,7 +497,8 @@ class CGLMHD : public EquationOfState {
                                         DvceArray5D<Real> &prim,
                                         const int il, const int iu,
                                         const int jl, const int ju,
-                                        const int kl, const int ku) override;
+                                        const int kl, const int ku,
+                                        cgl::LFAdmissibilityCounts *admissibility = nullptr) override;
 };
 
 //----------------------------------------------------------------------------------------

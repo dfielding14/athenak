@@ -163,18 +163,33 @@ void InitializeLFRepairCase(MeshBlockPack *pack, const int test_case) {
   if (boundary) exchange(1);
   auto &events = pack->pmesh->ecounter;
   const int old_density = events.neos_dfloor, old_pressure = events.neos_efloor;
+  cgl::LFAdmissibilityCounts fused_counts{};
+  auto *counts = !peos->eos_data.passive ? &fused_counts : nullptr;
   peos->CGLRefreshPrimFromMagneticMoment(cons, pmhd->bcc0, pmhd->w0,
       boundary ? is-1 : 0, boundary ? ie+1 : ni-1,
       boundary ? js-1 : 0, boundary ? idx.je+1 : nj-1,
-      boundary ? ks-1 : 0, boundary ? idx.ke+1 : nk-1);
+      boundary ? ks-1 : 0, boundary ? idx.ke+1 : nk-1, counts);
   const int density_repairs = events.neos_dfloor-old_density;
   const int pressure_repairs = events.neos_efloor-old_pressure;
   if (!boundary) {
     Require("one isolated LF repair", density_repairs == (test_case == 2) &&
             pressure_repairs == (test_case == 1));
   }
+  const auto before = pmhd->pcgl_lf->diagnostics;
   pmhd->pcgl_lf->RecordAdmissibility(cons, pmhd->w0, pmhd->bcc0, peos->eos_data,
                                     density_repairs, pressure_repairs, "fixture", 1, 1);
+  if (counts != nullptr) {
+    const auto reference = pmhd->pcgl_lf->diagnostics;
+    pmhd->pcgl_lf->diagnostics = before;
+    pmhd->pcgl_lf->RecordAdmissibility(cons, pmhd->w0, pmhd->bcc0, peos->eos_data,
+        density_repairs, pressure_repairs, "fixture", 1, 1, false, counts);
+    const auto &actual = pmhd->pcgl_lf->diagnostics;
+    Require("fused owned-cell diagnostics match the independent post-repair scan",
+        actual.nonfinite == reference.nonfinite && actual.nonpositive == reference.nonpositive &&
+        actual.mirror == reference.mirror && actual.firehose == reference.firehose &&
+        actual.hard_bound == reference.hard_bound && actual.nstage == reference.nstage &&
+        actual.dfloor == reference.dfloor && actual.pfloor == reference.pfloor);
+  }
   if (boundary) {
     exchange(2);
     const auto shared = Snapshot(cons);

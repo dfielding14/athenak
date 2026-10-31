@@ -139,7 +139,8 @@ void EquationOfState::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
                                                        DvceArray5D<Real> &prim,
                                                        const int il, const int iu,
                                                        const int jl, const int ju,
-                                                       const int kl, const int ku) {
+                                                       const int kl, const int ku,
+                                                       cgl::LFAdmissibilityCounts *admissibility) {
   (void) cons;
   (void) bcc;
   (void) prim;
@@ -149,5 +150,6 @@ void EquationOfState::CGLRefreshPrimFromMagneticMoment(DvceArray5D<Real> &cons,
   (void) ju;
   (void) kl;
   (void) ku;
+  (void) admissibility;
   Kokkos::abort("CGLRefreshPrimFromMagneticMoment is only defined for CGL MHD.\n");
 }

@@ -1396,7 +1396,8 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const EOS_Data &eos_in,
                                          int dfloor_delta, int pfloor_delta,
                                          const char *sweep_name,
-                                         int stage, int nstages, bool split_checkpoint) {
+                                         int stage, int nstages, bool split_checkpoint,
+                                         const cgl::LFAdmissibilityCounts *precomputed) {
   if (split_checkpoint && !strict_admissibility) return;
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;
@@ -1416,38 +1417,32 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
   const int nkji = nx3*nx2*nx1;
   const int nji = nx2*nx1;
   int nonfinite = 0, nonpositive = 0, mirror = 0, firehose = 0, hard_bound = 0;
-  Kokkos::parallel_reduce("cgl_lf_admissibility",
-      Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
-  KOKKOS_LAMBDA(const int idx, int &nbad, int &nnonpos, int &nmirror,
-                int &nfirehose, int &nhard) {
-    const int m = idx/nkji;
-    int k = (idx - m*nkji)/nji;
-    int j = (idx - m*nkji - k*nji)/nx1;
-    const int i = idx - m*nkji - k*nji - j*nx1 + is;
-    k += ks;
-    j += js;
-    const Real rho = w(m,IDN,k,j,i);
-    const Real ppar = w(m,IPR,k,j,i);
-    const Real pperp = w(m,IPP,k,j,i);
-    const Real energy = u(m,IEN,k,j,i);
-    const Real moment = u(m,IAN,k,j,i);
-    if (!Kokkos::isfinite(rho) || !Kokkos::isfinite(ppar) ||
-        !Kokkos::isfinite(pperp) || !Kokkos::isfinite(energy) ||
-        !Kokkos::isfinite(moment)) {
-      ++nbad;
-    }
-    if (rho <= 0.0 || ppar <= 0.0 || pperp <= 0.0) {
-      ++nnonpos;
-    }
-    const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
-                     + SQR(bcc(m,IBZ,k,j,i));
-    const Real paniso = pperp - ppar;
-    if (eos.mlim && cgl::MirrorLimiterActive(paniso, bsqr, eos)) ++nmirror;
-    if (eos.flim && cgl::FirehoseLimiterActive(paniso, bsqr, eos)) ++nfirehose;
-    if (cgl::HardBoundViolated(paniso, bsqr, eos, backup)) ++nhard;
-  }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
-     Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
-     Kokkos::Sum<int>(hard_bound));
+  if (precomputed != nullptr) {
+    precomputed->AddTo(nonfinite, nonpositive, mirror, firehose, hard_bound);
+  } else {
+    Kokkos::parallel_reduce("cgl_lf_admissibility",
+        Kokkos::RangePolicy<>(DevExeSpace(), 0, nmkji),
+    KOKKOS_LAMBDA(const int idx, int &nbad, int &nnonpos, int &nmirror,
+                  int &nfirehose, int &nhard) {
+      const int m = idx/nkji;
+      int k = (idx - m*nkji)/nji;
+      int j = (idx - m*nkji - k*nji)/nx1;
+      const int i = idx - m*nkji - k*nji - j*nx1 + is;
+      k += ks;
+      j += js;
+      const Real rho = w(m,IDN,k,j,i);
+      const Real ppar = w(m,IPR,k,j,i);
+      const Real pperp = w(m,IPP,k,j,i);
+      const Real energy = u(m,IEN,k,j,i);
+      const Real moment = u(m,IAN,k,j,i);
+      const Real bsqr = SQR(bcc(m,IBX,k,j,i)) + SQR(bcc(m,IBY,k,j,i))
+                       + SQR(bcc(m,IBZ,k,j,i));
+      cgl::CheckLFCell(rho, ppar, pperp, energy, moment, bsqr, eos, backup)
+          .AddTo(nbad, nnonpos, nmirror, nfirehose, nhard);
+    }, Kokkos::Sum<int>(nonfinite), Kokkos::Sum<int>(nonpositive),
+       Kokkos::Sum<int>(mirror), Kokkos::Sum<int>(firehose),
+       Kokkos::Sum<int>(hard_bound));
+  }
 
   // Entry and sweep-end checks validate the split state without counting extra stages.
   if (counted_rhs) {
