@@ -70,6 +70,15 @@ prevents transport or fluid evolution from creating them. Restart before the
 extreme ratios develop to test this prevention. The cutoff can reduce the
 cooling power and should be revisited if many cells reach it.
 
+User history reports `cool_hits`, the number of owned cell-updates whose cooling
+was reduced by the 10:1 guard since the previous history output, and `cool_frac`,
+that count divided by all owned cell-updates over the interval. These include
+complete suppression in already extreme cells and exclude pressure-floor-only
+clipping and ghost cells. A cell can contribute on successive steps. Restarting
+resets these diagnostics. Repeated output at the same cycle repeats the same
+interval values. The counters use the cooling source pass and are read only at
+history output. Use a fresh history file when adopting the additional columns.
+
 Active CGL total energy decreases by $3\delta p/2$, and the stored anisotropy is updated
 consistently. Density, momentum, and magnetic field are unchanged by cooling.
 The common cap protects both pressure floors. If encoding in total energy loses

@@ -7,6 +7,7 @@
 //! \brief CGL turbulence with history-controlled cooling at fixed pressure difference.
 
 #include <cmath>
+#include <cstdint>
 #include <cstdlib>
 #include <iomanip>
 #include <iostream>
@@ -46,6 +47,10 @@ struct Cooling {
   Real target, tau, alpha = 0.0;
   Real history_dt = 0.0, last_time = -1.0;
   int history_dcycle = 0, last_cycle = -1;
+  DvceArray1D<std::uint64_t> guard_hits;
+  std::uint64_t last_guard_hits = 0, interval_guard_hits = 0;
+  int guard_cycle = 0;
+  Real interval_guard_fraction = 0.0;
 
   TaskStatus Source(Driver *pdrive, int stage) {
     if (alpha == 0.0) return TaskStatus::complete;
@@ -61,6 +66,10 @@ struct Cooling {
     const int ni = indcs.nx1 + 2*indcs.ng;
     const int nj = indcs.nx2 > 1 ? indcs.nx2 + 2*indcs.ng : 1;
     const int nk = indcs.nx3 > 1 ? indcs.nx3 + 2*indcs.ng : 1;
+    const int is = indcs.is, ie = indcs.ie;
+    const int js = indcs.js, je = indcs.je;
+    const int ks = indcs.ks, ke = indcs.ke;
+    auto guard_hits_ = guard_hits;
 
     // Cooling periodic ghosts identically avoids another boundary exchange.
     par_for("cgl_cooling", DevExeSpace(), 0, mesh->pmb_pack->nmb_thispack - 1,
@@ -92,7 +101,13 @@ struct Cooling {
       // shortcut: cap cooling at a 10:1 pressure ratio; revisit if many cells hit it.
       const Real cooling_floor = fmax(eos.pfloor, fabs(delta)/(cooling_max_ratio - 1.0));
       const Real available = fmax(fmin(ppar, pperp) - cooling_floor, 0.0);
-      const Real decrement = fmin(fraction*piso, available);
+      const Real requested = fraction*piso;
+      const Real floor_available = fmax(fmin(ppar, pperp) - eos.pfloor, 0.0);
+      if (i >= is && i <= ie && j >= js && j <= je && k >= ks && k <= ke &&
+          fmin(requested, floor_available) > available) {
+        Kokkos::atomic_increment(&guard_hits_(0));
+      }
+      const Real decrement = fmin(requested, available);
       if (decrement == 0.0) return;
       // Limit the common decrement, never floor the two pressures independently.
       if (delta >= 0.0) {
@@ -201,6 +216,22 @@ void CoolingHistory(HistoryData *pdata, Mesh *pm) {
   }
   pdata->label[pdata->nhist] = "cool_alpha";
   pdata->hdata[pdata->nhist++] = global_variable::my_rank == 0 ? cooling.alpha : 0.0;
+  if (pm->ncycle != cooling.guard_cycle) {
+    std::uint64_t hits;
+    Kokkos::deep_copy(hits, Kokkos::subview(cooling.guard_hits, 0));
+    cooling.interval_guard_hits = hits - cooling.last_guard_hits;
+    const auto &indcs = pm->mb_indcs;
+    const Real updates = Real(pm->nmb_total)*indcs.nx1*indcs.nx2*indcs.nx3*
+                         (pm->ncycle - cooling.guard_cycle);
+    // Generic history sums local counts and fractions over all ranks.
+    cooling.interval_guard_fraction = cooling.interval_guard_hits/updates;
+    cooling.last_guard_hits = hits;
+    cooling.guard_cycle = pm->ncycle;
+  }
+  pdata->label[pdata->nhist] = "cool_hits";
+  pdata->hdata[pdata->nhist++] = cooling.interval_guard_hits;
+  pdata->label[pdata->nhist] = "cool_frac";
+  pdata->hdata[pdata->nhist++] = cooling.interval_guard_fraction;
 }
 
 } // namespace
@@ -228,6 +259,11 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
   cooling.mesh = pm;
   cooling.pin = pin;
   cooling.paper_history = user_hist_func;
+  cooling.guard_hits = DvceArray1D<std::uint64_t>("cgl_cooling_guard_hits", 1);
+  cooling.guard_cycle = pm->ncycle;
+  pgen_final_func = [](ParameterInput *, Mesh *) {
+    cooling.guard_hits = DvceArray1D<std::uint64_t>();
+  };
   cooling.target = pin->GetReal("problem", "cooling_piso");
   cooling.tau = pin->GetReal("problem", "cooling_tau");
   if (!std::isfinite(cooling.target) || cooling.target <= 0.0 ||

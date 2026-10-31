@@ -365,6 +365,34 @@ def test_cooling_cold_floor_retains_representable_pressure(tmp_path):
         assert_background_unchanged(states[0], state)
 
 
+@pytest.mark.parametrize("ranks", [1, 2])
+@pytest.mark.parametrize("case,expected", [("ratio", 1), ("blocked", 1),
+                                          ("floor", 0), ("free", 0)])
+def test_cooling_guard_counts_owned_cell_updates(tmp_path, case, expected, ranks):
+    if ranks == 2:
+        executable = Path(os.environ.get("ATHENAK_TEST_EXE", "athena")).resolve()
+        config = subprocess.run([str(executable), "-c"], capture_output=True,
+                                text=True, check=True).stdout
+        if not re.search(r"MPI parallelism:\s+ON", config) or not shutil.which("mpirun"):
+            pytest.skip("requires an MPI executable and mpirun")
+    pp, pt = (1e-6, 0.392) if case == "blocked" else (0.8, 1.0)
+    source = input_text(ppar=pp, pperp=pt, target=0.05,
+                        tau=100 if case == "free" else 1e-5,
+                        floor=0.5 if case == "floor" else 1e-8,
+                        history="dcycle = 1", nlim=3)
+    states = run(tmp_path / case, source, ranks=ranks)
+    history = passive_acceptance.history(tmp_path / case / "cooling.user.hst")
+    np.testing.assert_array_equal(history["cool_hits"][1:], 128*expected)
+    np.testing.assert_array_equal(history["cool_frac"][1:], expected)
+    assert history["cool_hits"][0] == history["cool_frac"][0] == 0
+    resumed = run(tmp_path / "resumed", restart=states[2]["path"],
+                  flags=("time/nlim=3",), ranks=ranks)
+    hist2 = passive_acceptance.history(tmp_path / "resumed/cooling.user.hst")
+    np.testing.assert_array_equal(hist2["cool_hits"], 128*expected)
+    np.testing.assert_array_equal(hist2["cool_frac"], expected)
+    np.testing.assert_array_equal(resumed[3]["payload"], states[3]["payload"])
+
+
 @pytest.mark.parametrize("checkpoint_kind", ["interior", "off_cadence_final"])
 @pytest.mark.parametrize("adiabatic", [False, True])
 def test_cooling_restart_preserves_history_schedule(tmp_path, checkpoint_kind, adiabatic):
