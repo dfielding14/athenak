@@ -26,6 +26,7 @@ def test_face_state_extremes(tmp_path, precision):
     function = source[start:source.index("KOKKOS_INLINE_FUNCTION\nvoid CGLLFFlux(", start)]
     unit = tmp_path / "speed.cpp"
     unit.write_text("""
+#include <algorithm>
 #include <cmath>
 #include <limits>
 #include <iostream>
@@ -50,7 +51,8 @@ int main() {
     CGLLFFaceState face{};
     if (!BuildCGLLFFaceState(test[1],test[1],test[0],test[0],test[0],test[0],
                             1,0,0,1,0,1,true,1,false,eos,face)) return 1;
-    const long double thermal=std::sqrt(static_cast<long double>(test[0])/test[1]);
+    const long double thermal=std::sqrt(static_cast<long double>(test[0]))/
+                              std::sqrt(static_cast<long double>(test[1]));
     const long double floor=std::sqrt(static_cast<long double>(test[2]));
     const long double expected=thermal>floor ? thermal : floor;
     const long double relative=std::abs(face.cparallel/expected-1);
@@ -71,13 +73,15 @@ int main() {
     CGLLFFaceState face{};
     if (!BuildCGLLFFaceState(1,1,1,1,1,1,field[0],field[1],field[2],
                             field[3],0,1,false,1,false,eos,face)) return 3;
-    const long double x=field[0],y=field[1],z=field[2];
-    const long double norm=std::sqrt(x*x+y*y+z*z);
-    const long double denom=norm>field[3] ? norm : field[3];
+    // Scale before normalizing: the true norm can exceed even long double on arm64.
+    const long double scale=std::max({std::abs(field[0]),std::abs(field[1]),
+                                      std::abs(field[2]),field[3]});
+    const long double norm=std::hypot(field[0]/scale,field[1]/scale,field[2]/scale);
+    const long double denom=std::max(norm,field[3]/scale);
     const Real actual[3]={face.bhx,face.bhy,face.bhz};
     for (int d=0;d<3;++d) {
       if (!std::isfinite(actual[d]) ||
-          std::abs(actual[d]-static_cast<long double>(field[d])/denom) >
+          std::abs(actual[d]-(field[d]/scale)/denom) >
               8*std::numeric_limits<Real>::epsilon()) return 4;
     }
     if (face.bmag_inv != Real(1)/field[3]) return 5;

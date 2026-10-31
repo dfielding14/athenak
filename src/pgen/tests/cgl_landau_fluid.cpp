@@ -1049,13 +1049,22 @@ void CheckDeviceClosureResponse() {
     const long double driver = parallel ? (rho/ppar)*host(i,7) : (rho/pperp)*host(i,7)-
         ((ppar-pperp)/ppar)*host(i,8)*host(i,4);
     const long double pi=acosl(-1.0L);
-    const long double chi = parallel ?
-        8*c*c/(std::sqrt(8*pi)*c*host(i,5)+(3*pi-8)*host(i,6)) :
-        c*c/(std::sqrt(0.5L*pi)*c*host(i,5)+host(i,6));
-    const long double qmax = std::sqrt((parallel ? 8.0L : 2.0L)/pi)*c*pressure;
-    const long double ratio = -chi*pressure*driver/qmax;
+    // Evaluate the reference in log space on hosts without extended long double.
+    const long double streaming = std::log(parallel ? std::sqrt(8*pi) :
+        std::sqrt(0.5L*pi)) + std::log(c) + std::log(host(i,5));
+    const long double scattering = std::log(parallel ? 3*pi-8 : 1.0L) +
+        std::log(host(i,6));
+    const long double high = std::max(streaming, scattering);
+    const long double denominator = high +
+        std::log1p(std::exp(std::min(streaming, scattering)-high));
+    const long double cap = 0.5L*std::log((parallel ? 8.0L : 2.0L)/pi);
+    const long double log_ratio = (parallel ? std::log(8.0L) : 0.0L) +
+        std::log(c) + std::log(std::abs(driver)) - denominator - cap;
+    const long double ratio = std::copysign(std::exp(log_ratio), -driver);
+    const long double log_flux = cap + std::log(c) + std::log(pressure) +
+        log_ratio - std::log1p(std::abs(ratio));
     const Real expected[] = {static_cast<Real>(ratio),
-        static_cast<Real>(qmax*ratio/(1.0L+std::abs(ratio)))};
+        static_cast<Real>(std::copysign(std::exp(log_flux), -driver))};
     for (int j=0; j<2; ++j) {
       Require(expected[j] != 0.0 && std::isfinite(result(i,j)) && result(i,j) != 0.0,
               "device closure lost a representable response");
@@ -1131,7 +1140,10 @@ void CheckDeviceSlopeMeans() {
   });
   const auto result = HostCopy(answers);
   for (int i=0; i<2*count; ++i) {
-    const Real expected = static_cast<Real>(2.0L/(1.0L/host(i,0)+1.0L/host(i,1)));
+    const long double lo = std::min(std::abs(host(i,0)), std::abs(host(i,1)));
+    const long double hi = std::max(std::abs(host(i,0)), std::abs(host(i,1)));
+    const Real expected = std::copysign(static_cast<Real>(lo/(0.5L+0.5L*(lo/hi))),
+                                        host(i,0));
     for (int j=0; j<2; ++j) {
       Require(std::isfinite(result(i,j)) && result(i,j) != 0.0 &&
               std::abs(result(i,j)/expected-1.0) <= 64.0*std::numeric_limits<Real>::epsilon(),
@@ -2275,7 +2287,8 @@ void CheckLocalSpeed(Mesh *pm) {
   Kokkos::deep_copy(mhd->uflx.x1f,0.0);
   lf->lf_coeff_local = true;
   lf->NewTimeStep(mhd->w0,mhd->bcc0,mhd->b0,eos);
-  const long double speed = std::sqrt(static_cast<long double>(pressure)/rho);
+  const long double speed = std::sqrt(static_cast<long double>(pressure))/
+                            std::sqrt(static_cast<long double>(rho));
   const long double chi = std::sqrt(8.0L/std::acos(-1.0L))*speed/lf->lf_k_parallel;
   auto magnitude = [&](int i) {
     const long double tangent = bcc(0,IBY,ind.ks,ind.js,i)/bscale;

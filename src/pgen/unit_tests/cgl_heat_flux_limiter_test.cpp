@@ -84,8 +84,9 @@ void CheckDiffusionSlopeMeans() {
                             {small,Real(2.0)*small}, {subnormal,Real(2.0)*subnormal}};
     for (const auto &pair : pairs) {
       const Real a = sign*pair[0], b = sign*pair[1];
-      // Extended-range host oracle does not multiply two extreme Real values.
-      const Real expected = static_cast<Real>(2.0L/(1.0L/a+1.0L/b));
+      const long double lo = std::min(std::abs(a), std::abs(b));
+      const long double hi = std::max(std::abs(a), std::abs(b));
+      const Real expected = std::copysign(static_cast<Real>(lo/(0.5L+0.5L*(lo/hi))), a);
       RequireRelativeClose("unequal extreme slopes", VanLeerLimiter(a,b), expected);
       RequireRelativeClose("unequal extreme four slopes", VL4Limiter(a,a,b,b), expected);
     }
@@ -374,9 +375,9 @@ void CheckParallelClosureOverflowEndpoints() {
     const Real gradient = sign*speed/4.0;
     const long double c=speed, k=speed, nu=subnormal;
     const long double pi=std::acos(-1.0L);
-    const long double chi=8*c*c/(std::sqrt(8*pi)*c*k+(3*pi-8)*nu);
     const long double qmax=std::sqrt(8/pi)*c;
-    const long double expected_ratio=-chi*gradient/qmax;
+    const long double expected_ratio=-8*(gradient/c)/
+        (std::sqrt(8/pi)*(std::sqrt(8*pi)*(k/c)+(3*pi-8)*(nu/c)/c));
     Real ratio=0.0;
     const Real flux=cgl::LimitedParallelHeatFlux(
         speed, 1.0, 1.0, speed, subnormal, gradient, ratio);
@@ -392,9 +393,8 @@ void CheckParallelClosureOverflowEndpoints() {
     const Real q = cgl::LimitedParallelHeatFlux(
         maximum, 1.0, 1.0, 1.0, 0.0, -tiny, ratio);
     const Real expected = static_cast<Real>(
-        static_cast<long double>(maximum)*
-        static_cast<long double>(cgl::kSqrtEightOverPi)*
-        static_cast<long double>(tiny));
+        static_cast<long double>(maximum)*static_cast<long double>(tiny)*
+        static_cast<long double>(cgl::kSqrtEightOverPi));
     RequireClose("parallel subnormal ratio", ratio, tiny);
     Require("parallel subnormal-ratio flux finite", std::isfinite(q));
     RequireRelativeClose("parallel subnormal-ratio flux", q, expected);
@@ -505,16 +505,22 @@ void CheckPerpendicularBGKResponse() {
                           const Real ppar, const Real pperp, const Real inverse_b,
                           const Real k, const Real nu, const Real gt, const Real gb,
                           const bool logarithmic = false) {
-    // SHD97 Eq.49 in extended precision, independent of the production ratio/cap.
+    // Scale SHD97 Eq.49 before its products, also on hosts with double-range long double.
     const long double c = speed;
-    const long double chi = c*c/(std::sqrt(pi/2.0L)*c*k + nu);
-    const long double driver = static_cast<long double>(rho)*gt -
-        pperp*(1.0L-static_cast<long double>(pperp)/ppar)*gb*inverse_b;
-    const long double unlimited = -chi*driver;
-    const long double cap = std::sqrt(2.0L/pi)*c*pperp;
-    const Real expected_ratio = static_cast<Real>(unlimited/cap);
+    const long double density_ratio = static_cast<long double>(rho)/pperp;
+    const long double anisotropy = 1.0L-static_cast<long double>(pperp)/ppar;
+    const long double coefficient = std::max(density_ratio, std::abs(anisotropy));
+    const long double gradient = std::max(std::abs(gt), std::abs(gb));
+    const long double driver = (density_ratio/coefficient)*(gt/gradient) -
+        (anisotropy/coefficient)*(gb/gradient)*inverse_b;
+    const long double scale = std::max(c*k, static_cast<long double>(nu));
+    const long double cap_factor = std::sqrt(2.0L/pi);
+    const long double reference_ratio = -(c/scale)*coefficient*gradient*driver/
+        (c*k/scale+cap_factor*(nu/scale));
+    const long double cap = (c*pperp)*cap_factor;
+    const Real expected_ratio = static_cast<Real>(reference_ratio);
     const Real expected_flux = static_cast<Real>(
-        unlimited/(1.0L+std::abs(unlimited/cap)));
+        cap*(reference_ratio/(1.0L+std::abs(reference_ratio))));
     Real ratio = 0.0;
     const Real flux = cgl::LimitedPerpendicularHeatFlux(
         speed, rho, ppar, pperp, inverse_b, k, nu, gt, gb, ratio);
@@ -565,7 +571,7 @@ void CheckPerpendicularBGKResponse() {
       // before scaling: subtracting two huge long-double products loses accuracy.
       const long double driver = 16.0L+gb;
       const Real expected = static_cast<Real>(
-          -driver/(1.0L+test[1]/(std::sqrt(pi/2.0L)*test[0])));
+          -test[0]*(driver/(test[0]+test[1]/std::sqrt(pi/2.0L))));
       const Real ratio = cgl::PerpendicularHeatFluxRatio(
           test[0], maximum/Real(4.0), maximum/Real(8.0), maximum/Real(4.0),
           1.0, 1.0, test[1], 16.0, gb);
@@ -586,8 +592,8 @@ void CheckPerpendicularBGKResponse() {
       const Real gb = std::nextafter(-gt, direction);
       // Form the finite normalized cancellation before the overflowing response.
       const long double driver = static_cast<long double>(gt)+gb;
-      const long double exact = -driver/(static_cast<long double>(k)+
-          nu/(std::sqrt(pi/2.0L)*speed));
+      const long double exact = -(driver/nu)*speed/
+          (static_cast<long double>(speed)*k/nu+std::sqrt(2.0L/pi));
       const long double cap = std::sqrt(2.0L/pi)*speed*(maximum/Real(4.0));
       Real ratio = 0.0;
       const Real flux = cgl::LimitedPerpendicularHeatFlux(
