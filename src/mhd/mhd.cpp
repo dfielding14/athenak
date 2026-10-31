@@ -206,6 +206,11 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   if (pin->DoesParameterExist("mhd","viscosity")) {
     pvisc = new Viscosity("mhd", ppack, pin);
     const bool active = (pvisc->nu_iso > 0.0 || pvisc->nu_floor > 0.0);
+    if (peos->eos_data.is_cgl && active && pvisc->tdep_nu) {
+      std::cout << "### FATAL ERROR: CGL does not support temperature-dependent "
+                << "<mhd>/tdep_viscosity" << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
     has_sts_viscosity = active &&
         (pvisc->mode == parabolic::ParabolicIntegratorMode::sts);
     has_explicit_viscosity = active &&
@@ -364,6 +369,12 @@ MHD::MHD(MeshBlockPack *ppack, ParameterInput *pin) :
   // Source terms (if needed)
   if (pin->DoesBlockExist("mhd_srcterms")) {
     psrc = new SourceTerms("mhd_srcterms", ppack, pin);
+    if (peos->eos_data.is_cgl && (psrc->ism_cooling || psrc->rel_cooling)) {
+      std::cout << "### FATAL ERROR: CGL does not support <mhd_srcterms>/ism_cooling "
+                << "or rel_cooling; use the CGL-aware cgl_lf_cooling problem generator"
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
   }
 
   if (peos->eos_data.passive &&

@@ -103,6 +103,9 @@ CGLMHD::CGLMHD(MeshBlockPack *pp, ParameterInput *pin) :
     EquationOfState("mhd", pp, pin) {
   eos_data.is_ideal = true;
   eos_data.is_cgl = true;
+  // CGL primitives store the parallel and perpendicular pressures.
+  eos_data.use_e = false;
+  eos_data.use_t = false;
   const std::string ratio_text =
       pin->GetOrAddString("mhd", "passive_max_pressure_ratio", "0");
   char *ratio_end = nullptr;

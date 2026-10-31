@@ -243,6 +243,12 @@ ideal-gas MHD energy equation.
 See [passive thermodynamics](cgl_passive.md) for the J/A storage contract,
 pressure-work interpretation, restart encoding and uniform-periodic scope.
 
+CGL primitives hold parallel and perpendicular pressures. Generic ISM cooling,
+relativistic cooling, and temperature-dependent viscosity have no defined
+CGL temperature and energy-partition prescription and are rejected at setup.
+Constant-coefficient active viscosity is supported. The dedicated
+[CGL cooling generator](cgl_cooling.md) supplies pressure-aware thermal cooling.
+
 ## Turbulence Comparisons
 
 Majeski/Squire-style turbulence studies typically use a periodic elongated box
