@@ -274,8 +274,9 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
       has_sts_cgl_lf && pcgl_lf != nullptr && !has_sts_viscosity &&
       !has_sts_hyperviscosity && !has_sts_conduction && !has_sts_resistivity &&
       !has_sts_scalar_diffusion;
+  const bool fuse_lf_history = lf_only_sts_cell_update && !peos->eos_data.passive;
 
-  {
+  if (!fuse_lf_history) {
     CGLLFProfileRegion profile(pcgl_lf, CGLLFProfileBucket::sts_update_copies);
     if (lf_only_sts_cell_update) {
       const int nmb = pmy_pack->nmb_thispack;
@@ -358,6 +359,14 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
       KOKKOS_LAMBDA(const int m, const int q, const int k, const int j,
                     const int i) {
         const int n = (q == 0) ? IEN : IAN;
+        // At stage entry u0 holds the refreshed previous state. Only this owned
+        // cell reads its history, so rotate it in registers before updating u0.
+        const Real previous = fuse_lf_history ? u0_(m,n,k,j,i) : u_sts1_(m,q,k,j,i);
+        const Real previous2 = fuse_lf_history ? u_sts1_(m,q,k,j,i) : u_sts2_(m,q,k,j,i);
+        if (fuse_lf_history) {
+          if (stage == 1) u_sts0_(m,q,k,j,i) = previous;
+          u_sts1_(m,q,k,j,i) = previous;
+        }
         Real divf =
             (flx1(m,n,k,j,i+1) - flx1(m,n,k,j,i))/mbsize.d_view(m).dx1;
         if (multi_d) {
@@ -374,8 +383,8 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
           const Real first_rhs_coeff =
               coeffs.gammaj_tilde/cgl_first_rkl_weight;
           u0_(m,n,k,j,i) = cgl_lf::WeightedRKL2Update(
-              coeffs.muj, u_sts1_(m,q,k,j,i),
-              coeffs.nuj, u_sts2_(m,q,k,j,i),
+              coeffs.muj, previous,
+              coeffs.nuj, previous2,
               1.0 - coeffs.muj - coeffs.nuj, u_sts0_(m,q,k,j,i),
               first_rhs_coeff, u_sts_rhs_(m,q,k,j,i), weighted_rhs);
           if (stage == 1) {
@@ -383,8 +392,8 @@ TaskStatus MHD::STSUpdateU(Driver *pdrive, int stage) {
           }
         } else {
           const Real delta_u = -dt_sweep*divf;
-          u0_(m,n,k,j,i) = coeffs.muj*u_sts1_(m,q,k,j,i)
-                         + coeffs.nuj*u_sts2_(m,q,k,j,i)
+          u0_(m,n,k,j,i) = coeffs.muj*previous
+                         + coeffs.nuj*previous2
                          + (1.0 - coeffs.muj - coeffs.nuj)*u_sts0_(m,q,k,j,i)
                          + coeffs.gammaj_tilde*u_sts_rhs_(m,q,k,j,i)
                          + coeffs.muj_tilde*delta_u;
