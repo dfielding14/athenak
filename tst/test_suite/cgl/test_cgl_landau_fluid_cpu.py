@@ -5232,9 +5232,10 @@ def test_cgl_lf_paper_snapshot_window_skips_unselected_field_reads(
 
 def test_cgl_lf_paper_snapshot_analysis_uses_both_pressures():
     try:
+        # The first forcing kick changes velocity; the next step develops anisotropy.
         _run_paper(
             "cgl_ci_paper_analysis",
-            "time/nlim=1",
+            "time/nlim=2",
             "output2/file_type=bin",
             "output2/dt=0.01",
             "output2/single_file_per_rank=true",
