@@ -113,7 +113,7 @@ void SingleStateLLF_CGLStateAndFlux(const MHDPrim1D &w, const Real &bxi,
 
   if (bmag > eos.bfloor) {
     fh = 1.0 + (pperp - ppar)/bsq;
-    u.mu = w.d*log(pperp/ppar*SQR(w.d)/(bmag*bsq));
+    u.mu = w.d*cgl::SpecificAnisotropyForFlux(w.d, ppar, pperp, bmag, bsq);
   } else {
     ppar = TWO_3RDS*pperp + ONE_3RD*ppar;
     pperp = ppar;

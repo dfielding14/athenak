@@ -290,12 +290,11 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     const Real bmag = left ? bmagl : bmagr;
     Real anis;
     if (bmag > bfloor) {
-      anis = rho*log(pperp/ppar*SQR(rho)/(bmag*SQR(bmag)));
+      anis = cgl::SpecificAnisotropyForFlux(rho, ppar, pperp, bmag, SQR(bmag));
     } else {
       const Real bref = fmax(left ? bmagr : bmagl, bfloor);
-      anis = rho*(2.0*log(rho) - 3.0*log(bref));
+      anis = 2.0*log(rho) - 3.0*log(bref);
     }
-    anis /= rho;
     Real fmutmp = fdtmp*anis;
 
     flx(m,IDN,k,j,i) = fdtmp;

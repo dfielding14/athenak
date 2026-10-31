@@ -12,11 +12,13 @@
 #include <iostream>
 #include <limits>
 #include <string>
+#include <utility>
 
 #include "athena.hpp"
 #include "mesh/mesh.hpp"
 #include "eos/eos.hpp"
 #include "mhd/rsolvers/hlle_cgl.hpp"
+#include "mhd/rsolvers/llf_mhd_singlestate.hpp"
 #include "parameter_input.hpp"
 #include "pgen/pgen.hpp"
 
@@ -498,6 +500,74 @@ void CheckActiveReconstructedHlleRoute(const EOS_Data &eos) {
   std::cout << "CGL active reconstructed-HLLE route checks passed" << std::endl;
 }
 
+void CheckFiniteAnisotropyFluxes(EOS_Data eos) {
+  constexpr int nvars = IAN + 1;
+  const Real weak_field = pow(Real(10), sizeof(Real) == sizeof(float) ? -16 : -110);
+  const Real cases[][4] = {
+      {1.0, 1.0, 1.0, weak_field},
+      {1.0, 1.0, 1.0, 1.0},
+      {1.2, 0.8, 1.1, 0.7}};
+  RegionIndcs indcs{};
+  CoordData coord{};
+  DualArray1D<RegionSize> size("cgl-anisotropy-size", 1);
+  DvceArray4D<Real> bx("cgl-anisotropy-bx", 1, 1, 1, 1);
+  DvceArray5D<Real> flux("cgl-anisotropy-flux", 1, nvars, 1, 1, 1);
+  DvceArray4D<Real> ey("cgl-anisotropy-ey", 1, 1, 1, 1);
+  DvceArray4D<Real> ez("cgl-anisotropy-ez", 1, 1, 1, 1);
+  DvceArray5D<Real> pflux("cgl-anisotropy-pflux", 1, 6, 1, 1, 1);
+  const size_t scratch_size = 2*ScrArray2D<Real>::shmem_size(nvars, 1)
+                           + 2*ScrArray2D<Real>::shmem_size(NMAG, 1);
+  eos.bfloor = weak_field/16.0;
+  for (const auto &state : cases) {
+    const Real rho = state[0], pp = state[1], pt = state[2], field = state[3];
+    const Real specific = log(pt) - log(pp) + 2.0*log(rho) - 3.0*log(field);
+    for (const Real velocity : {Real(0), Real(0.3), Real(-0.3)}) {
+      Kokkos::deep_copy(bx, field);
+      par_for_outer("cgl_finite_anisotropy_hlle", DevExeSpace(), scratch_size,
+                    0, 0, 0, KOKKOS_LAMBDA(TeamMember_t member, const int) {
+        ScrArray2D<Real> wl(member.team_scratch(0), nvars, 1);
+        ScrArray2D<Real> wr(member.team_scratch(0), nvars, 1);
+        ScrArray2D<Real> bl(member.team_scratch(0), NMAG, 1);
+        ScrArray2D<Real> br(member.team_scratch(0), NMAG, 1);
+        par_for_inner(member, 0, 0, [&](const int i) {
+          for (int n = 0; n < nvars; ++n) wl(n,i) = wr(n,i) = 0.0;
+          for (int n = 0; n < NMAG; ++n) bl(n,i) = br(n,i) = 0.0;
+          wl(IDN,i) = wr(IDN,i) = rho;
+          wl(IVX,i) = wr(IVX,i) = velocity;
+          wl(IPR,i) = wr(IPR,i) = pp;
+          wl(IPP,i) = wr(IPP,i) = pt;
+        });
+        member.team_barrier();
+        mhd::HLLE_CGL(member, eos, indcs, size, coord, 0, 0, 0, 0, 0, IVX,
+                     wl, wr, bl, br, bx, flux, ey, ez, false, pflux);
+      });
+      auto actual = Kokkos::create_mirror_view_and_copy(HostMemSpace(), flux);
+      RequireClose("finite HLLE anisotropy flux", actual(0,IAN,0,0,0),
+                   actual(0,IDN,0,0,0)*specific);
+      MHDPrim1D w{};
+      w.d = rho; w.vx = velocity; w.e = pp; w.pp = pt;
+      MHDCons1D cons{}, physical{}, llf{};
+      Real speed;
+      mhd::SingleStateLLF_CGLStateAndFlux(w, field, eos, cons, physical, speed);
+      RequireClose("finite LLF conserved anisotropy", cons.mu, rho*specific);
+      RequireClose("finite LLF physical anisotropy flux", physical.mu,
+                   rho*velocity*specific);
+      mhd::SingleStateLLF_CGL(w, w, field, eos, llf);
+      RequireClose("finite LLF anisotropy flux", llf.mu, llf.d*specific);
+    }
+  }
+  const Real huge = std::numeric_limits<Real>::max()/16.0;
+  const Real tiny = std::numeric_limits<Real>::min();
+  for (const auto &pressure : {std::pair<Real,Real>{tiny, huge},
+                               std::pair<Real,Real>{huge, tiny}}) {
+    const Real expected = log(pressure.second) - log(pressure.first);
+    RequireClose("extreme pressure ratio specific anisotropy",
+        cgl::SpecificAnisotropyForFlux(1.0, pressure.first, pressure.second, 1.0, 1.0),
+        expected);
+  }
+  std::cout << "CGL finite anisotropy flux checks passed" << std::endl;
+}
+
 } // namespace
 
 void RunCglFastSpeedChecks() {
@@ -512,6 +582,7 @@ void RunCglFastSpeedChecks() {
   CheckEndpointRanges(eos);
   CheckCycleTimestepAdvancementEndpoints();
   CheckActiveReconstructedHlleRoute(eos);
+  CheckFiniteAnisotropyFluxes(eos);
   std::cout << "CGL fast-speed checks passed" << std::endl;
 }
 

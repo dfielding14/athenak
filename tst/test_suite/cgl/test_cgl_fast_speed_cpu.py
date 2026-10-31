@@ -45,6 +45,8 @@ def test_cgl_active_hlle_uses_scaled_literature_discriminant(
     ]
     if single_precision:
         configure.append("-DAthena_SINGLE_PRECISION=ON")
+        # The LLF header also includes GR metric initializers with double literals.
+        configure.append("-DCMAKE_CXX_FLAGS=-Wno-narrowing")
     _run(configure)
     object_target = (
         "src/CMakeFiles/athena.dir/pgen/unit_tests/cgl_fast_speed_test.cpp.o"
@@ -87,4 +89,5 @@ def test_cgl_active_hlle_uses_scaled_literature_discriminant(
     ])
     result = _run([str(executable)])
     assert "CGL active reconstructed-HLLE route checks passed" in result.stdout
+    assert "CGL finite anisotropy flux checks passed" in result.stdout
     assert "CGL fast-speed checks passed" in result.stdout

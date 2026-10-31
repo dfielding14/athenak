@@ -21,6 +21,24 @@ constexpr Real kSqrtTwoPi = 2.5066282746310002;
 constexpr Real kSqrtEightPi = 5.013256549262000;
 constexpr Real kThreePiMinusEight = 1.4247779607693793;
 
+KOKKOS_INLINE_FUNCTION
+Real SpecificAnisotropyForFlux(const Real rho, const Real ppar, const Real pperp,
+                              const Real bmag, const Real bsqr) {
+  const Real pressure_ratio = pperp/ppar;
+  const Real density_squared = SQR(rho);
+  const Real field_cubed = bmag*bsqr;
+  const Real numerator = pressure_ratio*density_squared;
+  const Real argument = numerator/field_cubed;
+  const Real minimum = std::numeric_limits<Real>::min();
+  if (pressure_ratio >= minimum && density_squared >= minimum &&
+      field_cubed >= minimum && numerator >= minimum &&
+      argument >= minimum && Kokkos::isfinite(argument)) {
+    return log(argument);
+  }
+  // Finite invariants can have unrepresentable products inside the logarithm.
+  return log(pperp) - log(ppar) + 2.0*log(rho) - 3.0*log(bmag);
+}
+
 // Threshold parameters are positive coefficients of magnetic pressure B^2/2.
 KOKKOS_INLINE_FUNCTION
 Real FirehoseThreshold(const Real bsqr, const EOS_Data &eos) {
