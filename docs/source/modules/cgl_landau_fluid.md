@@ -238,6 +238,10 @@ equal an offline snapshot proxy, or close a total energy budget. The existing
 `aam-D` history column remains the conserved anisotropy variable for
 compatibility.
 
+CGL restarts require the saved MHD EOS, passive encoding, and scalar count.
+Changing these through an input overlay or command-line override is rejected
+before the fluid payload is read, including during refinement or reblocking.
+
 When `cgl_lf_diagnostics = none`, LF stage-admissibility counters remain active,
 but heat-flux face, cap, and q-work reductions are not
 collected. In that mode the corresponding heat-flux diagnostic columns should

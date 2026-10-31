@@ -234,6 +234,8 @@ int main(int argc, char *argv[]) {
   // read parameters from restart file
   bool restart_passive = false;
   int restart_passive_encoding = -1;
+  bool restart_cgl = false;
+  int restart_mhd_scalars = 0;
   bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
   if (res_flag) {
     // Check if the path contains "rank_" directory
@@ -289,6 +291,11 @@ int main(int argc, char *argv[]) {
     restartfile.Open(restart_file.c_str(),IOWrapper::FileMode::read,single_file_per_rank);
     pinput->LoadFromFile(restartfile, single_file_per_rank);
     // Capture the payload contract before an input overlay can replace its metadata.
+    restart_cgl = pinput->DoesParameterExist("mhd", "eos") &&
+                  pinput->GetString("mhd", "eos") == "cgl";
+    if (restart_cgl) {
+      restart_mhd_scalars = pinput->GetOrAddInteger("mhd", "nscalars", 0);
+    }
     restart_passive = pinput->DoesParameterExist("mhd", "passive") &&
                       pinput->GetBoolean("mhd", "passive");
     if (pinput->DoesParameterExist("mhd", "passive_restart_encoding")) {
@@ -323,6 +330,8 @@ int main(int argc, char *argv[]) {
   }
 
   if (res_flag) {
+    const bool cgl = pinput->DoesParameterExist("mhd", "eos") &&
+                     pinput->GetString("mhd", "eos") == "cgl";
     const bool passive = pinput->DoesParameterExist("mhd", "passive") &&
                          pinput->GetBoolean("mhd", "passive");
     const int encoding = pinput->DoesParameterExist("mhd", "passive_restart_encoding") ?
@@ -338,6 +347,13 @@ int main(int argc, char *argv[]) {
       std::cout << "### FATAL ERROR: passive restarts require J/A encoding version 1 "
                 << "for isothermal flow or version 2 for adiabatic flow; "
                 << "active and passive checkpoints cannot be interchanged." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (cgl != restart_cgl ||
+        (cgl && pinput->GetOrAddInteger("mhd", "nscalars", 0) !=
+                    restart_mhd_scalars)) {
+      std::cout << "### FATAL ERROR: CGL restart layout requires the saved MHD EOS "
+                << "and scalar count" << std::endl;
       std::exit(EXIT_FAILURE);
     }
   }
