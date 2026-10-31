@@ -195,6 +195,20 @@ The replay sub-kernels are removed: `cgl_lf_profile_detail=false` remains accept
 for old inputs, while `true` is rejected. Use profiling for attribution and the
 ordinary elapsed interval for production timing.
 
+For a matched throughput comparison, restart the same checkpoint on the same
+rank layout with identical forcing, arithmetic, and STS settings. Compare
+elapsed time over the same physical interval and compute LF evaluations from
+the change in `lf_nstage` divided by the owned cell count on a fixed mesh.
+This separates the cost per evaluation from a change in the number of stages.
+
+To diagnose a cold cell, replay from before the first drop in the LF timestep.
+Track its pressures and neighboring magnetic fields across the pre-LF sweep,
+hyperbolic update, cooling, post-LF sweep, and scattering. If the first extreme
+ratio appears inside LF, inspect that sweep's individual stages. In a cooled
+run, `cool_hits` counts updates clipped by the cooling guard, while passive
+`ratio_hits` counts pressure redistributions at recovery. Compare at the same
+times with the original executable and forcing realization.
+
 ## STS Fast Paths
 
 The MHD STS update has a CGL-LF-only path when no other MHD STS process is

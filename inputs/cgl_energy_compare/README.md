@@ -27,12 +27,11 @@ uses each directly, retaining magnetic energy even when it is tiny compared
 with thermal energy.
 
 The script matches samples by time and removes abandoned rows after a restart
-or a duplicate final write, keeping the later branch. Additional user-history
-samples are allowed. Both histories must contain the same recorded sample times,
-and their columns must be consistent across appended restart headers.
+or a duplicate final write, keeping the later branch. Each MHD sample needs
+a user-history sample at the same recorded time. Extra user-history samples
+are allowed. Within each file the column names must agree across restart headers.
 
 An older history lacking a direct thermal sum or the cell-centered magnetic
 sum requires matching saved snapshots to recover exact thermal energy. The
-script reports this missing data rather than estimating heating from the
-face-based magnetic history. The CSV and magnetic-energy curves use the same
-physical quantities as the thermal-energy calculation.
+script reports the missing data. The CSV and magnetic-energy curves use the
+same physical quantities as the thermal-energy calculation.

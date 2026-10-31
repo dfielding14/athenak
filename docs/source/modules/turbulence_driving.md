@@ -111,8 +111,8 @@ in a physical shell.
 Check the intended peak and weighting separately for an elongated box.
 Parabolic power is zero beyond the parabola's roots, even when those roots
 lie inside the selected shell. On a continuation from an older executable,
-stored amplitudes in those modes decay on `tcorr`; subsequent random
-increments use the corrected zero power. Use the same forcing version for
+stored amplitudes in those modes decay on `tcorr` and receive no further
+random increments. Use the same forcing version for
 matched simulations.
 
 `mode_amp_real` and `mode_amp_imag` are the authoritative OU state. The

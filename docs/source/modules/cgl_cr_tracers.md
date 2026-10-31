@@ -20,8 +20,9 @@ does not replace it.
 
 ## Seed a particle run
 
-Build with the usual CGL configuration and built-in problem generators; no
-separate `PROBLEM=part_random` build is required. For example:
+Use the CGL executable for the snapshot. The production `PROBLEM=cgl_lf_cooling`
+build accepts its cooled checkpoints directly with the frozen overlay. A
+`built_in_pgens` executable can also use the pgen named in the checkpoint.
 
 ```sh
 ./build/src/athena -r /absolute/path/cgl.00100.rst \
