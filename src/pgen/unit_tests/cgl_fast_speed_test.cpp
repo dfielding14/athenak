@@ -480,7 +480,7 @@ void CheckActiveReconstructedHlleRoute(const EOS_Data &eos) {
     });
     member.team_barrier();
     mhd::HLLE_CGL(member, eos, indcs, size, coord, 0, 0, 0, 0, 0, IVX,
-                  wl, wr, bl, br, bx, flux, e3x1, e2x1, false, pflux);
+                  wl, wr, bl, br, bx, flux, e3x1, e2x1, true, pflux);
   });
   Kokkos::fence();
 
@@ -497,6 +497,24 @@ void CheckActiveReconstructedHlleRoute(const EOS_Data &eos) {
           std::abs(corrected.d - legacy.d) > 1.0e-3);
   Require("active reconstructed HLLE differs from legacy momentum flux",
           std::abs(corrected.mx - legacy.mx) > 1.0e-3);
+  auto hpflux = Kokkos::create_mirror_view_and_copy(HostMemSpace(), pflux);
+  const Real cl = LiteratureFastSpeed(wl.d, wl.e, wl.pp, kBx, kBy, kBz);
+  const Real cr = LiteratureFastSpeed(wr.d, wr.e, wr.pp, kBx, kBy, kBz);
+  const Real bp = std::max(wl.vx + cl, wr.vx + cr);
+  const Real bm = std::min(wl.vx - cl, wr.vx - cr);
+  const Real tmp = 0.5*(bp + bm)/(bp - bm);
+  const Real field[3] = {kBx, kBy, kBz};
+  const Real bsq = kBx*kBx + kBy*kBy + kBz*kBz;
+  for (int dir = 0; dir < 3; ++dir) {
+    const Real anis_left = (wl.e - wl.pp)*kBx*field[dir]/bsq;
+    const Real anis_right = (wr.e - wr.pp)*kBx*field[dir]/bsq;
+    const Real pressure_left = anis_left + (dir == 0 ? wl.pp : 0.0);
+    const Real pressure_right = anis_right + (dir == 0 ? wr.pp : 0.0);
+    RequireClose("active HLLE pressure traction", hpflux(0,dir,0,0,0),
+                 HlleCombine(pressure_left, pressure_right, tmp));
+    RequireClose("active HLLE anisotropic traction", hpflux(0,3+dir,0,0,0),
+                 HlleCombine(anis_left, anis_right, tmp));
+  }
   std::cout << "CGL active reconstructed-HLLE route checks passed" << std::endl;
 }
 
@@ -564,6 +582,10 @@ void CheckFiniteAnisotropyFluxes(EOS_Data eos) {
     RequireClose("extreme pressure ratio specific anisotropy",
         cgl::SpecificAnisotropyForFlux(1.0, pressure.first, pressure.second, 1.0, 1.0),
         expected);
+  }
+  for (const Real rho : {sqrt(huge)*16.0, sqrt(tiny)/16.0}) {
+    RequireClose("extreme density specific anisotropy",
+        cgl::SpecificAnisotropyForFlux(rho, 1.0, 1.0, 1.0, 1.0), 2.0*log(rho));
   }
   std::cout << "CGL finite anisotropy flux checks passed" << std::endl;
 }

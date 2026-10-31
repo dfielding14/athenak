@@ -33,7 +33,7 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
      DvceArray5D<Real> flx, DvceArray4D<Real> ey, DvceArray4D<Real> ez,
      const bool record_pwork, DvceArray5D<Real> pflux) {
   if (eos.passive) {
-    // Fluxes() has already supplied the native isothermal flow and electric fields.
+    // Fluxes() has already supplied the native flow and electric fields.
     const int ivy = IVX + ((ivx-IVX)+1)%3;
     const int ivz = IVX + ((ivx-IVX)+2)%3;
     const int iby = ivy-IVX, ibz = ivz-IVX;
@@ -76,10 +76,7 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
   int ivz = IVX + ((ivx-IVX)+2)%3;
   int iby = ((ivx-IVX) + 1)%3;
   int ibz = ((ivx-IVX) + 2)%3;
-  Real gm1 = eos.gamma - 1.0;
   Real bfloor = eos.bfloor;
-  Real igm1 = 1.0/gm1;
-  Real iso_cs = eos.iso_cs;
 
   par_for_inner(member, il, iu, [&](const int i) {
     //--- Step 1.  Create local references for L/R states (helps compiler vectorize)
@@ -131,80 +128,16 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
       wr_ipp = wr_ipr;
     }
 
-    //--- Step 3. Compute fast magnetosonic speed in L,R states (MHD used Roe-averaged)
+    //--- Step 3. Compute fast magnetosonic speed in the left and right states.
 
-    // Passive-Delta evolves CGL thermodynamics diagnostically while the flow
-    // follows isothermal MHD, including its numerical signal speeds.
-    Real cl, cr;
-    if (eos.passive) {
-      cl = eos.IdealMHDFastSpeed(wl_idn, bxi, wl_iby, wl_ibz);
-      cr = eos.IdealMHDFastSpeed(wr_idn, bxi, wr_iby, wr_ibz);
-    } else {
-      cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, wl_ipp, bxi, wl_iby, wl_ibz, bfloor);
-      cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, wr_ipp, bxi, wr_iby, wr_ibz, bfloor);
-    }
+    const Real cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, wl_ipp,
+                                         bxi, wl_iby, wl_ibz, bfloor);
+    const Real cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, wr_ipp,
+                                         bxi, wr_iby, wr_ibz, bfloor);
 
-    //Real sqrtdl = sqrt(wl_idn);
-    //Real sqrtdr = sqrt(wr_idn);
-    //Real isdlpdr = 1.0/(sqrtdl + sqrtdr);
-
-    //Real wroe_idn = sqrtdl*sqrtdr;
-    //Real wroe_ivx = (sqrtdl*wl_ivx + sqrtdr*wr_ivx)*isdlpdr;
-    //Real wroe_ivy = (sqrtdl*wl_ivy + sqrtdr*wr_ivy)*isdlpdr;
-    //Real wroe_ivz = (sqrtdl*wl_ivz + sqrtdr*wr_ivz)*isdlpdr;
-    // Note Roe average of magnetic field is different
-    //Real wroe_iby = (sqrtdr*wl_iby + sqrtdl*wr_iby)*isdlpdr;
-    //Real wroe_ibz = (sqrtdr*wl_ibz + sqrtdl*wr_ibz)*isdlpdr;
-    //Real x = 0.5*(SQR(wl_iby-wr_iby) + SQR(wl_ibz-wr_ibz))/(SQR(sqrtdl+sqrtdr));
-    //Real y = 0.5*(wl_idn + wr_idn)/wroe_idn;
-
-    // Following Roe(1981), the enthalpy H=(E+P)/d is averaged for ideal gas EOS,
-    // rather than E or P directly. sqrtdl*hl = sqrtdl*(el+pl)/dl = (el+pl)/sqrtdl
-    //Real pbl = 0.5*(bxi*bxi + SQR(wl_iby) + SQR(wl_ibz));
-    //Real pbr = 0.5*(bxi*bxi + SQR(wr_iby) + SQR(wr_ibz));
-    //Real el,er,hroe,cl,cr;
-    //if (!(eos.passive)) {
-    //  el = wl_ipr*igm1 + 0.5*wl_idn*(SQR(wl_ivx)+SQR(wl_ivy)+SQR(wl_ivz)) + pbl;
-    //  er = wr_ipr*igm1 + 0.5*wr_idn*(SQR(wr_ivx)+SQR(wr_ivy)+SQR(wr_ivz)) + pbr;
-    //  hroe = ((el + wl_ipr + pbl)/sqrtdl + (er + wr_ipr + pbr)/sqrtdr)*isdlpdr;
-    //  cl = eos.IdealMHDFastSpeed(wl_idn, wl_ipr, bxi, wl_iby, wl_ibz);
-    //  cr = eos.IdealMHDFastSpeed(wr_idn, wr_ipr, bxi, wr_iby, wr_ibz);
-    //} else {
-    //  el = wl_ipr*igm1 + 0.5*wl_idn*(SQR(wl_ivx)+SQR(wl_ivy)+SQR(wl_ivz)) + pbl;
-    //  er = wr_ipr*igm1 + 0.5*wr_idn*(SQR(wr_ivx)+SQR(wr_ivy)+SQR(wr_ivz)) + pbr;
-    //  cl = eos.IdealMHDFastSpeed(wl_idn, bxi, wl_iby, wl_ibz);
-    //  cr = eos.IdealMHDFastSpeed(wr_idn, bxi, wr_iby, wr_ibz);
-    //}
-
-
-    // Compute Roe-averaged Cf using eq. B18 (ideal gas) or B39 (isothermal)
-    //Real btsq = SQR(wroe_iby) + SQR(wroe_ibz);
-    //Real vaxsq = bxi*bxi/wroe_idn;
-    //Real bt_starsq, twid_asq;
-    //if (!(eos.passive)) {
-    //  bt_starsq = (gm1 - (gm1 - 1.0)*y)*btsq;
-    //  Real hp = hroe - (vaxsq + btsq/wroe_idn);
-    //  Real vsq = SQR(wroe_ivx) + SQR(wroe_ivy) + SQR(wroe_ivz);
-    //  twid_asq = fmax((gm1*(hp-0.5*vsq)-(gm1-1.0)*x), 0.0);
-    //} else {
-    //  bt_starsq = btsq*y;
-    //  twid_asq = iso_cs*iso_cs + x;
-    //}
-    //Real ct2 = bt_starsq/wroe_idn;
-    //Real tsum = vaxsq + ct2 + twid_asq;
-    //Real tdif = vaxsq + ct2 - twid_asq;
-    //Real cf2_cs2 = sqrt(tdif*tdif + 4.0*twid_asq*ct2);
-
-    //Real cfsq = 0.5*(tsum + cf2_cs2);
-    //Real a = sqrt(cfsq);
-
-    //--- Step 4. Compute the max/min wave speeds based on L/R and Roe-averaged values
-
+    //--- Step 4. Compute the max/min wave speeds from the left and right states.
     Real al = fmin((wr_ivx - cr),(wl_ivx - cl));
     Real ar = fmax((wr_ivx + cr),(wl_ivx + cl));
-
-    //Real al = fmin((wroe_ivx - a),(wl_ivx - cl));
-    //Real ar = fmax((wroe_ivx + a),(wr_ivx + cr));
 
     // following min/max set to TINY_NUMBER to fix bug found in converging supersonic flow
     Real bp = ar > 0.0 ? ar : 1.0e-20;
@@ -219,55 +152,20 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     fl.d  = wl_idn*vxl;
     fr.d  = wr_idn*vxr;
 
-    if (!(eos.passive)) {
-      fl.mx = wl_idn*wl_ivx*vxl + pbl + wl_ipp - SQR(bxi)*fhl;
-      fr.mx = wr_idn*wr_ivx*vxr + pbr + wr_ipp - SQR(bxi)*fhr;
+    fl.mx = wl_idn*wl_ivx*vxl + pbl + wl_ipp - SQR(bxi)*fhl;
+    fr.mx = wr_idn*wr_ivx*vxr + pbr + wr_ipp - SQR(bxi)*fhr;
 
-      fl.my = wl_idn*wl_ivy*vxl - bxi*wl_iby*fhl;
-      fr.my = wr_idn*wr_ivy*vxr - bxi*wr_iby*fhr;
+    fl.my = wl_idn*wl_ivy*vxl - bxi*wl_iby*fhl;
+    fr.my = wr_idn*wr_ivy*vxr - bxi*wr_iby*fhr;
 
-      fl.mz = wl_idn*wl_ivz*vxl - bxi*wl_ibz*fhl;
-      fr.mz = wr_idn*wr_ivz*vxr - bxi*wr_ibz*fhr;
-    } else {
-      fl.mx = wl_idn*wl_ivx*vxl + pbl + (iso_cs*iso_cs)*wl_idn - SQR(bxi);
-      fr.mx = wr_idn*wr_ivx*vxr + pbr + (iso_cs*iso_cs)*wr_idn - SQR(bxi);
-
-      fl.my = wl_idn*wl_ivy*vxl - bxi*wl_iby;
-      fr.my = wr_idn*wr_ivy*vxr - bxi*wr_iby;
-
-      fl.mz = wl_idn*wl_ivz*vxl - bxi*wl_ibz;
-      fr.mz = wr_idn*wr_ivz*vxr - bxi*wr_ibz;
-    }
-
-
-    //fl.mx = wl_idn*wl_ivx*vxl + pbl - SQR(bxi);
-    //fr.mx = wr_idn*wr_ivx*vxr + pbr - SQR(bxi);
-
-    //fl.my = wl_idn*wl_ivy*vxl - bxi*wl_iby;
-    //fr.my = wr_idn*wr_ivy*vxr - bxi*wr_iby;
-
-    //fl.mz = wl_idn*wl_ivz*vxl - bxi*wl_ibz;
-    //fr.mz = wr_idn*wr_ivz*vxr - bxi*wr_ibz;
-
-    //if (!(eos.passive)) {
-    //  fl.mx += wl_ipr;
-    //  fr.mx += wr_ipr;
-    //} else {
-    //  fl.mx += (iso_cs*iso_cs)*wl_idn;
-    //  fr.mx += (iso_cs*iso_cs)*wr_idn;
-    //}
+    fl.mz = wl_idn*wl_ivz*vxl - bxi*wl_ibz*fhl;
+    fr.mz = wr_idn*wr_ivz*vxr - bxi*wr_ibz*fhr;
 
     //Energy fluxes
     fl.e = el*vxl + wl_ivx*(wl_ipp + pbl);
     fr.e = er*vxr + wr_ivx*(wr_ipp + pbr);
     fl.e -= bxi*(bxi*wl_ivx + wl_iby*wl_ivy + wl_ibz*wl_ivz)*fhl;
     fr.e -= bxi*(bxi*wr_ivx + wr_iby*wr_ivy + wr_ibz*wr_ivz)*fhr;
-
-    //energy fluxes
-    //fl.e   = el*vxl + wl_ivx*(wl_ipr + pbl - bxi*bxi);
-    //fr.e   = er*vxr + wr_ivx*(wr_ipr + pbr - bxi*bxi);
-    //fl.e  -= bxi*(wl_iby*wl_ivy + wl_ibz*wl_ivz);
-    //fr.e  -= bxi*(wr_iby*wr_ivy + wr_ibz*wr_ivz);
 
     //B/E field fluxes for CT
     fl.by = wl_iby*vxl - bxi*wl_ivy;
@@ -307,26 +205,20 @@ void HLLE_CGL(TeamMember_t const &member, const EOS_Data &eos,
     ez(m,k,j,i) =  0.5*(fl.bz + fr.bz) + (fl.bz - fr.bz)*tmp;
 
     if (record_pwork) {
-      Real plx = 0.0, ply = 0.0, plz = 0.0;
-      Real prx = 0.0, pry = 0.0, prz = 0.0;
-      Real alx = 0.0, aly = 0.0, alz = 0.0;
-      Real arx = 0.0, ary = 0.0, arz = 0.0;
-      if (!eos.passive) {
-        const Real danisl = (bmagl > bfloor) ? (wl_ipp - wl_ipr)/(2.0*pbl) : 0.0;
-        const Real danisr = (bmagr > bfloor) ? (wr_ipp - wr_ipr)/(2.0*pbr) : 0.0;
-        alx = -SQR(bxi)*danisl;
-        aly = -bxi*wl_iby*danisl;
-        alz = -bxi*wl_ibz*danisl;
-        arx = -SQR(bxi)*danisr;
-        ary = -bxi*wr_iby*danisr;
-        arz = -bxi*wr_ibz*danisr;
-        plx = wl_ipp + alx;
-        ply = aly;
-        plz = alz;
-        prx = wr_ipp + arx;
-        pry = ary;
-        prz = arz;
-      }
+      const Real danisl = (bmagl > bfloor) ? (wl_ipp - wl_ipr)/(2.0*pbl) : 0.0;
+      const Real danisr = (bmagr > bfloor) ? (wr_ipp - wr_ipr)/(2.0*pbr) : 0.0;
+      const Real alx = -SQR(bxi)*danisl;
+      const Real aly = -bxi*wl_iby*danisl;
+      const Real alz = -bxi*wl_ibz*danisl;
+      const Real arx = -SQR(bxi)*danisr;
+      const Real ary = -bxi*wr_iby*danisr;
+      const Real arz = -bxi*wr_ibz*danisr;
+      const Real plx = wl_ipp + alx;
+      const Real ply = aly;
+      const Real plz = alz;
+      const Real prx = wr_ipp + arx;
+      const Real pry = ary;
+      const Real prz = arz;
       pflux(m,ivx-IVX,k,j,i) = 0.5*(plx + prx) + (plx - prx)*tmp;
       pflux(m,ivy-IVX,k,j,i) = 0.5*(ply + pry) + (ply - pry)*tmp;
       pflux(m,ivz-IVX,k,j,i) = 0.5*(plz + prz) + (plz - prz)*tmp;
