@@ -113,6 +113,42 @@ def pressures(state):
     return ppar, ratio*ppar
 
 
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_frozen_cooling_checkpoint_preserves_controller(tmp_path, adiabatic):
+    source = input_text(history="dcycle = 1", nlim=1)
+    if adiabatic:
+        source += adiabatic_settings()
+    seed = run(tmp_path / "seed", source, adiabatic=adiabatic)[1]
+    overlay = (ROOT / "inputs/particles/frozen_cgl.athinput").read_text()
+    final_time = seed["time"] + 0.02
+    overlay += ("\n<particles>\nppc = 0.015625\n"
+                f"<time>\ntlim = {final_time:.17g}\n")
+    frozen = run(tmp_path / "frozen", overlay, restart=seed["path"],
+                 adiabatic=adiabatic)
+    final = frozen[max(frozen)]
+    assert final["time"] == final_time
+    assert final["cycle"] > seed["cycle"]
+    np.testing.assert_array_equal(final["active"], seed["active"])
+    for first, second in zip(final["faces"], seed["faces"]):
+        np.testing.assert_array_equal(first, second)
+    for name in ("cooling_alpha", "cooling_history_last_time",
+                 "cooling_history_last_cycle"):
+        assert final[name] == seed[name]
+    hist = passive_acceptance.history(tmp_path / "frozen/cooling.user.hst")
+    np.testing.assert_array_equal(hist["cool_alpha"], seed["cooling_alpha"])
+    checkpoint = sorted((tmp_path / "frozen/prst/rank_00000000").glob("*.prst"))[-1]
+    particles = np.fromfile(checkpoint, dtype=np.float64)
+    assert particles[0] == final_time and particles[2] == 2
+    resumed_overlay = overlay + ("\n<particles>\nseed_on_restart = false\n"
+        "<problem>\nprtcl_rst_flag = 1\n"
+        f"prtcl_res_file = {checkpoint}\n")
+    resumed = run(tmp_path / "resumed", resumed_overlay, restart=final["path"],
+                  flags=(f"time/tlim={final_time + 0.01:.17g}",), adiabatic=adiabatic)
+    last = resumed[max(resumed)]
+    np.testing.assert_array_equal(last["active"], final["active"])
+    assert last["cooling_alpha"] == seed["cooling_alpha"]
+
+
 def assert_background_unchanged(initial, final):
     np.testing.assert_allclose(final["active"][:, :4], initial["active"][:, :4],
                                rtol=0, atol=3e-13)

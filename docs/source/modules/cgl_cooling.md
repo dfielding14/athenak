@@ -85,8 +85,13 @@ the source has first-order split
 coupling to the fluid evolution. A finite exponential update at every RK source
 stage would instead corrupt the RK combination of the conserved anisotropy.
 Uniform periodic ghost cells receive the same source as owned cells, avoiding
-another boundary exchange. AMR, isothermal passive CGL, and frozen backgrounds
-are rejected.
+another boundary exchange. AMR and isothermal passive CGL are rejected.
+
+The same executable can load its own checkpoint with the
+`inputs/particles/frozen_cgl.athinput` overlay for frozen-field CR tracing.
+During a frozen restart, the saved controller and cooling history columns are
+retained while cooling and controller updates stop. Use a new output directory
+for the particle run. The ordinary fluid restart restores cooling normally.
 
 The held coefficient and nominal history schedule are saved at full precision in
 the normal restart parameter header. Extra finalization history rows do not

@@ -173,7 +173,7 @@ void CoolingHistory(HistoryData *pdata, Mesh *pm) {
        static_cast<float>(pm->time) >=
        static_cast<float>(cooling.last_time + cooling.history_dt));
   // Finalize also calls history off cadence and can repeat the last sample.
-  if (due && pm->ncycle != cooling.last_cycle) {
+  if (!pm->pmb_pack->frozen_mhd && due && pm->ncycle != cooling.last_cycle) {
     const auto eos = pm->pmb_pack->pmhd->peos->eos_data;
     const std::string thermal = eos.passive_adiabatic ? "therm_mhd" : "therm_cgl";
     const Real heat_capacity = eos.passive_adiabatic ? 1.0/(eos.gamma - 1.0) : 1.5;
@@ -214,8 +214,8 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
   auto *pmhd = pmbp->pmhd;
   if (pmhd == nullptr || !pmhd->peos->eos_data.is_cgl ||
       (pmhd->peos->eos_data.passive && !pmhd->peos->eos_data.passive_adiabatic) ||
-      pmbp->frozen_mhd || pm->multilevel) {
-    Fail("requires active CGL or adiabatic passive CGL on a uniform, evolving mesh");
+      (pmbp->frozen_mhd && !restart) || pm->multilevel) {
+    Fail("requires active CGL or adiabatic passive CGL on a uniform mesh");
   }
   for (int face = 0; face < 6; ++face) {
     if (pm->mesh_bcs[face] != BoundaryFlag::periodic) {
@@ -275,6 +275,7 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
   user_hist = true;
   pin->SetBoolean("problem", "user_hist", true);
   user_hist_func = CoolingHistory;
+  if (pmbp->frozen_mhd) return;
   // An exact source inside every RK stage would corrupt the RK combination of A.
   // Split once before native collisions, which already refresh restriction/timesteps.
   TaskID none(0);
