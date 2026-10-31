@@ -418,7 +418,8 @@ dedt = 0.2
     assert refined["time"] == initial["time"] and refined["cycle"] == initial["cycle"]
     assert refined["metadata"] == initial["metadata"]
     for key in ("cooling_alpha", "cooling_history_last_time",
-                "cooling_history_last_cycle"):
+                "cooling_history_last_cycle", "cooling_target_fraction",
+                "cooling_sample_time"):
         pattern = rf"^{key}\s*=\s*(\S+)"
         before = re.search(pattern, initial["text"], re.MULTILINE)
         after = re.search(pattern, refined["text"], re.MULTILINE)

@@ -39,28 +39,40 @@ this pgen enrolls its own split user source, outside the RK stage-source hook.
 At scheduled history samples it reuses the local thermal-energy and volume
 sums, then performs one two-scalar MPI all-reduction. It does not read the history
 file or traverse the mesh again. The usual history reduction remains unchanged.
-For active CGL, the coefficient held until the next scheduled sample is
+For active CGL, the sampled energy and target are
 
 $$
-\alpha=\frac{1}{\tau}\max\left(1-\frac{(3/2)p_{\rm target}V}{E_{\rm th}},0\right),
-\qquad E_{\rm th}=\int(p_\perp+p_\parallel/2)\,dV.
+E_s=\int(p_\perp+p_\parallel/2)\,dV,\qquad
+E_*=(3/2)p_{\rm target}V.
 $$
 
-The user history adds `cool_alpha`, the coefficient for subsequent steps.
-Cooling stops below the target. At approximately steady heating, the mean energy
-excess is roughly $\overline P_{\rm heat}\tau$. Choose the response time longer
-than the interval between history samples, but short compared with the thermal
-heating time. Time-based history requires `0 < dt <= cooling_tau`; for cycle-based
-history, check the resulting physical interval yourself.
+If $E_s>E_*$, the controller models the positive excess as relaxing on the
+response time $\tau$. At age $a=t-t_s$ since the actual sample time $t_s$,
 
-Each full step removes the same pressure decrement from both components:
+$$
+G(a)=E_*+(E_s-E_*)e^{-a/\tau},\qquad
+f=1-\frac{G(a+\Delta t)}{G(a)}.
+$$
+
+Each full step removes the same pressure decrement from both components,
 
 $$
 \delta p=\min\left[
- p_{\rm iso}(1-e^{-\alpha\Delta t}),
+ f p_{\rm iso},
  \max(\min(p_\perp,p_\parallel)-p_{\rm stop},0)
 \right],\qquad p_{\rm iso}=\frac{2p_\perp+p_\parallel}{3}.
 $$
+
+The isolated, unclipped box follows $G(a)$ for any timestep or history interval.
+Thus cooling cannot drive that reference box below its target. Fluid pressure
+work and other changes between samples can still move the actual thermal energy
+below target. Cooling is off when the last sample has $E_s\leq E_*$.
+The user history retains `cool_alpha`, the initial fractional cooling rate
+$\max(1-E_*/E_s,0)/\tau$ at the last scheduled sample. The effective cooling rate
+decreases between samples. The response time should be short compared with the
+thermal heating time, and history should sample changes in heating. Both
+positive time-based and positive cycle-based history intervals are supported,
+including intervals longer than `cooling_tau`.
 
 Here $p_{\rm stop}=\max(p_{\rm floor},|\Delta p|/9)$ stops cooling before the
 larger pressure exceeds ten times the smaller one. This fixed numerical guard
@@ -89,10 +101,9 @@ apply when thermal energy is tiny compared with kinetic or magnetic energy.
 
 The source runs once before the existing collision task, after the hyperbolic
 update. For split LF, the post-LF collision update remains in its existing place.
-The exponential is exact for isolated, uncapped cooling with a held coefficient;
-the source has first-order split
-coupling to the fluid evolution. A finite exponential update at every RK source
-stage would instead corrupt the RK combination of the conserved anisotropy.
+The excess relaxation is exact for isolated, uncapped cooling. The source has
+first-order split coupling to the fluid evolution. A finite exponential update at
+every RK source stage would instead corrupt the RK combination of the conserved anisotropy.
 Uniform periodic ghost cells receive the same source as owned cells, avoiding
 another boundary exchange. AMR and isothermal passive CGL are rejected.
 
@@ -102,12 +113,14 @@ During a frozen restart, the saved controller and cooling history columns are
 retained while cooling and controller updates stop. Use a new output directory
 for the particle run. The ordinary fluid restart restores cooling normally.
 
-The held coefficient and nominal history schedule are saved at full precision in
-the normal restart parameter header. Extra finalization history rows do not
-update the controller. On restart, the pgen restores the scheduled history clock,
+The sampled target fraction, actual sample time, initial fractional rate, and
+nominal history schedule are saved at full precision in the normal restart
+parameter header. Extra finalization history rows do not update the controller.
+On restart, the pgen restores the scheduled history clock,
 including when the run stopped between samples. Keep the cooling parameters and
 history cadence unchanged for identical continuation. An older checkpoint without
-controller state starts with cooling off until the next history sample.
+the sampled fraction and actual sample time starts with cooling off until the next
+scheduled thermal measurement. Its existing nominal history schedule is retained.
 
 ## Adiabatic passive comparison
 
@@ -138,10 +151,11 @@ making its passive companion.
 
 The controller uses the adiabatic gas's `therm_mhd` history sum,
 $E_{\rm gas}=\int p_{\rm gas}/(\gamma-1)\,dV$, with target
-$p_{\rm target}V/(\gamma-1)$. Thus its held coefficient is
+$p_{\rm target}V/(\gamma-1)$. Its sampled energy sets the same excess-relaxation
+model and initial rate
 $\alpha=\max(1-p_{\rm target}V/[(\gamma-1)E_{\rm gas}],0)/\tau$.
-The gas internal energy receives the same exponential cooling law, limited by
-its pressure, temperature, and entropy floors. The same coefficient cools the
+The gas internal energy receives the resulting cooling fraction, limited by
+its pressure, temperature, and entropy floors. The same fraction cools the
 passive CGL pair using the fixed-$\Delta p$ update above. Their 10:1 cap applies
 only to that pair; it cannot reduce the gas cooling or feed passive
 thermodynamics back into the flow.

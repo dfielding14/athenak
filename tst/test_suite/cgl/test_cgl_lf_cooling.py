@@ -1,4 +1,4 @@
-"""History-held CGL cooling, floors, and native checkpoint continuation.
+"""History-sampled CGL cooling, floors, and native checkpoint continuation.
 
 Run with ATHENAK_TEST_EXE pointing to a double-precision built_in_pgens executable.
 """
@@ -91,7 +91,8 @@ def run(directory, source=None, *, restart=None, flags=(), ranks=1, adiabatic=Fa
                                                   adiabatic=adiabatic)
         header = path.read_bytes().split(b"<par_end>\n", 1)[0].decode()
         for name in ("cooling_alpha", "cooling_history_last_time",
-                     "cooling_history_last_cycle"):
+                     "cooling_history_last_cycle", "cooling_target_fraction",
+                     "cooling_sample_time"):
             match = re.search(rf"^{name}\s*=\s*(\S+)", header, re.MULTILINE)
             assert match, name
             state[name] = float(match[1])
@@ -132,16 +133,19 @@ def test_frozen_cooling_checkpoint_preserves_controller(tmp_path, adiabatic):
     for first, second in zip(final["faces"], seed["faces"]):
         np.testing.assert_array_equal(first, second)
     for name in ("cooling_alpha", "cooling_history_last_time",
-                 "cooling_history_last_cycle"):
+                 "cooling_history_last_cycle", "cooling_target_fraction",
+                 "cooling_sample_time"):
         assert final[name] == seed[name]
     hist = passive_acceptance.history(tmp_path / "frozen/cooling.user.hst")
     np.testing.assert_array_equal(hist["cool_alpha"], seed["cooling_alpha"])
     checkpoint = sorted((tmp_path / "frozen/prst/rank_00000000").glob("*.prst"))[-1]
     particles = np.fromfile(checkpoint, dtype=np.float64)
     assert particles[0] == final_time and particles[2] == 2
-    resumed_overlay = overlay + ("\n<particles>\nseed_on_restart = false\n"
+    resumed_overlay = overlay + (
+        "\n<particles>\nseed_on_restart = false\n"
         "<problem>\nprtcl_rst_flag = 1\n"
-        f"prtcl_res_file = {checkpoint}\n")
+        f"prtcl_res_file = {checkpoint}\n"
+    )
     resumed = run(tmp_path / "resumed", resumed_overlay, restart=final["path"],
                   flags=(f"time/tlim={final_time + 0.01:.17g}",), adiabatic=adiabatic)
     last = resumed[max(resumed)]
@@ -182,7 +186,7 @@ def test_adiabatic_cooling_uses_gas_controller(tmp_path, gamma, integrator):
     alpha = (1 - 0.5/2.3)/0.1
     piso0 = (2.0 + 2*2.2)/3
     for state in states.values():
-        factor = np.exp(-alpha*state["time"])
+        factor = 0.5/2.3 + (1 - 0.5/2.3)*np.exp(-state["time"]/0.1)
         pp, pt = pressures(state)
         np.testing.assert_allclose(gas_pressure(state, gamma), 2.3*factor,
                                    rtol=3e-12, atol=3e-13)
@@ -223,23 +227,28 @@ def test_passive_cooling_cap_does_not_limit_gas_cooling(tmp_path):
         pp, pt = pressures(state)
         np.testing.assert_allclose(pt/pp, 10, rtol=3e-12, atol=0)
         np.testing.assert_allclose(pt - pp, 0.2, rtol=0, atol=3e-13)
-        np.testing.assert_allclose(gas_pressure(state), 1e-6, rtol=1e-9, atol=0)
+        np.testing.assert_allclose(gas_pressure(state), 0.05, rtol=1e-9, atol=0)
         assert_background_unchanged(states[0], state)
 
 
 @pytest.mark.parametrize("integrator", ["rk2", "rk4"])
-def test_cooling_exact_held_interval(tmp_path, integrator):
-    states = run(tmp_path / integrator, input_text(integrator=integrator))
+@pytest.mark.parametrize("history", ["dcycle = 100", "dt = 0.005"])
+def test_cooling_exact_sampled_interval(tmp_path, integrator, history):
+    source = input_text(integrator=integrator, history=history)
+    states = run(tmp_path / integrator, source)
     initial = states[0]
     piso0, delta = (2.0 + 2*2.2)/3, 0.2
     alpha = (1 - 0.5/piso0)/0.1
     for state in states.values():
         ppar, pperp = pressures(state)
-        piso = piso0*np.exp(-alpha*state["time"])
+        piso = 0.5 + (piso0 - 0.5)*np.exp(-state["time"]/0.1)
         np.testing.assert_allclose(ppar, piso - 2*delta/3, rtol=3e-12, atol=3e-13)
         np.testing.assert_allclose(pperp, piso + delta/3, rtol=3e-12, atol=3e-13)
-        assert state["cooling_alpha"] == pytest.approx(alpha, rel=2e-13)
-        assert state["cooling_history_last_cycle"] == 0
+        if history.startswith("dcycle"):
+            assert state["cooling_alpha"] == pytest.approx(alpha, rel=2e-13)
+            assert state["cooling_history_last_cycle"] == 0
+        else:
+            assert state["cooling_sample_time"] == state["time"]
         assert_background_unchanged(initial, state)
     assert states[max(states)]["time"] > 0
 
@@ -252,10 +261,9 @@ def test_cooling_and_collisions_keep_their_independent_rates(tmp_path, landau_fl
                    "<time>\nsts_integrator = rkl2\n")
     states = run(tmp_path / "collisions", source)
     piso0 = (2.0 + 2*2.2)/3
-    alpha = (1 - 0.5/piso0)/0.1
     for state in states.values():
         parallel, perpendicular = pressures(state)
-        piso = piso0*np.exp(-alpha*state["time"])
+        piso = 0.5 + (piso0 - 0.5)*np.exp(-state["time"]/0.1)
         delta = 0.2*np.exp(-0.7*state["time"])
         np.testing.assert_allclose((parallel + 2*perpendicular)/3, piso,
                                    rtol=3e-12, atol=3e-13)
@@ -281,8 +289,8 @@ def test_cooling_coefficient_changes_only_at_history(tmp_path):
         piso = (ppar + 2*pperp)/3
         if cycle:
             old_par, old_perp = pressures(previous)
-            expected = (old_par + 2*old_perp)/3 * np.exp(
-                -previous["cooling_alpha"]*(state["time"] - previous["time"]))
+            expected = 0.5 + ((old_par + 2*old_perp)/3 - 0.5)*np.exp(
+                -(state["time"] - previous["time"])/0.1)
             np.testing.assert_allclose(piso, expected, rtol=3e-12, atol=3e-13)
         expected_alpha = ((1 - 0.5/np.mean(piso))/0.1 if cycle % 2 == 0
                           else previous["cooling_alpha"])
@@ -366,8 +374,9 @@ def test_cooling_cold_floor_retains_representable_pressure(tmp_path):
 
 
 @pytest.mark.parametrize("ranks", [1, 2])
-@pytest.mark.parametrize("case,expected", [("ratio", 1), ("blocked", 1),
-                                          ("floor", 0), ("free", 0)])
+@pytest.mark.parametrize("case,expected", [
+    ("ratio", 1), ("blocked", 1), ("floor", 0), ("free", 0),
+])
 def test_cooling_guard_counts_owned_cell_updates(tmp_path, case, expected, ranks):
     if ranks == 2:
         executable = Path(os.environ.get("ATHENAK_TEST_EXE", "athena")).resolve()
@@ -415,8 +424,51 @@ def test_cooling_restart_preserves_history_schedule(tmp_path, checkpoint_kind, a
         assert state["time"] == reference["time"]
         np.testing.assert_array_equal(state["payload"], reference["payload"])
         for name in ("cooling_alpha", "cooling_history_last_time",
-                     "cooling_history_last_cycle"):
+                     "cooling_history_last_cycle", "cooling_target_fraction",
+                     "cooling_sample_time"):
             assert state[name] == reference[name], (cycle, name)
+
+
+@pytest.mark.parametrize("history", ["dt = 0.1", "dcycle = 100"])
+@pytest.mark.parametrize("adiabatic", [False, True])
+def test_cooling_long_interval_relaxes_to_target(tmp_path, history, adiabatic):
+    source = input_text(ppar=2, pperp=2, target=1, tau=0.001,
+                        history=history, nlim=-1)
+    if adiabatic:
+        source += adiabatic_settings(pgas=2)
+    final_time = 0.004
+    single = run(tmp_path / "single", source, flags=(f"time/tlim={final_time}",),
+                 adiabatic=adiabatic)
+    subdivided = run(tmp_path / "subdivided", source,
+                     flags=(f"time/tlim={final_time}", "time/cfl_number=0.005"),
+                     adiabatic=adiabatic)
+    assert max(single) == 1 and max(subdivided) > 4
+    for states in (single, subdivided):
+        final = states[max(states)]
+        pp, pt = pressures(final)
+        np.testing.assert_allclose(pp, 1 + np.exp(-4), rtol=3e-12, atol=3e-13)
+        np.testing.assert_allclose(pt, pp, rtol=3e-12, atol=3e-13)
+        if adiabatic:
+            np.testing.assert_allclose(gas_pressure(final), pp, rtol=3e-12, atol=3e-13)
+        assert np.min(pp) >= 1
+        assert_background_unchanged(states[0], final)
+
+
+def test_legacy_cooling_restart_waits_for_thermal_sample(tmp_path):
+    source = input_text(history="dcycle = 3", nlim=1)
+    seed = run(tmp_path / "seed", source)[1]
+    header, payload = seed["path"].read_bytes().split(b"<par_end>\n", 1)
+    header = re.sub(rb"^cooling_(target_fraction|sample_time)\s*=.*\n", b"",
+                    header, flags=re.MULTILINE)
+    checkpoint = tmp_path / "legacy.rst"
+    checkpoint.write_bytes(header + b"<par_end>\n" + payload)
+    resumed = run(tmp_path / "resumed", restart=checkpoint, flags=("time/nlim=4",))
+    np.testing.assert_array_equal(resumed[2]["payload"], seed["payload"])
+    np.testing.assert_array_equal(resumed[3]["payload"], seed["payload"])
+    assert resumed[2]["cooling_alpha"] == 0
+    assert resumed[3]["cooling_alpha"] > 0
+    assert resumed[3]["cooling_sample_time"] == resumed[3]["time"]
+    assert np.all(resumed[4]["active"][:, 4] < resumed[3]["active"][:, 4])
 
 
 @pytest.mark.parametrize("adiabatic", [False, True])

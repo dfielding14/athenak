@@ -45,6 +45,7 @@ struct Cooling {
   UserHistoryFnPtr paper_history;
   std::string history_block;
   Real target, tau, alpha = 0.0;
+  Real target_fraction = 1.0, sample_time = 0.0;
   Real history_dt = 0.0, last_time = -1.0;
   int history_dcycle = 0, last_cycle = -1;
   DvceArray1D<std::uint64_t> guard_hits;
@@ -61,7 +62,12 @@ struct Cooling {
     auto bcc = pmhd->bcc0;
     const auto eos = pmhd->peos->eos_data;
     constexpr Real cooling_max_ratio = 10.0;
-    const Real fraction = -std::expm1(-alpha*mesh->dt);
+    const Real age = fmax(mesh->time - sample_time, 0.0);
+    const Real remaining = (1.0 - target_fraction)*std::exp(-age/tau);
+    const Real excess_fraction = target_fraction == 0.0 ? 1.0 :
+        remaining/(target_fraction + remaining);
+    const Real fraction = excess_fraction*(-std::expm1(-mesh->dt/tau));
+    if (fraction == 0.0) return TaskStatus::complete;
     const auto &indcs = mesh->mb_indcs;
     const int ni = indcs.nx1 + 2*indcs.ng;
     const int nj = indcs.nx2 > 1 ? indcs.nx2 + 2*indcs.ng : 1;
@@ -205,12 +211,15 @@ void CoolingHistory(HistoryData *pdata, Mesh *pm) {
         !std::isfinite(sums[1]) || sums[1] <= 0.0) {
       Fail("history requires positive finite thermal energy and volume");
     }
-    cooling.alpha = fmax(1.0 - heat_capacity*cooling.target*sums[1]/sums[0],
-                         0.0)/cooling.tau;
+    cooling.target_fraction = fmin(heat_capacity*cooling.target*sums[1]/sums[0], 1.0);
+    cooling.sample_time = pm->time;
+    cooling.alpha = (1.0 - cooling.target_fraction)/cooling.tau;
     cooling.last_time = cooling.last_cycle < 0 ? pm->time :
         cooling.last_time + cooling.history_dt;
     cooling.last_cycle = pm->ncycle;
     SaveReal(cooling.pin, "problem", "cooling_alpha", cooling.alpha);
+    SaveReal(cooling.pin, "problem", "cooling_target_fraction", cooling.target_fraction);
+    SaveReal(cooling.pin, "problem", "cooling_sample_time", cooling.sample_time);
     SaveReal(cooling.pin, "problem", "cooling_history_last_time", cooling.last_time);
     cooling.pin->SetInteger("problem", "cooling_history_last_cycle", cooling.last_cycle);
   }
@@ -261,6 +270,7 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
   cooling.paper_history = user_hist_func;
   cooling.guard_hits = DvceArray1D<std::uint64_t>("cgl_cooling_guard_hits", 1);
   cooling.guard_cycle = pm->ncycle;
+  cooling.sample_time = pm->time;
   pgen_final_func = [](ParameterInput *, Mesh *) {
     cooling.guard_hits = DvceArray1D<std::uint64_t>();
   };
@@ -285,9 +295,8 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
     if (cooling.history_dcycle <= 0) Fail("history dcycle must be positive");
   } else {
     cooling.history_dt = pin->GetReal(hist, "dt");
-    if (!std::isfinite(cooling.history_dt) || cooling.history_dt <= 0.0 ||
-        cooling.history_dt > cooling.tau) {
-      Fail("history dt must be positive and no larger than cooling_tau");
+    if (!std::isfinite(cooling.history_dt) || cooling.history_dt <= 0.0) {
+      Fail("history dt must be finite and positive");
     }
   }
   if (restart && pin->DoesParameterExist("problem", "cooling_alpha")) {
@@ -303,12 +312,30 @@ void ProblemGenerator::CGLLFCooling(ParameterInput *pin, const bool restart) {
     }
     // Undo final-output-only clock advances before Outputs is constructed.
     SaveReal(pin, hist, "last_time", cooling.last_time);
+    const bool has_fraction = pin->DoesParameterExist("problem", "cooling_target_fraction");
+    const bool has_time = pin->DoesParameterExist("problem", "cooling_sample_time");
+    if (has_fraction != has_time) Fail("incomplete sampled cooling restart state");
+    if (has_fraction) {
+      cooling.target_fraction = pin->GetReal("problem", "cooling_target_fraction");
+      cooling.sample_time = pin->GetReal("problem", "cooling_sample_time");
+      if (!std::isfinite(cooling.target_fraction) || cooling.target_fraction < 0.0 ||
+          cooling.target_fraction > 1.0 || !std::isfinite(cooling.sample_time) ||
+          cooling.sample_time < 0.0 || cooling.sample_time > pm->time) {
+        Fail("invalid sampled cooling restart state");
+      }
+    } else if (!pmbp->frozen_mhd) {
+      // Legacy coefficients lack an actual sample time; wait for the next sample.
+      cooling.alpha = 0.0;
+      SaveReal(pin, "problem", "cooling_alpha", cooling.alpha);
+    }
   } else if (restart) {
     // An older uncooled checkpoint starts cooling at its next history sample.
     cooling.last_time = pin->GetOrAddReal(hist, "last_time", pm->time);
     cooling.last_cycle = pm->ncycle;
   }
   user_hist = true;
+  SaveReal(pin, "problem", "cooling_target_fraction", cooling.target_fraction);
+  SaveReal(pin, "problem", "cooling_sample_time", cooling.sample_time);
   pin->SetBoolean("problem", "user_hist", true);
   user_hist_func = CoolingHistory;
   if (pmbp->frozen_mhd) return;
