@@ -1036,6 +1036,53 @@ void CheckPassiveRatioRecovery() {
   }
 }
 
+void CheckPassiveMomentFloorFixedPoint() {
+  for (const bool adiabatic : {false, true}) {
+    for (const Real cap : {Real(0.0), Real(100.0)}) {
+      EOS_Data eos = MakeCglEOS();
+      eos.passive = true;
+      eos.passive_adiabatic = adiabatic;
+      eos.passive_max_pressure_ratio = cap;
+      eos.pfloor = 1.0e-6;
+      for (const int state : {0, 1, 2, 3}) {
+        MHDCons1D u{};
+        u.d = 1.0;
+        u.mx = 0.1;
+        u.my = -0.2;
+        u.mz = 0.3;
+        u.bx = state == 3 ? Real(0.0) : Real(2.053202960071438);
+        const Real beff = fmax(u.bx, eos.bfloor);
+        u.e = state == 0 ? Real(2.0e-6) : state == 1 ? Real(0.7) : Real(0.0);
+        u.mu = state == 1 ? Real(0.7)/beff : Real(0.0);
+        const auto initial = u;
+        HydPrim1D w{};
+        bool d = false, f = false, b = false, ratio = false;
+        cgl::PassiveMomentC2P(u, eos, w, d, f, b, u.bx, false, &ratio);
+        Require("passive moment initially floors", f);
+        Require("passive moment repaired pressures satisfy floor",
+                w.e >= eos.pfloor && w.pp >= eos.pfloor);
+        if (u.bx > eos.bfloor) {
+          Require("passive stored moment satisfies perpendicular floor",
+                  u.mu*beff >= eos.pfloor);
+          Require("passive stored energy satisfies parallel floor",
+                  2.0*(u.e - u.mu*beff) >= eos.pfloor);
+        }
+        Require("passive floor leaves flow and magnetic fields unchanged",
+                u.d == initial.d && u.mx == initial.mx && u.my == initial.my &&
+                u.mz == initial.mz && u.bx == initial.bx &&
+                u.by == initial.by && u.bz == initial.bz);
+        const auto repaired = u;
+        const Real pp = w.e, pt = w.pp;
+        d = f = b = ratio = false;
+        cgl::PassiveMomentC2P(u, eos, w, d, f, b, u.bx, false, &ratio);
+        Require("passive moment repeated recovery needs no further repairs",
+                !d && !f && !ratio && u.e == repaired.e && u.mu == repaired.mu);
+        Require("passive repaired pressures round trip", w.e == pp && w.pp == pt);
+      }
+    }
+  }
+}
+
 } // namespace
 
 void RunCglC2PPressureFloorChecks() {
@@ -1069,6 +1116,7 @@ void RunCglC2PPressureFloorChecks() {
   CheckCollisionMap();
   CheckStephenLimiterMap();
   CheckPassiveRatioRecovery();
+  CheckPassiveMomentFloorFixedPoint();
 
   std::cout << "CGL C2P pressure-floor checks passed" << std::endl;
 }

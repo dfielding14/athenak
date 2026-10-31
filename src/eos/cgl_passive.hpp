@@ -226,6 +226,30 @@ void PassiveMomentC2P(MHDCons1D &u, const EOS_Data &eos, HydPrim1D &w,
       w.e = 2.0*(u.e - w.pp);
     }
   }
+  if (!ratio_used && (efloor_used || bfloor_used)) {
+    // Floors must survive decoding the stored U/mu, including division and cancellation.
+    if (bmag > eos.bfloor) {
+      w.pp = u.mu*beff;
+      if (w.pp < eos.pfloor) {
+        u.mu = Kokkos::nextafter(eos.pfloor/beff,
+                                 std::numeric_limits<Real>::infinity());
+        w.pp = u.mu*beff;
+      }
+      w.e = 2.0*(u.e - w.pp);
+    } else {
+      w.e = TWO_3RDS*u.e;
+      w.pp = w.e;
+    }
+    if (w.e < eos.pfloor || w.pp < eos.pfloor) {
+      const Real energy = 0.5*fmax(w.e, eos.pfloor) + fmax(w.pp, eos.pfloor);
+      u.e = Kokkos::nextafter(fmax(u.e, energy),
+                              std::numeric_limits<Real>::infinity());
+      w.e = bmag > eos.bfloor ? 2.0*(u.e - w.pp) : TWO_3RDS*u.e;
+      if (bmag <= eos.bfloor) w.pp = w.e;
+      efloor_used = true;
+    }
+    if (bmag <= eos.bfloor) u.mu = w.pp/beff;
+  }
 }
 
 }  // namespace cgl
