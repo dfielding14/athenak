@@ -1,0 +1,8 @@
+# Overlay only when the restart has no suitable full-volume binary output.
+# Choose a previously unused output number if output99 already exists.
+<output99>
+file_type = bin
+variable = mhd_w_bcc
+dt = 1
+file_number = 0
+single_file_per_rank = false

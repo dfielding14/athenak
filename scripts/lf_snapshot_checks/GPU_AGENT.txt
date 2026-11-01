@@ -1,0 +1,22 @@
+Please compare the closures on developed active beta=16 snapshots from both collision runs. From the AthenaK repo root:
+
+git switch CGL-STS-LF && git pull --ff-only origin CGL-STS-LF
+cd scripts/lf_snapshot_checks
+
+Use a CPU allocation and Python with numpy, scipy, numba and matplotlib. Set SNAP0 and SNAPP to one full mhd_w_bcc file (or a quoted all-rank glob) per case at matched resolution and comparable turnover time. Set LA from the matched MHD control and ELL0/ELLP to each run's parallel viscous scale, all in code lengths. Put the measurement and length convention in LA_SRC, ELL0_SRC and ELLP_SRC. If the zero-background cutoff is unclear, use ELLP there and label it as a comparison scale.
+
+Set OUT to a persistent results directory and SCRATCH_DIR to node-local scratch. Run the following pair for each matched time, changing TAG and snapshot paths each time. Aim for two developed times per run.
+
+TAG=t1
+export NUMBA_NUM_THREADS="${SLURM_CPUS_PER_TASK:-4}" OPENBLAS_NUM_THREADS=1
+mkdir -p "${SCRATCH_DIR:?}"
+python run.py --case nu0 --snapshot "$SNAP0" --la "$LA" --ell-nu "$ELL0" \
+  --la-source "$LA_SRC" --visc-source "$ELL0_SRC" --cache-dir "$SCRATCH_DIR" --out "${OUT:?}/nu0-$TAG"
+python run.py --case collisional --snapshot "$SNAPP" --la "$LA" --ell-nu "$ELLP" \
+  --la-source "$LA_SRC" --visc-source "$ELLP_SRC" --cache-dir "$SCRATCH_DIR" --out "${OUT:?}/collisional-$TAG"
+
+After the last pair, combine all times in one fresh output directory:
+
+python combine.py "${OUT:?}"/nu0-* "$OUT"/collisional-* --out "$OUT/comparison"
+
+Please return both comparison plots, scales.csv and each metadata.json. At 0.5, 1 and 2 times each scale, report the signed anisotropy-variance transfer and RMS tendency differences, flagging unresolved scales or sensitivity to trace reach, ray step or sampling. Include path-dependent scattering for the collisional case.
