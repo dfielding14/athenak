@@ -377,6 +377,7 @@ int main(int argc, char *argv[]) {
     pinput->GetOrAddString("mhd", "passive_max_pressure_ratio", "0");
     if (pinput->DoesParameterExist("mhd", "cgl_heat_flux")) {
       pinput->GetOrAddString("mhd", "cgl_lf_stiffness_cycle", "-1");
+      pinput->GetOrAddBoolean("mhd", "cgl_lf_cache_geometry", false);
     }
   }
   // Let existing single-file checkpoints opt into node output using only command-line

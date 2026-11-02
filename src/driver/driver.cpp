@@ -333,9 +333,10 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
   const bool has_explicit_cgl_lf =
       (pm->pmb_pack->pmhd != nullptr && pm->pmb_pack->pmhd->has_explicit_cgl_lf);
 
-  if (cgl_lf_max_chunk_ratio_ > 0.0) {
+  auto *mhd = pm->pmb_pack->pmhd;
+  const bool cache_geometry = mhd && mhd->pcgl_lf && mhd->pcgl_lf->cache_geometry;
+  if (cgl_lf_max_chunk_ratio_ > 0.0 || cache_geometry) {
     auto *pack = pm->pmb_pack;
-    auto *mhd = pack->pmhd;
     const bool supported = mhd != nullptr && mhd->pcgl_lf != nullptr &&
         mhd->peos->eos_data.is_cgl && mhd->has_sts_cgl_lf &&
         pm->sts_integrator == parabolic::STSIntegrator::rkl2 &&
@@ -343,6 +344,9 @@ void Driver::ValidateSTSConfiguration(Mesh *pm) {
         pm->strictly_periodic && !pm->multilevel && !pm->adaptive &&
         !pm->pgen->user_bcs && !mhd->has_any_parabolic_field_update &&
         mhd->porb_u == nullptr && mhd->psbox_u == nullptr && mhd->psbox_b == nullptr;
+    if (cache_geometry && (!supported || mhd->peos->eos_data.passive)) {
+      DriverFatalError(__FILE__, __LINE__, "cgl_lf_cache_geometry requires uniform periodic active LF-only RKL2");
+    }
     if (!supported) {
       DriverFatalError(__FILE__, __LINE__,
                        "<time>/cgl_lf_max_chunk_ratio requires uniform periodic "

@@ -235,7 +235,7 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                          const int dir,
                          const Real lf_k, const bool coeff_local, const Real cparallel0,
                          const bool backup, const EOS_Data &eos,
-                         CGLLFFaceState &face) {
+                         CGLLFFaceState &face, bool geometry_ready = false) {
   if (bbar <= eos.bfloor || lf_k <= 0.0) {
     return false;
   }
@@ -245,15 +245,17 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
                    static_cast<Real>(0.5)*ppar_r, eos.pfloor);
   face.pperp = fmax(static_cast<Real>(0.5)*pperp_l +
                     static_cast<Real>(0.5)*pperp_r, eos.pfloor);
-  // Retain reversal attenuation, but CT face fields must not amplify a unit direction.
-  const Real bscale = fmax(bbar, fmax(fabs(bx), fmax(fabs(by), fabs(bz))));
-  const Real sx = bx/bscale, sy = by/bscale, sz = bz/bscale;
-  const Real direction_norm = fmax(bbar/bscale, sqrt(sx*sx + sy*sy + sz*sz));
-  face.bmag_inv = static_cast<Real>(1.0)/bbar;
-  face.bhx = sx/direction_norm;
-  face.bhy = sy/direction_norm;
-  face.bhz = sz/direction_norm;
-  face.bhdir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
+  if (!geometry_ready) {
+    // Retain reversal attenuation, but CT face fields must not amplify a unit direction.
+    const Real bscale = fmax(bbar, fmax(fabs(bx), fmax(fabs(by), fabs(bz))));
+    const Real sx = bx/bscale, sy = by/bscale, sz = bz/bscale;
+    const Real direction_norm = fmax(bbar/bscale, sqrt(sx*sx + sy*sy + sz*sz));
+    face.bmag_inv = static_cast<Real>(1.0)/bbar;
+    face.bhx = sx/direction_norm;
+    face.bhy = sy/direction_norm;
+    face.bhz = sz/direction_norm;
+    face.bhdir = (dir == 0) ? face.bhx : ((dir == 1) ? face.bhy : face.bhz);
+  }
   face.cparallel = cparallel0;
   if (coeff_local) {
     const Real temperature = face.ppar/face.rho;
@@ -277,7 +279,7 @@ bool BuildCGLLFFaceState(const Real rho_l, const Real rho_r,
 KOKKOS_INLINE_FUNCTION
 void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_y,
                const Real gtpar_z, const Real gtperp_x, const Real gtperp_y,
-               const Real gtperp_z, const Real gb_x, const Real gb_y, const Real gb_z,
+               const Real gtperp_z, const Real grad_b,
                const Real dt_sweep, const Real rkl_weight, Real &eflux,
                Real &muflux, cgl_lf::ScaledValue &weighted_qpar_flux,
                cgl_lf::ScaledValue &weighted_qperp_flux, Real &qpar_ratio,
@@ -286,7 +288,6 @@ void CGLLFFlux(const CGLLFFaceState &face, const Real gtpar_x, const Real gtpar_
       face.bhx*gtpar_x + face.bhy*gtpar_y + face.bhz*gtpar_z;
   const Real grad_tperp =
       face.bhx*gtperp_x + face.bhy*gtperp_y + face.bhz*gtperp_z;
-  const Real grad_b = face.bhx*gb_x + face.bhy*gb_y + face.bhz*gb_z;
   Real signed_qpar_ratio = 0.0;
   signed_qpar_ratio = cgl::ParallelHeatFluxRatio(
       face.cparallel, face.rho, face.ppar, face.lf_k, face.nu, grad_tpar);
@@ -322,8 +323,7 @@ KOKKOS_INLINE_FUNCTION
 void CGLLFFluxFast(const CGLLFFaceState &face, const Real gtpar_x,
                    const Real gtpar_y, const Real gtpar_z,
                    const Real gtperp_x, const Real gtperp_y,
-                   const Real gtperp_z, const Real gb_x, const Real gb_y,
-                   const Real gb_z, const Real dt_sweep,
+                   const Real gtperp_z, const Real grad_b, const Real dt_sweep,
                    const Real rkl_weight, Real &eflux, Real &muflux,
                    Real &weighted_qpar_flux, Real &weighted_qperp_flux,
                    Real &qpar_ratio, Real &qperp_ratio) {
@@ -331,7 +331,6 @@ void CGLLFFluxFast(const CGLLFFaceState &face, const Real gtpar_x,
       face.bhx*gtpar_x + face.bhy*gtpar_y + face.bhz*gtpar_z;
   const Real grad_tperp =
       face.bhx*gtperp_x + face.bhy*gtperp_y + face.bhz*gtperp_z;
-  const Real grad_b = face.bhx*gb_x + face.bhy*gb_y + face.bhz*gb_z;
   const Real signed_qpar_ratio = cgl::ParallelHeatFluxRatio(
       face.cparallel, face.rho, face.ppar, face.lf_k, face.nu, grad_tpar);
   const Real signed_qperp_ratio = cgl::PerpendicularHeatFluxRatio(
@@ -473,6 +472,7 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   mode = ParseCGLHeatFluxIntegrator(pin);
+  cache_geometry = pin->GetOrAddBoolean("mhd", "cgl_lf_cache_geometry", false);
   const auto cycle = pin->GetOrAddString("mhd", "cgl_lf_stiffness_cycle", "-1");
   const auto end = cycle.data() + cycle.size();
   const auto parsed = std::from_chars(cycle.data(), end, stiffness_cycle);
@@ -707,11 +707,13 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       tpar_.extent(1) != static_cast<std::size_t>(ncells3) ||
       tpar_.extent(2) != static_cast<std::size_t>(ncells2) ||
       tpar_.extent(3) != static_cast<std::size_t>(ncells1)) {
+    geometry_valid_ = false;
     Kokkos::realloc(tpar_, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
     Kokkos::realloc(tperp_, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
     Kokkos::realloc(bmag_, pmy_pack->nmb_thispack, ncells3, ncells2, ncells1);
   }
 
+  const bool fill_bmag = !geometry_valid_;
   auto tpar = tpar_;
   auto tperp = tperp_;
   auto bmag = bmag_;
@@ -723,7 +725,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
       const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
       tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
       tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
-      bmag(m,k,j,i) = ScaledMagneticMagnitude(
+      if (fill_bmag) bmag(m,k,j,i) = ScaledMagneticMagnitude(
           bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
     });
   }
@@ -741,6 +743,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     AddHeatFluxesDirection<0, false>(w, bcc, b, eos, dt_sweep, rkl_weight, f);
   }
   if (pmy_pack->pmesh->one_d) {
+    geometry_valid_ = geometry_active_;
     return;
   }
   if (collect_heat_flux_diagnostics) {
@@ -749,6 +752,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
     AddHeatFluxesDirection<1, false>(w, bcc, b, eos, dt_sweep, rkl_weight, f);
   }
   if (pmy_pack->pmesh->two_d) {
+    geometry_valid_ = geometry_active_;
     return;
   }
   if (collect_heat_flux_diagnostics) {
@@ -756,6 +760,7 @@ void CGLLandauFluid::AddHeatFluxes(const DvceArray5D<Real> &w,
   } else {
     AddHeatFluxesDirection<2, false>(w, bcc, b, eos, dt_sweep, rkl_weight, f);
   }
+  geometry_valid_ = geometry_active_;
 }
 
 template<int DIR, bool CollectQ>
@@ -790,6 +795,12 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
   const Real cpar0 = lf_c_parallel0;
   const bool backup = effective_backup_limiter;
   const bool fast_arithmetic = arithmetic_mode == CGLLFArithmeticMode::fast;
+  const bool reuse_geometry = geometry_valid_;
+  const bool store_geometry = geometry_active_ && !reuse_geometry;
+  if (store_geometry && face_geometry_[DIR].extent_int(1) != nmkji) {
+    Kokkos::realloc(face_geometry_[DIR], 6, nmkji);
+  }
+  auto geometry = face_geometry_[DIR];
   const auto face_flux = KOKKOS_LAMBDA(const int idx, array_sum::GlobalSum *qstats) {
     const int m = idx/nkji;
     const int k = (idx - m*nkji)/nji + ks;
@@ -798,11 +809,11 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
     const int il = i - (DIR == 0);
     const int jl = j - (DIR == 1);
     const int kl = k - (DIR == 2);
-    Real tx, px, bxg;
+    Real tx, px, bxg = 0.0;
     if constexpr (DIR == 0) {
       tx = (tpar(m,k,j,i) - tpar(m,kl,jl,il))/size.d_view(m).dx1;
       px = (tperp(m,k,j,i) - tperp(m,kl,jl,il))/size.d_view(m).dx1;
-      bxg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx1;
+      if (!reuse_geometry) bxg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx1;
     } else {
       tx = VL4Limiter(tpar(m,k,j,i+1) - tpar(m,k,j,i),
                       tpar(m,k,j,i) - tpar(m,k,j,i-1),
@@ -812,14 +823,14 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
                       tperp(m,k,j,i) - tperp(m,k,j,i-1),
                       tperp(m,kl,jl,il+1) - tperp(m,kl,jl,il),
                       tperp(m,kl,jl,il) - tperp(m,kl,jl,il-1))/size.d_view(m).dx1;
-      bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
+      if (!reuse_geometry) bxg = 0.25*(bmag(m,k,j,i+1) - bmag(m,k,j,i-1) +
                    bmag(m,kl,jl,il+1) - bmag(m,kl,jl,il-1))/size.d_view(m).dx1;
     }
     Real ty = 0.0, py = 0.0, byg = 0.0;
     if constexpr (DIR == 1) {
       ty = (tpar(m,k,j,i) - tpar(m,kl,jl,il))/size.d_view(m).dx2;
       py = (tperp(m,k,j,i) - tperp(m,kl,jl,il))/size.d_view(m).dx2;
-      byg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx2;
+      if (!reuse_geometry) byg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx2;
     } else if (DIR == 2 || multi_d) {
       ty = VL4Limiter(tpar(m,k,j+1,i) - tpar(m,k,j,i),
                       tpar(m,k,j,i) - tpar(m,k,j-1,i),
@@ -829,14 +840,14 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
                       tperp(m,k,j,i) - tperp(m,k,j-1,i),
                       tperp(m,kl,jl+1,il) - tperp(m,kl,jl,il),
                       tperp(m,kl,jl,il) - tperp(m,kl,jl-1,il))/size.d_view(m).dx2;
-      byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
+      if (!reuse_geometry) byg = 0.25*(bmag(m,k,j+1,i) - bmag(m,k,j-1,i) +
                    bmag(m,kl,jl+1,il) - bmag(m,kl,jl-1,il))/size.d_view(m).dx2;
     }
     Real tz = 0.0, pz = 0.0, bzg = 0.0;
     if constexpr (DIR == 2) {
       tz = (tpar(m,k,j,i) - tpar(m,kl,jl,il))/size.d_view(m).dx3;
       pz = (tperp(m,k,j,i) - tperp(m,kl,jl,il))/size.d_view(m).dx3;
-      bzg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx3;
+      if (!reuse_geometry) bzg = (bmag(m,k,j,i) - bmag(m,kl,jl,il))/size.d_view(m).dx3;
     } else if (three_d) {
       tz = VL4Limiter(tpar(m,k+1,j,i) - tpar(m,k,j,i),
                       tpar(m,k,j,i) - tpar(m,k-1,j,i),
@@ -846,23 +857,47 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
                       tperp(m,k,j,i) - tperp(m,k-1,j,i),
                       tperp(m,kl+1,jl,il) - tperp(m,kl,jl,il),
                       tperp(m,kl,jl,il) - tperp(m,kl-1,jl,il))/size.d_view(m).dx3;
-      bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
+      if (!reuse_geometry) bzg = 0.25*(bmag(m,k+1,j,i) - bmag(m,k-1,j,i) +
                    bmag(m,kl+1,jl,il) - bmag(m,kl-1,jl,il))/size.d_view(m).dx3;
     }
-    const Real bx = (DIR == 0) ? b.x1f(m,k,j,i) :
-        0.5*bcc(m,IBX,kl,jl,il) + 0.5*bcc(m,IBX,k,j,i);
-    const Real by = (DIR == 1) ? b.x2f(m,k,j,i) :
-        0.5*bcc(m,IBY,kl,jl,il) + 0.5*bcc(m,IBY,k,j,i);
-    const Real bz = (DIR == 2) ? b.x3f(m,k,j,i) :
-        0.5*bcc(m,IBZ,kl,jl,il) + 0.5*bcc(m,IBZ,k,j,i);
-    CGLLFFaceState face;
+    enum { Bbar, InvBbar, Bhx, Bhy, Bhz, GradB };
+    CGLLFFaceState face{};
+    Real bx = 0, by = 0, bz = 0, bbar;
+    if (reuse_geometry) {
+      bbar = geometry(Bbar,idx);
+      if (bbar > eos.bfloor) {
+        face.bmag_inv = geometry(InvBbar,idx);
+        face.bhx = geometry(Bhx,idx);
+        face.bhy = geometry(Bhy,idx);
+        face.bhz = geometry(Bhz,idx);
+        face.bhdir = DIR == 0 ? face.bhx : (DIR == 1 ? face.bhy : face.bhz);
+      }
+    } else {
+      bx = (DIR == 0) ? b.x1f(m,k,j,i) :
+          0.5*bcc(m,IBX,kl,jl,il) + 0.5*bcc(m,IBX,k,j,i);
+      by = (DIR == 1) ? b.x2f(m,k,j,i) :
+          0.5*bcc(m,IBY,kl,jl,il) + 0.5*bcc(m,IBY,k,j,i);
+      bz = (DIR == 2) ? b.x3f(m,k,j,i) :
+          0.5*bcc(m,IBZ,kl,jl,il) + 0.5*bcc(m,IBZ,k,j,i);
+      bbar = 0.5*bmag(m,kl,jl,il) + 0.5*bmag(m,k,j,i);
+      if (store_geometry) geometry(Bbar,idx) = bbar;
+    }
     Real eflux = 0.0, muflux = 0.0;
     Real qpar_ratio = 0.0, qperp_ratio = 0.0;
     if (BuildCGLLFFaceState(w(m,IDN,kl,jl,il), w(m,IDN,k,j,i),
                             w(m,IPR,kl,jl,il), w(m,IPR,k,j,i),
                             w(m,IPP,kl,jl,il), w(m,IPP,k,j,i),
-                            bx, by, bz, 0.5*bmag(m,kl,jl,il) + 0.5*bmag(m,k,j,i),
-                            DIR, lf_k, local, cpar0, backup, eos, face)) {
+                            bx, by, bz, bbar,
+                            DIR, lf_k, local, cpar0, backup, eos, face, reuse_geometry)) {
+      const Real grad_b = reuse_geometry ? geometry(GradB,idx) :
+                          face.bhx*bxg + face.bhy*byg + face.bhz*bzg;
+      if (store_geometry) {
+        geometry(InvBbar,idx) = face.bmag_inv;
+        geometry(Bhx,idx) = face.bhx;
+        geometry(Bhy,idx) = face.bhy;
+        geometry(Bhz,idx) = face.bhz;
+        geometry(GradB,idx) = grad_b;
+      }
       bool owns_face = false;
       Real area = 0.0;
       if constexpr (CollectQ) {
@@ -879,7 +914,7 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
       }
       if (fast_arithmetic) {
         Real weighted_qpar_flux = 0.0, weighted_qperp_flux = 0.0;
-        CGLLFFluxFast(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+        CGLLFFluxFast(face, tx, ty, tz, px, py, pz, grad_b,
                       dt_sweep, rkl_weight, eflux, muflux,
                       weighted_qpar_flux, weighted_qperp_flux,
                       qpar_ratio, qperp_ratio);
@@ -893,7 +928,7 @@ void CGLLandauFluid::AddHeatFluxesDirection(const DvceArray5D<Real> &w,
         }
       } else {
         cgl_lf::ScaledValue weighted_qpar_flux, weighted_qperp_flux;
-        CGLLFFlux(face, tx, ty, tz, px, py, pz, bxg, byg, bzg,
+        CGLLFFlux(face, tx, ty, tz, px, py, pz, grad_b,
                   dt_sweep, rkl_weight, eflux, muflux, weighted_qpar_flux,
                   weighted_qperp_flux, qpar_ratio, qperp_ratio);
         if constexpr (CollectQ) {
@@ -1398,6 +1433,7 @@ void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const char *sweep_name,
                                          int stage, int nstages, bool split_checkpoint,
                                          const cgl::LFAdmissibilityCounts *precomputed) {
+  if (dfloor_delta > 0) geometry_valid_ = false;
   if (split_checkpoint && !strict_admissibility) return;
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::admissibility);
   const EOS_Data eos = eos_in;

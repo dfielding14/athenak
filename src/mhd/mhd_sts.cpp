@@ -212,6 +212,7 @@ TaskStatus MHD::BeginCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     TraceCGLLFTask(pmy_pack, "BeginCGLLandauFluidSTSSweep", "skip", stage);
     return TaskStatus::complete;
   }
+  pcgl_lf->SetFrozenGeometrySweep(true);
   RequireCGLAnisotropyRepresentation("CGL Landau-fluid sweep begin");
   pcgl_lf->RecordAdmissibility(u0, w0, bcc0, peos->eos_data, 0, 0,
                               STSSweepName(pdrive), 0, pdrive->sts.nstages, true);
@@ -657,6 +658,7 @@ TaskStatus MHD::EndCGLLandauFluidSTSSweep(Driver *pdrive, int stage) {
     TraceCGLLFTask(pmy_pack, "EndCGLLandauFluidSTSSweep", "skip", stage);
     return TaskStatus::complete;
   }
+  pcgl_lf->SetFrozenGeometrySweep(false);
   RequireCGLMagneticMomentRepresentation("CGL Landau-fluid sweep end");
   if (diagnose_nonfinite_rk_update) {
     DiagnoseNonfiniteCGLState(stage, "magnetic-moment-to-anisotropy", "pre",

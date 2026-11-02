@@ -97,6 +97,11 @@ class CGLLandauFluid {
   CGLLFSTSFluxMode sts_flux_mode;
   parabolic::ParabolicIntegratorMode mode;
   CGLLFDiagnostics diagnostics;
+  bool cache_geometry = false;
+  void SetFrozenGeometrySweep(bool inside) {
+    geometry_active_ = inside && cache_geometry;
+    geometry_valid_ = false;
+  }
   int stiffness_cycle = -1;
   void WriteStiffnessMap(const char *phase, Real dt_sweep, Real dt_sts, int nstages);
 
@@ -150,6 +155,8 @@ class CGLLandauFluid {
   Real profile_seconds_[kCGLLFProfileBucketCount] = {};
   std::uint64_t profile_counts_[kCGLLFProfileBucketCount] = {};
   DvceArray4D<Real> tpar_, tperp_, bmag_;
+  bool geometry_active_ = false, geometry_valid_ = false;
+  DvceArray2D<Real> face_geometry_[3];
   Real stage_qpar_work_ = 0.0;
   Real stage_qperp_work_ = 0.0;
   Real sweep_qpar_work_ = 0.0;
