@@ -201,8 +201,8 @@ python scripts/plot_ito_tracer_figures.py \
 Here is the simple picture. The gas starts in exact heating-cooling balance,
 but on the unstable middle branch of the ISM equilibrium curve. The imposed
 `1%` density fluctuations leave its initial temperature uniform. Slightly
-denser patches then cool faster because radiative cooling scales as `n^2`
-while the constant per-particle heating scales as `n`; they lose pressure and
+denser patches then cool faster because radiative cooling scales as `n_H^2`
+while the constant per-particle heating scales as `n_tot`; they lose pressure and
 condense. Slightly underdense patches net heat and expand. Ito-2 particles act
 as mass-weighted observers that move with the resolved mass flux and record
 the temperature history of the phase they occupy.
@@ -219,19 +219,20 @@ The `20 pc x 20 pc`, `128 x 128` periodic Hydro problem starts at
 
 ```text
 P/k_B = 3000 K cm^-3
-n0    = 1.9071755 cm^-3
+n_tot = 1.9071755 cm^-3
 T0    = 1573.0068 K
 ```
 
-The constant per-particle heating rate is exactly balanced against `ISMCoolFn`
-at that state. At the initial pressure, the equilibrium curve has stable roots
-near `52 K` and `6353 K`, with the initialized `1573 K` state between them on
+For the neutral atomic H+He mixture (`mu=1.27`, `X_H=0.7165354331`),
+`n_H = 0.91 n_tot`. The per-particle heating rate is chosen so that
+`n_tot Gamma = n_H^2 ISMCoolFn(T0)` at that state. At the initial pressure, the
+equilibrium curve has stable roots near `52 K` and `6353 K`, with the initialized `1573 K` state between them on
 the unstable branch. A density-only Fourier perturbation with `1%` RMS seeds
 the instability. The run seeds 4096 mass-weighted Ito-2 tracers and records
 their density, pressure, temperature, and velocity histories.
 
-After `100` code time units (`30.47 Myr`), the evolved mass-weighted median
-pressure is `P/k_B = 2024 K cm^-3`. At that pressure the cooling curve's stable
+After `100` code time units (`30.47 Myr`) in the original run with total-particle
+cooling normalization, the evolved mass-weighted median pressure is `P/k_B = 2024 K cm^-3`. At that pressure the cooling curve's stable
 equilibria are `79.5 K` and `6720 K`, separated by an unstable root at `589 K`.
 The measured median tracer temperatures are `79.5 K` in the cold phase and
 `6673 K` in the warm phase. The final particle fractions are `81.8%` below
@@ -252,7 +253,7 @@ initial and evolved median pressures, respectively. The convergence of the
 cold and warm paths toward the two stable intersections is the main evidence
 that the histories are tracing the expected thermal phases.
 
-Run and reproduce the figure with:
+Run the hydrogen-normalized example and plot its tracer output with:
 
 ```bash
 ./build/src/athena \

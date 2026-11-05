@@ -48,6 +48,8 @@ def plot_history(
     time_unit_myr: float,
     heating_rate: float,
     initial_pressure: float,
+    mu: float = 1.27,
+    hydrogen_mass_fraction: float = 0.7165354330708661,
 ) -> None:
     data = read_history(history_path)
     cycles = np.unique(data["cycle"])
@@ -146,7 +148,10 @@ def plot_history(
         )
 
     equilibrium_temperature = np.geomspace(20.0, 1.2e4, 600)
-    equilibrium_density = heating_rate / ism_cooling(equilibrium_temperature)
+    # The phase diagram uses total particle density. n_H/n_tot = mu * X_H.
+    equilibrium_density = heating_rate / (
+        (mu * hydrogen_mass_fraction) ** 2 * ism_cooling(equilibrium_temperature)
+    )
     axes[2].plot(
         equilibrium_density,
         equilibrium_temperature,
@@ -174,7 +179,7 @@ def plot_history(
     axes[2].set_yscale("log")
     axes[2].set_xlim(0.15, 150.0)
     axes[2].set_ylim(20.0, 1.2e4)
-    axes[2].set_xlabel(r"number density [cm$^{-3}$]")
+    axes[2].set_xlabel(r"total particle density [cm$^{-3}$]")
     axes[2].set_ylabel("temperature [K]")
     axes[2].set_title("Tracer paths through phase space")
     axes[2].legend(frameon=False, fontsize=8, loc="lower left")
@@ -199,8 +204,10 @@ def main() -> None:
     parser.add_argument("--temperature-unit", type=float, default=1573.006766288556)
     parser.add_argument("--density-unit", type=float, default=1.907175521614809)
     parser.add_argument("--time-unit-myr", type=float, default=0.3046955159499056)
-    parser.add_argument("--heating-rate", type=float, default=1.9976230136434696e-26)
+    parser.add_argument("--heating-rate", type=float, default=1.654231617598157e-26)
     parser.add_argument("--initial-pressure", type=float, default=3000.0)
+    parser.add_argument("--mu", type=float, default=1.27)
+    parser.add_argument("--hydrogen-mass-fraction", type=float, default=0.7165354330708661)
     args = parser.parse_args()
 
     plot_history(
@@ -211,6 +218,8 @@ def main() -> None:
         args.time_unit_myr,
         args.heating_rate,
         args.initial_pressure,
+        args.mu,
+        args.hydrogen_mass_fraction,
     )
 
 

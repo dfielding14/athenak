@@ -281,18 +281,21 @@ starts in exact heating-cooling balance at
 \begin{equation}
   \frac{P}{k_B}=3000\ \mathrm{K\,cm^{-3}},
   \qquad
-  n_0=1.9071755\ \mathrm{cm^{-3}},
+  n_{\rm tot,0}=1.9071755\ \mathrm{cm^{-3}},
   \qquad
   T_0=1573.0068\ \mathrm{K}.
 \end{equation}
-This is the unstable middle equilibrium. At the initial pressure, the stable
+The input uses a neutral atomic H+He mixture with $\mu=1.27$ and
+$X_H=0.7165354331$, so $n_H=0.91 n_{\rm tot}$. Its per-particle heating rate is
+calibrated to $n_{\rm tot}\Gamma=n_H^2\Lambda(T_0)$ at this unstable middle
+equilibrium. At the initial pressure, the stable
 equilibria are near \(52\) K and \(6353\) K.
 
 The causal chain is simple. The \(1\%\) density-only perturbations leave the
 initial temperature uniform. Slightly denser regions cool faster because
-radiative cooling scales as \(n^2\), while constant per-particle heating scales
-as \(n\). They lose pressure and condense. Slightly underdense regions net heat
-and expand. The 4096 mass-weighted \Ito{} tracers record which thermal phase
+radiative cooling scales as \(n_H^2\), while constant per-particle heating scales
+as \(n_{\rm tot}\). They lose pressure and condense. Slightly underdense regions
+net heat and expand. The 4096 mass-weighted \Ito{} tracers record which thermal phase
 their stochastic mass-flux trajectories occupy over time.
 
 \begin{landscape}
@@ -315,7 +318,8 @@ establish resolution-converged interface structure or fragmentation.}
 
 \subsection{Observed result}
 
-The run completed 100 code time units, or \(30.47\) Myr, in 9437 cycles. Its
+The original run with total-particle cooling normalization completed 100 code
+time units, or \(30.47\) Myr, in 9437 cycles. Its
 thermodynamic-history output contained 823,296 finite records over 201 output
 cycles for all 4096 tags. At the final output:
 
@@ -454,7 +458,8 @@ claim.
 
 \section{Reproduction and Artifact Map}
 
-The thermal-instability experiment and figure can be reproduced from the
+The current hydrogen-normalized thermal-instability example can be run and
+plotted from the
 repository root with:
 
 \begin{verbatim}

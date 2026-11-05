@@ -40,7 +40,7 @@ tlim = 100.0
 ndiag = 100
 
 # One code length is 1 pc. Density and temperature units are chosen so that
-# rho=1, pgas=1 is the unstable equilibrium n0=1.9071755 cm^-3, T0=1573.0068 K.
+# rho=1, pgas=1 is the unstable equilibrium n_tot=1.9071755 cm^-3, T0=1573.0068 K.
 <units>
 length_cgs = 3.0856775809623245e18
 mass_cgs = 1.181666925039657e32
@@ -64,7 +64,7 @@ vy = 0.0
 vz = 0.0
 
 # Density-only perturbations preserve the initial temperature. Since cooling is
-# proportional to n^2 while heating is proportional to n, the fluctuations seed TI.
+# proportional to n_H^2 while heating is proportional to n_tot, the fluctuations seed TI.
 <initial_perturbations>
 variables = density
 density_rms = 1.0e-2
@@ -81,10 +81,13 @@ enabled = true
 units = cgs
 cooling_model = ism
 heating_model = constant
-cooling_density = number_density
+cooling_density = hydrogen_number_density
 heating_density = number_density
 mu = 1.27
-heating_rate = 1.9976230136434696e-26
+# Neutral atomic H+He: 1/mu = X_H + (1-X_H)/4, hence n_H/n_tot = 0.91.
+hydrogen_mass_fraction = 0.7165354330708661
+# Per-particle rate calibrated to n_H^2 Lambda(T0) = n_tot Gamma at the state above.
+heating_rate = 1.654231617598157e-26
 timestep = true
 timestep_factor = 0.1
 history = true
