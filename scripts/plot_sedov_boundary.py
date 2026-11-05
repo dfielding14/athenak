@@ -35,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = REPO_ROOT / "inputs" / "hydro" / "cloud_crushing_snr.athinput"
 ISM_COOLING = REPO_ROOT / "src" / "srcterms" / "ismcooling.hpp"
 
-AMU_CGS = 1.66053906660e-24
+AMU_CGS = 1.660538921e-24  # units::Units::atomic_mass_unit_cgs
 KBOLTZ_CGS = 1.3806488e-16
 
 
@@ -163,6 +163,34 @@ def stable_equilibria(pressure_over_k: float, hrate: float,
     return roots[0], roots[-1]
 
 
+def equilibrium_heating_rate(cooling: dict[str, str], hrate: float, mu: float,
+                             temperature_mu: float, velocity_unit: float,
+                             time_unit: float) -> float:
+    # At P/(k_B T) = 1 cm^-3, rho = temperature_mu * m_u. The equilibrium
+    # solver needs Q_heat / q_cool^2 at that reference total particle density.
+    cool_kind = cooling.get("cooling_density", "hydrogen_number_density").lower()
+    heat_kind = cooling.get("heating_density", "mass_density").lower()
+    densities = {"mass_density": temperature_mu * AMU_CGS,
+                 "number_density": temperature_mu / mu}
+    if "hydrogen_number_density" in (cool_kind, heat_kind):
+        if "hydrogen_mass_fraction" in cooling:
+            x_h = parse_float(cooling["hydrogen_mass_fraction"])
+        elif "mu_H" in cooling:
+            x_h = 1.0 / parse_float(cooling["mu_H"])
+        else:
+            raise ValueError("hydrogen_number_density requires hydrogen_mass_fraction or mu_H")
+        densities["hydrogen_number_density"] = temperature_mu * x_h
+
+    heat_ref = hrate * densities[heat_kind]
+    if cooling.get("units", "code").lower() == "code":
+        # Convert the code-unit heating to CGS. The density scale cancels
+        # the one in pressure_unit = density_unit * velocity_unit**2.
+        if heat_kind != "mass_density":
+            heat_ref *= AMU_CGS
+        heat_ref *= velocity_unit**2 / time_unit
+    return heat_ref / densities[cool_kind]**2
+
+
 def cell_centers(n: int, xmin: float, xmax: float) -> np.ndarray:
     return xmin + (np.arange(n, dtype=float) + 0.5) * (xmax - xmin) / n
 
@@ -238,21 +266,25 @@ def build_series(args: argparse.Namespace) -> dict[str, Any]:
 
     length_cgs = value_from(args, "length_cgs", blocks, "units", "length_cgs", 1.0)
     time_cgs = value_from(args, "time_cgs", blocks, "units", "time_cgs", 1.0)
-    mu = value_from(args, "mu", blocks, "units", "mu", 1.0)
+    cooling = blocks.get("cooling", {})
+    mu = value_from(args, "mu", blocks, "cooling", "mu", 1.0)
+    temperature_mu = parse_float(cooling["temperature_mu"]) if "temperature_mu" in cooling else mu
     gamma = value_from(args, "gamma", blocks, "hydro", "gamma", 5.0 / 3.0)
     velocity_unit = length_cgs / time_cgs
 
     pressure_over_k = value_from(
         args, "pressure_over_k", blocks, "problem", "pressure_over_k", 3162.277660168379
     )
-    hrate = value_from(args, "hrate", blocks, "hydro_srcterms", "hrate", 2.0e-26)
-
-    cold_temp, warm_temp = stable_equilibria(pressure_over_k, hrate, lhd)
+    hrate = value_from(args, "hrate", blocks, "cooling", "heating_rate", 2.0e-26)
+    equilibrium_rate = equilibrium_heating_rate(
+        cooling, hrate, mu, temperature_mu, velocity_unit, time_cgs
+    )
+    cold_temp, warm_temp = stable_equilibria(pressure_over_k, equilibrium_rate, lhd)
     cold_number_density = pressure_over_k / cold_temp
     warm_number_density = pressure_over_k / warm_temp
 
-    cold_mass_density_cgs = cold_number_density * mu * AMU_CGS
-    ambient_mass_density_cgs = warm_number_density * mu * AMU_CGS
+    cold_mass_density_cgs = cold_number_density * temperature_mu * AMU_CGS
+    ambient_mass_density_cgs = warm_number_density * temperature_mu * AMU_CGS
     ambient_pressure_cgs = pressure_over_k * KBOLTZ_CGS
 
     energy_cgs = value_from(
