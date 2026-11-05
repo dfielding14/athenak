@@ -45,6 +45,7 @@ reconstruct = plm     # spatial reconstruction method
 rsolver     = hllc    # Riemann-solver to be used
 gamma       = 1.666667 # gamma = C_p/C_v
 ism_cooling = true    # enable ISM cooling
+hydrogen_mass_fraction = 1.0  # Pure hydrogen in this example
 hrate       = 0.0     # no uniform heating
 tfloor      = 0.54    # 0.9e4 K with units below
 
