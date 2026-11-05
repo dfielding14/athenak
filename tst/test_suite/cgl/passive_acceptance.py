@@ -360,7 +360,7 @@ def main(argv=None):
             ('viscosity',['mhd/viscosity=.001'],'passive J/A does not support'),
             ('resistivity',['mhd/ohmic_resistivity=.001'],'passive J/A does not support'),
             ('hyperviscosity',['mhd/hyperviscosity=.001'],'passive J/A does not support'),
-            ('cooling',['mhd_srcterms/ism_cooling=true','mhd_srcterms/hrate=0'],
+            ('cooling',['mhd_srcterms/ism_cooling=true','mhd_srcterms/hydrogen_mass_fraction=1','mhd_srcterms/hrate=0'],
              'CGL does not support <mhd_srcterms>/ism_cooling or rel_cooling'),
             ('rel-cooling',['mhd_srcterms/rel_cooling=true','mhd_srcterms/crate_rel=.001'],
              'CGL does not support <mhd_srcterms>/ism_cooling or rel_cooling'),
