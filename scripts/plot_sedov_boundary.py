@@ -35,7 +35,7 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_INPUT = REPO_ROOT / "inputs" / "hydro" / "cloud_crushing_snr.athinput"
 ISM_COOLING = REPO_ROOT / "src" / "srcterms" / "ismcooling.hpp"
 
-AMU_CGS = 1.66053906660e-24
+AMU_CGS = 1.660538921e-24
 KBOLTZ_CGS = 1.3806488e-16
 
 
@@ -245,9 +245,28 @@ def build_series(args: argparse.Namespace) -> dict[str, Any]:
     pressure_over_k = value_from(
         args, "pressure_over_k", blocks, "problem", "pressure_over_k", 3162.277660168379
     )
-    hrate = value_from(args, "hrate", blocks, "hydro_srcterms", "hrate", 2.0e-26)
+    source = blocks.get("hydro_srcterms", {})
+    if "hydrogen_mass_fraction" not in source and "mu_H" not in source:
+        raise ValueError("ISM cooling requires hydrogen_mass_fraction or mu_H")
+    mu_h = float(source.get("mu_H", 1.0))
+    if not math.isfinite(mu_h) or mu_h < 1.0:
+        raise ValueError("ISM cooling requires finite mu_H >= 1")
+    xh = float(source.get("hydrogen_mass_fraction", 1.0 / mu_h))
+    if not (0.0 < xh <= 1.0):
+        raise ValueError("ISM cooling requires 0 < hydrogen_mass_fraction <= 1")
+    if "mu_H" in source and abs(xh * mu_h - 1.0) > 1.0e-6:
+        raise ValueError("Inconsistent hydrogen_mass_fraction and mu_H")
+    if args.hrate is None and source.get("hrate_auto", "false").lower() in ("true", "1"):
+        ref_rate = float(source.get("hrate_reference", 2.0e-26))
+        ref_pressure = float(source.get("hrate_reference_pressure_over_k", 3162.277660168379))
+        hrate = ref_rate * pressure_over_k / ref_pressure
+    else:
+        hrate = value_from(args, "hrate", blocks, "hydro_srcterms", "hrate", 2.0e-26)
+    # Equilibrium per total particle: (n_H/n_tot)^2 (P/k_B T) Lambda(T) = hrate.
+    nh_per_particle = mu * xh
+    cooling_pressure_over_k = pressure_over_k * nh_per_particle**2
 
-    cold_temp, warm_temp = stable_equilibria(pressure_over_k, hrate, lhd)
+    cold_temp, warm_temp = stable_equilibria(cooling_pressure_over_k, hrate, lhd)
     cold_number_density = pressure_over_k / cold_temp
     warm_number_density = pressure_over_k / warm_temp
 

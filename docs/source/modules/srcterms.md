@@ -53,9 +53,10 @@ The term updates momentum and, for ideal equations of state, the corresponding e
 | Parameter | Type | Notes |
 |-----------|------|-------|
 | `ism_cooling` | bool | Enables optically thin ISM cooling. |
-| `hrate` | real | Uniform heating rate in code units. |
+| `hydrogen_mass_fraction` or `mu_H` | real | Specify the hydrogen mass fraction or its reciprocal. |
+| `hrate` | real | Heating rate per total particle in erg s⁻¹. |
 
-The cooling coefficient is evaluated from `ISMCoolFn(temp)` and applied to the gas energy.
+The volumetric ISM loss is \(n_H^2\Lambda(T)\), where \(n_H=X_H\rho/m_u\) and \(\mu_H=1/X_H\). The heating rate per volume is \(n_{\rm tot}\Gamma\), where \(n_{\rm tot}\) is the EOS particle number density and `hrate` sets \(\Gamma\). The ISM coefficient comes from `ISMCoolFn(temp)`.
 
 ### Relativistic Cooling (`<hydro_srcterms>` or `<mhd_srcterms>`)
 
