@@ -149,6 +149,7 @@ class GeneralCooling {
   GeneralCooling(MeshBlockPack *pp, ParameterInput *pin);
   ~GeneralCooling() = default;
 
+  const RuntimeData &Runtime() const { return runtime_; }
   bool Enabled() const { return enabled_; }
   bool Exact() const { return enabled_ && exact_; }
   bool TimestepEnabled() const { return enabled_ && timestep_enabled_; }

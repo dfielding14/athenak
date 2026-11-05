@@ -70,6 +70,7 @@ class SourceTerms {
                   const Real bdt, DvceArray5D<Real> &u0);
   void BeamSource(DvceArray5D<Real> &i0, const Real bdt);
   void NewTimeStep(const DvceArray5D<Real> &w0, const EOS_Data &eos);
+  const cooling::GeneralCooling *Cooling() const { return pcooling; }
   bool CoolingHistoryEnabled() const;
   bool ExactCooling() const;  // <cooling>/integrator = exact: applied after the stages
   void ApplyExactCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos, const Real dt,

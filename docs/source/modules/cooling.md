@@ -45,6 +45,7 @@ where `q_cool` and `q_heat` are selected by `cooling_density` and
 | --- | --- |
 | Code-unit power law | `enabled=true`, `units=code`, `cooling_model=powerlaw`, `cooling_reference_axis`, `cooling_reference_value`, and a `cooling_density`. |
 | Piecewise code-unit curve | Same as power law, plus `cooling_model=piecewise_powerlaw`, ordered `cooling_breaks`, and one-more-entry `cooling_slopes`. |
+| Built-in ISM curve | Set `cooling_model=ism`. Provide `hydrogen_mass_fraction` or `mu_H` and a `temperature_mu` or `mu` for the CGS temperature. |
 | Cooling table | `cooling_model=table`, `cooling_table=...`, `cooling_density=...`, and a table with `value_kind Lambda`. |
 | Heating | `heating_model=constant`, `table`, `powerlaw`, or `piecewise_powerlaw`; select `heating_density` independently from `cooling_density`. |
 | CGS Lambda with total number density | Add a `<units>` block, set table/value units to `cgs`, set `cooling_density=number_density`, and provide `<cooling>/mu`. |
@@ -90,6 +91,12 @@ mu_H = 1.3333333333333333         # equivalent to 1 / hydrogen_mass_fraction
 ```
 
 For cgs temperature axes or models, provide either `temperature_mu` or `mu`.
+
+The built-in ISM curve defaults to `cooling_density=hydrogen_number_density`.
+It uses Schure et al. (2009) Table 2’s $\Lambda_{\rm hd}$ column at post-shock
+temperatures. Its volumetric loss is $n_{\rm H}^2\Lambda(T)$, with
+$n_{\rm H}=X_{\rm H}\rho/m_u$. The EOS uses the total particle density
+$n_{\rm tot}=\rho/(\mu m_u)$. Constant heating uses its own `heating_density`.
 
 ## Table Format
 
