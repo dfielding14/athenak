@@ -22,7 +22,7 @@
     #error NHISTORY > NREDUCTION in outputs.hpp
 #endif
 
-#define NOUTPUT_CHOICES 155
+#define NOUTPUT_CHOICES 159
 // choices for output variables used in <ouput> blocks in input file
 // TO ADD MORE CHOICES:
 //   - add more strings to array below, change NOUTPUT_CHOICES above appropriately
@@ -102,7 +102,9 @@ static const char *var_choice[NOUTPUT_CHOICES] = {
   "prtcl_all", "prtcl_d",
 
   // CGL pressure anisotropy (153-154)
-  "mhd_delta_p", "mhd_beta_delta"
+  "mhd_delta_p", "mhd_beta_delta",
+  // CGL field-aligned strain and signed anisotropic pressure work (155-158)
+  "mhd_strain_q", "mhd_strain_s", "mhd_strain_work", "mhd_w_bcc_strain"
 };
 
 

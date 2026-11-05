@@ -176,7 +176,11 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
   // make a vector of out_params.variables
   std::vector<std::string> variables;
 
-  variables.push_back(out_params.variable);
+  if (out_params.variable == "mhd_w_bcc_strain") {
+    variables = {"mhd_w_bcc", "mhd_strain_q", "mhd_strain_s"};
+  } else {
+    variables.push_back(out_params.variable);
+  }
   if (out_params.file_type == "pdf") {
     if (out_params.nbin2 > 1) {
       variables.push_back(out_params.variable_2);
@@ -185,7 +189,13 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
 
 
   for (const auto& variable : variables) {
-    if ((variable == "mhd_delta_p" || variable == "mhd_beta_delta") &&
+    const bool strain = variable == "mhd_strain_q" || variable == "mhd_strain_s" ||
+                        variable == "mhd_strain_work";
+    if (strain && out_params.include_gzs) {
+      std::cout << "### FATAL ERROR: CGL strain is defined on owned cells." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if ((strain || variable == "mhd_delta_p" || variable == "mhd_beta_delta") &&
         (pm->pmb_pack->pmhd == nullptr ||
          !pm->pmb_pack->pmhd->peos->eos_data.is_cgl)) {
       std::cout << "### FATAL ERROR: " << variable
@@ -577,6 +587,11 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
       outvars.emplace_back("bmag",i_derived,&(derived_var));
+    }
+
+    if (strain) {
+      out_params.contains_derived = true;
+      outvars.emplace_back(variable.substr(4), out_params.n_derived++, &derived_var);
     }
 
     // Signed CGL pressure anisotropy, optionally normalized by magnetic pressure.

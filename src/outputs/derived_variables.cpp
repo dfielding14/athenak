@@ -921,6 +921,38 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1; // increment derived variable index
   }
 
+  if (name == "mhd_w_bcc_strain" || name == "mhd_strain_q" ||
+      name == "mhd_strain_s" || name == "mhd_strain_work") {
+    ensure_derived_cell_shape();
+    auto dv = derived_var;
+    auto w = pm->pmb_pack->pmhd->w0;
+    auto bcc = pm->pmb_pack->pmhd->bcc0;
+    const Real bfloor = pm->pmb_pack->pmhd->peos->eos_data.bfloor;
+    const bool both = name == "mhd_w_bcc_strain";
+    const bool stretch = name == "mhd_strain_s";
+    const bool work = name == "mhd_strain_work";
+    par_for("cgl_strain", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
+    KOKKOS_LAMBDA(int m, int k, int j, int i) {
+      const Real b[3] = {bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i)};
+      const Real b2 = fmax(SQR(b[0]) + SQR(b[1]) + SQR(b[2]), SQR(bfloor));
+      const auto &block = size.d_view(m);
+      Real projected = 0.0, divergence = 0.0;
+      for (int a = 0; a < 3; ++a) {
+        const int v = IVX + a;
+        const Real dx = (w(m,v,k,j,i+1) - w(m,v,k,j,i-1))/(2.0*block.dx1);
+        const Real dy = multi_d ? (w(m,v,k,j+1,i) - w(m,v,k,j-1,i))/(2.0*block.dx2) : 0.0;
+        const Real dz = three_d ? (w(m,v,k+1,j,i) - w(m,v,k-1,j,i))/(2.0*block.dx3) : 0.0;
+        projected += b[a]*(b[0]*dx + b[1]*dy + b[2]*dz);
+        divergence += (a == 0 ? dx : (a == 1 ? dy : dz));
+      }
+      const Real s = b2 > 0.0 ? projected/b2 : 0.0;
+      const Real q = s - divergence/3.0;
+      dv(m,i_dv,k,j,i) = work ? (w(m,IPP,k,j,i) - w(m,IPR,k,j,i))*q : (stretch ? s : q);
+      if (both) dv(m,i_dv+1,k,j,i) = s;
+    });
+    i_dv += both ? 2 : 1;
+  }
+
   if (name == "mhd_delta_p" || name == "mhd_beta_delta") {
     ensure_derived_cell_shape();
     auto dv = derived_var;
