@@ -259,7 +259,7 @@ def main(argv=None):
             ('viscosity',['mhd/viscosity=.001'],'passive J/A has not yet validated'),
             ('resistivity',['mhd/ohmic_resistivity=.001'],'passive J/A has not yet validated'),
             ('hyperviscosity',['mhd/hyperviscosity=.001'],'passive J/A has not yet validated'),
-            ('cooling',['mhd_srcterms/ism_cooling=true','mhd_srcterms/hrate=0'],
+            ('cooling',['mhd_srcterms/ism_cooling=true','mhd_srcterms/hydrogen_mass_fraction=1','mhd_srcterms/hrate=0'],
              'passive J/A has not yet validated'),
             ('rel-cooling',['mhd_srcterms/rel_cooling=true','mhd_srcterms/crate_rel=.001'],
              'passive J/A has not yet validated'),
