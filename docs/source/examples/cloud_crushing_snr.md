@@ -88,6 +88,7 @@ the requested pressure:
 tfloor      = 0.1
 
 <hydro_srcterms>
+hydrogen_mass_fraction = 1.0
 hrate_auto  = true
 hrate_reference = 2.0e-26
 hrate_reference_pressure_over_k = 3.162277660168379e3
