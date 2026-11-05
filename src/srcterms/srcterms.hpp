@@ -52,6 +52,7 @@ class SourceTerms {
 
   // heating rate used with ISM/CGM cooling
   Real hrate;
+  Real ism_hydrogen_mass_fraction;  // X_H in the ISM loss n_H^2 Lambda(T)
   Real hscale_norm;
   Real hscale_height; // Gaussian Scale Height
   Real hscale_radius; // Exponential Scale Radius
@@ -84,6 +85,7 @@ class SourceTerms {
   // functions
   void ConstantAccel(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                      const Real dt, DvceArray5D<Real> &u0);
+  Real ISMHydrogenNumberDensityUnit() const;
   void ISMCooling(const DvceArray5D<Real> &w0, const EOS_Data &eos,
                   const Real dt, DvceArray5D<Real> &u0);
   void CGMCoolingSplit(DvceArray5D<Real> &w0, DvceArray5D<Real> &u0,
