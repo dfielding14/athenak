@@ -43,7 +43,7 @@ ndiag      = 1
 <units>
 length_cgs  = 3.0856775809623245e18  # 1 pc
 time_cgs    = 3.15576e13             # 1 Myr
-mass_cgs    = 4.91416144649125e31    # 1 amu cm^-3 * (1 pc)^3
+mass_cgs    = 4.91416144649125e31    # sets the density unit to 1.67262192369e-24 g cm^-3
 mu          = 1.0
 
 <hydro>
