@@ -142,7 +142,7 @@ Source-term blocks are attached to the active module:
 | Parameter | Default/requirement | Applies when enabled |
 | --- | --- | --- |
 | `const_accel` | Default `false` | Requires `const_accel_val` and `const_accel_dir` |
-| `ism_cooling` | Default `false` | Requires `hrate` and a `<units>` block used by cooling conversion |
+| `ism_cooling` | Default `false` | Requires `hrate`, `hydrogen_mass_fraction` or `mu_H`, and a `<units>` block |
 | `rel_cooling` | Default `false` | Requires `crate_rel`; `cpower_rel` defaults to `1.0` |
 | `rad_beam` | Default `false` | Requires `dii_dt`, `pos_1..3`, `dir_1..3`, `width`, and `spread` |
 

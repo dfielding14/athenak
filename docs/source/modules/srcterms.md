@@ -33,7 +33,7 @@ injection belongs in `<rad_srcterms>`.
 | Flag | Block | Required parameters when enabled | Behavior |
 | --- | --- | --- | --- |
 | `const_accel = true` | fluid | `const_accel_val`, `const_accel_dir` (`1`, `2`, or `3`) | Adds uniform momentum acceleration; ideal-gas states also receive the corresponding energy work. |
-| `ism_cooling = true` | fluid | `hrate` and a `<units>` block | Applies the public optically thin ISM heating/cooling energy term using unit conversion. |
+| `ism_cooling = true` | fluid | `hrate`, `hydrogen_mass_fraction` or `mu_H`, and a `<units>` block | Applies the public optically thin ISM heating/cooling energy term using unit conversion. |
 | `rel_cooling = true` | fluid | `crate_rel`; optional `cpower_rel` (default `1.0`) | Applies the implemented relativistic momentum and energy loss term. |
 | `rad_beam = true` | radiation | `dii_dt`, `pos_1`, `pos_2`, `pos_3`, `dir_1`, `dir_2`, `dir_3`, `width`, `spread` | Injects radiation intensity in the beam mask. |
 
@@ -43,6 +43,8 @@ Radiation beam source-term configuration is present in
 `inputs/radiation/bh_beam.athinput`.
 
 ### Cooling And Timestep Control
+
+The volumetric ISM loss is \(n_H^2\Lambda(T)\), where \(n_H=X_H\rho/m_u\) and \(\mu_H=1/X_H\). The heating rate per volume is \(n_{\rm tot}\Gamma\), where \(n_{\rm tot}\) is the EOS particle number density and `hrate` sets \(\Gamma\).
 
 `ISMCoolFn()` combines the Koyama and Inutsuka analytic low-temperature
 expression, interpolation through the bundled SPEX cooling table, and a
