@@ -69,13 +69,13 @@ With the default cooling/heating choices, the equilibrium phases are
 
 | Quantity | Value |
 | --- | ---: |
-| Cold temperature | `50.2123 K` |
-| Warm temperature | `6296.21 K` |
-| Cold number density | `62.9781 cm^-3` |
-| Warm number density | `0.502251 cm^-3` |
+| Cold temperature | `49.6728 K` |
+| Warm temperature | `6279.73 K` |
+| Cold number density | `63.6622 cm^-3` |
+| Warm number density | `0.503569 cm^-3` |
 | Ambient pressure | `4.36599e-13 dyn cm^-2` |
-| Ambient mass density | `8.40076e-25 g cm^-3` |
-| Cold-cloud mass density | `1.05339e-22 g cm^-3` |
+| Ambient mass density | `8.42281e-25 g cm^-3` |
+| Cold-cloud mass density | `1.06483e-22 g cm^-3` |
 
 The heating rate can either be supplied directly or scaled automatically with
 the requested pressure:
@@ -83,6 +83,7 @@ the requested pressure:
 ```ini
 <hydro>
 tfloor      = 0.1
+hydrogen_mass_fraction = 1.0
 hrate_auto  = true
 hrate_reference = 2.0e-26
 hrate_reference_pressure_over_k = 3.162277660168379e3
@@ -203,6 +204,8 @@ This run is intentionally low resolution. It is a wiring and consistency test,
 not a production cloud-crushing calculation.
 
 ## Validation Plots
+
+The saved boundary CSV, figures, and low-resolution measurements below use the previous ISM cooling rate proportional to the square of the total particle density.
 
 Plot the analytic boundary state in cgs units through `t = 10` code units:
 
