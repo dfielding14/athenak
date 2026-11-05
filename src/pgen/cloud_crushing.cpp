@@ -25,6 +25,7 @@
 #include "pgen.hpp"
 #include "srcterms/frame_tracker.hpp"
 #include "srcterms/ismcooling.hpp"
+#include "srcterms/srcterms.hpp"
 #include "units/units.hpp"
 
 namespace {
@@ -226,7 +227,10 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
   const Real temp_max = pin->GetOrAddReal("problem", "equilibrium_temp_max", 1.0e7);
   Real temp_cold = 0.0;
   Real temp_warm = 0.0;
-  FindStableISMEquilibria(data.pressure_over_k, data.hrate, temp_min, temp_max,
+  // Balance per total particle: (n_H/n_tot)^2 (P/k_B T) Lambda(T) = hrate.
+  const Real nh_per_particle = pmbp->phydro->psrc->ISMHydrogenNumberDensityUnit()/data.n_unit;
+  const Real cooling_pressure_over_k = data.pressure_over_k*nh_per_particle*nh_per_particle;
+  FindStableISMEquilibria(cooling_pressure_over_k, data.hrate, temp_min, temp_max,
                           temp_cold, temp_warm);
   data.cold = MakePhaseState(temp_cold, data);
   data.warm = MakePhaseState(temp_warm, data);

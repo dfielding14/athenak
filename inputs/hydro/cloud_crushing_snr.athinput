@@ -56,6 +56,7 @@ tfloor      = 0.1   # code temperature, about 11 K with the default units
 
 <hydro_srcterms>
 ism_cooling = true
+hydrogen_mass_fraction = 1.0  # Pure hydrogen in this example
 hrate       = 2.0e-26
 hrate_auto  = false
 hrate_reference = 2.0e-26
