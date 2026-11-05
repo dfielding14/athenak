@@ -31,7 +31,7 @@ def run(directory, settings, mode="active"):
      "CGL does not support temperature-dependent <mhd>/tdep_viscosity"),
     ("\n<mhd>\nviscosity = 0\nviscosity_floor = 0.1\ntdep_viscosity = true\n",
      "CGL does not support temperature-dependent <mhd>/tdep_viscosity"),
-    ("\n<mhd_srcterms>\nism_cooling = true\nhrate = 0\n",
+    ("\n<mhd_srcterms>\nism_cooling = true\nhydrogen_mass_fraction = 1\nhrate = 0\n",
      "CGL does not support <mhd_srcterms>/ism_cooling or rel_cooling"),
     ("\n<mhd_srcterms>\nrel_cooling = true\ncrate_rel = 0\n",
      "CGL does not support <mhd_srcterms>/ism_cooling or rel_cooling"),
