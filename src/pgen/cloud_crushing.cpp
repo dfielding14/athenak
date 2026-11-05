@@ -23,8 +23,10 @@
 #include "eos/eos.hpp"
 #include "parameter_input.hpp"
 #include "pgen.hpp"
+#include "srcterms/cooling_hooks.hpp"
 #include "srcterms/frame_tracker.hpp"
 #include "srcterms/ismcooling.hpp"
+#include "srcterms/srcterms.hpp"
 #include "units/units.hpp"
 
 namespace {
@@ -141,7 +143,7 @@ Real BisectEquilibriumRoot(const Real temp_lo, const Real temp_hi,
   for (int iter = 0; iter < 80; ++iter) {
     const Real mid = std::sqrt(lo*hi);
     const Real fmid = EquilibriumFunction(mid, pressure_over_k, hrate);
-    if (flo*fmid <= 0.0) {
+    if (fmid == 0.0 || (flo < 0.0) != (fmid < 0.0)) {
       hi = mid;
     } else {
       lo = mid;
@@ -163,7 +165,7 @@ void FindStableISMEquilibria(const Real pressure_over_k, const Real hrate,
     const Real frac = static_cast<Real>(n)/static_cast<Real>(nbins);
     const Real temp = temp_min*std::pow(temp_max/temp_min, frac);
     const Real f = EquilibriumFunction(temp, pressure_over_k, hrate);
-    if (prev_f == 0.0 || f == 0.0 || prev_f*f < 0.0) {
+    if (prev_f == 0.0 || f == 0.0 || (prev_f < 0.0) != (f < 0.0)) {
       const Real root = BisectEquilibriumRoot(prev_t, temp, pressure_over_k, hrate);
       const bool positive_slope_crossing = (prev_f < 0.0 && f > 0.0);
       if (positive_slope_crossing) {
@@ -176,7 +178,7 @@ void FindStableISMEquilibria(const Real pressure_over_k, const Real hrate,
 
   if (stable_roots.size() < 2) {
     FatalCloudCrushingInput("Could not find both cold and warm stable ISM equilibria. "
-                            "Adjust hydro_srcterms/hrate, problem/pressure_over_k, or the "
+                            "Adjust cooling/heating_rate, problem/pressure_over_k, or the "
                             "temperature search interval.");
   }
   temp_cold = stable_roots.front();
@@ -201,30 +203,42 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
   if (pmbp->punit == nullptr) {
     FatalCloudCrushingInput("cloud_crushing with ISM cooling requires a <units> block.");
   }
-  if (!pin->DoesBlockExist("hydro_srcterms") ||
-      !pin->GetOrAddBoolean("hydro_srcterms", "ism_cooling", false)) {
-    FatalCloudCrushingInput("cloud_crushing requires hydro_srcterms/ism_cooling = true.");
+  const bool has_cooling_block = pin->DoesBlockExist("cooling") &&
+      pin->GetOrAddBoolean("cooling", "enabled", false) &&
+      pin->GetOrAddString("cooling", "cooling_model", "none") == "ism" &&
+      pin->GetOrAddString("cooling", "heating_model", "none") == "constant";
+  if (!has_cooling_block) {
+    FatalCloudCrushingInput("cloud_crushing requires a standalone <cooling> block with "
+                            "cooling_model=ism and heating_model=constant.");
   }
   if (!pmbp->phydro->peos->eos_data.is_ideal) {
     FatalCloudCrushingInput("cloud_crushing requires an ideal-gas hydro EOS.");
   }
 
   CloudCrushingData data;
-  data.pressure_over_k = pin->GetOrAddReal("problem", "pressure_over_k", 3162.277660168379);
-  data.hrate = pin->GetReal("hydro_srcterms", "hrate");
-  data.n_unit = pmbp->punit->density_cgs()/pmbp->punit->mu()/
-                units::Units::atomic_mass_unit_cgs;
+  data.pressure_over_k =
+      pin->GetOrAddReal("problem", "pressure_over_k", 3162.277660168379);
+  data.hrate = pin->GetReal("cooling", "heating_rate");
+  const auto &runtime = pmbp->phydro->psrc->Cooling()->Runtime();
+  data.mu = runtime.composition.temperature_mu;
+  data.n_unit = runtime.density_cgs/(data.mu*units::Units::atomic_mass_unit_cgs);
   data.pressure_unit = pmbp->punit->pressure_cgs();
   data.velocity_unit = pmbp->punit->velocity_cgs();
   data.time_unit = pmbp->punit->time_cgs();
-  data.mu = pmbp->punit->mu();
   data.gm1 = pmbp->phydro->peos->eos_data.gamma - 1.0;
 
   const Real temp_min = pin->GetOrAddReal("problem", "equilibrium_temp_min", 1.0);
   const Real temp_max = pin->GetOrAddReal("problem", "equilibrium_temp_max", 1.0e7);
   Real temp_cold = 0.0;
   Real temp_warm = 0.0;
-  FindStableISMEquilibria(data.pressure_over_k, data.hrate, temp_min, temp_max,
+  // At n_tot = 1 cm^-3, normalize the two rates once. At any other n_tot
+  // cooling scales quadratically and constant heating scales linearly.
+  const Real rho_ref = 1.0/data.n_unit;
+  const Real heat_ref = cooling::HeatingEdotFromGamma(data.hrate, runtime.default_units,
+      runtime.heating_density, rho_ref, runtime);
+  const Real cool_ref = cooling::CoolingEdotFromLambda(1.0, cooling::UnitSystem::cgs,
+      runtime.cooling_density, rho_ref, runtime);
+  FindStableISMEquilibria(data.pressure_over_k, heat_ref/cool_ref, temp_min, temp_max,
                           temp_cold, temp_warm);
   data.cold = MakePhaseState(temp_cold, data);
   data.warm = MakePhaseState(temp_warm, data);
@@ -348,7 +362,7 @@ void ReadCloudCrushingParameters(ParameterInput *pin, Mesh *pm) {
 
   if (global_variable::my_rank == 0) {
     std::cout << "CloudCrushing ISM equilibrium: P/k_B=" << data.pressure_over_k
-              << " K cm^-3, hrate=" << data.hrate << " erg s^-1" << std::endl;
+              << " K cm^-3, hrate=" << data.hrate << std::endl;
     std::cout << " cold: T=" << data.cold.temp_cgs
               << " K, n=" << data.cold.number_density_cgs << " cm^-3" << std::endl;
     std::cout << " warm: T=" << data.warm.temp_cgs

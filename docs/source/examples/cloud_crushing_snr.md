@@ -8,7 +8,7 @@ Taylor-von Neumann-Sedov blast wave.
 The problem is built around three pieces:
 
 - ISM cooling and heating set the cold and warm thermal equilibria at the
-  requested `problem/pressure_over_k` and resolved `hydro_srcterms/hrate`.
+  requested `problem/pressure_over_k` and `cooling/heating_rate`.
 - The cold cloud starts as a smoothed density sphere embedded in the warm phase.
 - The `inner_x1` user boundary samples the full xi-dependent TVNS interior
   profile, not just a constant post-shock state.
@@ -65,7 +65,8 @@ mass_cgs    = 4.91416144649125e31    # 1 amu cm^-3 * (1 pc)^3
 mu          = 1.0
 ```
 
-With the default cooling/heating choices, the equilibrium phases are
+The example assumes pure hydrogen (`hydrogen_mass_fraction = 1.0`) and a mean
+particle mass of one atomic mass unit (`mu = 1.0`). The equilibrium phases are
 
 | Quantity | Value |
 | --- | ---: |
@@ -74,38 +75,34 @@ With the default cooling/heating choices, the equilibrium phases are
 | Cold number density | `62.9781 cm^-3` |
 | Warm number density | `0.502251 cm^-3` |
 | Ambient pressure | `4.36599e-13 dyn cm^-2` |
-| Ambient mass density | `8.40076e-25 g cm^-3` |
-| Cold-cloud mass density | `1.05339e-22 g cm^-3` |
+| Ambient mass density | `8.34008e-25 g cm^-3` |
+| Cold-cloud mass density | `1.04578e-22 g cm^-3` |
 
-The heating rate can either be supplied directly or scaled automatically with
-the requested pressure:
+The shipped input supplies the ISM cooling and constant heating through the
+standalone `<cooling>` block:
 
 ```ini
 <hydro>
 tfloor      = 0.1
 
-<hydro_srcterms>
-hrate_auto  = true
-hrate_reference = 2.0e-26
-hrate_reference_pressure_over_k = 3.162277660168379e3
-cooling_timestep_factor = 0.1
+<cooling>
+enabled         = true
+units           = cgs
+cooling_model   = ism
+heating_model   = constant
+cooling_density = hydrogen_number_density
+hydrogen_mass_fraction = 1.0
+heating_density = number_density
+mu              = 1.0
+heating_rate    = 2.0e-26
+timestep        = true
+timestep_factor = 0.1
 ```
 
-With `hrate_auto = true`, the code sets
-
-```text
-hrate = hrate_reference
-      * problem/pressure_over_k
-      / hrate_reference_pressure_over_k
-```
-
-and writes the resolved value back into `<hydro_srcterms>`, so source terms and
-the problem generator use the same heating rate. This preserves the default
-cold/warm equilibrium temperatures while allowing a different ambient
-`P/k_B`.
-
-`cooling_timestep_factor` multiplies the source-term cooling/heating timestep
-limit. A value below unity is useful in this strongly shocked cloud test because
+The problem generator uses the same `<cooling>/heating_rate` value when solving
+for the cold and warm ISM equilibria. `timestep_factor` multiplies the
+source-term cooling/heating timestep limit. A value below unity is useful in
+this strongly shocked cloud test because
 explicit cooling at the full local cooling time can drive mixed cells into the
 energy floor.
 

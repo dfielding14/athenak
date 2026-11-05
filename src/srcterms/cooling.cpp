@@ -696,8 +696,7 @@ GeneralCooling::GeneralCooling(MeshBlockPack *pp, ParameterInput *pin) :
   heating_bounds_ = ParseBounds(pin->GetOrAddString("cooling", "heating_bounds", "zero"),
                                 "heating_bounds");
   const char *default_cooling_density = "mass_density";
-  if (cooling_model_ == ModelKind::ism) default_cooling_density = "number_density";
-  if (cooling_model_ == ModelKind::cgm) {
+  if (cooling_model_ == ModelKind::ism || cooling_model_ == ModelKind::cgm) {
     default_cooling_density = "hydrogen_number_density";
   }
   runtime_.cooling_density = ParseDensityKind(pin->GetOrAddString("cooling",

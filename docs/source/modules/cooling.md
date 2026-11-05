@@ -70,6 +70,12 @@ mu_H = 1.3333333333333333         # equivalent to 1 / hydrogen_mass_fraction
 
 For cgs temperature axes or models, provide either `temperature_mu` or `mu`.
 
+The built-in ISM curve defaults to `cooling_density=hydrogen_number_density`.
+It uses Schure et al. (2009) Table 2’s $\Lambda_{\rm hd}$ column at post-shock
+temperatures. Its volumetric loss is $n_{\rm H}^2\Lambda(T)$, with
+$n_{\rm H}=X_{\rm H}\rho/m_u$. The EOS uses the total particle density
+$n_{\rm tot}=\rho/(\mu m_u)$. Constant heating uses its own `heating_density`.
+
 ## Table Format
 
 Tables are fixed-format ASCII files. Irregular source data should be

@@ -7,8 +7,8 @@ a warm ISM. It is intended to be built with:
 cmake -S . -B build_cloud_crushing -DPROBLEM=cloud_crushing
 ```
 
-The setup requires a `<hydro_srcterms>` block with `ism_cooling = true` and a
-`<units>` block so the ISM equilibrium and Sedov boundary can be evaluated in
+The setup requires a `<cooling>` block with `cooling_model = ism` and
+`heating_model = constant`, plus a `<units>` block so the ISM equilibrium and Sedov boundary can be evaluated in
 cgs-backed code units.
 
 The problem generator supports two inner-`x1` boundary modes:
