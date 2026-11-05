@@ -31,6 +31,18 @@
 #include "outputs.hpp"
 #include "utils/current.hpp"
 
+// Normalize at each stencil point before differentiating the field direction.
+KOKKOS_INLINE_FUNCTION
+static void FieldDirection(const DvceArray5D<Real> &bcc, int m, int k, int j, int i,
+                           Real bfloor, Real unit[3]) {
+  const Real bx = bcc(m,IBX,k,j,i), by = bcc(m,IBY,k,j,i), bz = bcc(m,IBZ,k,j,i);
+  const Real norm = fmax(sqrt(SQR(bx) + SQR(by) + SQR(bz)), bfloor);
+  const Real inverse = norm > 0.0 ? 1.0/norm : 0.0;
+  unit[0] = bx*inverse;
+  unit[1] = by*inverse;
+  unit[2] = bz*inverse;
+}
+
 KOKKOS_INLINE_FUNCTION
 void ComputeUcBcFromPrimitive(const Real uu1, const Real uu2, const Real uu3,
                               const Real bb1, const Real bb2, const Real bb3,
@@ -152,15 +164,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("vor2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real w1 = 0.0;
-      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))/size.d_view(m).dx1;
-      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/size.d_view(m).dx1;
+      Real w2 = -(w0_(m,IVZ,k,j,i+1) - w0_(m,IVZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real w3 =  (w0_(m,IVY,k,j,i+1) - w0_(m,IVY,k,j,i-1))/(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))/size.d_view(m).dx2;
-        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/size.d_view(m).dx2;
+        w1 += (w0_(m,IVZ,k,j+1,i) - w0_(m,IVZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        w3 -= (w0_(m,IVX,k,j+1,i) - w0_(m,IVX,k,j-1,i))/(2.0*size.d_view(m).dx2);
       }
       if (three_d) {
-        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))/size.d_view(m).dx3;
-        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))/size.d_view(m).dx3;
+        w1 -= (w0_(m,IVY,k+1,j,i) - w0_(m,IVY,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        w2 += (w0_(m,IVX,k+1,j,i) - w0_(m,IVX,k-1,j,i))/(2.0*size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = w1*w1 + w2*w2 + w3*w3;
     });
@@ -193,15 +205,15 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     par_for("j2", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
       Real j1 = 0.0;
-      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/size.d_view(m).dx1;
-      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/size.d_view(m).dx1;
+      Real j2 = -(bcc(m,IBZ,k,j,i+1) - bcc(m,IBZ,k,j,i-1))/(2.0*size.d_view(m).dx1);
+      Real j3 =  (bcc(m,IBY,k,j,i+1) - bcc(m,IBY,k,j,i-1))/(2.0*size.d_view(m).dx1);
       if (multi_d) {
-        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/size.d_view(m).dx2;
-        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/size.d_view(m).dx2;
+        j1 += (bcc(m,IBZ,k,j+1,i) - bcc(m,IBZ,k,j-1,i))/(2.0*size.d_view(m).dx2);
+        j3 -= (bcc(m,IBX,k,j+1,i) - bcc(m,IBX,k,j-1,i))/(2.0*size.d_view(m).dx2);
       }
       if (three_d) {
-        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/size.d_view(m).dx3;
-        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/size.d_view(m).dx3;
+        j1 -= (bcc(m,IBY,k+1,j,i) - bcc(m,IBY,k-1,j,i))/(2.0*size.d_view(m).dx3);
+        j2 += (bcc(m,IBX,k+1,j,i) - bcc(m,IBX,k-1,j,i))/(2.0*size.d_view(m).dx3);
       }
       dv(m,i_dv,k,j,i) = j1*j1 + j2*j2 + j3*j3;
     });
@@ -276,90 +288,30 @@ void BaseTypeOutput::ComputeDerivedVariable(std::string name, Mesh *pm) {
     i_dv += 1; // increment derived variable index
   }
 
-  // magnitude of curvature = |b_hat dot nabla b_hat|.
-  // Calculated from cell-centered fields.
-  // Not computed in ghost zones since requires derivative
-  if (name.compare("mhd_curv_alt") == 0) {
+  // Field-line curvature |(b_hat dot grad)b_hat| using the PLM output stencil.
+  if (name == "mhd_curv_alt") {
     ensure_derived_cell_shape();
     auto dv = derived_var;
-    auto &bcc = pm->pmb_pack->pmhd->bcc0;
-    par_for("curv_alt", DevExeSpace(), 0, (nmb-1), ks, ke, js, je, is, ie,
+    auto bcc = pm->pmb_pack->pmhd->bcc0;
+    const Real bfloor = pm->pmb_pack->pmhd->peos->eos_data.bfloor;
+    const int ndim = three_d ? 3 : (multi_d ? 2 : 1);
+    par_for("curv_alt", DevExeSpace(), 0, nmb-1, ks, ke, js, je, is, ie,
     KOKKOS_LAMBDA(int m, int k, int j, int i) {
-      // Calculate |B|
-      Real B_mag = sqrt( bcc(m,IBX,k,j,i)*bcc(m,IBX,k,j,i)
-                       + bcc(m,IBY,k,j,i)*bcc(m,IBY,k,j,i)
-                       + bcc(m,IBZ,k,j,i)*bcc(m,IBZ,k,j,i));
-      // Calculate b_hat vector
-      Real b1 = bcc(m,IBX,k,j,i)/B_mag;
-      Real b2 = bcc(m,IBY,k,j,i)/B_mag;
-      Real b3 = bcc(m,IBZ,k,j,i)/B_mag;
-
-      // calculate b_hat vector at i +/- 1
-      Real B_mag_ip1 = sqrt( bcc(m,IBX,k,j,i+1)*bcc(m,IBX,k,j,i+1)
-                           + bcc(m,IBY,k,j,i+1)*bcc(m,IBY,k,j,i+1)
-                           + bcc(m,IBZ,k,j,i+1)*bcc(m,IBZ,k,j,i+1));
-      Real b1_ip1 = bcc(m,IBX,k,j,i+1)/B_mag_ip1;
-      Real b2_ip1 = bcc(m,IBY,k,j,i+1)/B_mag_ip1;
-      Real b3_ip1 = bcc(m,IBZ,k,j,i+1)/B_mag_ip1;
-
-      Real B_mag_im1 = sqrt( bcc(m,IBX,k,j,i-1)*bcc(m,IBX,k,j,i-1)
-                           + bcc(m,IBY,k,j,i-1)*bcc(m,IBY,k,j,i-1)
-                           + bcc(m,IBZ,k,j,i-1)*bcc(m,IBZ,k,j,i-1));
-      Real b1_im1 = bcc(m,IBX,k,j,i-1)/B_mag_im1;
-      Real b2_im1 = bcc(m,IBY,k,j,i-1)/B_mag_im1;
-      Real b3_im1 = bcc(m,IBZ,k,j,i-1)/B_mag_im1;
-
-      // calculate b_hat vector at j +/- 1
-      Real B_mag_jp1 = sqrt( bcc(m,IBX,k,j+1,i)*bcc(m,IBX,k,j+1,i)
-                           + bcc(m,IBY,k,j+1,i)*bcc(m,IBY,k,j+1,i)
-                           + bcc(m,IBZ,k,j+1,i)*bcc(m,IBZ,k,j+1,i));
-      Real b1_jp1 = bcc(m,IBX,k,j+1,i)/B_mag_jp1;
-      Real b2_jp1 = bcc(m,IBY,k,j+1,i)/B_mag_jp1;
-      Real b3_jp1 = bcc(m,IBZ,k,j+1,i)/B_mag_jp1;
-
-      Real B_mag_jm1 = sqrt( bcc(m,IBX,k,j-1,i)*bcc(m,IBX,k,j-1,i)
-                           + bcc(m,IBY,k,j-1,i)*bcc(m,IBY,k,j-1,i)
-                           + bcc(m,IBZ,k,j-1,i)*bcc(m,IBZ,k,j-1,i));
-      Real b1_jm1 = bcc(m,IBX,k,j-1,i)/B_mag_jm1;
-      Real b2_jm1 = bcc(m,IBY,k,j-1,i)/B_mag_jm1;
-      Real b3_jm1 = bcc(m,IBZ,k,j-1,i)/B_mag_jm1;
-
-      // calculate b_hat vector at k +/- 1
-      Real B_mag_kp1 = sqrt( bcc(m,IBX,k+1,j,i)*bcc(m,IBX,k+1,j,i)
-                           + bcc(m,IBY,k+1,j,i)*bcc(m,IBY,k+1,j,i)
-                           + bcc(m,IBZ,k+1,j,i)*bcc(m,IBZ,k+1,j,i));
-      Real b1_kp1 = bcc(m,IBX,k+1,j,i)/B_mag_kp1;
-      Real b2_kp1 = bcc(m,IBY,k+1,j,i)/B_mag_kp1;
-      Real b3_kp1 = bcc(m,IBZ,k+1,j,i)/B_mag_kp1;
-
-      Real B_mag_km1 = sqrt( bcc(m,IBX,k-1,j,i)*bcc(m,IBX,k-1,j,i)
-                           + bcc(m,IBY,k-1,j,i)*bcc(m,IBY,k-1,j,i)
-                           + bcc(m,IBZ,k-1,j,i)*bcc(m,IBZ,k-1,j,i));
-      Real b1_km1 = bcc(m,IBX,k-1,j,i)/B_mag_km1;
-      Real b2_km1 = bcc(m,IBY,k-1,j,i)/B_mag_km1;
-      Real b3_km1 = bcc(m,IBZ,k-1,j,i)/B_mag_km1;
-
-      // Central differencing of b_hat vector
-      Real db1_dx1 = (b1_ip1 - b1_im1)/(2.0*size.d_view(m).dx1);
-      Real db2_dx1 = (b2_ip1 - b2_im1)/(2.0*size.d_view(m).dx1);
-      Real db3_dx1 = (b3_ip1 - b3_im1)/(2.0*size.d_view(m).dx1);
-
-      Real db1_dx2 = (b1_jp1 - b1_jm1)/(2.0*size.d_view(m).dx2);
-      Real db2_dx2 = (b2_jp1 - b2_jm1)/(2.0*size.d_view(m).dx2);
-      Real db3_dx2 = (b3_jp1 - b3_jm1)/(2.0*size.d_view(m).dx2);
-
-      Real db1_dx3 = (b1_kp1 - b1_km1)/(2.0*size.d_view(m).dx3);
-      Real db2_dx3 = (b2_kp1 - b2_km1)/(2.0*size.d_view(m).dx3);
-      Real db3_dx3 = (b3_kp1 - b3_km1)/(2.0*size.d_view(m).dx3);
-
-      // Calculate curvature = |b_hat dot nabla b_hat|
-      Real curv1 = b1*db1_dx1 + b2*db1_dx2 + b3*db1_dx3;
-      Real curv2 = b1*db2_dx1 + b2*db2_dx2 + b3*db2_dx3;
-      Real curv3 = b1*db3_dx1 + b2*db3_dx2 + b3*db3_dx3;
-
-      dv(m,i_dv,k,j,i) = sqrt(curv1*curv1 + curv2*curv2 + curv3*curv3);
+      const auto &block = size.d_view(m);
+      const Real dx[3] = {block.dx1, block.dx2, block.dx3};
+      Real unit[3], curvature[3] = {};
+      FieldDirection(bcc, m, k, j, i, bfloor, unit);
+      for (int axis = 0; axis < ndim; ++axis) {
+        const int di = axis == 0, dj = axis == 1, dk = axis == 2;
+        Real high[3], low[3];
+        FieldDirection(bcc, m, k+dk, j+dj, i+di, bfloor, high);
+        FieldDirection(bcc, m, k-dk, j-dj, i-di, bfloor, low);
+        const Real scale = unit[axis]/(2.0*dx[axis]);
+        for (int c = 0; c < 3; ++c) curvature[c] += scale*(high[c] - low[c]);
+      }
+      dv(m,i_dv,k,j,i) = sqrt(SQR(curvature[0]) + SQR(curvature[1]) + SQR(curvature[2]));
     });
-    i_dv += 1; // increment derived variable index
+    i_dv += 1;
   }
 
   // contravariant four-current jcon.  Calculated from cell-centered fields.

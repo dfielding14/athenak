@@ -558,11 +558,17 @@ BaseTypeOutput::BaseTypeOutput(ParameterInput *pin, Mesh *pm, OutputParameters o
 
     // Added by DBF --- check & update NOUTPUT_CHOICES
     // mhd magnitude of magnetic curvature
-    if (variable.compare("mhd_curv") == 0) {
+    if (variable == "mhd_curv" || variable == "mhd_curv_alt") {
+      if (pm->pmb_pack->pmhd == nullptr ||
+          (variable == "mhd_curv_alt" && out_params.include_gzs)) {
+        std::cout << "### FATAL ERROR: magnetic curvature requires owned MHD cells."
+                  << std::endl;
+        std::exit(EXIT_FAILURE);
+      }
       out_params.contains_derived = true;
       out_params.n_derived += 1;
       int i_derived = out_params.n_derived - 1;
-      outvars.emplace_back("curv",i_derived,&(derived_var));
+      outvars.emplace_back(variable.substr(4), i_derived, &derived_var);
     }
 
     // mhd magnitude of magnetic curvature
