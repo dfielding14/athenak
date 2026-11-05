@@ -17,7 +17,7 @@
 
 KOKKOS_INLINE_FUNCTION
 Real ISMCoolFn(Real temp) {
-  // original data from Shure et al. paper, covers 4.12 < logt < 8.16
+  // Schure et al. Table 2 log10(Lambda_hd): the volumetric loss is n_H^2*Lambda_hd.
   const float lhd[102] = {
       -22.5977, -21.9689, -21.5972, -21.4615, -21.4789, -21.5497, -21.6211, -21.6595,
       -21.6426, -21.5688, -21.4771, -21.3755, -21.2693, -21.1644, -21.0658, -20.9778,
