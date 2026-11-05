@@ -68,7 +68,8 @@ mass_cgs    = 4.91416144649125e31    # 1 amu cm^-3 * (1 pc)^3
 mu          = 1.0
 ```
 
-With the default cooling/heating choices, the equilibrium phases are
+The example assumes pure hydrogen (`hydrogen_mass_fraction = 1.0`) and a mean
+particle mass of one atomic mass unit (`mu = 1.0`). The equilibrium phases are
 
 | Quantity | Value |
 | --- | ---: |
@@ -92,7 +93,8 @@ enabled         = true
 units           = cgs
 cooling_model   = ism
 heating_model   = constant
-cooling_density = number_density
+cooling_density = hydrogen_number_density
+hydrogen_mass_fraction = 1.0
 heating_density = number_density
 mu              = 1.0
 heating_rate    = 2.0e-26
