@@ -9,6 +9,7 @@
 //  Viscosity may be added to Hydro and/or MHD independently.
 
 #include <algorithm>
+#include <cmath>
 #include <limits>
 #include <iostream>
 #include <string> // string
@@ -17,8 +18,40 @@
 #include "athena.hpp"
 #include "parameter_input.hpp"
 #include "mesh/mesh.hpp"
+#include "coordinates/coordinates.hpp"
 #include "eos/eos.hpp"
 #include "viscosity.hpp"
+
+namespace {
+
+// Evaluate the strain norm at a face using the same gradients as the stress.
+KOKKOS_INLINE_FUNCTION
+Real SmagorinskyNu(const DvceArray5D<Real> &w, int m, int k, int j, int i,
+                   const RegionSize &size, Real cs, bool x1_face) {
+  const int it = x1_face ? 0 : 1;
+  const int jt = 1 - it;
+  const int i_lo = i - jt;
+  const int j_lo = j - it;
+  const Real dn = x1_face ? size.dx1 : size.dx2;
+  const Real dt = x1_face ? size.dx2 : size.dx1;
+  const int vn = x1_face ? IVX : IVY;
+  const int vt = x1_face ? IVY : IVX;
+  const auto normal = [&](int v) {
+    return (w(m,v,k,j,i) - w(m,v,k,j_lo,i_lo))/dn;
+  };
+  const auto transverse = [&](int v) {
+    return ((w(m,v,k,j+jt,i+it) + w(m,v,k,j_lo+jt,i_lo+it)) -
+            (w(m,v,k,j-jt,i-it) + w(m,v,k,j_lo-jt,i_lo-it)))/(4.0*dt);
+  };
+  const Real dvn_dn = normal(vn), dvt_dt = transverse(vt);
+  const Real shear = normal(vt) + transverse(vn);
+  const Real dvz_dn = normal(IVZ), dvz_dt = transverse(IVZ);
+  const Real strain_sq = 2.0*(SQR(dvn_dn) + SQR(dvt_dt)) +
+                         SQR(shear) + SQR(dvz_dn) + SQR(dvz_dt);
+  return SQR(cs)*size.dx1*size.dx2*sqrt(strain_sq);
+}
+
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 // ctor:
@@ -29,11 +62,32 @@
 Viscosity::Viscosity(std::string block, MeshBlockPack *pp,
                      ParameterInput *pin) :
   pmy_pack(pp) {
-  // Read coefficient of isotropic kinematic shear viscosity (must be present)
-  nu_iso = pin->GetReal(block,"viscosity");
+  nu_iso = pin->DoesParameterExist(block,"viscosity") ?
+           pin->GetReal(block,"viscosity") : 0.0;
+  if (block == "hydro" && pin->DoesParameterExist(block,"smagorinsky_cs")) {
+    smagorinsky_cs = pin->GetReal(block,"smagorinsky_cs");
+    if (!std::isfinite(smagorinsky_cs) || smagorinsky_cs < 0.0) {
+      std::cout << "### FATAL ERROR: <hydro>/smagorinsky_cs must be finite and "
+                << "non-negative." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (smagorinsky_cs > 0.0 &&
+        (!pp->pmesh->two_d || pp->pcoord->is_special_relativistic ||
+         pp->pcoord->is_general_relativistic || pp->pcoord->is_dynamical_relativistic)) {
+      std::cout << "### FATAL ERROR: Smagorinsky viscosity requires 2D Newtonian Hydro."
+                << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+    if (smagorinsky_cs > 0.0 && (!std::isfinite(nu_iso) || nu_iso < 0.0)) {
+      std::cout << "### FATAL ERROR: <hydro>/viscosity must be finite and non-negative "
+                << "with Smagorinsky viscosity." << std::endl;
+      std::exit(EXIT_FAILURE);
+    }
+  }
 
   // viscous timestep on MeshBlock(s) in this pack
   dtnew = std::numeric_limits<float>::max();
+  if (nu_iso == 0.0 || smagorinsky_cs > 0.0) {return;}
   auto size = pmy_pack->pmb->mb_size;
   Real fac;
   if (pp->pmesh->three_d) {
@@ -57,11 +111,44 @@ Viscosity::~Viscosity() {
 }
 
 //----------------------------------------------------------------------------------------
+//  \brief Update the explicit diffusion timestep using the current face viscosities.
+
+void Viscosity::NewTimeStep(const DvceArray5D<Real> &w) {
+  if (smagorinsky_cs == 0.0) {return;}
+
+  auto &indcs = pmy_pack->pmesh->mb_indcs;
+  const int ks = indcs.ks, ie = indcs.ie, je = indcs.je;
+  const Real cs = smagorinsky_cs, nu = nu_iso;
+  auto size = pmy_pack->pmb->mb_size;
+  using Policy = Kokkos::MDRangePolicy<DevExeSpace, Kokkos::Rank<3>>;
+  Real max_rate;
+  Kokkos::parallel_reduce("SmagorinskyTimeStep",
+      Policy({0, indcs.js, indcs.is}, {pmy_pack->nmb_thispack, je+2, ie+2}),
+      KOKKOS_LAMBDA(int m, int j, int i, Real &max_local) {
+    const auto &block_size = size.d_view(m);
+    Real nu_sgs = 0.0;
+    if (j <= je) {
+      nu_sgs = SmagorinskyNu(w, m, ks, j, i, block_size, cs, true);
+    }
+    if (i <= ie) {
+      nu_sgs = fmax(nu_sgs, SmagorinskyNu(w, m, ks, j, i, block_size, cs, false));
+    }
+    const Real h = fmin(block_size.dx1, block_size.dx2);
+    max_local = fmax(max_local, (nu + 2.0*nu_sgs)/SQR(h));
+  }, Kokkos::Max<Real>(max_rate));
+
+  // The tangent viscosity doubles in pure shear, and normal stress adds a 4/3 factor.
+  dtnew = (max_rate > 0.0) ? 0.1875/max_rate : std::numeric_limits<float>::max();
+}
+
+//----------------------------------------------------------------------------------------
 //! \fn void AddIsoViscousFlux
 //  \brief Adds viscous fluxes to face-centered fluxes of conserved variables
 
 void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_iso,
   const EOS_Data &eos, DvceFaceFld5D<Real> &flx) {
+  const Real cs = smagorinsky_cs;
+  if (nu_iso == 0.0 && cs == 0.0) {return;}
   auto &indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
   int js = indcs.js, je = indcs.je;
@@ -114,7 +201,9 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie+1, [&](const int i) {
-      Real nud = 0.5*nu_iso*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
+      Real nu = nu_iso;
+      if (cs > 0.0) {nu += SmagorinskyNu(w0, m, k, j, i, size.d_view(m), cs, true);}
+      Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j,i-1));
       flx1(m,IVX,k,j,i) -= nud*fvx(i);
       flx1(m,IVY,k,j,i) -= nud*fvy(i);
       flx1(m,IVZ,k,j,i) -= nud*fvz(i);
@@ -161,7 +250,9 @@ void Viscosity::IsotropicViscousFlux(const DvceArray5D<Real> &w0, const Real nu_
 
     // Sum viscous fluxes into fluxes of conserved variables; including energy fluxes
     par_for_inner(member, is, ie, [&](const int i) {
-      Real nud = 0.5*nu_iso*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
+      Real nu = nu_iso;
+      if (cs > 0.0) {nu += SmagorinskyNu(w0, m, k, j, i, size.d_view(m), cs, false);}
+      Real nud = 0.5*nu*(w0(m,IDN,k,j,i) + w0(m,IDN,k,j-1,i));
       flx2(m,IVX,k,j,i) -= nud*fvx(i);
       flx2(m,IVY,k,j,i) -= nud*fvy(i);
       flx2(m,IVZ,k,j,i) -= nud*fvz(i);

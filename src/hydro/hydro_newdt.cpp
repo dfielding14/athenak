@@ -18,6 +18,7 @@
 #include "eos/eos.hpp"
 #include "hydro.hpp"
 #include "diffusion/conduction.hpp"
+#include "diffusion/viscosity.hpp"
 #include "srcterms/srcterms.hpp"
 
 namespace hydro {
@@ -124,6 +125,9 @@ TaskStatus Hydro::NewTimeStep(Driver *pdrive, int stage) {
   if (pmy_pack->pmesh->three_d) { dtnew = std::min(dtnew, dt3); }
 
   // compute timestep for diffusion
+  if (pvisc != nullptr) {
+    pvisc->NewTimeStep(w0);
+  }
   if (pcond != nullptr) {
     pcond->NewTimeStep(w0, peos->eos_data);
   }

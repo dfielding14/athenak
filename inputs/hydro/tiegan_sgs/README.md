@@ -75,6 +75,15 @@ a Mach-number thermostat.
 - The turbulence driver only generates in-plane force components on an `nx3 = 1`
   mesh. With zero initial `v3`, the third momentum and kinetic energy remain zero.
 
+## Smagorinsky LES
+
+In a 2D Newtonian Hydro run built with `-DPROBLEM=turb`, set
+`smagorinsky_cs = 0.2` in `<hydro>` to run with Smagorinsky eddy viscosity.
+The coefficient is dimensionless. Zero disables the model, and the optional
+`viscosity` parameter adds a uniform kinematic viscosity. The model uses the
+local cell widths, $\Delta=\sqrt{\Delta x_1\Delta x_2}$, for its filter scale.
+The `hydro_sgs_2d` output measures the Favre stress at its own coarsening scale.
+
 ## Coarsened SGS Output
 
 Use `file_type = cbin` with `variable = hydro_sgs_2d`. A square top-hat filter of

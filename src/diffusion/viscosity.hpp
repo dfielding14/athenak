@@ -7,8 +7,7 @@
 //========================================================================================
 //! \file viscosity.hpp
 //  \brief Contains data and functions that implement various formulations for
-//  viscosity. Currently only Navier-Stokes (uniform, isotropic) shear viscosity
-//  is implemented. TODO: add Braginskii viscosity
+//  viscosity, including Smagorinsky eddy viscosity for 2D Newtonian Hydro.
 
 #include <string>
 
@@ -32,9 +31,11 @@ class Viscosity {
   // function to add viscous fluxes to Hydro and/or MHD fluxes
   void IsotropicViscousFlux(const DvceArray5D<Real> &w, const Real nu,
                             const EOS_Data &eos, DvceFaceFld5D<Real> &f);
+  void NewTimeStep(const DvceArray5D<Real> &w);
 
  private:
   MeshBlockPack* pmy_pack;
+  Real smagorinsky_cs = 0.0;
 };
 
 #endif // DIFFUSION_VISCOSITY_HPP_

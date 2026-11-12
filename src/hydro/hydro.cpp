@@ -73,7 +73,8 @@ Hydro::Hydro(MeshBlockPack *ppack, ParameterInput *pin) :
   nscalars = pin->GetOrAddInteger("hydro","nscalars",0);
 
   // Viscosity (if requested in input file)
-  if (pin->DoesParameterExist("hydro","viscosity")) {
+  if (pin->DoesParameterExist("hydro","viscosity") ||
+      pin->DoesParameterExist("hydro","smagorinsky_cs")) {
     pvisc = new Viscosity("hydro", ppack, pin);
   } else {
     pvisc = nullptr;
