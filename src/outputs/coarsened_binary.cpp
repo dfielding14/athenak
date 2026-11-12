@@ -84,6 +84,9 @@ void CoarsenSGS(Mesh *pm, int factor, HostArray5D<Real> &output) {
     int k = (cell / (nx * ny)) % nz, m = cell / (nx * ny * nz);
     int begin = chunk * chunk_cells;
     int end = (begin + chunk_cells < samples) ? begin + chunk_cells : samples;
+    // NVCC requires the first use of a captured variable outside if constexpr.
+    const auto &magnetic = bcc;
+    int first_moment = group * group_size;
     auto reduce_group = [=](auto group_start) {
       int first;
       if constexpr (powers == 1) { first = decltype(group_start)::value; }
@@ -102,9 +105,9 @@ void CoarsenSGS(Mesh *pm, int factor, HostArray5D<Real> &output) {
         state.mz = u(m,IM3,kk,jj,ii);
         if constexpr (is_mhd) {
           state.e = u(m,IEN,kk,jj,ii);
-          state.bx = bcc(m,IBX,kk,jj,ii);
-          state.by = bcc(m,IBY,kk,jj,ii);
-          state.bz = bcc(m,IBZ,kk,jj,ii);
+          state.bx = magnetic(m,IBX,kk,jj,ii);
+          state.by = magnetic(m,IBY,kk,jj,ii);
+          state.bz = magnetic(m,IBZ,kk,jj,ii);
         }
         auto moment = [=](int n) {
           if constexpr (is_mhd) {
@@ -152,7 +155,7 @@ void CoarsenSGS(Mesh *pm, int factor, HostArray5D<Real> &output) {
           }
       }
     } else {
-      reduce_group(group * group_size);
+      reduce_group(first_moment);
     }
   });
   if (chunks > 1) {

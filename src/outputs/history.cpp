@@ -30,6 +30,8 @@
 namespace {
 constexpr int nturb_history = 9;
 
+void LoadTurbulenceHistoryData(HistoryData *pdata, Mesh *pm);
+
 // Positive viscous stress at the lower face normal to dir. Match
 // IsotropicViscousFlux: face-averaged rho*nu and centered transverse derivatives.
 KOKKOS_INLINE_FUNCTION
@@ -142,11 +144,11 @@ void HistoryOutput::LoadOutputData(Mesh *pm) {
   }
 }
 
-//----------------------------------------------------------------------------------------
+namespace {
 // Instantaneous spatial-operator rates, evaluated only at history output. Periodic
 // summation by parts gives dZ/dt|a = integral a.curl(omega); this avoids acceleration
 // halos (forcing ghosts are not populated) and additional mesh-sized work arrays.
-void HistoryOutput::LoadTurbulenceHistoryData(HistoryData *pdata, Mesh *pm) {
+void LoadTurbulenceHistoryData(HistoryData *pdata, Mesh *pm) {
   const char *labels[nturb_history] = {"enstrophy", "drag-KE", "drag-enst", "visc-KE",
                                     "visc-enst", "force-KE", "force-enst", "p-dilat",
                                     "enst-comp"};
@@ -236,6 +238,7 @@ void HistoryOutput::LoadTurbulenceHistoryData(HistoryData *pdata, Mesh *pm) {
   }
   pdata->nhist += nturb_history;
 }
+}  // namespace
 
 //----------------------------------------------------------------------------------------
 //! \fn void HistoryOutput::LoadHydroHistoryData()

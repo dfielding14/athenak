@@ -290,7 +290,6 @@ class HistoryOutput : public BaseTypeOutput {
 
  private:
   bool turbulence_history_;
-  void LoadTurbulenceHistoryData(HistoryData *pdata, Mesh *pm);
 };
 
 //----------------------------------------------------------------------------------------

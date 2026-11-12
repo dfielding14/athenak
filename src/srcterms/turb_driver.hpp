@@ -98,11 +98,13 @@ class TurbulenceDriver {
   TurbulenceRestartMetadata RestartMetadata() const;
   void ValidateRestartMetadata(const TurbulenceRestartMetadata& metadata) const;
 
- private:
+  // NVCC requires public access for members that define extended lambdas.
   void Initialize();
-  void BuildModeList();
   void BuildBasis();
   void RenderForce();
+
+ private:
+  void BuildModeList();
 
   MeshBlockPack* pmy_pack;  // MeshBlockPack containing this driver
 
