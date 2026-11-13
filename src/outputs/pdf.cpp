@@ -20,6 +20,7 @@
 
 #include <sys/stat.h>  // mkdir
 
+#include <algorithm>
 #include <cstdio>
 #include <cstdlib>
 #include <iomanip>
@@ -35,9 +36,6 @@
 #include "mhd/mhd.hpp"
 #include "z4c/z4c.hpp"
 #include "outputs.hpp"
-
-// ScatterView is not part of Kokkos core interface
-#include "Kokkos_ScatterView.hpp"
 
 
 //----------------------------------------------------------------------------------------
@@ -146,9 +144,7 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
   } else if (pdf_data.pdf_dimension == 1) {
     pdf_data.result_ = DvceArray2D<Real>("result", 1, op.nbin+2);
   }
-  pdf_data.scatter_result = Kokkos::Experimental::ScatterView<Real **, LayoutWrapper>(
-    pdf_data.result_
-  );
+
 }
 
 
@@ -200,7 +196,6 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   int ks = indcs.ks; int ke = indcs.ke;
 
   auto result  = pdf_data.result_;
-  auto scatter = pdf_data.scatter_result;
 
   int nmb = pm->pmb_pack->nmb_thispack;
   int nx1 = indcs.nx1 + 2*indcs.ng;
@@ -218,16 +213,6 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   }
   Kokkos::fence();
 
-  //
-
-  // Reset ScatterView from previous output
-  scatter.reset();
-  // Also reset the histogram from previous call.
-  // Currently still required for consistent results between host and device backends, see
-  // https://github.com/kokkos/kokkos/issues/6363
-  Kokkos::deep_copy(result, 0);
-  Kokkos::fence();
-
   // Capture the necessary data from pdf_data
   auto bins = pdf_data.bins;
   auto bins2 = pdf_data.bins2;
@@ -239,6 +224,30 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
   bool logscale = pdf_data.logscale;
   bool logscale2 = pdf_data.logscale2;
   bool mass_weighted = pdf_data.mass_weighted;
+
+  // A uniform volume PDF needs cell counts. Spread updates to a hot bin across
+  // GPU lanes, then multiply the exact local counts by the common cell volume.
+  const auto volume = [&](int m) {
+    const auto &block = size.h_view(m);
+    return block.dx1*block.dx2*block.dx3;
+  };
+  const Real cell_volume = nmb > 0 ? volume(0) : 0.0;
+  bool count_cells = !mass_weighted && nmb > 0;
+  for (int m = 1; count_cells && m < nmb; ++m) {
+    count_cells = (volume(m) == cell_volume);
+  }
+  const int ncols = nbin_ + 2;
+  const int nrows = pdf_dimension == 2 ? nbin2_ + 2 : 1;
+  const std::size_t nbin_total = static_cast<std::size_t>(nrows)*ncols;
+  // Keep temporary storage near 8 MiB for the usual 1D/2D tables.
+  const int copies = std::min(256, std::max(1, static_cast<int>((1<<20)/nbin_total)));
+  DvceArray2D<unsigned long long> counts;
+  DvceArray2D<Real> weights;
+  if (count_cells) {
+    counts = DvceArray2D<unsigned long long>("pdf_cell_counts", nbin_total, copies);
+  } else {
+    weights = DvceArray2D<Real>("pdf_weights", nbin_total, copies);
+  }
 
   par_for("pdf", DevExeSpace(),0,nmb-1,ks,ke,js,je,is,ie,
   KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -277,18 +286,30 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
         }
       }
     }
-    auto res = scatter.access();
-    Real weight = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
-    weight *= mass_weighted == false
-              ? 1.0
-              : u0_(m, IDN, k, j, i);
-    res(y_bin, x_bin) += weight;
+    const std::size_t bin = static_cast<std::size_t>(y_bin)*ncols + x_bin;
+    const int copy = ((i - is) + (j - js) + (k - ks)) % copies;
+    if (count_cells) {
+      Kokkos::atomic_increment(&counts(bin, copy));
+    } else {
+      Real weight = size.d_view(m).dx1*size.d_view(m).dx2*size.d_view(m).dx3;
+      if (mass_weighted) weight *= u0_(m, IDN, k, j, i);
+      Kokkos::atomic_add(&weights(bin, copy), weight);
+    }
   });
 
-  // "reduce" results from scatter view to original view.
-  // May be a no-op depending on backend.
-  Kokkos::Experimental::contribute(result, scatter); //.KokkosView()
-  // Kokkos::Experimental::contribute(result.KokkosView(), scatter);
+  using BinRange = Kokkos::RangePolicy<DevExeSpace, Kokkos::IndexType<std::size_t>>;
+  Kokkos::parallel_for("combine_pdf_bins", BinRange(0, nbin_total),
+  KOKKOS_LAMBDA(std::size_t bin) {
+    Real sum = 0.0;
+    if (count_cells) {
+      unsigned long long cells = 0;
+      for (int copy = 0; copy < copies; ++copy) cells += counts(bin, copy);
+      sum = cell_volume*static_cast<Real>(cells);
+    } else {
+      for (int copy = 0; copy < copies; ++copy) sum += weights(bin, copy);
+    }
+    result(bin/ncols, bin%ncols) = sum;
+  });
   Kokkos::fence(); // May not be required
 
   // Now reduce over ranks

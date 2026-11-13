@@ -142,6 +142,7 @@ sweep-end checks do not add LF RHS counts. Backup scattering requires explicit
 | `cgl_lf_arithmetic` | `safe` | `safe` uses overflow-protected scaled arithmetic; `fast` uses direct normal-range `Real` arithmetic. |
 | `cgl_lf_sts_flux` | `weighted` | `weighted` embeds STS weights in LF fluxes; `physical` writes physical fluxes and requires `cgl_lf_diagnostics = none` plus `cgl_lf_arithmetic = fast`. |
 | `cgl_lf_profile` | `false` | Enable coarse LF timing regions with Kokkos fences; for profiling only. |
+| `cgl_lf_stiffness_cycle` | `-1` | Capture raw timestep maps at one absolute cycle of an active RKL2 replay. See [replay instructions](cgl_landau_fluid_code_guide.md#map-the-lf-timestep-on-a-replay). |
 | `cgl_lf_profile_detail` | `false` | Compatibility key: `false` is accepted; the removed replay mode (`true`) is rejected. |
 
 The `<time>/cgl_lf_max_chunk_ratio` default is `0`, including passive runs.

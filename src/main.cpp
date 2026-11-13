@@ -315,10 +315,13 @@ int main(int argc, char *argv[]) {
   for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {
     pinput->GetOrAddBoolean("mesh", key, false);
   }
-  // Permit a command-line cap on inputs and passive checkpoints predating the option.
+  // Permit command-line overrides on CGL checkpoints predating these options.
   if (pinput->DoesParameterExist("mhd", "eos") &&
       pinput->GetString("mhd", "eos") == "cgl") {
     pinput->GetOrAddString("mhd", "passive_max_pressure_ratio", "0");
+    if (pinput->DoesParameterExist("mhd", "cgl_heat_flux")) {
+      pinput->GetOrAddString("mhd", "cgl_lf_stiffness_cycle", "-1");
+    }
   }
   pinput->ModifyFromCmdline(argc, argv);
   for (const char *key : {"refine_on_restart", "reblock_on_restart"}) {

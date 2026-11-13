@@ -64,6 +64,8 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
     pdata->label[22] = "therm_mhd";
     pdata->label[23] = "p_gas";
   }
+  const int va2_index = pdata->nhist++;
+  pdata->label[va2_index] = "va2_vol";
   const bool backup = (pmbp->pmhd->pcgl_lf != nullptr)
                           ? pmbp->pmhd->pcgl_lf->effective_backup_limiter
                           : eos.backup_lim;
@@ -135,6 +137,7 @@ void CGLLFPaperHistory(HistoryData *pdata, Mesh *pm) {
       cell.the_array[22] = vol*w0(m,IEG,k,j,i);
       cell.the_array[23] = (eos.gamma - 1.0)*cell.the_array[22];
     }
+    cell.the_array[va2_index] = vol*bsqr/rho;
     result += cell;
   }, Kokkos::Sum<array_sum::GlobalSum>(sum));
   Kokkos::fence();

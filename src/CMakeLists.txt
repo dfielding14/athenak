@@ -33,6 +33,7 @@ add_executable(
 
         diffusion/conduction.cpp
         diffusion/cgl_landau_fluid.cpp
+        diffusion/cgl_lf_stiffness.cpp
         diffusion/hyperviscosity.cpp
         diffusion/resistivity.cpp
         diffusion/scalar_diffusion.cpp

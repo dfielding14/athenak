@@ -6,6 +6,7 @@
 //! \file cgl_landau_fluid.cpp
 //! \brief CGL Landau-fluid heat-flux closure and parabolic timestep bound.
 
+#include <charconv>
 #include <cmath>
 #include <cstddef>
 #include <cstdlib>
@@ -472,6 +473,16 @@ CGLLandauFluid::CGLLandauFluid(MeshBlockPack *pp, ParameterInput *pin) :
     std::exit(EXIT_FAILURE);
   }
   mode = ParseCGLHeatFluxIntegrator(pin);
+  const auto cycle = pin->GetOrAddString("mhd", "cgl_lf_stiffness_cycle", "-1");
+  const auto end = cycle.data() + cycle.size();
+  const auto parsed = std::from_chars(cycle.data(), end, stiffness_cycle);
+  if (parsed.ec != std::errc{} || parsed.ptr != end || stiffness_cycle < -1 ||
+      (stiffness_cycle >= 0 && (pin->GetBoolean("mhd", "passive") ||
+                                mode != parabolic::ParabolicIntegratorMode::sts))) {
+    std::cerr << "### FATAL ERROR: <mhd>/cgl_lf_stiffness_cycle must be -1 (off)"
+              << " or a nonnegative cycle for active CGL with RKL2 LF." << std::endl;
+    std::exit(EXIT_FAILURE);
+  }
   diagnostics_mode = ParseCGLLFDiagnosticsMode(
       pin->GetOrAddString("mhd", "cgl_lf_diagnostics", "full"));
   arithmetic_mode = ParseCGLLFArithmeticMode(
@@ -997,6 +1008,17 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
                                  const DvceFaceFld4D<Real> &b,
                                  const EOS_Data &eos_in) {
   CGLLFProfileRegion profile(this, CGLLFProfileBucket::timestep_reduction);
+  dtnew = CalculateTimeStep<TimestepSample::minimum>(w, bcc, b, eos_in, {}, {}, {});
+}
+
+template<CGLLandauFluid::TimestepSample sample>
+Real CGLLandauFluid::CalculateTimeStep(const DvceArray5D<Real> &w,
+                                      const DvceArray5D<Real> &bcc,
+                                      const DvceFaceFld4D<Real> &b,
+                                      const EOS_Data &eos_in,
+                                      const DvceArray1D<Real> &cell_dt_map,
+                                      const DvceArray1D<int> &worst,
+                                      const DvceArray3D<Real> &face_info) {
   const EOS_Data eos = eos_in;
   // Freeze closure coefficients and cap scales before differentiating. Omitting
   // limiter scattering and cap suppression then enlarges this local row envelope.
@@ -1024,31 +1046,44 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
   // every primitive refresh rather than depending on an earlier sweep.
   const int jl = (nx2 > 1) ? js-1 : 0, ju = (nx2 > 1) ? js+nx2 : 0;
   const int kl = (nx3 > 1) ? ks-1 : 0, ku = (nx3 > 1) ? ks+nx3 : 0;
-  par_for("cgl_lf_timestep_precompute", DevExeSpace(), 0, nmb-1, kl, ku,
-          jl, ju, is-1, is+nx1,
-  KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
-    bmag(m,k,j,i) = ScaledMagneticMagnitude(
-        bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
-    const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
-    tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
-    tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
-  });
+  constexpr bool hot_faces = sample == TimestepSample::faces;
+  if constexpr (!hot_faces) {
+    par_for("cgl_lf_timestep_precompute", DevExeSpace(), 0, nmb-1, kl, ku,
+            jl, ju, is-1, is+nx1,
+    KOKKOS_LAMBDA(const int m, const int k, const int j, const int i) {
+      bmag(m,k,j,i) = ScaledMagneticMagnitude(
+          bcc(m,IBX,k,j,i), bcc(m,IBY,k,j,i), bcc(m,IBZ,k,j,i));
+      const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
+      tpar(m,k,j,i) = w(m,IPR,k,j,i)/rho;
+      tperp(m,k,j,i) = w(m,IPP,k,j,i)/rho;
+    });
+  }
   const int nkji = nx3*nx2*nx1, nji = nx2*nx1;
   const int ndim = pmy_pack->pmesh->three_d ? 3 :
                    (pmy_pack->pmesh->multi_d ? 2 : 1);
   const Real kpar = lf_k_parallel;
   const bool local = lf_coeff_local;
   const Real cpar0 = lf_c_parallel0;
+  const bool backup = effective_backup_limiter;
   auto size = pmy_pack->pmb->mb_size;
-  dtnew = static_cast<Real>(std::numeric_limits<float>::max());
-  Kokkos::parallel_reduce("cgl_lf_newdt", Kokkos::RangePolicy<>(DevExeSpace(), 0, nmb*nkji),
-  KOKKOS_LAMBDA(const int &idx, Real &min_dt) {
+  Real rank_dt;
+  Kokkos::parallel_reduce("cgl_lf_newdt",
+      Kokkos::RangePolicy<>(DevExeSpace(), 0, hot_faces ? nmb : nmb*nkji),
+  KOKKOS_LAMBDA(const int &item, Real &min_dt) {
+    int idx = item;
+    if constexpr (hot_faces) idx = item*nkji + worst(item);
     const int m = idx/nkji;
     const int k = (idx - m*nkji)/nji + ks;
     const int j = (idx - m*nkji - (k-ks)*nji)/nx1 + js;
     const int i = idx - m*nkji - (k-ks)*nji - (j-js)*nx1 + is;
     const Real rho = fmax(w(m,IDN,k,j,i), eos.dfloor);
     const Real bi = bmag(m,k,j,i);
+    if constexpr (hot_faces) {
+      face_info(m,2*ndim,0) = w(m,IDN,k,j,i);
+      face_info(m,2*ndim,1) = w(m,IPR,k,j,i);
+      face_info(m,2*ndim,2) = w(m,IPP,k,j,i);
+      for (int d = 0; d < 3; ++d) face_info(m,2*ndim,3+d) = bcc(m,d,k,j,i);
+    }
     const Real dx[3] = {size.d_view(m).dx1, size.d_view(m).dx2,
                         size.d_view(m).dx3};
     Real row_parallel = 0.0, row_perp = 0.0;
@@ -1058,6 +1093,10 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
     bool invalid_state = false;
     for (int dir=0; dir<ndim; ++dir) {
       for (int side=-1; side<=1; side+=2) {
+        const int face_index = 2*dir + (side > 0);
+        if constexpr (hot_faces) {
+          for (int column=0; column<face_columns; ++column) face_info(m,face_index,column) = 0.0;
+        }
         // l/r always follow the positive coordinate direction.
         const int il = i + ((dir == 0 && side < 0) ? -1 : 0);
         const int jl = j + ((dir == 1 && side < 0) ? -1 : 0);
@@ -1073,6 +1112,10 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
         bv[dir] = (dir == 0) ? b.x1f(m,kr,jr,ir) :
                   ((dir == 1) ? b.x2f(m,kr,jr,ir) : b.x3f(m,kr,jr,ir));
         const Real bbar = 0.5*bmag(m,kl,jl,il) + 0.5*bmag(m,kr,jr,ir);
+        if constexpr (hot_faces) {
+          face_info(m,face_index,bbar_col) = bbar;
+          face_info(m,face_index,bn_col) = bv[dir];
+        }
         CGLLFFaceState face;
         if (!BuildCGLLFFaceState(
             w(m,IDN,kl,jl,il), w(m,IDN,kr,jr,ir),
@@ -1080,14 +1123,20 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
             w(m,IPP,kl,jl,il), w(m,IPP,kr,jr,ir),
             bv[0], bv[1], bv[2], bbar, dir, kpar, local, cpar0,
             false, bound_eos, face)) continue;
+        if constexpr (hot_faces) {
+          face_info(m,face_index,density_col) = face.rho;
+          face_info(m,face_index,ppar_col) = face.ppar;
+          face_info(m,face_index,pperp_col) = face.pperp;
+        }
         if (!(face.cparallel > 0.0) || !Kokkos::isfinite(face.cparallel)) {
+          if constexpr (hot_faces) face_info(m,face_index,status_col) = -1.0;
           invalid_state = true;
           continue;
         }
         const Real nu = fmax(eos.nu_coll, static_cast<Real>(0.0));
         if (nu == std::numeric_limits<Real>::infinity()) continue;
         const Real bn = fabs(face.bhdir);
-        if (bv[dir] == 0.0) continue;
+        if (!hot_faces && bv[dir] == 0.0) continue;
         const Real bh[3] = {face.bhx, face.bhy, face.bhz};
         // Each transverse VL4 derivative has six coefficients, including the
         // unequal-slope central coefficients. Its row norm can approach 8/h_t;
@@ -1136,6 +1185,39 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
         // Match the flux's grouping: anisotropy can amplify a canceled residual.
         const Real grad_b = face.bhx*gradient_b[0] + face.bhy*gradient_b[1]
                            + face.bhz*gradient_b[2];
+        if constexpr (hot_faces) {
+          Real gtpar[3] = {}, gtperp[3] = {};
+          gtpar[dir] = (tpar(m,kr,jr,ir)-tpar(m,kl,jl,il))/dx[dir];
+          gtperp[dir] = (tperp(m,kr,jr,ir)-tperp(m,kl,jl,il))/dx[dir];
+          for (int t=0; t<ndim; ++t) {
+            if (t == dir) continue;
+            const int di=(t==0), dj=(t==1), dk=(t==2);
+            gtpar[t] = VL4Limiter(
+                tpar(m,kr+dk,jr+dj,ir+di)-tpar(m,kr,jr,ir),
+                tpar(m,kr,jr,ir)-tpar(m,kr-dk,jr-dj,ir-di),
+                tpar(m,kl+dk,jl+dj,il+di)-tpar(m,kl,jl,il),
+                tpar(m,kl,jl,il)-tpar(m,kl-dk,jl-dj,il-di))/dx[t];
+            gtperp[t] = VL4Limiter(
+                tperp(m,kr+dk,jr+dj,ir+di)-tperp(m,kr,jr,ir),
+                tperp(m,kr,jr,ir)-tperp(m,kr-dk,jr-dj,ir-di),
+                tperp(m,kl+dk,jl+dj,il+di)-tperp(m,kl,jl,il),
+                tperp(m,kl,jl,il)-tperp(m,kl-dk,jl-dj,il-di))/dx[t];
+          }
+          const Real grad_tpar = face.bhx*gtpar[0]+face.bhy*gtpar[1]+face.bhz*gtpar[2];
+          const Real grad_tperp = face.bhx*gtperp[0]+face.bhy*gtperp[1]+face.bhz*gtperp[2];
+          const Real sqrt_max = sqrt(std::numeric_limits<Real>::max());
+          const Real bsqr = bbar <= sqrt_max ? bbar*bbar : std::numeric_limits<Real>::max();
+          const Real actual_nu = nu + cgl::LimiterCollisionRate(
+              face.ppar, face.pperp, bsqr, eos, backup);
+          face_info(m,face_index,grad_b_col) = grad_b;
+          face_info(m,face_index,nu_col) = actual_nu;
+          face_info(m,face_index,qpar_col) = fabs(cgl::ParallelHeatFluxRatio(
+              face.cparallel, face.rho, face.ppar, kpar, actual_nu, grad_tpar));
+          face_info(m,face_index,qperp_col) = fabs(cgl::PerpendicularHeatFluxRatio(
+              face.cparallel, face.rho, face.ppar, face.pperp, face.bmag_inv,
+              kpar, actual_nu, grad_tperp, grad_b));
+          if (bv[dir] == 0.0) continue;  // No contribution to this face's normal flux.
+        }
         const Real pressure_ratio = face.pperp/face.ppar;
         // Differentiate Tperp_f*(1-Tperp_f/Tpar_f), including its
         // reverse coupling to Tpar. Both density-weighted face means
@@ -1183,6 +1265,20 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
             Kokkos::isfinite(factor) &&
             Kokkos::isfinite(face_parallel) && face_parallel >= minimum &&
             Kokkos::isfinite(face_perp) && (face_perp >= minimum || bi == 0.0);
+        if constexpr (hot_faces) {
+          if (direct_face) {
+            const Real perp_temperature = cgl::PositiveProduct4(chi_perp,bn,grad_perp,1.0);
+            const Real perp_magnetic = cgl::PositiveProduct4(chi_perp,bn,drift,1.0);
+            const Real coupling = 2.0*fabs(1.0-beta);
+            face_info(m,face_index,status_col) = 1.0;
+            face_info(m,face_index,t_par_col) = factor*(para_face+coupling*perp_temperature);
+            face_info(m,face_index,b_par_col) = factor*(coupling*perp_magnetic);
+            face_info(m,face_index,t_perp_col) = perp_factor*perp_temperature;
+            face_info(m,face_index,b_perp_col) = perp_factor*perp_magnetic;
+            face_info(m,face_index,row_par_col) = face_parallel;
+            face_info(m,face_index,row_perp_col) = face_perp;
+          }
+        }
         if (!scaled_rows && direct_face &&
             Kokkos::isfinite(row_parallel+face_parallel) &&
             Kokkos::isfinite(row_perp+face_perp)) {
@@ -1244,6 +1340,22 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
               CGLLFLogScale(log_perp,2.0*fabs(1.0-beta)));
           log_face_perp = (bi == 0.0) ? -std::numeric_limits<Real>::infinity() :
               log_perp + CGLLFLogAbs(bi) - log_bar;
+          if constexpr (hot_faces) {
+            const Real common = CGLLFLogDiffusivity(cp,kpar,nu,cgl::kSqrtTwoOverPi,
+                2.0/cgl::kSqrtTwoPi)+log_bn+log_factor;
+            const Real temperature = common+log_grad_perp;
+            const Real magnetic = common+log_drift;
+            const Real coupling = 2.0*fabs(1.0-beta);
+            const Real log_beta = CGLLFLogAbs(bi)-log_bar;
+            face_info(m,face_index,status_col) = 2.0;
+            face_info(m,face_index,t_par_col) = Kokkos::exp2(CGLLFLogAdd(
+                log_para,CGLLFLogScale(temperature,coupling)));
+            face_info(m,face_index,b_par_col) = Kokkos::exp2(CGLLFLogScale(magnetic,coupling));
+            face_info(m,face_index,t_perp_col) = bi == 0.0 ? 0.0 : Kokkos::exp2(temperature+log_beta);
+            face_info(m,face_index,b_perp_col) = bi == 0.0 ? 0.0 : Kokkos::exp2(magnetic+log_beta);
+            face_info(m,face_index,row_par_col) = Kokkos::exp2(log_face_parallel);
+            face_info(m,face_index,row_perp_col) = Kokkos::exp2(log_face_perp);
+          }
         }
         log_row_parallel = CGLLFLogAdd(log_row_parallel,log_face_parallel);
         log_row_perp = CGLLFLogAdd(log_row_perp,log_face_perp);
@@ -1252,17 +1364,31 @@ void CGLLandauFluid::NewTimeStep(const DvceArray5D<Real> &w,
     // A Gershgorin/row-sum bound for the local temperature Jacobian with
     // density, magnetic field, closure coefficients and cap scales frozen.
     // It is not a proof of nonlinear or composite-AMR RKL2 stability.
+    Real cell_dt = std::numeric_limits<Real>::infinity();
     if (invalid_state || Kokkos::isnan(log_row_parallel) || Kokkos::isnan(log_row_perp)) {
-      min_dt = 0.0;
+      cell_dt = 0.0;
     } else if (scaled_rows) {
       const Real log_bound = fmax(log_row_parallel,log_row_perp);
-      min_dt = fmin(min_dt,Kokkos::exp2(1.0-log_bound));
+      cell_dt = Kokkos::exp2(1.0-log_bound);
     } else {
       const Real bound = fmax(row_parallel,row_perp);
-      if (bound > 0.0) min_dt = fmin(min_dt,2.0/bound);
+      if (bound > 0.0) cell_dt = 2.0/bound;
     }
-  }, Kokkos::Min<Real>(dtnew));
+    min_dt = fmin(min_dt, cell_dt);
+    if constexpr (sample == TimestepSample::cells) cell_dt_map(idx) = cell_dt;
+  }, Kokkos::Min<Real>(rank_dt));
+  return rank_dt;
 }
+
+// The replay writer requests the owned-cell map, then just the worst cell per block.
+template Real CGLLandauFluid::CalculateTimeStep<CGLLandauFluid::TimestepSample::cells>(
+    const DvceArray5D<Real>&, const DvceArray5D<Real>&, const DvceFaceFld4D<Real>&,
+    const EOS_Data&, const DvceArray1D<Real>&, const DvceArray1D<int>&,
+    const DvceArray3D<Real>&);
+template Real CGLLandauFluid::CalculateTimeStep<CGLLandauFluid::TimestepSample::faces>(
+    const DvceArray5D<Real>&, const DvceArray5D<Real>&, const DvceFaceFld4D<Real>&,
+    const EOS_Data&, const DvceArray1D<Real>&, const DvceArray1D<int>&,
+    const DvceArray3D<Real>&);
 
 void CGLLandauFluid::RecordAdmissibility(const DvceArray5D<Real> &u,
                                          const DvceArray5D<Real> &w,
