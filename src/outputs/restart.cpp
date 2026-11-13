@@ -42,11 +42,8 @@ RestartOutput::RestartOutput(ParameterInput *pin, Mesh *pm, OutputParameters op)
   BaseTypeOutput(pin, pm, op) {
   // create directories for outputs. Comments in binary.cpp constructor explain why
   mkdir("rst",0775);
-  bool single_file_per_rank = op.single_file_per_rank;
-  if (single_file_per_rank) {
-    char rank_dir[20];
-    std::snprintf(rank_dir, sizeof(rank_dir), "rst/rank_%08d/", global_variable::my_rank);
-    mkdir(rank_dir, 0775);
+  if (IsPartitioned(op.file_shard_mode)) {
+    mkdir(("rst/" + ShardDirectoryName(op.file_shard_mode)).c_str(), 0775);
   }
 }
 
@@ -168,31 +165,13 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   } else if (padm != nullptr) {
     nadm = padm->nadm;
   }
-  bool single_file_per_rank = out_params.single_file_per_rank;
-  std::string fname;
-  if (single_file_per_rank) {
-    // Generate a directory and filename for each rank
-    // create filename: "rst/rank_YYYYYYY/file_basename" + "." + XXXXX + ".rst"
-    // where YYYYYYY = 8-digit rank number
-    // where XXXXX = 5-digit file_number
-    char rank_dir[20];
-    char number[7];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
-    std::snprintf(rank_dir, sizeof(rank_dir), "rank_%08d/", global_variable::my_rank);
-    fname = std::string("rst/") + std::string(rank_dir) + out_params.file_basename
-      + number + ".rst";
-
-    // Debugging output to check directory and filename
-    // std::cout << "Rank " << global_variable::my_rank << " generated filename: "
-    //           << fname << std::endl;
-  } else {
-    // Existing behavior: single restart file
-    // create filename: "rst/file_basename" + "." + XXXXX + ".rst"
-    // where XXXXX = 5-digit file_number
-    char number[7];
-    std::snprintf(number, sizeof(number), ".%05d", out_params.file_number);
-    fname = std::string("rst/") + out_params.file_basename + number + ".rst";
-  }
+  const FileShardMode mode = out_params.file_shard_mode;
+  const bool single_file_per_rank = UsesSerialIO(mode);
+  const bool per_node = mode == FileShardMode::per_node;
+  char number[24];
+  std::snprintf(number, sizeof(number), ".%05d.rst", out_params.file_number);
+  const std::string leaf = out_params.file_basename + number;
+  std::string fname = "rst/" + ShardDirectoryName(mode) + leaf;
   // increment counters now so values for *next* dump are stored in restart file
   out_params.file_number++;
   if (out_params.last_time < 0.0) {
@@ -240,37 +219,50 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // open file and  write the header; this part is serial
   IOWrapper resfile;
+  IOWrapper manifest;
+  auto &metadata_file = per_node ? manifest : resfile;
+  const bool serial_metadata = per_node || single_file_per_rank;
+#if MPI_PARALLEL_ENABLED
+  if (per_node) resfile.SetCommunicator(global_variable::node_comm);
+#endif
+  if (per_node && global_variable::my_rank == 0) {
+    manifest.Open(("rst/" + leaf).c_str(), IOWrapper::FileMode::write, true);
+  }
   resfile.Open(fname.c_str(), IOWrapper::FileMode::write, single_file_per_rank);
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // output the input parameters (input file)
-    resfile.Write_any_type(sbuf.c_str(), sbuf.size(), "byte", single_file_per_rank);
+    metadata_file.Write_any_type(sbuf.c_str(), sbuf.size(), "byte", serial_metadata);
 
     // output Mesh information
-    resfile.Write_any_type(&(pm->nmb_total), (sizeof(int)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->root_level), (sizeof(int)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->mesh_size), (sizeof(RegionSize)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->mesh_indcs), (sizeof(RegionIndcs)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->mb_indcs), (sizeof(RegionIndcs)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->time), (sizeof(Real)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->dt), (sizeof(Real)), "byte",
-                            single_file_per_rank);
-    resfile.Write_any_type(&(pm->ncycle), (sizeof(int)), "byte",
-                            single_file_per_rank);
+    metadata_file.Write_any_type(&(pm->nmb_total), (sizeof(int)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->root_level), (sizeof(int)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->mesh_size), (sizeof(RegionSize)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->mesh_indcs), (sizeof(RegionIndcs)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->mb_indcs), (sizeof(RegionIndcs)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->time), (sizeof(Real)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->dt), (sizeof(Real)), "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->ncycle), (sizeof(int)), "byte", serial_metadata);
+    if (per_node) {
+      const int layout[] = {global_variable::nranks, global_variable::nnodes,
+                            kPerNodeManifestVersion};
+      metadata_file.Write_any_type(layout, sizeof(layout), "byte", true);
+    }
   }
   //--- STEP 2.  Root process writes list of logical locations and cost of MeshBlocks
   // This data read in Mesh::BuildTreeFromRestart()
 
   if (global_variable::my_rank == 0 || single_file_per_rank) {
-    resfile.Write_any_type(&(pm->lloc_eachmb[0]),(pm->nmb_total)*sizeof(LogicalLocation),
-                           "byte", single_file_per_rank);
-    resfile.Write_any_type(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float),
-                           "byte", single_file_per_rank);
+    metadata_file.Write_any_type(&(pm->lloc_eachmb[0]),(pm->nmb_total)*sizeof(LogicalLocation),
+                           "byte", serial_metadata);
+    metadata_file.Write_any_type(&(pm->cost_eachmb[0]), (pm->nmb_total)*sizeof(float),
+                           "byte", serial_metadata);
+    if (per_node) {
+      const auto rank_bytes = global_variable::nranks * sizeof(int);
+      metadata_file.Write_any_type(pm->rank_eachmb, pm->nmb_total*sizeof(int), "byte", true);
+      metadata_file.Write_any_type(pm->gids_eachrank, rank_bytes, "byte", true);
+      metadata_file.Write_any_type(pm->nmb_eachrank, rank_bytes, "byte", true);
+      metadata_file.Write_any_type(global_variable::rank_to_node.data(), rank_bytes, "byte", true);
+    }
   }
 
   constexpr int nlf_diag = 18;
@@ -312,14 +304,12 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   if (global_variable::my_rank == 0 || single_file_per_rank) {
     // store z4c information
     if (pz4c != nullptr) {
-      resfile.Write_any_type(&(pz4c->last_output_time), sizeof(Real), "byte",
-                             single_file_per_rank);
+      metadata_file.Write_any_type(&(pz4c->last_output_time), sizeof(Real), "byte", serial_metadata);
     }
     // output puncture tracker data
     if (nco > 0) {
       for (auto & pt : pz4c->ptracker) {
-        resfile.Write_any_type(pt->GetPos(), 3*sizeof(Real), "byte",
-                               single_file_per_rank);
+        metadata_file.Write_any_type(pt->GetPos(), 3*sizeof(Real), "byte", serial_metadata);
       }
     }
     // The modal OU state is authoritative; storing it makes restarts independent of
@@ -328,32 +318,25 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       TurbulenceRestartMetadata metadata = pturb->RestartMetadata();
       pturb->mode_amp_real.template sync<HostMemSpace>();
       pturb->mode_amp_imag.template sync<HostMemSpace>();
-      resfile.Write_any_type(&metadata, sizeof(TurbulenceRestartMetadata), "byte",
-                             single_file_per_rank);
-      resfile.Write_any_type(pturb->mode_indices.data(),
+      metadata_file.Write_any_type(&metadata, sizeof(TurbulenceRestartMetadata), "byte", serial_metadata);
+      metadata_file.Write_any_type(pturb->mode_indices.data(),
                              pturb->mode_indices.size() * sizeof(std::array<int, 3>),
-                             "byte", single_file_per_rank);
-      resfile.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte",
-                             single_file_per_rank);
-      resfile.Write_any_type(pturb->mode_amp_real.h_view.data(),
-                             3 * pturb->mode_count * sizeof(Real), "byte",
-                             single_file_per_rank);
-      resfile.Write_any_type(pturb->mode_amp_imag.h_view.data(),
-                             3 * pturb->mode_count * sizeof(Real), "byte",
-                             single_file_per_rank);
+                             "byte", serial_metadata);
+      metadata_file.Write_any_type(&(pturb->rstate), sizeof(RNG_State), "byte", serial_metadata);
+      metadata_file.Write_any_type(pturb->mode_amp_real.h_view.data(),
+                             3 * pturb->mode_count * sizeof(Real), "byte", serial_metadata);
+      metadata_file.Write_any_type(pturb->mode_amp_imag.h_view.data(),
+                             3 * pturb->mode_count * sizeof(Real), "byte", serial_metadata);
       if (pturb->record_injected_work) {
-        resfile.Write_any_type(&(pturb->injected_work), sizeof(Real), "byte",
-                               single_file_per_rank);
+        metadata_file.Write_any_type(&(pturb->injected_work), sizeof(Real), "byte", serial_metadata);
       }
     }
     if (pmhd != nullptr && pmhd->pcgl_lf != nullptr) {
-      resfile.Write_any_type(&lf_diag[0], nlf_diag*sizeof(Real), "byte",
-                             single_file_per_rank);
+      metadata_file.Write_any_type(&lf_diag[0], nlf_diag*sizeof(Real), "byte", serial_metadata);
     }
     if (has_cgl_amr_repair_counters) {
-      resfile.Write_any_type(cgl_amr_repair_counters.data(),
-                             sizeof(cgl_amr_repair_counters), "byte",
-                             single_file_per_rank);
+      metadata_file.Write_any_type(cgl_amr_repair_counters.data(),
+                             sizeof(cgl_amr_repair_counters), "byte", serial_metadata);
     }
   }
 
@@ -381,8 +364,7 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
     data_size += nout1*nout2*nout3*nadm*sizeof(Real);   // adm u_adm
   }
   if (global_variable::my_rank == 0 || single_file_per_rank) {
-    resfile.Write_any_type(&(data_size), sizeof(IOWrapperSizeT), "byte",
-                            single_file_per_rank);
+    metadata_file.Write_any_type(&(data_size), sizeof(IOWrapperSizeT), "byte", serial_metadata);
   }
 
   // calculate size of data written in Steps 1-2 above
@@ -407,7 +389,11 @@ void RestartOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
   IOWrapperSizeT offset_myrank = (step1size + step2size + step3size
                                   + sizeof(IOWrapperSizeT));
 
-  if (!single_file_per_rank) {
+  if (per_node) {
+    if (global_variable::my_rank == 0) manifest.Close(true);
+    const auto counts = GatherShardCounts(pm->nmb_thisrank, mode);
+    offset_myrank = data_size * PrefixCountBeforeMe(counts, mode);
+  } else if (!single_file_per_rank) {
     offset_myrank += data_size*(pm->gids_eachrank[global_variable::my_rank]);
   }
 

@@ -406,6 +406,10 @@ ProblemGenerator::ProblemGenerator(ParameterInput *pin, Mesh *pm, IOWrapper resf
     exit(EXIT_FAILURE);
   }
 
+  if (!pm->node_restart_manifest.empty()) {
+    resfile.SetNodePayload(pm->node_restart_manifest, headeroffset, data_size,
+                           pm->restart_node, pm->restart_local_block);
+  }
   if (pm->restart_transfer != nullptr) {
     ReadRestartMHD(pm, pin, resfile, headeroffset, data_size);
     pm->restart_transfer.reset();

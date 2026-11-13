@@ -171,6 +171,10 @@ class Mesh {
   std::unique_ptr<ProblemGenerator> pgen;  // class containing functions to set ICs
   MeshRefinement *pmr=nullptr;             // mesh refinement data/functions (if needed)
   std::unique_ptr<RestartTransfer> restart_transfer;
+  // Source ownership from a node-sharded restart, indexed by the saved global block ID.
+  std::string node_restart_manifest;
+  std::vector<int> restart_node, restart_local_block;
+
 
   // functions
   void BuildTreeFromScratch(ParameterInput *pin);

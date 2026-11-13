@@ -18,6 +18,7 @@
 #include "globals.hpp"
 #include "parameter_input.hpp"
 #include "mesh.hpp"
+#include "file_sharding.hpp"
 #include "coordinates/cell_locations.hpp"
 #include "hydro/hydro.hpp"
 #include "mhd/mhd.hpp"
@@ -377,6 +378,8 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   // ParameterInput data) in restart.cpp
   IOWrapperSizeT headersize = 3*sizeof(int) + 2*sizeof(Real)
     + sizeof(RegionSize) + 2*sizeof(RegionIndcs);
+  const bool per_node = !node_restart_manifest.empty();
+  if (per_node) headersize += 3*sizeof(int);
   char *headerdata = new char[headersize];
 
   // the master process reads the header data if single_file_per_rank is false
@@ -424,6 +427,17 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
   std::memcpy(&dt, &(headerdata[hdos]), sizeof(Real));
   hdos += sizeof(Real);
   std::memcpy(&ncycle, &(headerdata[hdos]), sizeof(int));
+  int saved_ranks = 0, saved_nodes = 0;
+  if (per_node) {
+    int layout[3];
+    std::memcpy(layout, headerdata + hdos + sizeof(int), sizeof(layout));
+    saved_ranks = layout[0];
+    saved_nodes = layout[1];
+    if (layout[2] != kPerNodeManifestVersion || saved_nodes <= 0 ||
+        saved_nodes > saved_ranks || saved_ranks > nmb_total) {
+      Kokkos::abort("Invalid per-node restart manifest dimensions or version");
+    }
+  }
   delete [] headerdata;
 
   // calculate the number of MeshBlocks at root level in each dir
@@ -484,6 +498,41 @@ void Mesh::BuildTreeFromRestart(ParameterInput *pin, IOWrapper &resfile,
     if (lloc_eachmb[i].level > current_level) current_level = lloc_eachmb[i].level;
   }
   delete [] idlist;
+  if (per_node) {
+    // Layout v1 stores rank per block, first global block and count per rank, then node per rank.
+    auto read_list = [&](int count) {
+      std::vector<int> list(count);
+      if (global_variable::my_rank == 0 &&
+          resfile.Read_bytes(list.data(), sizeof(int), count) != static_cast<unsigned>(count)) {
+        Kokkos::abort("Truncated per-node restart ownership table");
+      }
+#if MPI_PARALLEL_ENABLED
+      MPI_Bcast(list.data(), count, MPI_INT, 0, MPI_COMM_WORLD);
+#endif
+      return list;
+    };
+    auto owners = read_list(nmb_total);
+    auto starts = read_list(saved_ranks);
+    auto counts = read_list(saved_ranks);
+    auto nodes = read_list(saved_ranks);
+    std::vector<int> next(saved_nodes, 0);
+    restart_node.resize(nmb_total);
+    restart_local_block.resize(nmb_total);
+    int gid = 0;
+    for (int rank = 0; rank < saved_ranks; ++rank) {
+      const int node = nodes[rank];
+      if (node < 0 || node >= saved_nodes || starts[rank] != gid ||
+          counts[rank] < 0 || counts[rank] > nmb_total-gid) {
+        Kokkos::abort("Invalid per-node restart rank layout");
+      }
+      for (int m = 0; m < counts[rank]; ++m, ++gid) {
+        if (owners[gid] != rank) Kokkos::abort("Invalid per-node restart block owner");
+        restart_node[gid] = node;
+        restart_local_block[gid] = next[node]++;
+      }
+    }
+    if (gid != nmb_total) Kokkos::abort("Incomplete per-node restart block map");
+  }
   if (!adaptive) max_level = current_level;
 
   if (refine || reblock) {

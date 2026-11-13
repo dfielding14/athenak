@@ -52,7 +52,12 @@ PDFOutput::PDFOutput(ParameterInput *pin, Mesh *pm, OutputParameters op) :
     dir_name.append("_");
     dir_name.append(op.variable_2);
   }
-  mkdir(dir_name.c_str(),0775);
+  if (IsShardWriter(op.file_shard_mode)) {
+    mkdir(dir_name.c_str(),0775);
+    if (IsPartitioned(op.file_shard_mode)) {
+      mkdir((dir_name + "/" + ShardDirectoryName(op.file_shard_mode)).c_str(), 0775);
+    }
+  }
 
   pdf_data.mass_weighted = op.mass_weighted;
   pdf_data.logscale = op.logscale;
@@ -314,12 +319,10 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
 
   // Now reduce over ranks
 #if MPI_PARALLEL_ENABLED
-  if (global_variable::my_rank == 0) {
-    MPI_Reduce(MPI_IN_PLACE, result.data(), result.size(),
-                                   MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
-  } else {
-    MPI_Reduce(result.data(), result.data(), result.size(),
-                                   MPI_ATHENA_REAL, MPI_SUM, 0, MPI_COMM_WORLD);
+  const auto mode = out_params.file_shard_mode;
+  if (mode != FileShardMode::per_rank) {
+    MPI_Reduce(IsShardWriter(mode) ? MPI_IN_PLACE : result.data(), result.data(),
+               result.size(), MPI_ATHENA_REAL, MPI_SUM, 0, ShardCommunicator(mode));
   }
 #endif
 }
@@ -329,8 +332,8 @@ void PDFOutput::LoadOutputData(Mesh *pm) {
 //  \brief Cycles through hist_data vector and writes history file for each component
 
 void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
-  // only the master rank writes the file
-  if (global_variable::my_rank == 0) {
+  // Retain the CGL volume-weighted histogram and its native ASCII format on each shard.
+  if (IsShardWriter(out_params.file_shard_mode)) {
     // Write header, if it has not been written already
     if (!(pdf_data.bins_written)) {
       // create filename: "pdf_"+"file_id"/file_basename" + ".bins.pdf"
@@ -342,6 +345,7 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
         fname.append(out_params.variable_2);
       }
       fname.append("/");
+      fname.append(ShardDirectoryName(out_params.file_shard_mode));
       fname.append(out_params.file_basename);
       fname.append(".bins.pdf");
 
@@ -395,6 +399,7 @@ void PDFOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
       fname.append(out_params.variable_2);
     }
     fname.append("/");
+    fname.append(ShardDirectoryName(out_params.file_shard_mode));
     fname.append(out_params.file_basename);
     fname.append(".");
     fname.append(number);

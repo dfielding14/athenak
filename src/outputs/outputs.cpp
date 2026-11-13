@@ -86,6 +86,18 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       opar.file_number = pin->GetOrAddInteger(opar.block_name,"file_number",0);
       opar.file_basename = pin->GetString("job","basename");
       opar.file_type = pin->GetString(opar.block_name,"file_type");
+      if (opar.file_type == "bin" || opar.file_type == "cbin" ||
+          opar.file_type == "rst" || opar.file_type == "pdf") {
+        bool per_rank = pin->GetOrAddBoolean(opar.block_name, "single_file_per_rank", false);
+        bool per_node = pin->GetOrAddBoolean(opar.block_name, "single_file_per_node", false);
+        if (per_rank && per_node) {
+          std::cerr << "Choose one file layout in " << opar.block_name << std::endl;
+          std::exit(EXIT_FAILURE);
+        }
+        if (per_rank) opar.file_shard_mode = FileShardMode::per_rank;
+        if (per_node) opar.file_shard_mode = FileShardMode::per_node;
+      }
+
 
       // set output variable and optional file id (default is output variable name)
       // but only for those output types that use them
@@ -248,8 +260,6 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new ParticleRestartOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cbin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
         opar.coarsen_factor = pin->GetInteger(opar.block_name,"coarsen_factor");
         opar.compute_moments = pin->GetOrAddBoolean(opar.block_name,
           "compute_moments", false);
@@ -278,8 +288,6 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
         pnode = new PDFOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("bin") == 0) {
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
         pnode = new MeshBinaryOutput(pin,pm,opar);
         pout_list.insert(pout_list.begin(),pnode);
       } else if (opar.file_type.compare("cart") == 0) {
@@ -291,8 +299,6 @@ Outputs::Outputs(ParameterInput *pin, Mesh *pm) {
       } else if (opar.file_type.compare("rst") == 0) {
       // Add restarts to the tail end of BaseTypeOutput list, so file counters for other
       // output types are up-to-date in restart file
-        opar.single_file_per_rank = pin->GetOrAddBoolean(opar.block_name,
-          "single_file_per_rank", false);
         pnode = new RestartOutput(pin,pm,opar);
         pout_list.push_back(pnode);
         num_rst++;

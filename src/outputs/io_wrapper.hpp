@@ -10,6 +10,8 @@
 
 #include <string>
 #include <cstdio>
+#include <memory>
+#include <vector>
 #include "athena.hpp"
 
 #if MPI_PARALLEL_ENABLED
@@ -20,6 +22,13 @@ using  IOWrapperFile = FILE*;
 #endif
 
 using IOWrapperSizeT = std::uint64_t;
+
+namespace io_wrapper {
+IOWrapperSizeT GetMaxChunkedByteCount();
+#if MPI_PARALLEL_ENABLED
+void BroadcastBytes(void *buf, IOWrapperSizeT count, int root, MPI_Comm comm);
+#endif
+}  // namespace io_wrapper
 
 class IOWrapper {
  public:
@@ -33,32 +42,39 @@ class IOWrapper {
   // nested type definition of strongly typed/scoped enum in class definition
   enum class FileMode {read, write, append};
 
+  // Read payload ranges in the global-block coordinate system used by restart and refinement.
+  void SetNodePayload(const std::string &manifest, IOWrapperSizeT header,
+                      IOWrapperSizeT stride, const std::vector<int> &node,
+                      const std::vector<int> &block);
+
   // wrapper functions for basic I/O tasks
-  int Open(const char* fname, FileMode rw, bool single_file_per_rank = false);
+  int Open(const char* fname, FileMode rw, bool use_serial_io = false);
   std::size_t Read_bytes(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
-                         bool single_file_per_rank = false);
+                         bool use_serial_io = false);
   std::size_t Read_bytes_at(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
-                            IOWrapperSizeT offset, bool single_file_per_rank = false);
+                            IOWrapperSizeT offset, bool use_serial_io = false);
   std::size_t Read_bytes_at_all(void *buf, IOWrapperSizeT size, IOWrapperSizeT count,
-                                IOWrapperSizeT offset, bool single_file_per_rank = false);
+                                IOWrapperSizeT offset, bool use_serial_io = false);
   std::size_t Write_any_type(const void *buf, IOWrapperSizeT count, std::string type,
-                             bool single_file_per_rank = false);
+                             bool use_serial_io = false);
   std::size_t Write_any_type_at(const void *buf, IOWrapperSizeT cnt,IOWrapperSizeT offset,
-                                std::string datatype, bool single_file_per_rank = false);
+                                std::string datatype, bool use_serial_io = false);
   std::size_t Write_any_type_at_all(const void *buf, IOWrapperSizeT cnt,
                                     IOWrapperSizeT offset, std::string datatype,
-                                    bool single_file_per_rank = false);
+                                    bool use_serial_io = false);
   std::size_t Read_Reals(void *buf, IOWrapperSizeT count,
-                         bool single_file_per_rank = false);
+                         bool use_serial_io = false);
   std::size_t Read_Reals_at(void *buf, IOWrapperSizeT count, IOWrapperSizeT offset,
-                            bool single_file_per_rank = false);
+                            bool use_serial_io = false);
   std::size_t Read_Reals_at_all(void *buf, IOWrapperSizeT count, IOWrapperSizeT offset,
-                                bool single_file_per_rank = false);
-  int Close(bool single_file_per_rank = false);
-  int Seek(IOWrapperSizeT offset, bool single_file_per_rank = false);
-  IOWrapperSizeT GetPosition(bool single_file_per_rank = false);
+                                bool use_serial_io = false);
+  int Close(bool use_serial_io = false);
+  int Seek(IOWrapperSizeT offset, bool use_serial_io = false);
+  IOWrapperSizeT GetPosition(bool use_serial_io = false);
 
  private:
+  struct NodePayload;
+  std::shared_ptr<NodePayload> node_payload_;
   IOWrapperFile fh_;
 #if MPI_PARALLEL_ENABLED
   MPI_Comm comm_;

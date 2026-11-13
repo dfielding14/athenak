@@ -14,6 +14,7 @@
 
 
 #include "athena.hpp"
+#include "file_sharding.hpp"
 #include "io_wrapper.hpp"
 
 #define NHISTORY_VARIABLES 64
@@ -149,7 +150,7 @@ struct OutputParameters {
   int nbin=0, nbin2=0;
   bool logscale=true, logscale2=true;
   bool mass_weighted=false;
-  bool single_file_per_rank=false; // DBF: parameter for single file per rank
+  FileShardMode file_shard_mode = FileShardMode::shared;
 };
 
 //----------------------------------------------------------------------------------------

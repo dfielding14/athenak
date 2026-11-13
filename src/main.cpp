@@ -25,6 +25,8 @@
 
 // C/C++ headers
 #include <cstdlib>
+#include <filesystem>
+#include <unordered_map>
 #include <iostream>
 #include <string>
 #include <memory>
@@ -112,9 +114,44 @@ int main(int argc, char *argv[]) {
     MPI_Finalize();
     return(0);
   }
+  if (MPI_SUCCESS != MPI_Comm_split_type(MPI_COMM_WORLD, MPI_COMM_TYPE_SHARED,
+                                         global_variable::my_rank,
+                                         MPI_INFO_NULL,
+                                         &global_variable::node_comm)) {
+    std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
+              << std::endl
+              << "MPI_Comm_split_type(MPI_COMM_TYPE_SHARED) failed."
+              << std::endl;
+    MPI_Finalize();
+    return EXIT_FAILURE;
+  }
+  MPI_Comm_rank(global_variable::node_comm, &global_variable::rank_in_node);
+  MPI_Comm_size(global_variable::node_comm, &global_variable::ranks_per_node);
+
+  int node_leader_world_rank = global_variable::my_rank;
+  MPI_Bcast(&node_leader_world_rank, 1, MPI_INT, 0, global_variable::node_comm);
+  std::vector<int> node_leader_for_rank(global_variable::nranks, 0);
+  MPI_Allgather(&node_leader_world_rank, 1, MPI_INT,
+                node_leader_for_rank.data(), 1, MPI_INT, MPI_COMM_WORLD);
+
+  std::unordered_map<int, int> leader_to_node;
+  global_variable::rank_to_node.assign(global_variable::nranks, 0);
+  for (int r = 0; r < global_variable::nranks; ++r) {
+    auto [it, inserted] = leader_to_node.emplace(
+        node_leader_for_rank[r], static_cast<int>(leader_to_node.size()));
+    global_variable::rank_to_node[r] = it->second;
+  }
+  global_variable::node_id =
+      global_variable::rank_to_node[global_variable::my_rank];
+  global_variable::nnodes = static_cast<int>(leader_to_node.size());
 #else  // no MPI
   global_variable::my_rank = 0;
   global_variable::nranks  = 1;
+  global_variable::node_id = 0;
+  global_variable::rank_in_node = 0;
+  global_variable::ranks_per_node = 1;
+  global_variable::nnodes = 1;
+  global_variable::rank_to_node.assign(1, 0);
 #endif  // MPI_PARALLEL_ENABLED
 
   Kokkos::initialize(argc, argv);
@@ -237,7 +274,16 @@ int main(int argc, char *argv[]) {
   bool restart_cgl = false;
   int restart_mhd_scalars = 0;
   bool single_file_per_rank = false; // DBF: flag for single_file_per_rank for rst files
+  std::string node_manifest;
   if (res_flag) {
+    // A payload path names the same checkpoint as its top-level manifest.
+    std::filesystem::path path = std::filesystem::absolute(restart_file);
+    const std::string dir = path.parent_path().filename().string();
+    if (dir.size() == 13 && dir.compare(0, 5, "node_") == 0 &&
+        dir.find_first_not_of("0123456789", 5) == std::string::npos) {
+      path = path.parent_path().parent_path() / path.filename();
+    }
+    restart_file = path.string();
     // Check if the path contains "rank_" directory
     size_t rank_pos = restart_file.find("/rank_");
     single_file_per_rank = (rank_pos != std::string::npos);
@@ -290,6 +336,17 @@ int main(int argc, char *argv[]) {
     // read parameters from restart file
     restartfile.Open(restart_file.c_str(),IOWrapper::FileMode::read,single_file_per_rank);
     pinput->LoadFromFile(restartfile, single_file_per_rank);
+    // Read the saved format before applying the new run's output options.
+    for (const auto &block : pinput->block) {
+      const auto &name = block.block_name;
+      if (!single_file_per_rank && name.compare(0, 6, "output") == 0 &&
+          pinput->DoesParameterExist(name, "file_type") &&
+          pinput->GetString(name, "file_type") == "rst" &&
+          pinput->DoesParameterExist(name, "single_file_per_node") &&
+          pinput->GetBoolean(name, "single_file_per_node")) {
+        node_manifest = restart_file;
+      }
+    }
     // Capture the payload contract before an input overlay can replace its metadata.
     restart_cgl = pinput->DoesParameterExist("mhd", "eos") &&
                   pinput->GetString("mhd", "eos") == "cgl";
@@ -379,6 +436,7 @@ int main(int argc, char *argv[]) {
   // pointer to Mesh.
 
   Mesh* pmesh = new Mesh(pinput);
+  pmesh->node_restart_manifest = node_manifest;
   if (!res_flag) {
     pmesh->BuildTreeFromScratch(pinput);
   } else {
@@ -445,6 +503,7 @@ int main(int argc, char *argv[]) {
   delete pinput;
   Kokkos::finalize();
 #if MPI_PARALLEL_ENABLED
+  MPI_Comm_free(&global_variable::node_comm);
   MPI_Finalize();
 #endif
   return(0);
