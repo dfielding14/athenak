@@ -358,7 +358,6 @@ int main(int argc, char *argv[]) {
     if (pinput->DoesParameterExist("mhd", "passive_restart_encoding")) {
       restart_passive_encoding = pinput->GetInteger("mhd", "passive_restart_encoding");
     }
-    IOWrapperSizeT headeroffset = restartfile.GetPosition(single_file_per_rank);
   }
 
   // read parameters from input file.  If both -r and -i are specified, this will
@@ -378,6 +377,17 @@ int main(int argc, char *argv[]) {
     pinput->GetOrAddString("mhd", "passive_max_pressure_ratio", "0");
     if (pinput->DoesParameterExist("mhd", "cgl_heat_flux")) {
       pinput->GetOrAddString("mhd", "cgl_lf_stiffness_cycle", "-1");
+    }
+  }
+  // Let existing single-file checkpoints opt into node output using only command-line
+  // overrides. The input checkpoint format was already captured before the overlay.
+  for (const auto &block : pinput->block) {
+    const auto &name = block.block_name;
+    if (name.compare(0, 6, "output") == 0 && pinput->DoesParameterExist(name, "file_type")) {
+      const auto type = pinput->GetString(name, "file_type");
+      if (type == "bin" || type == "cbin" || type == "rst" || type == "pdf") {
+        pinput->GetOrAddBoolean(name, "single_file_per_node", false);
+      }
     }
   }
   pinput->ModifyFromCmdline(argc, argv);
