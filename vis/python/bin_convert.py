@@ -86,6 +86,7 @@ The read_*(...) functions return a filedata dictionary-like object with
 import numpy as np
 import os
 import glob
+from pathlib import Path
 
 
 def read_binary(filename):
@@ -431,6 +432,19 @@ def read_coarsened_binary(filename):
     return filedata
 
 
+def _matching_shards(filename):
+    path = Path(filename)
+    kind, _, index = path.parent.name.partition("_")
+    if kind not in ("node", "rank") or len(index) != 8 or not index.isdigit():
+        return [path]
+    # Some nodes own no blocks on a slice. Any existing shard can identify the dump.
+    pattern = kind + "_" + "[0-9]" * 8
+    files = sorted(path.parent.parent.glob(pattern + "/" + path.name))
+    if not files:
+        raise FileNotFoundError(filename)
+    return files
+
+
 def read_all_ranks_binary(rank0_filename):
     """
     Reads binary files from all ranks and combines them into a single dictionary.
@@ -443,17 +457,7 @@ def read_all_ranks_binary(rank0_filename):
       combined_filedata - dict
           dictionary of combined fluid file data from all ranks
     """
-    # Determine the directory and base filename pattern
-    # rank0_dir = os.path.dirname(rank0_filename)
-    # rank0_base = os.path.basename(rank0_filename).replace("rank_00000000", "rank_*")
-    # Find all rank files
-    rank_files = sorted(
-        glob.glob(
-            os.path.dirname(rank0_filename).replace("rank_00000000", "rank_*")
-            + "/"
-            + os.path.basename(rank0_filename)
-        )
-    )
+    rank_files = _matching_shards(rank0_filename)
 
     # Read the rank 0 file to get the metadata
     rank0_filedata = read_binary(rank_files[0])
@@ -470,6 +474,9 @@ def read_all_ranks_binary(rank0_filename):
     # Read data from all ranks
     for rank_filename in rank_files:
         rank_filedata = read_binary(rank_filename)
+        for key in ("time", "cycle", "var_names", "Nx1", "Nx2", "Nx3"):
+            if rank_filedata[key] != rank0_filedata[key]:
+                raise ValueError(f"Inconsistent {key} in {rank_filename}")
 
         combined_filedata["mb_index"].extend(rank_filedata["mb_index"])
         combined_filedata["mb_logical"].extend(rank_filedata["mb_logical"])
@@ -522,19 +529,7 @@ def read_all_ranks_coarsened_binary(rank0_filename):
       combined_filedata - dict
           dictionary of combined fluid file data from all ranks
     """
-    # Determine the directory and base filename pattern
-    # rank0_dir = os.path.dirname(rank0_filename)
-    # rank0_base = os.path.basename(rank0_filename).replace("rank_00000000", "rank_*")
-
-    # Find all rank files
-    rank_files = sorted(
-        glob.glob(
-            os.path.dirname(rank0_filename).replace("rank_00000000", "rank_*")
-            + "/"
-            + os.path.basename(rank0_filename)
-        )
-    )
-    # print(rank_files)
+    rank_files = _matching_shards(rank0_filename)
 
     # Read the rank 0 file to get the metadata
     rank0_filedata = read_coarsened_binary(rank0_filename)
@@ -551,6 +546,9 @@ def read_all_ranks_coarsened_binary(rank0_filename):
     # Read data from all ranks
     for rank_filename in rank_files:
         rank_filedata = read_coarsened_binary(rank_filename)
+        for key in ("time", "cycle", "var_names", "Nx1", "Nx2", "Nx3"):
+            if rank_filedata[key] != rank0_filedata[key]:
+                raise ValueError(f"Inconsistent {key} in {rank_filename}")
 
         combined_filedata["mb_index"].extend(rank_filedata["mb_index"])
         combined_filedata["mb_logical"].extend(rank_filedata["mb_logical"])
