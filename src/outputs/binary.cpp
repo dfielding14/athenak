@@ -313,50 +313,13 @@ void MeshBinaryOutput::WriteOutputFile(Mesh *pm, ParameterInput *pin) {
 
   // now write binary data
   phase_timer.reset();
-  if (bin_slice) {
-    int shard_prefix = PrefixCountBeforeMe(slice_shard_counts, shard_mode);
-    std::size_t myoffset = header_offset + data_size*shard_prefix;
-    binfile.Write_any_type_at_all(data,(data_size*nout_mbs),myoffset,"byte",
-                                  use_serial_io);
-  } else {
-    std::vector<int> shard_counts = GatherShardCounts(nb_mbs, shard_mode);
-    int shard_prefix = PrefixCountBeforeMe(shard_counts, shard_mode);
-    int shard_min = *std::min_element(shard_counts.begin(), shard_counts.end());
-    int shard_max = *std::max_element(shard_counts.begin(), shard_counts.end());
-    // check if elements larger than 2^31
-    if (data_size*nb_mbs<=2147483648) {
-      // now write binary data in parallel
-      std::size_t myoffset = header_offset + data_size*shard_prefix;
-      binfile.Write_any_type_at_all(data,(data_size*nb_mbs),myoffset,"byte",
-                                    use_serial_io);
-    } else {
-      // write data over each MeshBlock sequentially and in parallel
-      // calculate max/min number of MeshBlocks across all ranks
-      for (int m=0;  m<shard_max; ++m) {
-        std::size_t myoffset = header_offset + data_size*(shard_prefix + m);
-        // every rank has a MB to write, so write collectively
-        if (m < shard_min) {
-          char *pdata = &(data[m*data_size]);
-          if (binfile.Write_any_type_at_all(pdata,(data_size),myoffset,"byte",
-                                            use_serial_io) != data_size) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                << std::endl << "binary data not written correctly to binary file, "
-                << "binary file is broken." << std::endl;
-            exit(EXIT_FAILURE);
-          }
-        // some ranks are finished writing, so use non-collective write
-        } else if (m < pm->nmb_thisrank) {
-          char *pdata = &(data[m*data_size]);
-          if (binfile.Write_any_type_at(pdata,(data_size),myoffset,"byte",
-                                        use_serial_io) != data_size) {
-            std::cout << "### FATAL ERROR in " << __FILE__ << " at line " << __LINE__
-                 << std::endl << "binary data not written correctly to binary file, "
-                 << "binary file is broken." << std::endl;
-            exit(EXIT_FAILURE);
-          }
-        }
-      }
-    }
+  // Counts may differ for a slice or AMR. The wrapper chunks a collective byte write
+  // consistently for every member, including ranks contributing zero bytes.
+  const auto counts = bin_slice ? slice_shard_counts : GatherShardCounts(nb_mbs, shard_mode);
+  const auto offset = header_offset + data_size*PrefixCountBeforeMe(counts, shard_mode);
+  const auto bytes = data_size*write_mbs;
+  if (binfile.Write_any_type_at_all(data, bytes, offset, "byte", use_serial_io) != bytes) {
+    Kokkos::abort("Incomplete binary output shard");
   }
   payload_time = phase_timer.seconds();
 
