@@ -242,6 +242,23 @@ def test_acceleration_normalization_and_localization(tmp_path):
     assert inner < outer
 
 
+def test_cached_localized_force_keeps_its_shape_between_ou_updates(tmp_path):
+    require_success(run_athena(tmp_path, "turb_driving_tiled_include.athinput",
+                               "turb_driving/dt_update=0.5", "output1/dcycle=1"))
+    frames = [read_force_blocks(path) for path in sorted((tmp_path / "bin").glob("*.bin"))]
+    frames = [frame for frame in frames if frame["cycle"] > 0]
+    assert len({frame["cycle"] for frame in frames}) == 4
+    assert frames[-1]["time"] < 0.5
+    shapes = []
+    for frame in frames:
+        force = np.concatenate([block["force"].reshape(3, -1) for block in frame["blocks"]],
+                               axis=1).astype(float)
+        force -= force.mean(axis=1, keepdims=True)
+        shapes.append(force / np.linalg.norm(force))
+    for shape in shapes[1:]:
+        np.testing.assert_allclose(shape, shapes[0], rtol=2.e-6, atol=2.e-9)
+
+
 def test_restart_preserves_modal_state_on_fixed_grid_and_amr(tmp_path):
     """Restarting retains the modal OU trajectory independently of mesh layout."""
     for name, split_cycle, final_cycle in (

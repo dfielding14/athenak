@@ -79,6 +79,7 @@ TurbulenceDriver::TurbulenceDriver(MeshBlockPack* pp, ParameterInput* pin)
   }
 
   Kokkos::realloc(force, nmb_alloc, 3, ncells3, ncells2, ncells1);
+  raw_force_ = DvceArray5D<Real>("turb_raw_force", nmb_alloc, 3, ncells3, ncells2, ncells1);
 
   const std::string block_name = "turb_driving";
   if (pmy_pack->pcoord->is_general_relativistic ||
@@ -478,6 +479,7 @@ void TurbulenceDriver::Initialize() {
 // \brief Render the geometry-dependent trigonometric basis for current MeshBlocks.
 
 void TurbulenceDriver::BuildBasis() {
+  rendered_update_ = -1;
   int nmb = pmy_pack->nmb_thispack;
   auto& indcs = pmy_pack->pmesh->mb_indcs;
   int is = indcs.is, ie = indcs.ie;
@@ -835,7 +837,7 @@ void TurbulenceDriver::RenderForce() {
   const int js = indcs.js, je = indcs.je;
   const int ks = indcs.ks, ke = indcs.ke;
   const int nmb = pmy_pack->nmb_thispack;
-  auto force_ = force;
+  auto force_ = raw_force_;
   auto mode_amp_real_ = mode_amp_real;
   auto mode_amp_imag_ = mode_amp_imag;
   auto xcos_ = xcos;
@@ -914,6 +916,7 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
   }
 
   auto force_ = force;
+  auto raw_force = raw_force_;
 
   const int nmkji = nmb * nx3 * nx2 * nx1;
   const int nkji = nx3 * nx2 * nx1;
@@ -934,9 +937,13 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
   if ((!pmy_pack->pcoord->is_special_relativistic || pm->ncycle >= 1) &&
       (current_time >= tdriv_start) &&
       ((t_since_start < tdriv_duration) || turb_flag != 1)) {
-    RenderForce();
+    const bool refresh_force = rendered_update_ != n_turb_updates_yet;
+    if (refresh_force) {
+      RenderForce();
+      rendered_update_ = n_turb_updates_yet;
+    }
 
-    if (localization_ != TurbLocalization::none) {
+    if (refresh_force && localization_ != TurbLocalization::none) {
       par_for(
           "force_localization", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
           KOKKOS_LAMBDA(int m, int k, int j, int i) {
@@ -959,9 +966,9 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
             Real gaussian = std::exp(-exponent);
             Real weight = (localization_ == TurbLocalization::include) ?
                           gaussian : (1.0 - gaussian);
-            force_(m, 0, k, j, i) *= weight;
-            force_(m, 1, k, j, i) *= weight;
-            force_(m, 2, k, j, i) *= weight;
+            raw_force(m, 0, k, j, i) *= weight;
+            raw_force(m, 1, k, j, i) *= weight;
+            raw_force(m, 2, k, j, i) *= weight;
           });
     }
 
@@ -984,9 +991,9 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
             den += u0_(m, IDN, k, j, i);
           }
           sum_t0 += den * vol;
-          sum_t1 += den * force_(m, 0, k, j, i) * vol;
-          sum_t2 += den * force_(m, 1, k, j, i) * vol;
-          sum_t3 += den * force_(m, 2, k, j, i) * vol;
+          sum_t1 += den * raw_force(m, 0, k, j, i) * vol;
+          sum_t2 += den * raw_force(m, 1, k, j, i) * vol;
+          sum_t3 += den * raw_force(m, 2, k, j, i) * vol;
         },
         Kokkos::Sum<Real>(t0), Kokkos::Sum<Real>(t1), Kokkos::Sum<Real>(t2),
         Kokkos::Sum<Real>(t3));
@@ -1015,9 +1022,9 @@ TaskStatus TurbulenceDriver::UpdateForcing(Driver* pdrive, int stage) {
     par_for(
         "force_remove_net_mom", DevExeSpace(), 0, nmb - 1, ks, ke, js, je, is, ie,
         KOKKOS_LAMBDA(int m, int k, int j, int i) {
-          force_(m, 0, k, j, i) -= t1 / t0;
-          force_(m, 1, k, j, i) -= t2 / t0;
-          force_(m, 2, k, j, i) -= t3 / t0;
+          force_(m, 0, k, j, i) = raw_force(m, 0, k, j, i) - t1 / t0;
+          force_(m, 1, k, j, i) = raw_force(m, 1, k, j, i) - t2 / t0;
+          force_(m, 2, k, j, i) = raw_force(m, 2, k, j, i) - t3 / t0;
         });
 
     t0 = 0.0;
@@ -1572,6 +1579,7 @@ TaskStatus TurbulenceDriver::EnsureBasisSize(Driver* pdrive, int stage) {
   // Retain the AMR-capacity allocation used by the fluid state arrays.
   if (force.extent(0) < nmb_alloc) {
     Kokkos::realloc(force, nmb_alloc, 3, ncells3, ncells2, ncells1);
+    Kokkos::realloc(raw_force_, nmb_alloc, 3, ncells3, ncells2, ncells1);
     Kokkos::realloc(xcos, nmb_alloc, mode_count, ncells1);
     Kokkos::realloc(xsin, nmb_alloc, mode_count, ncells1);
     Kokkos::realloc(ycos, nmb_alloc, mode_count, ncells2);

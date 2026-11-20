@@ -98,6 +98,9 @@ class TurbulenceDriver {
   void BuildBasis();
   void RenderForce();
 
+  DvceArray5D<Real> raw_force_;
+  int rendered_update_ = -1;
+
   MeshBlockPack* pmy_pack;  // MeshBlockPack containing this driver
 
   int nlow, nhigh;

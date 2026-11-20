@@ -160,8 +160,10 @@ mode requires its target and rejects the other target.
 ## Time Integration
 
 Before RK evolution, the Newtonian driver advances its modal OU state through
-all updates due at the cycle-start time. The resulting realization is held
-for that cycle. It applies one kick at the final RK stage, after the
+all updates due at the cycle-start time. The driver reuses the unnormalized
+force until the modal state or mesh layout changes. It recomputes the net
+acceleration correction and normalization from the current fluid on every kick.
+It applies one kick at the final RK stage, after the
 cell-centered fluid update and source terms, before boundary exchange and
 primitive recovery.
 
