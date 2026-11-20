@@ -395,6 +395,28 @@ def test_exact_integrator_rests_on_table_edge():
     _assert_history_rate(data, gross=net + heat, net=net, rtol=1.0e-12)
 
 
+@pytest.mark.parametrize("rho,coefficient", [(0.01, -0.2), (1.0, 0.2), (100.0, 0.6)])
+def test_exact_temperature_density_table_clamps_density(tmp_path, rho, coefficient):
+    table = tmp_path / "cooling.tbl"
+    table.write_text("""ATHENAK_COOLING_TABLE 1
+ndim 2
+value_kind Lambda
+value_units code
+value_scale linear
+bounds clamp
+axis0 temperature code linear 0.5 3 2
+axis1 density code log10 -1 1 2 mass_density
+data
+-0.2 0.6
+-0.2 0.6
+""")
+    data = _run_case("cooling_exact_density_table", ["cooling/integrator=exact",
+                      "cooling/cooling_model=table", f"cooling/cooling_table={table}",
+                      f"problem/density={rho}", f"problem/pressure={rho}"])
+    rate = rho**2*coefficient
+    _assert_history_rate(data, gross=rate, net=rate, rtol=1.0e-10, atol=1.0e-12)
+
+
 def test_exact_integrator_mhd_path():
     lam0 = 1.0e4
     data = _run_case(

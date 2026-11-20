@@ -47,6 +47,7 @@ namespace hydro {
 
 void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> tl) {
   TaskID none(0);
+  const bool exact_cooling = psrc != nullptr && psrc->ExactCooling();
 
   // assemble "before_stagen" task list
   id.irecv = tl["before_stagen"]->AddTask(&Hydro::InitRecv, this, none);
@@ -69,7 +70,9 @@ void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> 
   id.prol      = tl["stagen"]->AddTask(&Hydro::Prolongate, this, id.recvu_shr);
   id.bcs       = tl["stagen"]->AddTask(&Hydro::ApplyPhysicalBCs, this, id.prol);
   id.c2p       = tl["stagen"]->AddTask(&Hydro::ConToPrim, this, id.bcs);
-  id.newdt     = tl["stagen"]->AddTask(&Hydro::NewTimeStep, this, id.c2p);
+  if (!exact_cooling) {
+    id.newdt   = tl["stagen"]->AddTask(&Hydro::NewTimeStep, this, id.c2p);
+  }
 
   // assemble "after_stagen" task list
   id.csend = tl["after_stagen"]->AddTask(&Hydro::ClearSend, this, none);
@@ -101,7 +104,7 @@ void Hydro::AssembleHydroTasks(std::map<std::string, std::shared_ptr<TaskList>> 
   // assemble "after_timeintegrator" task list: <cooling>/integrator = exact cools once
   // per step after the stages; restriction, ghost zones and primitives are then
   // refreshed as after a stage (AMR and the next fluxes read them), and dt recomputed
-  if (psrc != nullptr && psrc->ExactCooling()) {
+  if (exact_cooling) {
     tl["after_timeintegrator"]->AddTask([this](Driver *pdrive, int) {
       psrc->ApplyExactCooling(w0, peos->eos_data, pmy_pack->pmesh->dt, u0);
       pdrive->InitBoundaryValuesAndPrimitives(pmy_pack->pmesh);

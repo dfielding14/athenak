@@ -256,50 +256,62 @@ Real HeatingEdotCode(Real gamma, UnitSystem units, DensityKind density_kind,
 }
 
 KOKKOS_INLINE_FUNCTION
+bool LocateTableAxis(const AxisData &axis, Real raw_coord, BoundsBehavior bounds,
+                     int &idx, Real &frac, Real &bad_bounds) {
+  Real coord = raw_coord;
+  if (axis.scale == ValueScale::log10) {
+    if (raw_coord <= 0.0) {
+      if (bounds == BoundsBehavior::fatal) bad_bounds += 1.0;
+      if (bounds == BoundsBehavior::zero || bounds == BoundsBehavior::fatal) return false;
+      coord = axis.xmin;
+    } else {
+      coord = log10(raw_coord);
+    }
+  }
+  if (coord < axis.xmin || coord > axis.xmax) {
+    if (bounds == BoundsBehavior::fatal) bad_bounds += 1.0;
+    if (bounds == BoundsBehavior::zero || bounds == BoundsBehavior::fatal) return false;
+    coord = fmin(fmax(coord, axis.xmin), axis.xmax);
+  }
+  if (axis.n <= 1) {
+    idx = 0;
+    frac = 0.0;
+  } else {
+    const Real x = (coord - axis.xmin)*axis.inv_dx;
+    int lo = static_cast<int>(floor(x));
+    lo = (lo < 0) ? 0 : lo;
+    lo = (lo > axis.n - 2) ? axis.n - 2 : lo;
+    idx = lo;
+    frac = x - static_cast<Real>(lo);
+  }
+  return true;
+}
+
+KOKKOS_INLINE_FUNCTION
+Real BilinearTableValue(const TableData &table, int i, int j, Real t, Real u) {
+  const int p00 = i*table.stride0 + j*table.stride1;
+  const int p10 = (i + 1)*table.stride0 + j*table.stride1;
+  const int p01 = i*table.stride0 + (j + 1)*table.stride1;
+  const int p11 = (i + 1)*table.stride0 + (j + 1)*table.stride1;
+  return (1.0 - t)*(1.0 - u)*table.values(p00) +
+         t*(1.0 - u)*table.values(p10) +
+         (1.0 - t)*u*table.values(p01) +
+         t*u*table.values(p11);
+}
+
+KOKKOS_INLINE_FUNCTION
 Real EvaluateTable(const TableData &table, const CoolingCellState &state,
                    const DvceArray5D<Real> &w0, const RuntimeData &runtime,
                    int m, int k, int j, int i, Real &bad_bounds) {
   if (!table.enabled || table.ndim <= 0) return 0.0;
 
-  Real coord[MAX_TABLE_AXES] = {0.0, 0.0, 0.0};
   int idx0[MAX_TABLE_AXES] = {0, 0, 0};
   Real frac[MAX_TABLE_AXES] = {0.0, 0.0, 0.0};
-
   for (int a = 0; a < table.ndim; ++a) {
     const AxisData &axis = table.axes[a];
-    Real raw_coord = RawAxisValue(axis, state, w0, runtime, m, k, j, i);
-    if (axis.scale == ValueScale::log10) {
-      if (raw_coord <= 0.0) {
-        if (table.bounds == BoundsBehavior::fatal) bad_bounds += 1.0;
-        if (table.bounds == BoundsBehavior::zero ||
-            table.bounds == BoundsBehavior::fatal) {
-          return 0.0;
-        }
-        coord[a] = axis.xmin;
-      } else {
-        coord[a] = log10(raw_coord);
-      }
-    } else {
-      coord[a] = raw_coord;
-    }
-    const bool low = coord[a] < axis.xmin;
-    const bool high = coord[a] > axis.xmax;
-    if (low || high) {
-      if (table.bounds == BoundsBehavior::fatal) bad_bounds += 1.0;
-      if (table.bounds == BoundsBehavior::zero ||
-          table.bounds == BoundsBehavior::fatal) return 0.0;
-      coord[a] = fmin(fmax(coord[a], axis.xmin), axis.xmax);
-    }
-    if (axis.n <= 1) {
-      idx0[a] = 0;
-      frac[a] = 0.0;
-    } else {
-      const Real x = (coord[a] - axis.xmin)*axis.inv_dx;
-      int lo = static_cast<int>(floor(x));
-      lo = (lo < 0) ? 0 : lo;
-      lo = (lo > axis.n - 2) ? axis.n - 2 : lo;
-      idx0[a] = lo;
-      frac[a] = x - static_cast<Real>(lo);
+    const Real raw_coord = RawAxisValue(axis, state, w0, runtime, m, k, j, i);
+    if (!LocateTableAxis(axis, raw_coord, table.bounds, idx0[a], frac[a], bad_bounds)) {
+      return 0.0;
     }
   }
 
@@ -314,18 +326,7 @@ Real EvaluateTable(const TableData &table, const CoolingCellState &state,
     interpolated = (1.0 - t)*values(i0*stride0) +
                    t*values((i0 + 1)*stride0);
   } else if (table.ndim == 2) {
-    const int i0 = idx0[0];
-    const int j0 = idx0[1];
-    const Real t = frac[0];
-    const Real u = frac[1];
-    const int p00 = i0*stride0 + j0*stride1;
-    const int p10 = (i0 + 1)*stride0 + j0*stride1;
-    const int p01 = i0*stride0 + (j0 + 1)*stride1;
-    const int p11 = (i0 + 1)*stride0 + (j0 + 1)*stride1;
-    interpolated = (1.0 - t)*(1.0 - u)*values(p00) +
-                   t*(1.0 - u)*values(p10) +
-                   (1.0 - t)*u*values(p01) +
-                   t*u*values(p11);
+    interpolated = BilinearTableValue(table, idx0[0], idx0[1], frac[0], frac[1]);
   } else {
     const int i0 = idx0[0];
     const int j0 = idx0[1];
@@ -1019,16 +1020,19 @@ ExactCoolingResult IntegrateCoolingExact(const Real temp0, const Real dt, const 
   Real temp = fmin(fmax(temp0, temp_lo), temp_hi);
   // interval n = [Node(n), Node(n+1)) holding temp; a break moves a node by < dlogt/2
   int n = static_cast<int>(floor(log10(temp*grid.temp_cgs)/grid.dlogt));
-  if (temp < grid.Node(n)) {
+  Real ta = grid.Node(n), tb = grid.Node(n + 1);
+  if (temp < ta) {
     --n;
-  } else if (temp >= grid.Node(n + 1)) {
+    tb = ta;
+    ta = grid.Node(n);
+  } else if (temp >= tb) {
     ++n;
+    ta = tb;
+    tb = grid.Node(n + 1);
   }
   // each interval's line passes through its two samples just inside the nodes
-  Real ta, tb, xa, xb, ra, rb, ca, cb, s, sc;
+  Real xa, xb, ra, rb, ca, cb, s, sc;
   auto load = [&]() {
-    ta = grid.Node(n);
-    tb = grid.Node(n + 1);
     xa = ta*(1.0 + eps);
     xb = tb*(1.0 - eps);
     const EvaluatedCoolingRates lo = rates(xa), hi = rates(xb);
@@ -1068,7 +1072,15 @@ ExactCoolingResult IntegrateCoolingExact(const Real temp0, const Real dt, const 
     temp = te;
     if (down ? (te <= temp_lo) : (te >= temp_hi)) break;  // at the floor or the cap
     const Real c_from = cool(te);
-    n += down ? -1 : 1;
+    if (down) {
+      --n;
+      tb = ta;
+      ta = grid.Node(n);
+    } else {
+      ++n;
+      ta = tb;
+      tb = grid.Node(n + 1);
+    }
     load();
     r0 = net(temp);
     c0 = cool(temp);
@@ -1574,6 +1586,12 @@ void GeneralCooling::ApplyExact(const DvceArray5D<Real> &w0, const EOS_Data &eos
   const bool track_bad_bounds = BuiltInModelsHaveFatalBounds(cooling_model, heating_model,
       cooling_table, heating_table, cgm_pie_table, cgm_cie_table, cooling_powerlaw,
       heating_powerlaw, cooling_modifier, heating_modifier);
+  const bool cache_table_density = cooling_model == ModelKind::table &&
+      heating_model == ModelKind::none && !cooling_modifier.enabled &&
+      !heating_modifier.enabled && !shielding.enabled && cooling_table.ndim == 2 &&
+      cooling_table.bounds == BoundsBehavior::clamp &&
+      cooling_table.axes[0].kind == AxisKind::temperature &&
+      cooling_table.axes[1].kind == AxisKind::density;
   ExactGrid grid;
   grid.dlogt = exact_dlogt_;
   grid.temp_cgs = runtime.temp_cgs;
@@ -1608,7 +1626,32 @@ void GeneralCooling::ApplyExact(const DvceArray5D<Real> &w0, const EOS_Data &eos
     const CoolingCellState state = LoadCoolingCellState(w0, runtime, gm1, use_e,
         nfluid, nscalars, m, k, j, i);
     const Real c_v = state.rho_code/gm1;  // de/dT in code units
+    int density_index = 0;
+    Real density_frac = 0.0, density_squared = 0.0;
+    if (cache_table_density) {
+      // Density stays fixed as the exact integrator samples temperatures in this cell.
+      const auto &axis = cooling_table.axes[1];
+      Real ignored = 0.0;
+      LocateTableAxis(axis, DensityValue(axis.density_kind, axis.units, state.rho_code,
+                                         runtime), BoundsBehavior::clamp,
+                      density_index, density_frac, ignored);
+      const Real q = DensityValue(runtime.cooling_density, cooling_table.value_units,
+                                  state.rho_code, runtime);
+      density_squared = q*q;
+    }
     auto rates_at = [&](const Real temp, Real &bad) {
+      if (cache_table_density) {
+        const auto &axis = cooling_table.axes[0];
+        const Real coord = (axis.units == UnitSystem::cgs) ? temp*runtime.temp_cgs : temp;
+        int temp_index = 0;
+        Real temp_frac = 0.0;
+        LocateTableAxis(axis, coord, BoundsBehavior::clamp, temp_index, temp_frac, bad);
+        const Real interpolated = BilinearTableValue(cooling_table, temp_index, density_index,
+                                                     temp_frac, density_frac);
+        Real rate = density_squared*TransformValue(interpolated, cooling_table.value_scale);
+        if (cooling_table.value_units == UnitSystem::cgs) rate *= runtime.edot_cgs_to_code;
+        return EvaluatedCoolingRates{rate, 0.0, rate};
+      }
       CoolingCellState s = state;
       s.temp_code = temp;
       s.temp_cgs = temp*runtime.temp_cgs;
