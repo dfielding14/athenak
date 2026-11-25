@@ -72,52 +72,55 @@ static int EMFTagBuffer(const int n, const int l, const int c) {
 static void SetShearJRanges(const int n, const int scase, const int js, const int je,
                             const int ng, const int nx2, const int jr, const bool edge,
                             std::pair<int,int> jsrc[3], std::pair<int,int> jdst[3]) {
-  const int e = edge ? 1 : 0;
   if (scase == 1) {
     if (n==0) {
       jsrc[0] = std::make_pair(js,js+ng-jr);
-      jsrc[1] = std::make_pair(js,je+1+e);
-      jsrc[2] = std::make_pair(je-(ng-1)-jr+e,je+1+e);
-      jdst[0] = std::make_pair(je+1+jr+e,je+ng+1+e);
-      jdst[1] = std::make_pair(js+jr,je+jr+1+e);
+      jsrc[1] = std::make_pair(js,je+1);
+      jsrc[2] = std::make_pair(je-(ng-1)-jr,je+1);
+      jdst[0] = std::make_pair(je+1+jr,je+ng+1);
+      jdst[1] = std::make_pair(js+jr,je+jr+1);
       jdst[2] = std::make_pair(js-ng,js+jr);
     } else {
       jsrc[0] = std::make_pair(js,js+ng+jr);
-      jsrc[1] = std::make_pair(js,je+1+e);
-      jsrc[2] = std::make_pair(je-(ng-1)+jr+e,je+1+e);
-      jdst[0] = std::make_pair(je+1-jr+e,je+ng+1+e);
-      jdst[1] = std::make_pair(js-jr,je-jr+1+e);
+      jsrc[1] = std::make_pair(js,je+1);
+      jsrc[2] = std::make_pair(je-(ng-1)+jr,je+1);
+      jdst[0] = std::make_pair(je+1-jr,je+ng+1);
+      jdst[1] = std::make_pair(js-jr,je-jr+1);
       jdst[2] = std::make_pair(js-ng,js-jr);
     }
   } else if (scase == 2) {
     if (n==0) {
-      jsrc[0] = std::make_pair(js,je+ng-jr+1+e);
-      jsrc[1] = std::make_pair(je-(ng-1)-jr+e,je+1+e);
-      jdst[0] = std::make_pair(js+jr,je+ng+1+e);
+      jsrc[0] = std::make_pair(js,je+ng-jr+1);
+      jsrc[1] = std::make_pair(je-(ng-1)-jr,je+1);
+      jdst[0] = std::make_pair(js+jr,je+ng+1);
       jdst[1] = std::make_pair(js-ng,js+jr);
     } else {
       jsrc[0] = std::make_pair(js,js+ng+jr);
-      jsrc[1] = std::make_pair(js-ng+jr,je+1+e);
-      jdst[0] = std::make_pair(je-jr+1+e,je+ng+1+e);
-      jdst[1] = std::make_pair(js-ng,je-jr+1+e);
+      jsrc[1] = std::make_pair(js-ng+jr,je+1);
+      jdst[0] = std::make_pair(je-jr+1,je+ng+1);
+      jdst[1] = std::make_pair(js-ng,je-jr+1);
     }
   } else {
     const int dj = nx2-jr;
     if (n==0) {
       jsrc[0] = std::make_pair(js,js+ng+dj);
-      jsrc[1] = std::make_pair(js,je+1+e);
-      jsrc[2] = std::make_pair(je-(ng-1)+dj+e,je+1+e);
-      jdst[0] = std::make_pair(je+1-dj+e,je+ng+1+e);
-      jdst[1] = std::make_pair(js-dj,je-dj+1+e);
+      jsrc[1] = std::make_pair(js,je+1);
+      jsrc[2] = std::make_pair(je-(ng-1)+dj,je+1);
+      jdst[0] = std::make_pair(je+1-dj,je+ng+1);
+      jdst[1] = std::make_pair(js-dj,je-dj+1);
       jdst[2] = std::make_pair(js-ng,js-dj);
     } else {
       jsrc[0] = std::make_pair(js,js+ng-dj);
-      jsrc[1] = std::make_pair(js,je+1+e);
-      jsrc[2] = std::make_pair(je-(ng-1)-dj+e,je+1+e);
-      jdst[0] = std::make_pair(je+1+dj+e,je+ng+1+e);
-      jdst[1] = std::make_pair(js+dj,je+dj+1+e);
+      jsrc[1] = std::make_pair(js,je+1);
+      jsrc[2] = std::make_pair(je-(ng-1)-dj,je+1);
+      jdst[0] = std::make_pair(je+1+dj,je+ng+1);
+      jdst[1] = std::make_pair(js+dj,je+dj+1);
       jdst[2] = std::make_pair(js-ng,js+dj);
     }
+  }
+  if (edge) {
+    ++jsrc[0].second;
+    ++jdst[0].second;
   }
 }
 
